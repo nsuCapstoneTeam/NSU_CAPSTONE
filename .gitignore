@@ -1,0 +1,126 @@
+# ============================================================
+# OS
+# ============================================================
+
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+
+# ============================================================
+# IDE / Editor
+# ============================================================
+
+.idea/
+*.iml
+*.ipr
+*.iws
+
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+
+*.swp
+*.swo
+*~
+
+# ============================================================
+# Environment / Secrets
+# ============================================================
+
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+
+# GitHub / authentication related local secrets
+.github-token
+credentials.json
+
+# ============================================================
+# Logs
+# ============================================================
+
+*.log
+logs/
+log/
+
+# ============================================================
+# Java / Spring Boot / Gradle
+# ============================================================
+
+.gradle/
+**/build/
+!**/src/**/build/
+
+out/
+target/
+
+.classpath
+.project
+.settings/
+
+hs_err_pid*
+replay_pid*
+
+# Gradle Wrapper는 Git에 포함해야 합니다.
+!gradle/wrapper/gradle-wrapper.jar
+!backend/gradle/wrapper/gradle-wrapper.jar
+
+# ============================================================
+# Node.js / TypeScript / Frontend
+# ============================================================
+
+node_modules/
+**/node_modules/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+
+dist/
+**/dist/
+.next/
+.nuxt/
+.output/
+coverage/
+**/coverage/
+
+*.tsbuildinfo
+
+# ============================================================
+# Build / Cache
+# ============================================================
+
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+
+# ============================================================
+# Test outputs
+# ============================================================
+
+test-results/
+playwright-report/
+blob-report/
+
+# ============================================================
+# Temporary
+# ============================================================
+
+tmp/
+temp/
+*.tmp
