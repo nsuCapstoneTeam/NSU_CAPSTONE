@@ -40,6 +40,6 @@ GitHub Flow의 브랜치·PR·리뷰·병합 절차를 이 팀의 승인 규칙�
 | `docs` | 문서 변경 | `docs/update-readme` |
 | `chore` | 설정·도구 등 유지보수 | `chore/fix-config` |
 
-`docs`·`chore`도 이슈가 있으면 키를 넣는다. 브랜치 유형은 작업을 구분하기 위한 표기이며, 커밋 제목에 같은 접두사를 붙여야 한다는 뜻은 아니다.
+`docs`·`chore`도 이슈가 있으면 키를 넣는다. 브랜치 유형과 [커밋 타입](03-커밋-전략과-메시지.md#타입)은 이름이 겹치지만 각각 판단한다. 커밋 타입에는 `build`, `ci`, `style`, `perf`가 더 있고, 한 브랜치 안에서 서로 다른 타입의 커밋이 나올 수 있다.
 
 [G1]: https://docs.github.com/en/get-started/using-github/github-flow
