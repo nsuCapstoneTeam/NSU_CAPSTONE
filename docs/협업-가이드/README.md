@@ -2,7 +2,7 @@
 
 작성일: 2026-09-08 · 버전: 1.0 · 대상: FE 2명 / BE 2명
 
-대상 저장소: `seokyun-kang/capstone-team4-project`  
+대상 저장소: `nsuCapstoneTeam/NSU_CAPSTONE`  
 구성: React 프런트엔드와 Spring Boot 백엔드를 함께 관리하는 단일 저장소
 
 기존 `nsu_capstone_협업환경_인수인계(1).md`의 GitHub Flow·커밋 규칙을 팀 운영 가이드로 확장했다. 기존 합의는 유지하고, 충돌 처리와 설정 절차를 보완했다. **이 문서는 도입 기준이며, 실제 저장소 설정이나 팀원 PC 설정의 적용 완료를 뜻하지 않는다.**

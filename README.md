@@ -1,9 +1,9 @@
-# capstone-team4-project
+# NSU_CAPSTONE
 
 졸업작품 4인 개발팀용 단일 Repository 초기 운영 스캐폴드입니다.
 
-- Repository: `seokyun-kang/capstone-team4-project`
-- Repository 소유자: `seokyun-kang`
+- Repository: `nsuCapstoneTeam/NSU_CAPSTONE`
+- Repository 소유자: `nsuCapstoneTeam` Organization
 - 개발 인원: Frontend 2명 + Backend 2명
 - Git 전략: **GitHub Flow**
 - 장기 브랜치: **`main` 하나**
