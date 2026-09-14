@@ -1,8 +1,40 @@
 ## 관련 작업
 
-<!-- Linear 이슈가 있으면 키/링크를 적고, 단순 docs/chore면 "N/A"로 둡니다. -->
+<!--
+Linear 이슈가 있으면 실제 키/링크를 적습니다.
+제품 요구사항과 무관한 Level 0 docs/chore 작업이면 N/A로 둘 수 있습니다.
+가짜 이슈 키를 만들지 않습니다.
+-->
 
 - Linear:
+
+## 제품 요구사항 영향
+
+<!-- 현재 PR에 해당하는 항목을 체크합니다. -->
+
+- [ ] 제품 요구사항과 무관한 문서 변경입니다.
+- [ ] 제품 요구사항에 영향이 있으며 Linear Requirements를 먼저 수정·확정했습니다.
+- [ ] 승인된 Linear Requirements의 GitHub Snapshot 동기화 PR입니다.
+
+### 관련 Requirements
+
+<!--
+제품 요구사항에 영향이 있는 경우 고정 Requirement ID를 적습니다.
+예: AUTH-005, PAY-062
+해당 없으면 N/A.
+-->
+
+- Requirement ID: N/A
+
+### Requirements Snapshot 정보
+
+<!--
+`docs/요구사항/`의 Generated Snapshot 동기화 PR일 때만 작성합니다.
+그 외에는 N/A.
+-->
+
+- Linear Revision: N/A
+- Linear Status: N/A
 
 ## 문서 변경 목적
 
@@ -26,6 +58,8 @@
 - [ ] 문서 내 링크와 경로를 확인했습니다.
 - [ ] 명령어나 설정 경로가 실제 저장소/도구와 일치하는지 확인했습니다.
 - [ ] 다른 협업 문서와 내용이 충돌하지 않는지 확인했습니다.
+- [ ] 제품 요구사항 관련 변경이면 Linear Requirements와 일치하는지 확인했습니다.
+- [ ] `docs/요구사항/` 변경이면 승인된 Linear Revision의 Snapshot인지 확인했습니다.
 - [ ] 코드 실행이 필요한 변경이면 필요한 검증 결과를 아래에 적었습니다.
 
 ### 확인 상세
@@ -38,10 +72,21 @@
 <!-- 리뷰어가 특히 확인해야 할 정책 변경, 표현, 누락 사항 -->
 
 
+## Human Review
+
+Reviewer는 Merge 전에 다음을 확인합니다.
+
+- [ ] **Requirement** — 제품 요구사항에 영향이 있다면 Linear Requirements가 원본이며 내용이 일치합니다.
+- [ ] **Documentation** — 다른 README / `docs/` / ADR과 상반되는 설명이 없습니다.
+- [ ] **State** — 아직 도입하지 않은 기능·설정을 적용 완료처럼 표현하지 않았습니다.
+
 ## 체크리스트
 
 - [ ] PR이 하나의 명확한 문서 변경 목적만 포함합니다.
 - [ ] 실제로 확정되지 않은 설정을 "적용 완료"로 표현하지 않았습니다.
 - [ ] 예시 이슈 키/계정/경로를 실제 값처럼 오해하지 않게 표시했습니다.
+- [ ] 제품 요구사항을 GitHub 문서에서 독립적으로 새로 확정하지 않았습니다.
+- [ ] `docs/요구사항/`을 직접 편집한 경우가 아니라 승인된 Linear Snapshot 반영인지 확인했습니다.
+- [ ] Level 0 작업에 가짜 Linear Issue나 Requirement ID를 만들지 않았습니다.
 - [ ] Secret, 토큰, 개인 인증정보를 포함하지 않았습니다.
 - [ ] `main`에 직접 push하지 않았습니다.

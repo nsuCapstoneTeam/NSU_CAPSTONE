@@ -10,7 +10,7 @@
 - Merge 방식: **Squash Merge**
 - 업무 추적: Linear Issue / Acceptance Criteria
 - AI 개발 지원: Claude
-- PR 검증: GitHub Actions + CodeRabbit Review + Human Review
+- PR 검증: CodeRabbit Review + Human Review (**GitHub Actions CI는 도입 완료 후 추가**)
 
 ## 핵심 원칙
 
@@ -59,7 +59,7 @@ AI Agent 또는 Human 구현
    ↓
 GitHub PR
    ↓
-GitHub Actions + CodeRabbit 자동 PR Review
+GitHub Actions CI(도입 완료 후) + CodeRabbit 자동 PR Review
    ↓
 Human Review
 ├─ Linear 요구사항 / Acceptance Criteria 충족?
@@ -70,6 +70,8 @@ Squash Merge
    ↓
 Linear 상태 정리
 ```
+
+현재 GitHub Actions CI는 도입 예정입니다. CI 도입 전에는 CodeRabbit Review와 Human Review를 기준으로 검증하고, 실제 CI 워크플로와 check 이름을 검증한 뒤 위 흐름의 필수 검사로 적용합니다.
 
 CodeRabbit은 GitHub PR의 자동 1차 리뷰에 사용하며 초기에는 **Advisory**로 운영합니다. Linear ↔ CodeRabbit 직접 연동과 Slack `@CodeRabbit` 호출은 공식 개발 Workflow의 필수 단계로 두지 않습니다.
 
