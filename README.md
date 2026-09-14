@@ -8,33 +8,38 @@
 - Git 전략: **GitHub Flow**
 - 장기 브랜치: **`main` 하나**
 - Merge 방식: **Squash Merge**
-- 업무 추적: Linear Issue ID 사용 예정
-- AI 개발 지원: Claude Code / Claude Tag / Linear Coding Sessions 사용 예정
-- PR 리뷰: CodeRabbit + Human Review 사용 예정
+- 업무 추적: Linear Issue / Acceptance Criteria
+- AI 개발 지원: Claude
+- PR 검증: GitHub Actions + CodeRabbit Review + Human Review
 
 ## 핵심 원칙
 
 ```text
 Slack
-= 대화 / 회의
-
-Linear
-= 업무와 일정 Source of Truth
-
-GitHub
-= 코드 Source of Truth
+= 팀 논의 / Context / AI Agent 호출 시작점
 
 Claude
-= 업무 정리 / 개발 보조
+= 논의 요약 / 문서 초안 / 설계·구현 보조
+
+Linear
+= 확정된 작업 / Acceptance Criteria / 일정 / 상태 Source of Truth
+
+GitHub
+= 코드 / Branch / PR / CI Source of Truth
+
+docs/ + ADR
+= 장기 설계 / 정책 / 운영 규칙 Source of Truth
 
 CodeRabbit
-= AI 보조 Reviewer
+= GitHub PR 자동 1차 AI Reviewer (Advisory)
 
 Human
-= 최종 승인 / Merge
+= 최종 요구사항·설계 판단 / 승인 / Merge
 ```
 
-```
+## 기본 개발 흐름
+
+```text
 Slack #dev
    ↓
 Thread 팀 논의
@@ -43,9 +48,10 @@ Thread 팀 논의
    ↓
 논의 요약 / 문서 초안 / 설계 검토
    ↓
-사람 검토
+사람이 요구사항 확정
    ↓
-Linear
+@Linear
+Issue / Acceptance Criteria / 담당자 / 우선순위 / 일정 반영
    ↓
 작업 Branch
    ↓
@@ -53,11 +59,18 @@ AI Agent 또는 Human 구현
    ↓
 GitHub PR
    ↓
-GitHub Actions + CodeRabbit
+GitHub Actions + CodeRabbit 자동 PR Review
    ↓
 Human Review
+├─ Linear 요구사항 / Acceptance Criteria 충족?
+├─ 코드 / 테스트 / 보안 / 예외처리 정상?
+└─ README / docs/ / ADR 업데이트 필요한가?
    ↓
 Squash Merge
    ↓
 Linear 상태 정리
 ```
+
+CodeRabbit은 GitHub PR의 자동 1차 리뷰에 사용하며 초기에는 **Advisory**로 운영합니다. Linear ↔ CodeRabbit 직접 연동과 Slack `@CodeRabbit` 호출은 공식 개발 Workflow의 필수 단계로 두지 않습니다.
+
+상세 운영 규칙은 [`docs/협업-가이드/`](docs/협업-가이드/README.md)를 참고합니다.
