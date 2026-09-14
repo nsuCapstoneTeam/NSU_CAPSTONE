@@ -46,7 +46,7 @@ Slack #dev 논의
 → 최신 main에서 작업 브랜치 생성
 → AI Agent 또는 사람이 구현·검증
 → GitHub PR
-→ GitHub Actions CI + CodeRabbit 자동 PR Review
+→ GitHub Actions CI(도입 완료 후) + CodeRabbit 자동 PR Review
 → Human Review
    1. Linear 요구사항 / Acceptance Criteria 충족
    2. 코드 / 테스트 / 보안 / 예외처리 정상
@@ -55,6 +55,8 @@ Slack #dev 논의
 → Squash Merge
 → Linear 상태 정리
 ```
+
+현재 GitHub Actions CI는 도입 예정이다. CI가 실제로 구성·검증되기 전에는 CodeRabbit Review와 Human Review를 사용하고, 검증된 CI check만 이후 필수 검사로 추가한다.
 
 ## Source of Truth를 겹치지 않게 쓰는 원칙
 
