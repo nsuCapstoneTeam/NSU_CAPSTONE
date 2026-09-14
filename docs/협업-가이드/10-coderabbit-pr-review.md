@@ -22,6 +22,17 @@ CodeRabbit은 초기 운영에서 **Advisory**다. 사람 승인을 대체하지
 
 Linear ↔ CodeRabbit 직접 연동과 Slack `@CodeRabbit` 호출은 현재 공식 개발 Workflow의 필수 단계로 사용하지 않는다.
 
+## 현재 확인된 동작
+
+워크플로우 Smoke Test에서도 CodeRabbit이 새 PR을 자동으로 감지하고 변경 파일을 Review 대상으로 선택하는 것까지 확인했다.
+
+다만 무료 OSS Review 사용량 제한에 도달하면 자동 Trigger는 되더라도 실제 Review 결과가 일정 시간 지연될 수 있다. 따라서 팀 운영은 다음 원칙을 따른다.
+
+- CodeRabbit 미실행 또는 rate limit만으로 PR을 영구 Block하지 않는다.
+- 실제 Review가 도착했다면 Human Reviewer가 유효한 지적을 확인한다.
+- 중요한 버그·보안·데이터 정합성 문제는 사람이 최종 판단한다.
+- CodeRabbit 자체를 Required Check로 두지 않는다.
+
 ## Dashboard 권장 초기 설정
 
 CodeRabbit Web App의 Organization Settings 또는 `Repositories → NSU_CAPSTONE → Settings`에서 설정한다. Repository가 Organization Settings를 그대로 사용한다면 `Use Organization Settings`를 유지하고, 이 저장소만 다른 값이 필요할 때만 Repository override를 사용한다.
@@ -38,7 +49,7 @@ CodeRabbit Web App의 Organization Settings 또는 `Repositories → NSU_CAPSTON
 | Base branch | `main` | 현재 장기 브랜치가 `main` 하나 |
 | Request Changes Workflow | OFF | CodeRabbit을 Advisory Reviewer로 유지 |
 
-처음 몇 개의 실제 PR을 본 뒤 리뷰가 지나치게 약할 때만 `assertive`를 검토한다.
+처음 몇 개의 실제 기능 PR을 본 뒤 리뷰가 지나치게 약할 때만 `assertive`를 검토한다.
 
 ## Tone Instructions 권장값
 
@@ -72,6 +83,7 @@ frontend/**
 
 docs/**
 - 실제 설정 상태와 계획 상태를 구분
+- Linear의 확정 내용과 충돌하는 오래된 정책이 없는지 확인
 - 오래된 링크와 잘못된 명령 확인
 ```
 
@@ -81,16 +93,16 @@ Path Instructions는 일반적인 코드 리뷰 규칙을 전부 다시 적는 �
 
 CodeRabbit이 리뷰 대화에서 학습한 선호는 보조 정보로만 사용한다. 중요한 공식 규칙은 Learnings에만 의존하지 않고 `docs/`, ADR, 코드 가이드 등 Git에서 리뷰 가능한 문서로 남긴다.
 
-## 자동 Review 검증 순서
+제품 요구사항과 Acceptance Criteria의 기준은 Linear다. CodeRabbit Learnings나 Review Comment가 요구사항을 새로 정의하지 않는다.
+
+## 자동 Review 확인 방법
 
 1. Dashboard에서 `NSU_CAPSTONE` Repository가 Installed/Enabled인지 확인한다.
 2. Auto Review / Incremental Review / Draft Review / Review Profile 설정을 확인한다.
-3. `main`을 base로 하는 새 PR을 만든다.
-4. CodeRabbit Summary와 Review가 자동으로 생성되는지 확인한다.
-5. 추가 commit을 push해 Incremental Review가 동작하는지 확인한다.
-6. 필요하면 PR Conversation에서 `@coderabbitai full review`로 전체 리뷰를 다시 요청한다.
-7. 실제 버그·보안·예외·테스트 누락 지적의 품질과 노이즈를 확인한다.
-8. 검증이 끝나기 전에는 CodeRabbit을 Required Check로 등록하지 않는다.
+3. `main`을 base로 하는 새 PR에서 CodeRabbit이 자동으로 Trigger되는지 확인한다.
+4. Review 결과가 도착하면 실제 버그·보안·예외·테스트 누락 지적의 품질을 확인한다.
+5. rate limit이 발생하면 Advisory 특성상 Human Review를 중심으로 진행한다.
+6. 실제 FE/BE 코드가 생긴 뒤 필요할 때만 Path Instructions를 추가한다.
 
 ## PR에서 지적을 처리하는 원칙
 
@@ -105,6 +117,8 @@ Linear 요구사항 / Acceptance Criteria와 비교
    ↓
 필요하면 수정 + 테스트
    ↓
+GitHub docs/ / ADR 영향 확인
+   ↓
 Human Reviewer가 최종 판단
 ```
 
@@ -116,9 +130,9 @@ CodeRabbit 자동 Review 이후 사람 리뷰어는 반드시 다음 세 가지�
 
 1. **Linear** — Issue 목표와 Acceptance Criteria를 실제 구현이 충족하는가?
 2. **Code** — 코드, 테스트, 보안, 권한, 예외 처리와 변경 영향이 적절한가?
-3. **Documentation** — README, `docs/`, ADR 변경이 필요한데 누락되지 않았는가?
+3. **Documentation** — README, `docs/`, ADR이 필요한 만큼 갱신되었고 Linear의 확정 내용과 충돌하지 않는가?
 
-CodeRabbit은 이 중 Code 영역의 1차 분석을 돕지만, 요구사항 충족과 문서 일치까지 포함한 최종 판단은 사람이 수행한다.
+CodeRabbit은 이 중 Code 영역의 1차 분석을 돕지만, 요구사항 충족과 문서 일치까지 포함한 최종 판단은 사람이 수행한다. 문서 정합성을 위한 별도 GitHub Action은 사용하지 않는다.
 
 ## 공식 Workflow에서 사용하지 않는 항목
 
@@ -128,6 +142,7 @@ CodeRabbit은 이 중 Code 영역의 1차 분석을 돕지만, 요구사항 충�
 - Slack `@CodeRabbit` Agent 호출
 - `request_changes_workflow`를 이용한 AI Merge Gate
 - CodeRabbit 자체의 Required Status Check
+- CodeRabbit을 이용한 자동 요구사항 동기화
 
 필요성이 생기면 별도 실험 PR을 통해 검증한 뒤 문서와 팀 합의를 함께 갱신한다.
 
