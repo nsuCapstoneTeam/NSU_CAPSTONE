@@ -1,0 +1,2 @@
+Workflow smoke test for NSU-5 / TEST-WF-001.
+This file is temporary and will be removed by the cleanup PR after validation.
