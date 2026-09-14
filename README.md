@@ -34,3 +34,30 @@ Human
 = 최종 승인 / Merge
 ```
 
+```
+Slack #dev
+   ↓
+Thread 팀 논의
+   ↓
+@Claude
+   ↓
+논의 요약 / 문서 초안 / 설계 검토
+   ↓
+사람 검토
+   ↓
+Linear
+   ↓
+작업 Branch
+   ↓
+AI Agent 또는 Human 구현
+   ↓
+GitHub PR
+   ↓
+GitHub Actions + CodeRabbit
+   ↓
+Human Review
+   ↓
+Squash Merge
+   ↓
+Linear 상태 정리
+```
