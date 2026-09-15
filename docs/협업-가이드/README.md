@@ -1,11 +1,11 @@
 # NSU Capstone Team 4 — 협업 운영 가이드
 
-최종 정리일: 2026-09-14 · 버전: 1.4 · 대상: FE 2명 / BE 2명
+최종 정리일: 2026-09-15 · 버전: 1.5 · 대상: FE 2명 / BE 2명
 
 대상 저장소: `nsuCapstoneTeam/NSU_CAPSTONE`  
 구성: React 프런트엔드와 Spring Boot 백엔드를 함께 관리하는 단일 저장소
 
-이 가이드는 팀의 GitHub Flow, 커밋 규칙, PR 규칙, Slack/Claude/Linear 협업 흐름, Linear 기반 GitHub 문서 반영, CodeRabbit PR Review, 저장소 보호 계획을 관리한다. **문서에 적힌 목표 설정과 실제 적용 상태를 구분하며, 실제 상태는 [8. 도입 체크리스트](08-도입-체크리스트.md)에서 추적한다.**
+이 가이드는 팀의 GitHub Flow, 커밋 규칙, PR 규칙, Slack/Claude/Linear 협업 흐름, Linear 기반 GitHub 문서 반영, CodeRabbit PR Review, 실제 개발 작업 순서와 저장소 보호 계획을 관리한다. **문서에 적힌 목표 설정과 실제 적용 상태를 구분하며, 실제 상태는 [8. 도입 체크리스트](08-도입-체크리스트.md)에서 추적한다.**
 
 핵심 원칙은 다음과 같다.
 
@@ -32,31 +32,36 @@ GitHub Flow는 브랜치·PR 운영 방식, 커밋 전략은 변경을 나누고
 | [4. 로컬 설정과 일상 작업](04-로컬-설정과-일상-작업.md) | 팀원 초기 설정, 작업 시작·커밋·push, 최신 `main` 반영, 충돌 처리 |
 | [5. PR 작성과 리뷰](05-pr-작성과-리뷰.md) | Linear → GitHub 문서 반영, PR 템플릿, CodeRabbit·Human Review 3종 체크, Squash Merge |
 | [6. 저장소 설정과 자동화](06-저장소-설정과-자동화.md) | 현재 저장소 설정, 자동화 최소화 원칙, 팀원 초대, CODEOWNERS 검토, `main` Ruleset 계획 |
-| [7. 병합 이후 정리와 되돌리기](07-병합-이후-정리와-되돌리기.md) | 다음 작업 준비, 브랜치 정리, `revert` 절차 |
+| [7. 병합 이후 정리와 되돌리기](07-병합-이후-정리와-되돌리기.md) | Merge 후 Linear 종료, 다음 작업 준비, 브랜치 정리, `revert` 절차 |
 | [8. 도입 체크리스트](08-도입-체크리스트.md) | 실제 적용 완료/대기 상태, Smoke Test 결과, 다음 작업 추적 |
 | [9. 용어와 참고 자료](09-용어와-참고-자료.md) | 용어 정의, 공식 문서 출처 |
-| [10. CodeRabbit PR Review](10-coderabbit-pr-review.md) | Dashboard 권장값, 자동 리뷰, Advisory 운영 기준 |
+| [10. CodeRabbit PR Review](10-coderabbit-pr-review.md) | Dashboard 권장값, 자동/수동 리뷰, Slack 보조 호출, Advisory 운영 기준 |
+| [11. 실제 개발 작업 절차](11-실제-개발-작업-절차.md) | `#dev` 논의부터 Linear Issue 생성·확인, Branch, 문서·구현, PR, Review, Merge, Linear Done까지 실제 순서와 호출 예시 |
 
 ## 기본 개발 흐름
 
 ```text
 Slack #dev 논의
 → Thread에서 @Claude 호출
-→ 사람이 요약/설계 초안 검토 후 요구사항 확정
+→ 사람이 요약/설계 초안 검토 후 요구사항 확정(Human Confirm)
 → @Linear로 Issue·Acceptance Criteria·담당자·우선순위·일정 반영
-→ 최신 main에서 작업 Branch 생성
+→ 생성된 Linear Issue 내용 확인
+→ 실제 작업 시작 시 In Progress
+→ 최신 main에서 작업 브랜치 생성
 → Linear 확정 내용을 기준으로 필요한 README / docs/ / API / ADR 갱신
 → AI Agent 또는 사람이 구현·검증
 → GitHub PR
 → CodeRabbit 자동 PR Review
 → Human Review
    1. Linear 요구사항 / Acceptance Criteria 충족
-   2. 코드 / 테스트 / 보안 / 예외처리 정상
-   3. README / docs/ / ADR이 Linear의 확정 내용과 일치
+   2. 코드 / 테스트 / 보안 / 권한 / 예외처리 정상
+   3. README / docs/ / API / ADR이 Linear의 확정 내용과 일치
 → 작성자 외 사람 1명 이상 승인
 → Squash Merge
-→ @Linear 상태 정리
+→ @Linear로 Done 처리
 ```
+
+현재 Linear 상태는 `Backlog / In Progress / Done / Canceled / Duplicate`를 사용한다. 별도의 `Approved` 상태는 두지 않으며, 요구사항 승인은 Slack Thread의 Human Confirm에서 이루어진다. Linear에서는 생성된 Issue가 그 확정 내용과 일치하는지 확인한 뒤 작업을 시작한다.
 
 GitHub 문서 변경은 `main`에 직접 반영하지 않고 작업 Branch에서 코드와 함께 진행한다. 문서만 독립적으로 리뷰할 필요가 있을 때만 별도 문서 PR로 분리한다.
 
@@ -74,14 +79,15 @@ GitHub 문서 변경은 `main`에 직접 반영하지 않고 작업 Branch에서
 
 요구사항이 바뀌면 Linear를 먼저 수정한 뒤 같은 작업 Branch에서 필요한 GitHub 문서와 코드를 갱신한다. **문서 정합성 전용 GitHub Action은 도입하지 않으며 Human Review에서 Linear / Code / Documentation을 직접 비교한다.**
 
-Linear ↔ CodeRabbit 직접 연동과 Slack `@CodeRabbit` 호출은 현재 공식 Workflow의 필수 단계로 사용하지 않는다.
+Linear ↔ CodeRabbit 직접 연동과 Slack `@CodeRabbit` 호출은 현재 공식 Workflow의 필수 단계로 사용하지 않는다. Slack `@CodeRabbit`은 필요할 때 PR 지적을 요약하는 보조 수단으로만 사용할 수 있다.
 
 ## 현재 확인된 운영 특성
 
 - Slack `@Claude`와 `@Linear` 기반 흐름은 실제 Smoke Test에서 동작했다.
 - Linear Issue 키 기반 Branch/PR 추적과 Squash Merge는 정상 동작했다.
-- Merge 후 Linear Issue 상태 자동 전환은 확인되지 않았으므로 현재는 `@Linear`로 상태를 명시적으로 정리한다.
+- Merge 후 Linear Issue 상태 자동 전환은 확인되지 않았으므로 현재는 `@Linear`로 상태를 명시적으로 `Done` 처리한다.
 - CodeRabbit은 PR을 자동 감지하지만 무료 OSS Review 제한으로 실제 리뷰가 지연될 수 있어 Merge Gate로 사용하지 않는다.
+- `#temp`에 실제 개발 작업 순서와 `@Claude` / `@Linear` / `@CodeRabbit` 사용 예시를 공지했다.
 
 ## 다음 운영 단계
 
@@ -93,7 +99,8 @@ Linear ↔ CodeRabbit 직접 연동과 Slack `@CodeRabbit` 호출은 현재 공�
 
 ## 읽는 순서
 
-- **새로 합류한 팀원**: 1 → 2 → 3 → 4 → 5 순서로 읽고 [4번 문서의 초기 설정](04-로컬-설정과-일상-작업.md#팀원-초기-설정)을 실행한다.
+- **새로 합류한 팀원**: 1 → 11 → 2 → 3 → 4 → 5 순서로 읽고 실제 작업 순서를 먼저 익힌 뒤 [4번 문서의 초기 설정](04-로컬-설정과-일상-작업.md#팀원-초기-설정)을 실행한다.
+- **실제 기능 작업 시작 전**: [11. 실제 개발 작업 절차](11-실제-개발-작업-절차.md)를 따른다.
 - **저장소 관리자**: 6 → 8 → 10 순서로 팀원 권한, Ruleset, CodeRabbit 상태를 관리한다.
 - **PR 작성자/리뷰어**: 5번과 10번 문서, 목적에 맞는 PR 템플릿을 사용한다.
 - **막혔을 때**: 충돌은 [4번 문서](04-로컬-설정과-일상-작업.md#충돌-해결-또는-중단), 병합한 변경을 되돌릴 때는 [7번 문서](07-병합-이후-정리와-되돌리기.md#병합한-변경-되돌리기)를 본다.
