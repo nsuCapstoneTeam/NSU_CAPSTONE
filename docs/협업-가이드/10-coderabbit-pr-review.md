@@ -4,6 +4,8 @@
 
 이 문서는 CodeRabbit을 **GitHub Pull Request 자동 1차 Reviewer**로 사용하는 팀 기준을 정한다.
 
+전체 실제 개발 흐름은 [11. 실제 개발 작업 절차](11-실제-개발-작업-절차.md)를 함께 본다.
+
 ## 역할
 
 CodeRabbit의 역할은 다음으로 제한한다.
@@ -32,6 +34,32 @@ Linear ↔ CodeRabbit 직접 연동과 Slack `@CodeRabbit` 호출은 현재 공�
 - 실제 Review가 도착했다면 Human Reviewer가 유효한 지적을 확인한다.
 - 중요한 버그·보안·데이터 정합성 문제는 사람이 최종 판단한다.
 - CodeRabbit 자체를 Required Check로 두지 않는다.
+
+## 자동 Review와 수동 호출
+
+기본은 **PR 생성 후 자동 Review**다. 자동 Review를 놓쳤거나 전체 재검토가 필요할 때만 GitHub PR 댓글에서 수동 명령을 사용한다.
+
+```text
+@coderabbitai review
+```
+
+전체 변경을 다시 보고 싶다면:
+
+```text
+@coderabbitai full review
+```
+
+수동 호출도 CodeRabbit을 Merge Gate로 바꾸는 것은 아니다. 결과가 도착하면 Human Reviewer가 실제 요구사항과 코드를 기준으로 판단한다.
+
+Slack `@CodeRabbit`은 공식 Workflow의 필수 단계가 아니라 보조 조사용이다. 예를 들면 다음처럼 사용할 수 있다.
+
+```text
+@CodeRabbit
+GitHub PR #123에서 지적된 내용을 요약하고,
+버그/보안/데이터 정합성 문제와 단순 스타일 제안을 구분해줘.
+```
+
+Slack 답변만으로 Merge 여부를 결정하지 않는다. 실제 PR의 변경 내용, Linear Acceptance Criteria, 필요한 테스트와 문서를 사람이 확인한다.
 
 ## Dashboard 권장 초기 설정
 
@@ -102,7 +130,8 @@ CodeRabbit이 리뷰 대화에서 학습한 선호는 보조 정보로만 사용
 3. `main`을 base로 하는 새 PR에서 CodeRabbit이 자동으로 Trigger되는지 확인한다.
 4. Review 결과가 도착하면 실제 버그·보안·예외·테스트 누락 지적의 품질을 확인한다.
 5. rate limit이 발생하면 Advisory 특성상 Human Review를 중심으로 진행한다.
-6. 실제 FE/BE 코드가 생긴 뒤 필요할 때만 Path Instructions를 추가한다.
+6. 자동 Review가 누락된 경우에만 `@coderabbitai review` 또는 `@coderabbitai full review`를 사용한다.
+7. 실제 FE/BE 코드가 생긴 뒤 필요할 때만 Path Instructions를 추가한다.
 
 ## PR에서 지적을 처리하는 원칙
 
@@ -130,7 +159,7 @@ CodeRabbit 자동 Review 이후 사람 리뷰어는 반드시 다음 세 가지�
 
 1. **Linear** — Issue 목표와 Acceptance Criteria를 실제 구현이 충족하는가?
 2. **Code** — 코드, 테스트, 보안, 권한, 예외 처리와 변경 영향이 적절한가?
-3. **Documentation** — README, `docs/`, ADR이 필요한 만큼 갱신되었고 Linear의 확정 내용과 충돌하지 않는가?
+3. **Documentation** — README, `docs/`, API, ADR이 필요한 만큼 갱신되었고 Linear의 확정 내용과 충돌하지 않는가?
 
 CodeRabbit은 이 중 Code 영역의 1차 분석을 돕지만, 요구사항 충족과 문서 일치까지 포함한 최종 판단은 사람이 수행한다. 문서 정합성을 위한 별도 GitHub Action은 사용하지 않는다.
 
@@ -139,7 +168,7 @@ CodeRabbit은 이 중 Code 영역의 1차 분석을 돕지만, 요구사항 충�
 현재 팀 기준에서는 다음 기능을 필수 절차로 두지 않는다.
 
 - CodeRabbit ↔ Linear 직접 Integration / Knowledge Base
-- Slack `@CodeRabbit` Agent 호출
+- Slack `@CodeRabbit` Agent 호출을 필수 단계로 사용
 - `request_changes_workflow`를 이용한 AI Merge Gate
 - CodeRabbit 자체의 Required Status Check
 - CodeRabbit을 이용한 자동 요구사항 동기화
