@@ -101,7 +101,7 @@ CodeRabbit 지적
    ↓
 근거와 실제 코드 확인
    ↓
-Linear 요구사항 / Acceptance Criteria와 비교
+GitHub docs/의 요구사항과 동기화된 Issue의 Acceptance Criteria 비교
    ↓
 필요하면 수정 + 테스트
    ↓
@@ -114,7 +114,7 @@ Human Reviewer가 최종 판단
 
 CodeRabbit 자동 Review 이후 사람 리뷰어는 반드시 다음 세 가지를 확인한다.
 
-1. **Linear** — Issue 목표와 Acceptance Criteria를 실제 구현이 충족하는가?
+1. **Requirement / Issue** — GitHub `docs/`의 요구사항과 동기화된 Linear / GitHub Issue의 Acceptance Criteria를 실제 구현이 충족하는가?
 2. **Code** — 코드, 테스트, 보안, 권한, 예외 처리와 변경 영향이 적절한가?
 3. **Documentation** — README, `docs/`, ADR 변경이 필요한데 누락되지 않았는가?
 
