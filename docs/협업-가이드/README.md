@@ -1,6 +1,6 @@
 # NSU Capstone Team 4 — 협업 운영 가이드
 
-최종 정리일: 2026-09-15 · 버전: 1.4 · 대상: FE 2명 / BE 2명
+최종 정리일: 2026-09-16 · 버전: 1.5 · 대상: FE 2명 / BE 2명
 
 대상 저장소: `nsuCapstoneTeam/NSU_CAPSTONE`  
 구성: React 프런트엔드와 Spring Boot 백엔드를 함께 관리하는 단일 저장소
@@ -37,29 +37,29 @@ GitHub Flow는 브랜치·PR 운영 방식, 커밋 전략은 변경을 나누고
 | [9. 용어와 참고 자료](09-용어와-참고-자료.md) | 용어 정의, 공식 문서 출처 |
 | [10. CodeRabbit PR Review](10-coderabbit-pr-review.md) | Dashboard 권장값, 자동 리뷰 검증, Path Instructions 도입 기준 |
 
+## 한눈에 보는 운영 규칙
+
+### Slack Root Message 태그
+
+| 태그 | 사용 기준 | 예시 |
+|---|---|---|
+| `[FRONT]` | 화면·UX·프론트엔드 구현 | `[FRONT][FEATURE] 로그인 화면 구현` |
+| `[BACK]` | API·DB·인증·서버 구현 | `[BACK][FEATURE] 로그인 API 구현` |
+| `[COMMON]` | API 명세·데이터 계약 등 공동 결정 | `[COMMON][DECISION] 로그인 응답 규격 확정` |
+
+태그는 Root Message에만 붙이고 후속 대화는 같은 Thread에서 이어간다. 작업 성격은 필요할 때 `[FEATURE]`, `[BUG]`, `[DECISION]`을 두 번째 태그로 붙인다.
+
 ## 기본 개발 흐름
 
-```text
-Slack #dev Thread에서 요구사항 논의
-→ 사람이 요구사항 확정(Human Confirm)
-→ Slack에서 Agent를 호출해 GitHub docs/에 확정 내용 반영
-→ 문서 PR을 검토·Squash Merge
-→ @Linear로 Issue·Acceptance Criteria·담당자·우선순위·일정 생성(ToDo)
-→ Two-way Sync로 동일한 GitHub Issue 생성
-→ 최신 main에서 작업 브랜치 생성
-→ 작업 시작 시 Linear In Progress
-→ AI Agent 또는 사람이 구현·검증
-→ GitHub PR
-→ GitHub Actions CI(도입 완료 후) + CodeRabbit 자동 PR Review
-→ Human Review
-   1. GitHub docs/와 Issue의 요구사항 / Acceptance Criteria 충족
-   2. 코드 / 테스트 / 보안 / 예외처리 정상
-   3. README / docs/ / ADR 업데이트 필요 여부
-→ 사람 승인
-→ Squash Merge
-→ Linear Done 자동 전환
-→ Two-way Sync로 GitHub Issue Closed
-```
+| 단계 | 담당 도구 | 해야 할 일 | 완료 기준 |
+|---|---|---|---|
+| 1. 논의 | Slack `#dev` | 태그가 붙은 Root Message와 Thread에서 논의 | 사람이 `[Human Confirm]` 작성 |
+| 2. 문서화 | Agent + GitHub `docs/` | 확정 내용만 문서 브랜치와 PR에 반영 | 사람 검토 후 문서 PR Squash Merge |
+| 3. 이슈화 | Linear ↔ GitHub Issues | Linear 이슈를 `ToDo`로 만들고 Two-way Sync 확인 | 두 이슈의 내용과 링크가 일치 |
+| 4. 개발 | GitHub Branch / PR | 실제 이슈 키로 브랜치 생성, 구현·테스트, PR 생성 | PR Open 시 Linear `In Progress` |
+| 5. 검토·완료 | CodeRabbit + Human | 자동 1차 리뷰와 Human Review 3종 체크 | Squash Merge → Linear `Done` → GitHub Issue `Closed` |
+
+> 자동 상태 규칙: Draft PR은 상태를 바꾸지 않고, 일반 PR Open은 `In Progress`, 리뷰 요청·활동은 상태를 바꾸지 않으며, PR Merge는 `Done`으로 전환한다.
 
 현재 GitHub Actions CI는 도입 예정이다. CI가 실제로 구성·검증되기 전에는 CodeRabbit Review와 Human Review를 사용하고, 검증된 CI check만 이후 필수 검사로 추가한다.
 
@@ -75,7 +75,7 @@ Slack #dev Thread에서 요구사항 논의
 
 요구사항의 최종 기준은 GitHub `docs/` 하나다. Linear와 GitHub Issues에는 구현할 작업 범위와 Acceptance Criteria만 동일하게 두며 Two-way Sync로 관리한다. Slack의 결정이 바뀌면 먼저 `docs/`를 PR로 갱신한 다음 관련 이슈를 맞춘다.
 
-상태는 `ToDo` / `In Progress` / `Done`만 사용한다. GitHub Issue는 `ToDo`와 `In Progress` 동안 Open이고, Linear가 `Done`이 되면 Two-way Sync로 Closed된다. PR Merge 자동화가 검증되기 전까지는 수동 상태 변경에 의존하지 않고 [도입 체크리스트](08-도입-체크리스트.md)에서 검증 상태를 확인한다.
+상태는 `ToDo` / `In Progress` / `Done`만 사용한다. Linear ↔ GitHub Issues Two-way Sync는 실제 이슈로 동작을 확인했다. 일반 PR이 열리면 Linear는 `In Progress`, PR이 `main`에 Squash Merge되면 `Done`으로 전환되며, Two-way Sync가 GitHub Issue를 `Closed`로 맞춘다. PR Merge 전체 흐름의 실제 검증 여부는 [도입 체크리스트](08-도입-체크리스트.md)에서 추적한다.
 
 Linear ↔ CodeRabbit 직접 연동과 Slack `@CodeRabbit` 호출은 현재 공식 Workflow의 필수 단계로 사용하지 않는다.
 
