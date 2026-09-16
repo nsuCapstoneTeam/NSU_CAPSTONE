@@ -15,15 +15,16 @@ flowchart TD
     F --> A
 ```
 
-1. Slack에서 작업 목적을 확정하고 GitHub `docs/`에 먼저 기록한다.
+1. Slack에서 사람이 작업 목적을 확정하고 GitHub `docs/`에 먼저 기록한다.
 2. GitHub 문서를 기준으로 Linear Issue를 `ToDo`로 만들고 Two-way Sync된 GitHub Issue를 확인한다.
-3. 최신 `main`에서 실제 이슈 키가 포함된 작업 브랜치를 만든 뒤 Linear를 `In Progress`로 전환한다.
-4. 의미 있는 단위로 커밋하고 원격 브랜치에 push한다.
-5. 큰 작업이나 설계 논의가 필요하면 Draft PR을 일찍 연다.
-6. 리뷰 가능한 상태에서 검증 결과를 기록하고 사람에게 리뷰를 요청한다.
-7. 필수 CI와 사람 승인 조건을 충족하면 사람이 Squash Merge한다.
-8. PR Merge로 Linear가 `Done`, GitHub Issue가 `Closed`로 자동 전환되는지 확인한다.
-9. 병합된 작업 브랜치를 정리하고 다음 작업은 새 브랜치에서 시작한다.
+3. 최신 `main`에서 실제 이슈 키가 포함된 작업 브랜치를 만든다.
+4. 의미 있는 단위로 구현·테스트·커밋하고 원격 브랜치에 push한다.
+5. 작업 중 공유가 필요하면 Draft PR을 열 수 있다. Draft PR은 Linear 상태를 바꾸지 않는다.
+6. 리뷰 가능한 일반 PR을 열면 Linear가 자동으로 `In Progress`가 된다.
+7. PR 본문에 GitHub 문서, Linear 이슈, GitHub Issue와 검증 결과를 남긴다.
+8. CodeRabbit과 Human Review를 거쳐 작성자 외 팀원 1명 이상이 승인한다.
+9. 사람이 Squash Merge하면 Linear가 `Done`, GitHub Issue가 `Closed`로 자동 전환된다.
+10. 병합된 작업 브랜치를 정리하고 다음 작업은 최신 `main`의 새 브랜치에서 시작한다.
 
 GitHub Flow의 브랜치·PR·리뷰·병합 절차를 이 팀의 승인 규칙과 결합한 운영안이다. [공식 설명][G1]
 
