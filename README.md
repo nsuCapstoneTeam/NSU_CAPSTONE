@@ -21,7 +21,7 @@ Claude
 = 논의 요약 / 문서 초안 / 설계·구현 보조
 
 Linear
-= 확정된 작업 / Acceptance Criteria / 일정 / 상태 Source of Truth
+= 확정된 작업 / Acceptance Criteria / 일정 / 상태관리 
 
 GitHub
 = 코드 / Branch / PR 
@@ -62,14 +62,11 @@ CodeRabbit 자동 PR Review
    ↓
 Human Review
 ├─ Linear 요구사항 / Acceptance Criteria 충족?
-├─ 코드 / 테스트 / 보안 / 예외처리 정상?
 └─ README / docs/ / ADR 업데이트 필요한가?
    ↓
 Squash Merge
    ↓
 Linear 상태 정리
 ```
-
-CodeRabbit은 GitHub PR의 자동 1차 리뷰에 사용하며 초기에는 **Advisory**로 운영합니다. Linear ↔ CodeRabbit 직접 연동과 Slack `@CodeRabbit` 호출은 공식 개발 Workflow의 필수 단계로 두지 않습니다.
 
 상세 운영 규칙은 [`docs/협업-가이드/`](docs/협업-가이드/README.md)를 참고합니다.
