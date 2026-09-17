@@ -1,118 +1,132 @@
 # 협업 가이드
 
-## 1. 도구 역할
+이 문서는 **Claude와 팀원이 공통으로 읽는 협업 규칙**이다.
+
+제품 요구사항의 기준 원문은 Linear의 요구사항 문서이고, 이 문서는 개발 절차와 Agent 사용 규칙만 정의한다.
+
+## 1. Agent 컨텍스트 구조
+
+우리 팀은 Agent가 대화 맥락을 기억한다고 가정하지 않는다.
+
+```text
+1. Linear Slack 전용 Guidance
+        ↓
+2. Linear 기본 Issue Template
+        ↓
+3. GitHub 협업 가이드
+```
+
+- Slack의 `@Linear`는 Slack 전용 Guidance와 기본 Issue Template을 따른다.
+- Slack의 `@Claude`는 작업 전에 이 문서를 읽고 협업 규칙을 따른다.
+- Slack Thread의 `[Human Confirm]`만 확정된 결정으로 취급한다.
+- Agent는 확정되지 않은 정책, 일정, 담당자, 우선순위를 임의로 만들지 않는다.
+
+## 2. 도구 역할
 
 | 도구 | 역할 |
 |---|---|
-| Slack `#dev` | 기능, 버그, 정책을 논의하는 곳 |
-| GitHub `docs/` | 확정된 요구사항, 정책, 설계 문서의 기준 |
-| Linear | 해야 할 작업과 진행 상태 관리 |
-| GitHub | 코드, 브랜치, PR, 리뷰, 변경 이력 관리 |
+| Slack `#dev` | 기능, 버그, 정책 논의와 Human Confirm |
+| Linear Requirements | 제품·서비스 요구사항의 기준 원문 |
+| Linear Issue | 실제 작업, Acceptance Criteria, 담당자, 우선순위, 일정, 상태 관리 |
+| GitHub `docs/` | 협업 규칙, 기술 설계, ADR, API 등 개발 문서 |
+| GitHub Issue | Linear Issue와 Two-way Sync되는 작업 기록 |
+| GitHub PR | 코드 변경, 리뷰, Merge |
 | CodeRabbit | PR 자동 리뷰 보조 |
 
-중요한 결정은 Slack에만 남기지 않는다. 요구사항이나 정책이 확정되면 필요한 경우 GitHub `docs/`에 반영한다.
-
-## 2. 개발 순서
+## 3. 실제 작업 흐름
 
 ```text
-Slack에서 논의
-→ 사람이 최종 결정
-→ 필요하면 docs/ 수정
-→ Linear Issue 생성
-→ main에서 작업 브랜치 생성
+Slack Thread에서 논의
+→ Human Confirm
+→ 필요하면 요구사항/문서 반영
+→ @Linear로 Issue 생성
+→ Linear Todo
+→ 실제 작업 시작 시 In Progress
+→ Branch 생성
 → 구현 + 테스트
-→ GitHub PR 생성
-→ CodeRabbit 리뷰 + 사람 리뷰
+→ GitHub PR
+→ CodeRabbit + Human Review
 → Squash Merge
+→ GitHub Issue Closed
 → Linear Done
 ```
 
-요구사항이나 정책이 바뀌지 않는 단순 버그 수정, 리팩터링, 테스트 작업은 불필요하게 문서를 먼저 수정하지 않는다.
+## 4. Linear 상태 규칙
 
-## 3. Linear Issue
-
-Issue에는 최소한 다음 내용만 적는다.
-
-- 무엇을 하는 작업인지
-- 왜 필요한지
-- 완료 조건(Acceptance Criteria)
-- 담당자
-
-상태는 팀에서 아래 3개만 사용한다.
+일반 개발 작업에서는 아래 3개 상태만 사용한다.
 
 ```text
 Todo → In Progress → Done
 ```
 
-작업을 시작하면 `In Progress`, PR이 병합되고 작업이 끝나면 `Done`으로 바꾼다.
+- 새 Issue는 항상 `Todo`
+- 실제 개발을 시작할 때 `In Progress`
+- 완료 조건을 모두 충족하고 작업이 끝났을 때 `Done`
+- Agent가 다른 상태를 임의로 선택하거나 새 상태를 만들지 않는다.
 
-## 4. 브랜치와 커밋
+## 5. Linear Issue 생성 규칙
 
-`main`에 직접 작업하지 않는다. 항상 최신 `main`에서 작업 브랜치를 만든다.
+새 Issue에는 아래 내용만 있으면 된다.
+
+```markdown
+## 목표
+
+## 작업 범위
+
+## Acceptance Criteria
+- [ ]
+
+## 관련 문서
+- Linear Requirements:
+- GitHub docs:
+```
+
+규칙:
+
+- Team: `NSU_CAPSTONE`
+- Project: `아티스트-행사 매칭 플랫폼 MVP`
+- 초기 상태: `Todo`
+- 제목과 Acceptance Criteria는 Human Confirm 또는 확정 요구사항만 사용한다.
+- 담당자, Priority, 일정이 확정되지 않았다면 비워 둔다.
+- 같은 작업의 GitHub Issue를 수동으로 하나 더 만들지 않는다. Two-way Sync 결과를 사용한다.
+
+## 6. Claude 호출 규칙
+
+Slack에서 Claude에게 작업을 맡길 때는 다음 원칙을 사용한다.
+
+```text
+작업 전에 nsuCapstoneTeam/NSU_CAPSTONE의
+`docs/협업-가이드/README.md`를 먼저 읽고 그 규칙을 따라라.
+
+이 Thread에서는 `[Human Confirm]`만 확정된 결정으로 취급한다.
+결정되지 않은 내용은 임의로 정하지 않는다.
+```
+
+## 7. Branch / PR
+
+`main`에 직접 작업하지 않는다. 최신 `main`에서 Branch를 만든다.
 
 ```text
 feat/NSU-123-user-signup
 fix/NSU-124-login-error
-docs/update-api-docs
-chore/update-config
+docs/update-collaboration-guide
 ```
 
-커밋 메시지는 변경 목적이 보이면 충분하다.
+PR에는 다음을 적는다.
 
-```text
-feat: 회원가입 API 구현
-fix: 로그인 예외 처리 수정
-refactor: 인증 서비스 구조 개선
-test: 회원가입 서비스 테스트 추가
-docs: 인증 API 문서 수정
-chore: 개발 설정 정리
-```
+- 관련 Linear / GitHub Issue
+- 변경 내용
+- 테스트 또는 검증 결과
+- 문서 영향
 
-커밋 하나에 서로 관계없는 작업을 섞지 않는다.
-
-## 5. PR 작성
-
-PR에는 아래 내용만 명확하게 적는다.
-
-- 관련 Linear Issue
-- 무엇을 변경했는지
-- 어떻게 검증했는지
-- 문서 수정이 필요한지
-- 리뷰어가 주의해서 볼 부분이 있는지
-
-PR은 한 가지 목적에 집중한다. 너무 큰 작업이면 리뷰 가능한 단위로 나눈다.
-
-## 6. 리뷰와 Merge
-
-CodeRabbit은 보조 리뷰어다. 최종 판단은 사람이 한다.
-
-사람 리뷰에서는 아래 세 가지만 확인한다.
-
-1. **요구사항** — Linear의 완료 조건을 충족했는가?
-2. **코드** — 테스트, 예외 처리, 보안, 영향 범위에 문제가 없는가?
-3. **문서** — README, `docs/`, ADR 등을 함께 수정해야 하는가?
-
-수정 요청이 남아 있으면 해결한 뒤 병합한다.
-작성자 외 팀원 최소 1명이 확인한 뒤 **Squash Merge**한다.
-
-## 7. 문서를 반드시 수정해야 하는 경우
-
-다음이 바뀌면 구현과 함께 문서를 수정한다.
-
-- 제품 요구사항 또는 운영 정책
-- API Contract
-- DB Schema
-- 인증 / 권한 / 결제처럼 중요한 동작
-- 팀이 계속 참고해야 하는 아키텍처 결정
-
-단순 구현 상세, 변수명 변경, 작은 리팩터링까지 모두 문서화하지 않는다.
+CodeRabbit은 보조 리뷰어이며 최종 승인과 Squash Merge는 사람이 한다.
 
 ## 8. 꼭 지킬 것
 
 - `main` 직접 push 금지
 - Secret, API Key, 비밀번호 커밋 금지
-- 팀에서 확정하지 않은 정책을 임의로 코드에 넣지 않기
-- AI 리뷰 결과를 그대로 믿지 말고 실제 요구사항과 코드 확인하기
-- Merge 전 테스트 결과와 문서 영향을 사람이 확인하기
+- `[Human Confirm]` 없는 정책을 Agent가 임의로 확정하지 않기
+- Linear 일반 개발 상태는 `Todo → In Progress → Done`만 사용하기
+- PR Merge 전 Acceptance Criteria와 테스트 결과를 사람이 확인하기
 
-이 규칙보다 복잡한 절차가 필요해지는 시점에만 가이드를 확장한다.
+필요한 규칙이 실제로 생길 때만 이 문서를 확장한다.
