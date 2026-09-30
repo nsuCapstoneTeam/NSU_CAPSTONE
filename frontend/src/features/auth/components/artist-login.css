@@ -1,0 +1,120 @@
+.artist-login {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 32px 0 65px;
+}
+.artist-login > .text-button { font-size: 12px; }
+.artist-login-panel {
+  margin-top: 24px;
+  padding: 36px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.artist-login-panel h1 {
+  margin: 14px 0;
+  font-size: 28px;
+  letter-spacing: -1px;
+}
+.artist-login-intro {
+  margin-bottom: 28px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+.artist-login-panel form > label {
+  display: block;
+  margin: 16px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.artist-login-panel form > label:first-child { margin-top: 0; }
+.artist-login-submit { margin-top: 18px; justify-content: center; }
+.artist-login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 28px 0 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.artist-login-divider::before,
+.artist-login-divider::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
+.artist-social {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  padding: 8px 0 14px;
+}
+.artist-social-button {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.artist-social-button.kakao { background: #fee500; color: #191919; }
+.artist-social-button.naver { background: #03c75a; color: #fff; }
+.artist-social-button.google { background: #fff; color: #4285f4; border-color: #ccd5df; }
+.artist-provider-mark {
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+}
+.artist-social-button:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 4px;
+}
+.artist-signup {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.artist-signup button {
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+.artist-login-feedback {
+  margin: 18px 0 0;
+  color: var(--blue);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.artist-login-feedback:empty { display: none; }
+.artist-login-note {
+  margin: 24px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+@media (max-width: 580px) {
+  .artist-login-panel { padding: 26px 20px; }
+  .artist-login-panel h1 { font-size: 25px; }
+}
+@media (max-width: 360px) {
+  .artist-social { gap: 20px; }
+  .artist-social-button { width: 56px; height: 56px; }
+}

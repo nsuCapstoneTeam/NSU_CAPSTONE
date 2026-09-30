@@ -1,0 +1,187 @@
+.organizer-login {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 32px 0 65px;
+}
+.organizer-login > .text-button {
+  font-size: 12px;
+}
+.organizer-login-panel {
+  margin-top: 24px;
+  padding: 36px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.organizer-login-panel h1 {
+  font-size: 28px;
+  letter-spacing: -1px;
+  margin: 14px 0;
+}
+.organizer-login-intro {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--muted);
+  margin-bottom: 28px;
+}
+.organizer-social {
+  display: grid;
+  gap: 12px;
+}
+.organizer-social-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  min-height: 54px;
+}
+.organizer-social-button.naver {
+  background: #03c75a;
+  color: #102d1e;
+}
+.organizer-social-button.google {
+  background: #fff;
+  color: #263449;
+  border-color: #ccd5df;
+}
+.organizer-social-button.kakao {
+  background: #fee500;
+  color: #191919;
+}
+.organizer-provider-mark {
+  width: 20px;
+  font-size: 21px;
+  font-weight: 900;
+}
+.organizer-social-button:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 4px;
+}
+.organizer-login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 28px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.organizer-login-divider:before,
+.organizer-login-divider:after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
+.organizer-login-panel form > label {
+  font-size: 13px;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 10px;
+}
+.organizer-phone-submit {
+  margin-top: 14px;
+  justify-content: center;
+}
+.organizer-code-form {
+  margin-top: 16px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.organizer-login-feedback {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--blue);
+  margin: 18px 0 0;
+}
+.organizer-login-feedback:empty {
+  display: none;
+}
+.organizer-login-note {
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--muted);
+  margin: 24px 0 0;
+}
+@media (max-width: 580px) {
+  .organizer-login-panel {
+    padding: 26px 20px;
+  }
+  .organizer-login-panel h1 {
+    font-size: 25px;
+  }
+}
+
+/* 간편 로그인: 휴대폰 입력 아래 원형 버튼 */
+.organizer-social {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  padding: 8px 0 14px;
+}
+.organizer-social-button {
+  width: 64px;
+  height: 64px;
+  min-height: 64px;
+  flex: 0 0 64px;
+  border-radius: 50%;
+  padding: 0;
+  justify-content: center;
+}
+.organizer-provider-mark {
+  display: grid;
+  place-items: center;
+  width: auto;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 900;
+}
+.organizer-social-button.naver {
+  color: #fff;
+}
+.organizer-social-button.google {
+  color: #4285f4;
+}
+.organizer-signup {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 22px 0 0;
+  line-height: 1.8;
+}
+.organizer-signup button {
+  background: none;
+  padding: 4px;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+.organizer-signup button:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+@media (max-width: 360px) {
+  .organizer-social {
+    gap: 20px;
+  }
+  .organizer-social-button {
+    width: 56px;
+    height: 56px;
+    min-height: 56px;
+    flex-basis: 56px;
+  }
+}

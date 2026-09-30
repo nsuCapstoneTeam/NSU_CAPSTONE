@@ -1,0 +1,48 @@
+.auth-role-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 32px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--soft);
+}
+.auth-role-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 12px 10px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.auth-role-tabs button.is-active {
+  background: var(--surface);
+  color: var(--blue);
+  border-color: var(--blue);
+  box-shadow: 0 5px 16px rgba(30, 75, 145, 0.13);
+}
+.auth-role-tabs button > span {
+  font-size: 17px;
+  line-height: 1;
+}
+.auth-role-tabs button:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+@media (max-width: 420px) {
+  .auth-role-tabs button {
+    min-height: 48px;
+    font-size: 11px;
+  }
+  .auth-role-tabs button > span {
+    display: none;
+  }
+}

@@ -1,0 +1,55 @@
+.service-intro {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 40px;
+  align-items: center;
+  padding: 64px 0;
+  border-bottom: 1px solid var(--line);
+}
+.service-intro-copy h2 {
+  color: var(--ink);
+  font-size: clamp(25px, 3vw, 38px);
+  line-height: 1.5;
+  letter-spacing: -1px;
+  margin: 20px 0;
+  word-break: keep-all;
+}
+.service-intro-copy h2 span {
+  color: var(--blue);
+}
+.service-intro-invitation {
+  color: var(--muted);
+  font-size: 17px;
+}
+.service-intro-challenge {
+  color: var(--blue);
+  font-size: 24px;
+  font-weight: 800;
+  margin-top: 24px;
+}
+.service-intro-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 24px;
+  background: white;
+}
+@media (max-width: 800px) {
+  .service-intro {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 40px 0;
+  }
+  .service-intro-image {
+    max-width: 600px;
+    justify-self: center;
+  }
+}
+
+.service-intro-connection {
+  color: var(--blue);
+  font-size: clamp(26px, 3vw, 36px);
+  font-weight: 800;
+  line-height: 1.4;
+  margin: 28px 0 0;
+}
