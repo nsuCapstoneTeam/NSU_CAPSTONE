@@ -265,6 +265,8 @@ GHCR Push 하지 않음
 
 main에 merge되면 실제 배포 가능한 이미지를 만든다.
 
+단, **Docker Image를 GHCR에 올리기 전에 Trivy 취약점 검사를 반드시 통과해야 한다.**
+
 ```text
 main merge
    ↓
@@ -274,8 +276,15 @@ Application Build
    ↓
 Docker Build
    ↓
+Trivy Image Scan
+   ↓
+HIGH / CRITICAL Security Gate
+   ↓
 GHCR Push
 ```
+
+Trivy는 Dockerfile 작성과 로컬 `docker build`가 정상 동작하는 시점부터 적용한다.
+즉 **첫 main → GHCR 자동 push를 활성화하기 전에 넣는 것을 기본 시점으로 한다.**
 
 ---
 
@@ -627,7 +636,8 @@ feature branch
 Pull Request
    │
    ├─ Test
-   └─ Docker Build 검증
+   ├─ Docker Build
+   └─ Trivy Scan
             │
             └─ Push X
 
@@ -641,6 +651,12 @@ bootJar
    │
    ▼
 Docker Build
+   │
+   ▼
+Trivy Scan
+   │
+   ▼
+HIGH / CRITICAL 없음
    │
    ▼
 GHCR Push
@@ -658,7 +674,8 @@ Developer
 Pull Request
    │
    ├─ AI Test
-   └─ Docker Build 검증
+   ├─ Docker Build
+   └─ Trivy Scan
             │
             └─ Push X
 
@@ -671,6 +688,12 @@ AI Test
 Docker Build
    │
    ▼
+Trivy Scan
+   │
+   ▼
+HIGH / CRITICAL 없음
+   │
+   ▼
 GHCR Push
    │
    ├─ :latest
@@ -679,7 +702,73 @@ GHCR Push
 
 ---
 
-## 18. 선택하지 않은 대안
+## 18. Container Image Security Gate
+
+Spring Boot와 AI 서버 이미지는 **GHCR에 push하기 전에 Trivy로 취약점을 검사한다.**
+
+기본 정책:
+
+```text
+Docker Build
+     ↓
+Trivy Image Scan
+     ↓
+HIGH / CRITICAL 존재?
+   /             \
+ YES              NO
+  │                │
+  ▼                ▼
+Workflow 실패     GHCR Push
+```
+
+- PR에서도 Docker Build 후 Trivy 검사를 수행해 문제를 merge 전에 확인한다.
+- main에서는 Trivy 검사를 통과한 Image만 GHCR에 push한다.
+- 기본 차단 기준은 `HIGH`, `CRITICAL` 취약점이다.
+- 수정 가능한 취약점은 dependency 또는 base image 업데이트를 우선한다.
+- Trivy Action은 `@master` 같은 이동 가능한 branch 참조 대신 검증된 release version을 사용하고, CI가 안정화되면 full commit SHA pinning을 검토한다.
+
+Trivy는 모든 보안 문제를 탐지하는 도구가 아니라 **Container Image 내부의 알려진 취약점을 배포 전에 걸러내는 Security Gate**로 사용한다.
+
+---
+
+## 19. Build Once, Deploy Many와 Rollback
+
+배포 환경마다 Docker Image를 다시 build하지 않는다.
+
+```text
+Git Commit
+   ↓
+Docker Build
+   ↓
+Trivy 통과
+   ↓
+GHCR
+   ↓
+sha-a812bc3
+   ├─ Staging
+   └─ Production
+```
+
+즉 **한 번 검증한 동일한 SHA Image를 여러 환경에 배포한다.**
+
+운영 배포 기준은 `latest`가 아니라 Git SHA 기반 Image를 사용한다.
+
+배포 후에는 Health Check로 정상 기동을 확인하고, 실패하면 직전 정상 SHA Image로 rollback할 수 있어야 한다.
+
+```text
+Deploy
+   ↓
+Health Check
+  /        \
+PASS       FAIL
+ │           │
+ ▼           ▼
+완료      이전 SHA로 Rollback
+```
+
+---
+
+## 20. 선택하지 않은 대안
 
 ### 18.1 Docker Image를 Git repository에 저장
 
@@ -728,7 +817,7 @@ GitHub Actions
 
 ---
 
-## 19. 장점
+## 21. 장점
 
 - Git과 Docker Image의 역할이 명확하게 분리된다.
 - GitHub Actions와 GHCR의 연동이 단순하다.
@@ -739,7 +828,7 @@ GitHub Actions
 
 ---
 
-## 20. 단점과 주의점
+## 22. 단점과 주의점
 
 - Private GHCR Image를 외부 서버에서 pull하려면 별도 인증이 필요하다.
 - AI Image가 커질 경우 CI 시간과 Registry 전송 시간이 증가할 수 있다.
@@ -749,7 +838,7 @@ GitHub Actions
 
 ---
 
-## 21. 구현 순서
+## 23. 구현 순서
 
 실제 적용은 다음 순서로 진행한다.
 
@@ -760,28 +849,32 @@ GitHub Actions
         ↓
 3. Backend GitHub Actions 작성
         ↓
-4. PR에서 Test + Docker Build 검증
+4. Trivy Image Scan + HIGH/CRITICAL Gate 적용
         ↓
-5. main merge 후 GHCR Push 확인
+5. PR에서 Test + Docker Build + Trivy 검증
         ↓
-6. AI Dockerfile 작성
+6. main merge 후 Trivy 통과 Image의 GHCR Push 확인
         ↓
-7. AI GitHub Actions 작성
+7. AI Dockerfile 작성
         ↓
-8. AI GHCR Push 확인
+8. AI GitHub Actions + Trivy Gate 작성
         ↓
-9. compose.yml 작성
+9. AI GHCR Push 확인
         ↓
-10. PostgreSQL + pgvector 공식 Image 연결
+10. compose.yml 작성
         ↓
-11. Redis 공식 Image 연결
+11. PostgreSQL + pgvector 공식 Image 연결
         ↓
-12. 배포 서버에서 compose pull/up 검증
+12. Redis 공식 Image 연결
+        ↓
+13. 배포 후 Health Check 확인
+        ↓
+14. 이전 SHA Image Rollback 절차 검증
 ```
 
 ---
 
-## 22. 향후 Kubernetes로 전환할 경우
+## 24. 향후 Kubernetes로 전환할 경우
 
 이 구조의 중요한 장점은 Docker Image 생성 과정이 Kubernetes와 독립적이라는 점이다.
 
@@ -813,23 +906,25 @@ Pod
 
 ---
 
-## 23. 최종 결정
+## 25. 최종 결정
 
 우리 졸업작품은 다음을 기본 정책으로 사용한다.
 
 1. Git에는 Source Code, Dockerfile, Compose, Workflow를 저장한다.
 2. Spring Boot와 AI 서버 Docker Image는 GHCR에 저장한다.
-3. PR에서는 Test + Docker Build까지만 수행하고 Image는 push하지 않는다.
-4. main merge에서 Docker Image를 GHCR에 push한다.
+3. PR에서는 Test + Docker Build + Trivy Scan을 수행하고 Image는 push하지 않는다.
+4. main에서는 Trivy HIGH/CRITICAL Security Gate를 통과한 Image만 GHCR에 push한다.
 5. GHCR push에는 `contents: read`, `packages: write` 최소 권한을 사용한다.
 6. 배포 가능한 Image에는 Git SHA tag를 부여한다.
-7. PostgreSQL + pgvector와 Redis는 공식 Image를 사용한다.
-8. Database Schema는 Flyway migration으로 관리한다.
-9. Secret은 Git과 Docker Image에 포함하지 않는다.
-10. 향후 Kubernetes로 이동하더라도 동일한 Image build pipeline을 재사용한다.
+7. 한 번 검증한 동일 SHA Image를 환경마다 다시 build하지 않고 재사용한다.
+8. 배포 후 Health Check를 수행하고 실패 시 이전 정상 SHA Image로 rollback한다.
+9. PostgreSQL + pgvector와 Redis는 공식 Image를 사용한다.
+10. Database Schema는 Flyway migration으로 관리한다.
+11. Secret은 Git과 Docker Image에 포함하지 않는다.
+12. 향후 Kubernetes로 이동하더라도 동일한 Image build pipeline을 재사용한다.
 
 ---
 
-## 24. 한 줄 요약
+## 26. 한 줄 요약
 
-> **우리 코드는 GitHub Actions로 Docker Image를 만들고 GHCR에 저장하며, PostgreSQL·pgvector·Redis는 공식 이미지를 사용한다. PR은 검증만 하고 main merge에서만 Image를 배포한다.**
+> **우리 코드는 GitHub Actions로 Docker Image를 만들고 Trivy Security Gate를 통과한 Image만 GHCR에 저장한다. 배포는 Git SHA Image를 기준으로 하며 Health Check 실패 시 이전 SHA로 rollback한다.**
