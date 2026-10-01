@@ -56,6 +56,20 @@ PostgreSQL 볼륨을 생성한 후 사용자, 비밀번호 또는 데이터베�
 
 실제 `.env`는 Git에 커밋하지 않는다.
 
+## 운영 환경 데이터베이스 설정
+
+운영 환경의 데이터베이스 접속 정보는 Spring Boot의 Externalized Configuration 원칙에 따라 애플리케이션 코드, JAR 및 컨테이너 이미지에 포함하지 않고 실행 환경에서 주입한다.
+
+Docker Compose를 사용하지 않는 환경에서는 다음 Spring Boot 표준 환경변수를 사용한다.
+
+```properties
+SPRING_DATASOURCE_URL=jdbc:postgresql://호스트:5432/데이터베이스
+SPRING_DATASOURCE_USERNAME=사용자
+SPRING_DATASOURCE_PASSWORD=비밀번호
+```
+
+Spring Boot 서버를 컨테이너로 실행하는 경우에도 해당 환경변수는 애플리케이션 컨테이너에 주입한다. AWS 환경에서는 비밀번호를 애플리케이션 이미지나 저장소에 포함하지 않고 AWS Secrets Manager 등의 Secret 관리 서비스를 통해 실행 환경에 주입한다.
+
 ## PostgreSQL 및 Redis 실행
 
 Docker Desktop을 실행한 후 `backend` 디렉터리에서 다음 명령을 사용한다.
@@ -183,6 +197,8 @@ backend/
 - `application.properties`에는 애플리케이션 공통 설정과 설정 파일 import만 둔다.
 - 기능별 설정은 `config/` 아래의 별도 `.properties` 파일로 분리하며, 실제 설정이 생기는 시점에 파일을 추가한다.
 - 운영 RDS 비밀번호는 로컬 개발 비밀번호와 분리한다.
+- 운영 환경의 데이터베이스 접속 정보는 Spring Boot Externalized Configuration 원칙에 따라 실행 환경에서 주입한다.
+- 비밀번호와 Secret은 애플리케이션 코드, JAR 및 컨테이너 이미지에 포함하지 않는다.
 - 데이터베이스 구조 변경은 Flyway 마이그레이션으로 관리한다.
 - 이미 적용한 Flyway 마이그레이션 파일은 수정하지 않는다.
 - 로컬 데이터를 완전히 초기화할 때만 `docker compose down -v`를 사용한다.

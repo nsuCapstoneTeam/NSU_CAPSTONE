@@ -183,5 +183,6 @@ CodeRabbit은 보조 리뷰어이며 최종 승인과 Squash Merge는 사람이 
 - 아직 도입하지 않았거나 설정값이 없는 기능의 빈 설정 파일은 미리 만들지 않는다. 실제 설정이 추가되는 시점에 해당 파일을 생성하고 `application.properties`에서 import한다.
 - Spring Boot가 자동 인식하지 못하는 Docker 이미지는 `org.springframework.boot.service-connection` 라벨로 서비스 종류를 명시한다.
 - 비밀번호 등 민감한 설정에는 저장소에 기본값을 작성하지 않는다.
+- 운영 환경의 민감한 설정은 Spring Boot Externalized Configuration 원칙에 따라 실행 환경에서 주입하며 저장소, JAR 및 컨테이너 이미지에 포함하지 않는다.
 
 필요한 규칙이 실제로 생길 때만 이 문서를 확장한다.
