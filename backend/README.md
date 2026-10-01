@@ -162,6 +162,9 @@ backend/
 │   │   ├── java/com/nsu/capstone/
 │   │   └── resources/
 │   │       ├── application.properties
+│   │       ├── config/
+│   │       │   ├── database.properties
+│   │       │   └── redis.properties
 │   │       └── db/migration/
 │   └── test/
 ├── .env.example
@@ -175,6 +178,8 @@ backend/
 ## 관리 원칙
 
 - `.env`, 실제 비밀번호, API Key는 커밋하지 않는다.
+- `application.properties`에는 애플리케이션 공통 설정과 설정 파일 import만 둔다.
+- 기능별 설정은 `config/` 아래의 별도 `.properties` 파일로 분리하며, 실제 설정이 생기는 시점에 파일을 추가한다.
 - 운영 RDS 비밀번호는 로컬 개발 비밀번호와 분리한다.
 - 데이터베이스 구조 변경은 Flyway 마이그레이션으로 관리한다.
 - 이미 적용한 Flyway 마이그레이션 파일은 수정하지 않는다.

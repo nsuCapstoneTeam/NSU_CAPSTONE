@@ -175,4 +175,11 @@ CodeRabbit은 보조 리뷰어이며 최종 승인과 Squash Merge는 사람이 
 - Linear 일반 개발 상태는 `Todo → In Progress → Done`만 사용하기
 - PR Merge 전 Acceptance Criteria와 테스트 결과를 사람이 확인하기
 
+## 9. Backend 설정 파일 관리
+
+- Spring Boot 설정은 `.properties` 형식을 사용한다.
+- `backend/src/main/resources/application.properties`에는 애플리케이션 공통 설정과 설정 파일 import만 둔다.
+- 데이터베이스, Redis 등 기능별 설정은 `backend/src/main/resources/config/` 아래의 별도 `.properties` 파일로 분리한다.
+- 아직 도입하지 않았거나 설정값이 없는 기능의 빈 설정 파일은 미리 만들지 않는다. 실제 설정이 추가되는 시점에 해당 파일을 생성하고 `application.properties`에서 import한다.
+
 필요한 규칙이 실제로 생길 때만 이 문서를 확장한다.
