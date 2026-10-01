@@ -1,6 +1,8 @@
 services:
   postgres:
     image: pgvector/pgvector:0.8.6-pg18
+    labels:
+      org.springframework.boot.service-connection: postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

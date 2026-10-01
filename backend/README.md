@@ -41,16 +41,18 @@ cp .env.example .env
 
 ```properties
 POSTGRES_USER=capstone
-POSTGRES_PASSWORD=capstone1234
+POSTGRES_PASSWORD=
 POSTGRES_DB=capstone_db
 POSTGRES_PORT=5432
 
 REDIS_PORT=6379
 ```
 
-비밀번호는 팀원별로 다른 값을 사용할 수 있다. 단, Docker Compose와 Spring Boot에서 동일한 비밀번호를 사용해야 한다.
+`POSTGRES_PASSWORD`에는 팀원별로 사용할 로컬 비밀번호를 직접 입력한다.
 
-`capstone1234`는 로컬 개발 전용 예시 값으로 사용하며 운영 환경이나 AWS RDS에서 재사용하지 않는다.
+Spring Boot는 Docker Compose의 PostgreSQL 서비스를 인식하여 `.env`에 지정한 사용자, 비밀번호, 데이터베이스 및 포트를 자동으로 사용한다.
+
+PostgreSQL 볼륨을 생성한 후 사용자, 비밀번호 또는 데이터베이스 이름을 변경하면 기존 데이터베이스에는 자동으로 반영되지 않는다. 변경된 값으로 다시 생성하려면 `docker compose down -v`로 로컬 데이터를 초기화한 후 컨테이너를 다시 실행한다.
 
 실제 `.env`는 Git에 커밋하지 않는다.
 
@@ -184,5 +186,6 @@ backend/
 - 데이터베이스 구조 변경은 Flyway 마이그레이션으로 관리한다.
 - 이미 적용한 Flyway 마이그레이션 파일은 수정하지 않는다.
 - 로컬 데이터를 완전히 초기화할 때만 `docker compose down -v`를 사용한다.
+- `pgvector/pgvector` 이미지는 Spring Boot가 PostgreSQL로 인식할 수 있도록 Compose 서비스 연결 라벨을 유지한다.
 - PostgreSQL, pgvector 및 Redis 이미지 버전은 팀 합의 없이 변경하지 않는다.
 - LLM 및 Spring AI 관련 설정은 모델과 적용 방식 확정 후 별도로 추가한다.
