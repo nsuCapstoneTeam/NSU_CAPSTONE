@@ -86,9 +86,9 @@ DB, Snapshot History, Risk Signal, Spring Boot 책임 경계와 구현 순서를
 
 기존 ADR-005의 비중복 Provider별 External Account / OAuth 결정을 통합합니다.
 
-### [08_previous_adr_reconciliation.md](./08_previous_adr_reconciliation.md)
+### [08_deprecated_legacy_decisions.md](./08_deprecated_legacy_decisions.md)
 
-기존 ADR-001~005 중 무엇을 합쳤고, 무엇을 중복/충돌 때문에 다시 합치지 않았는지 기록합니다.
+삭제된 이전 Artist Trust ADR에서 현재 V1이 폐기·대체한 결정과 그 이유만 간단히 기록합니다.
 
 ---
 
@@ -204,7 +204,7 @@ README
 06. DB / 구현 Roadmap
 
 필요 시
-02. Trade-off / 03. 논문 근거 / 07. External Account / 08. 기존 ADR 정합성
+02. Trade-off / 03. 논문 근거 / 07. External Account / 08. 폐기된 이전 결정
 ```
 
 ---
