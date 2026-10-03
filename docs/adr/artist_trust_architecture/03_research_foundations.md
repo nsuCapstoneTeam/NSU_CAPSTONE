@@ -33,10 +33,10 @@
 
 ## 우리 서비스와의 연결
 
-행사 주최자도 비슷한 불확실성을 가집니다.
+EVENT_PARTNER도 비슷한 불확실성을 가집니다.
 
 ```text
-주최자
+EVENT_PARTNER
   ↓
 처음 보는 아티스트
   ↓
@@ -315,7 +315,9 @@ No-show
 
 No-show와 단순 취소를 동일한 `negative 1건`으로 보면 정보가 손실될 수 있습니다.
 
-이 검토 이후 V1은 **Beta Reputation을 핵심 추정 모델로 채택**했습니다. 다만 여러 종류의 사건을 그대로 binary 1건으로 만들지 않고, 프로젝트의 Severity Policy를 통해 `R/S` Evidence로 변환합니다.
+이 검토 이후 V1은 **Beta Reputation을 핵심 추정 모델로 채택**했습니다. 결과는 이진 관측(정상 완료 = 성공, 아티스트 귀책 취소·노쇼 = 실패)으로 해석하고, 사건의 종류가 주는 정보(취소 통보 시점, 노쇼 여부)는 Risk Signal과 근거 분류로 보존합니다.
+
+이전 `trust-v1`은 Severity를 실패 건수로 환산(노쇼 = 실패 5건)했지만, 그렇게 하면 값이 어떤 사건의 확률도 아니게 되어 폐기했습니다([D40](./04_final_policy_decisions.md#d40-binary-outcome)).
 
 ---
 
@@ -350,7 +352,9 @@ flowchart LR
     Current --> Aggregate
 ```
 
-단, 과거를 완전히 삭제하는 것이 아니라 **영향을 줄이는 방식**을 우선 검토합니다.
+단, 과거를 완전히 삭제하는 것이 아니라 **영향을 줄이는 방식**을 사용합니다.
+
+V1은 달력 시간이 아니라 **관측이 확정될 때마다** 기존 누적값에 `γ = 0.95`를 곱하는 방식으로 forgetting을 구체화했습니다. 시간 기준으로 감쇠하면 공연 빈도가 낮은 아티스트가 구조적으로 불리해지고, 시간만 지나도 실패 이력이 희석되기 때문입니다. 실제 서비스 사례로 Storj의 Beta 평판 모델도 감사(audit) 1건마다 forgetting factor를 적용합니다. 근거는 [09 ADR](./09_reliability_decay_gamma.md)에 있습니다.
 
 ---
 
@@ -553,7 +557,7 @@ flowchart TD
 우리 서비스는:
 
 ```text
-아티스트 ↔ 행사 주최자
+아티스트 ↔ EVENT_PARTNER
 공연 거래 플랫폼
 추천 시스템
 ```
@@ -583,15 +587,14 @@ flowchart TD
 다음은 별도의 설계와 실험이 필요합니다.
 
 - 우리 서비스에서 최적의 가중치
-- No-show의 정확한 penalty
-- 취소와 No-show의 상대적 심각도
-- 몇 건의 공연이 있어야 Confidence가 HIGH인지
-- 시간 감쇠의 정확한 반감기
-- Cold Start에서 사용할 prior의 **최적성** (현재 프로젝트는 중립 prior `0.5`를 채택했지만 이것이 도메인 최적값인지는 미검증)
+- 취소와 No-show의 상대적 심각도를 경고에 반영하는 기준
+- 몇 건의 관측이 있어야 확신 수준이 높음인지
+- 감쇠 계수 γ의 최적값
+- Cold Start에서 사용할 prior의 **최적성** (현재 프로젝트는 `α₀ = β₀ = 1`을 채택했지만 이것이 도메인 최적값인지는 미검증)
 - 아티스트 공연 도메인에 특화된 Fraud Rule
 - 최종 추천 랭킹의 최적 조합
 
-이 값들의 **도메인 최적성**은 실제 데이터가 없으므로 보장할 수 없습니다. V1에서는 구현과 시뮬레이션을 시작하기 위한 기본값을 확정하고 `trust-v1`으로 버전 관리하며, 이후 민감도 분석으로 재검토합니다.
+이 값들의 **도메인 최적성**은 실제 데이터가 없으므로 보장할 수 없습니다. V1에서는 구현과 시뮬레이션을 시작하기 위한 기본값을 확정하고 `reliability-v1`으로 버전 관리하며, 이후 민감도 분석으로 재검토합니다.
 
 ---
 
@@ -614,35 +617,31 @@ flowchart TD
 
 ## 논문에서 직접 근거를 얻는 부분
 
-### Beta Trust Estimate
+### Beta 기댓값
 
-Positive / Negative Evidence를 `R`, `S`로 둘 때:
+성공·실패 관측의 누적값을 `α`, `β`로 둘 때:
 
 $$
-Trust = \frac{R + 1}{R + S + 2}
+R = \frac{\alpha}{\alpha + \beta}
 $$
 
-는 `Beta(R+1, S+1)`의 기대값에 해당하는 구조입니다.
+는 `Beta(α, β)`의 기대값입니다. 관측 전 `α₀ = β₀ = 1`이면 관측이 없을 때 0.5에서 출발합니다.
 
 ## 논문 아이디어를 프로젝트 수식으로 구체화한 부분
 
-### Exponential Time Decay
+### 관측 순서 기반 감쇠
 
 $$
-W(t) = e^{-\lambda \Delta t}
+\alpha_t = \gamma\,\alpha_{t-1} + x_t,\qquad \beta_t = \gamma\,\beta_{t-1} + (1 - x_t),\qquad \gamma = 0.95
 $$
 
-Beta Reputation 논문은 **forgetting factor**, PeerTrust는 **temporal adaptivity**를 논의하지만, 현재 프로젝트의 연속 시간 지수 감쇠식을 그대로 제시한 것은 아닙니다.
+관측이 확정될 때마다 기존 누적값의 영향력을 γ만큼 남기고 새 결과를 더합니다. Beta Reputation 논문은 **forgetting factor**, PeerTrust는 **temporal adaptivity**를 논의하지만, `γ = 0.95`와 관측 순서 기준은 프로젝트가 정한 정책입니다.
 
-### Confidence Saturation
+### 확신 수준
 
-$$
-Confidence = 1 - e^{-kN_{\text{eff}}}
-$$
+관측 건수 n의 경계(3, 10)로 낮음/보통/높음을 정합니다. PeerTrust는 거래 수를 신뢰 판단에 고려해야 한다고 설명하지만, 이 경계값을 해당 논문이 직접 제시하는 것은 아닙니다.
 
-PeerTrust는 Trust 값과 함께 Confidence를 고려할 수 있음을 설명하지만, 위 지수 포화식을 해당 논문이 직접 제시하는 것은 아닙니다.
-
-따라서 두 식은 **논문 개념을 기반으로 프로젝트가 선택한 구현 수식**으로 문서화합니다.
+따라서 감쇠식과 확신 수준 경계는 **논문 개념을 기반으로 프로젝트가 선택한 구현 규칙**으로 문서화합니다.
 
 이 구분을 유지해야 발표나 보고서에서 “논문에 있는 수식”과 “논문을 근거로 우리가 설계한 수식”을 혼동하지 않습니다.
 
@@ -661,14 +660,13 @@ PeerTrust는 Trust 값과 함께 Confidence를 고려할 수 있음을 설명하
 반면 다음 값들은 논문이 “우리 공연 플랫폼에 최적”이라고 제시한 숫자가 아닙니다.
 
 ```text
-ARTIST_CANCELLED = S 1 / 2 / 3
-ARTIST_NO_SHOW = S 5
-Half-life = 365 days
-Confidence HIGH = 0.80
-HIGH target N_eff = 10
+γ = 0.95 (사건 반감기 약 14건)
+α₀ = β₀ = 1
+확신 수준 경계 = 관측 3건 / 10건
+Risk Signal 창 = 최근 관측 14건
 No-show report grace = 15 minutes
 Artist response window = 48 hours
-Exploration Slot = Top 10에서 최대 1명
+신규 노출 = TOP 5 아래 1칸, 신규 기간 90일, 5위 대비 10점
 ```
 
 이 값들은 **연구 개념을 실제 졸업작품 도메인에 적용하기 위해 선택한 V1 정책값**입니다.
