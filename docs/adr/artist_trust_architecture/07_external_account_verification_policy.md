@@ -9,7 +9,7 @@ External Account Verification
         ≠
 Rights Verification
         ≠
-Artist Trust
+Artist Reliability
 ```
 
 를 유지합니다.
@@ -34,7 +34,7 @@ Artist 계정 생성
    └─ Rights Verification
 ```
 
-아티스트 계정이 외부 플랫폼과 많이 연결되어 있다고 해서 Trust Score를 올리지 않습니다.
+아티스트 계정이 외부 플랫폼과 많이 연결되어 있다고 해서 Artist Reliability를 올리지 않습니다. 연결 결과는 Trust Profile의 Verification 정보로만 표시합니다.
 
 ---
 
@@ -201,10 +201,10 @@ Provider Account ID + Verification 결과 저장
 
 # 7. Provider별 MVP 요약
 
-| Provider | 연결 방식 | 증명하는 것 | Trust 영향 |
+| Provider | 연결 방식 | 증명하는 것 | Reliability 영향 |
 |---|---|---|---|
 | YouTube | OAuth 2.0 + readonly | 해당 Channel 접근 권한 | 없음 |
 | SoundCloud | OAuth 2.1 + PKCE | 해당 Account 접근 권한 | 없음 |
 | Spotify | Artist URL / ID | 공개 Artist Profile 존재 | 없음 |
 
-Provider 연결 결과는 `Verification` 영역에 저장하고 `R/S` Evidence로 변환하지 않습니다.
+Provider 연결 결과는 `Verification` 영역에 저장하고 Reliability 관측으로 변환하지 않습니다.
