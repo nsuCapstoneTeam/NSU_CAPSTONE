@@ -10,7 +10,7 @@
 
 우리 서비스의 추천 기능은 단순히 **“음악이 행사 분위기와 잘 맞는 아티스트”**를 찾는 것만으로는 충분하지 않습니다.
 
-행사 주최자 입장에서는 다음과 같은 걱정이 있습니다.
+EVENT_PARTNER 입장에서는 다음과 같은 걱정이 있습니다.
 
 - 이 사람이 실제 활동하는 아티스트인가?
 - 업로드한 작업물이 본인의 작업물이 맞는가?
@@ -41,14 +41,16 @@
 현재는 구현 시작을 위해 V1 정책값을 확정했습니다.
 
 ```text
-공연 완료              R = +1
-아티스트 취소          S = +1 / +2 / +3
-확정 No-show           S = +5
-시간 감쇠 반감기       365일
-Confidence HIGH        80% @ N_eff 10
+공연 결과 해석        정상 완료 = 성공 1건, 아티스트 귀책 취소·노쇼 = 실패 1건
+최근성 감쇠           관측 순서 기준, γ = 0.95 (약 14건마다 영향력 절반)
+확신 수준             관측 건수: 낮음 ≤ 3 (점수 숨김) / 보통 4~9 / 높음 ≥ 10
+Risk Signal           최근 관측 14건 안의 노쇼·당일 취소·반복 취소
+추천 순위             Matching Score만 사용, Trust Profile은 표시 전용
 ```
 
-이 값들은 학술적으로 영구 고정된 정답이 아니라 `trust-v1` 서비스 정책입니다. 원본 Event를 보존하므로 이후 시뮬레이션 결과에 따라 `trust-v2`로 재계산할 수 있습니다.
+이 값들은 학술적으로 영구 고정된 정답이 아니라 `reliability-v1` 서비스 정책입니다. 공연 결과 원장을 보존하므로 이후 시뮬레이션과 운영 데이터에 따라 `reliability-v2`로 재계산할 수 있습니다. 2026-10-03에 이전 `trust-v1`을 대체했습니다.
+
+용어 정의는 저장소 루트의 [CONTEXT.md](../../../CONTEXT.md)를 따릅니다.
 
 ---
 
@@ -76,11 +78,11 @@ V1 실제 운영 정책값을 확정한 문서입니다.
 
 ### [05_trust_event_catalog.md](./05_trust_event_catalog.md)
 
-Trust Event와 Evidence 입력 계약을 정의합니다.
+공연 결과 카탈로그와 원장 입력 계약을 정의합니다.
 
 ### [06_database_and_implementation_roadmap.md](./06_database_and_implementation_roadmap.md)
 
-DB, Snapshot History, Risk Signal, Spring Boot 책임 경계와 구현 순서를 설명합니다.
+공연 결과 원장, 조회 시 계산, Risk Signal, Spring Boot 책임 경계와 구현 순서를 설명합니다.
 
 ### [07_external_account_verification_policy.md](./07_external_account_verification_policy.md)
 
@@ -88,7 +90,11 @@ DB, Snapshot History, Risk Signal, Spring Boot 책임 경계와 구현 순서를
 
 ### [08_deprecated_legacy_decisions.md](./08_deprecated_legacy_decisions.md)
 
-삭제된 이전 Artist Trust ADR에서 현재 V1이 폐기·대체한 결정과 그 이유만 간단히 기록합니다.
+삭제된 이전 Artist Trust ADR과 `trust-v1`에서 현재 V1이 폐기·대체한 결정과 그 이유만 간단히 기록합니다.
+
+### [09_reliability_decay_gamma.md](./09_reliability_decay_gamma.md)
+
+관측 순서 기반 감쇠와 γ = 0.95를 선택한 ADR입니다.
 
 ---
 
@@ -103,19 +109,21 @@ flowchart LR
 
     Verification --> Eligibility["2. Eligibility"]
 
-    Eligibility --> Signals["3. Trust Signal Collection"]
+    Eligibility --> Ranker["3. Explainable Ranker (Matching Score)"]
 
-    Signals --> Evaluator["4. Trust Evaluator"]
+    Ranker --> Result["4. Recommendation"]
 
-    Evaluator --> Profile["5. Artist Trust Profile"]
+    Ledger["5. 공연 결과 원장"] --> Calculator["6. Reliability Calculator"]
 
-    Profile --> Ranker["6. Explainable Ranker"]
+    Calculator --> Profile["7. Trust Profile"]
 
-    Ranker --> Result["7. Recommendation"]
+    Verification --> Profile
 
-    subgraph TrustSystem["아티스트 신뢰 시스템(Artist Trust System)"]
-        Signals
-        Evaluator
+    Profile -->|표시 전용| Result
+
+    subgraph TrustSystem["Trust 도메인(Trust Domain)"]
+        Ledger
+        Calculator
         Profile
     end
 ```
@@ -177,11 +185,13 @@ Artist Trust
 ```text
 본인 인증              완료
 권리 인증              완료
-검증된 공연 완료       17회
-아티스트 귀책 취소      1회
+아티스트 귀책 기준 이행률  91%
+확신 수준              높음 (관측 17건)
+정상 완료              16회
+아티스트 귀책 취소      1회 (3일 전 통보)
 No-show                0회
-최근 6개월 공연         8회
-거래 근거 충분도        높음
+계산 제외              1건 (EVENT_PARTNER 귀책 취소)
+최근 12개월 공연        8회
 ```
 
 ---
@@ -199,62 +209,62 @@ README
  ↓
 04. V1 최종 정책 결정
  ↓
-05. Trust Event Catalog
+05. 공연 결과 카탈로그
  ↓
 06. DB / 구현 Roadmap
 
 필요 시
-02. Trade-off / 03. 논문 근거 / 07. External Account / 08. 폐기된 이전 결정
+02. Trade-off / 03. 논문 근거 / 07. External Account / 08. 폐기된 이전 결정 / 09. γ 결정 ADR
 ```
 
 ---
 
-## 7. 최신 결정: Trust 계산 골격
+## 7. 최신 결정: Reliability 계산 골격
 
-현재 Trust 계산의 핵심 골격은 다음과 같이 구체화되었습니다.
+현재 Artist Reliability 계산의 핵심 골격은 다음과 같습니다.
 
 ```text
-Verified Event
+판정이 끝난 공연 결과
    ↓
-Severity / Context
+귀책 해석 (관측 여부)
    ↓
-Temporal Decay
+이진 관측 x = 1 / 0
    ↓
-R / S
+행동 시각 순서 정렬
    ↓
-Beta Trust Estimate
+관측 순서 감쇠 (γ = 0.95)
+   ↓
+Artist Reliability
 
-+ 별도의 Confidence
++ 별도의 확신 수준 (관측 건수)
++ 별도의 Risk Signal (최근 관측 14건)
 ```
 
-$$
-Trust = \frac{R + 1}{R + S + 2}
-$$
+```text
+α₀ = 1,  β₀ = 1
+αₜ = 0.95 × αₜ₋₁ + xₜ
+βₜ = 0.95 × βₜ₋₁ + (1 − xₜ)
+Rₜ = αₜ / (αₜ + βₜ)
+```
 
-$$
-W(t) = e^{-\lambda \Delta t}
-$$
-
-$$
-Confidence = 1 - e^{-kN_{\text{eff}}}
-$$
+관측이 확정될 때마다 기존 이행·실패 누적값의 영향력을 95%로 줄이고 새 결과를 더합니다. Reliability는 전체 누적값 중 이행의 비율입니다.
 
 V1에서는 다음까지 확정했습니다.
 
 ```text
-ARTIST_CANCELLED S = 1 / 2 / 3
-ARTIST_NO_SHOW S = 5
-Half-life = 365일
-k = 0.16094
-Confidence HIGH = 0.80 @ N_eff 10
-Review = Trust 계산 제외
-Cold Start = Top 10 최대 1개 Exploration Slot
+정상 완료 = 성공 1건, 아티스트 귀책 취소·노쇼 = 실패 1건
+γ = 0.95 (사건 반감기 약 14건)
+확신 수준 = 관측 건수 (낮음 ≤ 3 / 보통 4~9 / 높음 ≥ 10)
+Risk Signal = RECENT_NO_SHOW / LATE_ARTIST_CANCELLATION / REPEATED_ARTIST_CANCELLATION
+Review = Reliability 계산 제외
+추천 순위 = Matching Score만 사용
+신규 노출 = TOP 5 아래 별도 1칸
 ```
 
-이 값들은 `trust-v1` 정책으로 관리하며 이후 시뮬레이션에 따라 새 정책 버전으로 조정할 수 있습니다.
+이 값들은 `reliability-v1` 정책으로 관리하며 이후 시뮬레이션과 운영 데이터에 따라 새 정책 버전으로 조정할 수 있습니다. γ 선택 근거는 [09 ADR](./09_reliability_decay_gamma.md)에 있습니다.
 
 ---
 
 ## 8. 한 문장 정의
 
-> **Artist Trust System은 아티스트의 신원·권리 검증 정보와 플랫폼에서 실제로 관측한 공연 거래 이력을 수집하고, 시간·데이터 충분도·조작 가능성을 고려하여 설명 가능한 신뢰 프로필을 생성한 뒤 추천 시스템의 독립적인 평가 신호로 제공하는 시스템이다.**
+> **Artist Trust System은 아티스트의 신원·권리 검증 정보와 플랫폼에서 판정으로 확정한 공연 결과를 수집하고, 최근성·근거 충분도·조작 가능성을 고려하여 설명 가능한 Trust Profile을 만든 뒤 추천 결과와 함께 별도 정보로 제공하는 시스템이다.**
