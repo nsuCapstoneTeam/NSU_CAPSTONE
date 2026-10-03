@@ -330,7 +330,7 @@ flowchart TD
 
 이 섹션은 기존 `ADR-002-reliability-evidence-contract.md`에서 **현재 `trust-v1` 문서와 충돌하지 않으면서 아직 명시되지 않았던 입력 계약**만 합친 것입니다.
 
-현재 V1은 Review/Behavior를 Beta Trust에 넣지 않으므로, 기존 ADR의 `OFFER_RESPONDED_LATE = 0.5`, `VERIFIED_REVIEW → Reliability 계산` 규칙은 이 문서에 다시 적용하지 않습니다. 해당 관계는 [이전 ADR 정합성 기록](./08_previous_adr_reconciliation.md)에서 확인할 수 있습니다.
+현재 V1은 Review/Behavior를 Beta Trust에 넣지 않으므로, 기존 ADR의 `OFFER_RESPONDED_LATE = 0.5`, `VERIFIED_REVIEW → Reliability 계산` 규칙은 이 문서에 다시 적용하지 않습니다. 해당 관계는 [폐기된 이전 결정 기록](./08_deprecated_legacy_decisions.md)에서 확인할 수 있습니다.
 
 ## 13.1 Evidence Source Type
 
