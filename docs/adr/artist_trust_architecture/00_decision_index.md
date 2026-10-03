@@ -84,23 +84,11 @@
 
 ---
 
-## F. 기존 ADR 병합 기록
+## F. 폐기된 이전 결정
 
-| ID | 기존 ADR | 병합 결과 |
-|---|---|---|
-| D37 | ADR-001 Artist Reliability V2 | [정합성 기록](./08_previous_adr_reconciliation.md#d37-adr001-reconciliation) |
-| D38 | ADR-002 Evidence Contract | [정합성 기록](./08_previous_adr_reconciliation.md#d38-adr002-reconciliation) |
-| D39 | ADR-003 Data Boundary | [정합성 기록](./08_previous_adr_reconciliation.md#d39-adr003-reconciliation) |
-| D40 | ADR-004 Cold Start | [정합성 기록](./08_previous_adr_reconciliation.md#d40-adr004-reconciliation) |
-| D41 | ADR-005 External Account | [정합성 기록](./08_previous_adr_reconciliation.md#d41-adr005-reconciliation) |
+기존 Artist Trust ADR 원문은 현재 문서로 통합한 뒤 삭제했습니다. 과거에 어떤 정책이 있었고 왜 폐기·대체했는지만 아래 문서에 간단히 남깁니다.
 
-기존 원문:
-
-- [ADR-001](../ADR-001-artist-reliability-v2.md)
-- [ADR-002](../ADR-002-reliability-evidence-contract.md)
-- [ADR-003](../ADR-003-matching-verification-reliability-data-boundary.md)
-- [ADR-004](../ADR-004-artist-reliability-cold-start.md)
-- [ADR-005](../ADR-005-artist-onboarding-external-account.md)
+- [폐기된 이전 Artist Trust 결정 기록](./08_deprecated_legacy_decisions.md)
 
 ---
 
