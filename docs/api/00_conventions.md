@@ -102,3 +102,12 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 
 - MVC 계층의 예외는 Spring의 `ProblemDetail` 지원으로 만든다.
 - `401`·`403`은 Spring Security 필터 체인에서 만들어지므로 `AuthenticationEntryPoint`와 `AccessDeniedHandler`도 같은 형식을 내야 한다.
+
+## 9. 아직 정하지 않은 규칙
+
+아래 규칙은 처음 필요한 API를 설계할 때 정하고 해당 절에 추가한다. 그 전까지 다른 API는 이 항목을 임의로 정하지 않는다.
+
+| 항목 | 정할 시점 | 기록할 곳 |
+|---|---|---|
+| 페이지네이션 방식(offset·cursor), 파라미터 이름, 응답 형태, 최대 페이지 크기 | 크기가 늘어나는 첫 목록 API | §5 |
+| 월(`YYYY-MM`) 이외의 날짜·시각 형식(날짜, 시각, 시간대 표기) | 해당 값을 처음 내보내는 API | §4 |
