@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { localDemoStore } from '../storage/local-demo-store.js';
 // useState처럼 쓰되, 값이 바뀔 때마다 체험 저장소(localStorage)에도 저장하는 훅.
 // 반환값: [값, 값 변경 함수, 저장 실패 여부]
+// 값 변경 함수는 브라우저 저장에 성공하면 true, 실패하면 false를 돌려줌
 export default function useStoredState(
   key,
   initialValue,
@@ -16,7 +17,9 @@ export default function useStoredState(
   function update(next) {
     const resolved = typeof next === 'function' ? next(value) : next;
     setValue(resolved);
-    setStorageFailed(!localDemoStore.write(key, resolved));
+    const saved = localDemoStore.write(key, resolved);
+    setStorageFailed(!saved);
+    return saved;
   }
   return [value, update, storageFailed];
 }

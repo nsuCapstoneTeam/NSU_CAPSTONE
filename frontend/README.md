@@ -56,8 +56,8 @@
 
 ```sh
 # 1. 저장소 받기
-git clone <저장소 주소>
-cd my-homepage          # 저장소 안의 프런트엔드 폴더로 이동
+git clone https://github.com/nsuCapstoneTeam/NSU_CAPSTONE.git
+cd NSU_CAPSTONE/frontend   # 저장소 안의 프런트엔드 폴더로 이동
 
 # 2. 패키지 설치 (package-lock.json 기준으로 동일한 버전 설치)
 npm ci
@@ -81,7 +81,7 @@ npm run dev
 ## 폴더 구조
 
 ```text
-my-homepage/
+frontend/
 ├─ DESIGN.md                  # 디자인 규칙 (색·글꼴·모양·애니메이션) — 새 화면 만들기 전에 읽기
 ├─ index.html                 # 진입 HTML
 ├─ package.json               # 스크립트·의존성

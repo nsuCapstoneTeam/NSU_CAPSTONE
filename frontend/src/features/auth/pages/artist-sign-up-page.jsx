@@ -293,7 +293,7 @@ export default function ArtistSignUp({ profile, setProfile, notify, navigate }) 
               autoComplete="username"
               value={form.loginId}
               onChange={(e) => update('loginId', e.target.value)}
-              placeholder="영문과 숫자를 조합해 주세요"
+              placeholder="로그인에 사용할 아이디"
               aria-describedby="artist-login-id-hint"
               aria-invalid={invalid('artist-signup-id')}
             />
@@ -308,7 +308,8 @@ export default function ArtistSignUp({ profile, setProfile, notify, navigate }) 
             </button>
           </span>
           <small id="artist-login-id-hint" className="signup-field-hint">
-            아이디는 12자 이상의 문자로 구성해주세요.
+            {/* 아이디 글자 수·조합 규칙은 팀 확정 전이라 검증하지 않음. 확정되면 missing 목록에 조건 추가 */}
+            로그인할 때 사용할 아이디예요.
           </small>
         </label>
         <div className="signup-two-columns">
@@ -342,7 +343,8 @@ export default function ArtistSignUp({ profile, setProfile, notify, navigate }) 
               id="artist-password-hint"
               className="signup-field-hint signup-password-hint"
             >
-              비밀번호에 특수문자를 2개 이상 포함해 주세요.(!, @, #, $, %, ^, &, *)
+              {/* 특수문자 등 비밀번호 규칙은 팀 확정 전. 지금은 8자 이상만 확인 */}
+              8자 이상 입력해 주세요.
             </small>
           </label>
           <label>

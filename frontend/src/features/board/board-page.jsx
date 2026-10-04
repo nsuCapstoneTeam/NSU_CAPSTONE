@@ -36,7 +36,7 @@ export default function Board({ posts, setPosts, profile, notify }) {
       owner: profile.id,
       author: profile.name,
     };
-    setPosts(
+    const saved = setPosts(
       editing.id
         ? posts.map((p) =>
             p.id === editing.id && p.owner === profile.id ? item : p,
@@ -51,7 +51,11 @@ export default function Board({ posts, setPosts, profile, notify }) {
           ],
     );
     setEditing(null);
-    notify('게시글을 이 브라우저에 저장했습니다.');
+    notify(
+      saved
+        ? '게시글을 이 브라우저에 저장했습니다.'
+        : '게시글이 화면에는 반영됐지만 브라우저 저장에 실패했습니다. 새로고침하면 사라질 수 있습니다.',
+    );
   }
   return (
     <>

@@ -44,9 +44,27 @@ export default function MyPage({
       notify('이름을 입력해 주세요.');
       return;
     }
-    setProfile({ ...draft, name: draft.name.trim() });
-    notify('프로필을 이 브라우저에 저장했습니다.');
+    const saved = setProfile({ ...draft, name: draft.name.trim() });
+    notify(
+      saved
+        ? '프로필을 이 브라우저에 저장했습니다.'
+        : '프로필이 화면에는 반영됐지만 브라우저 저장에 실패했습니다. 새로고침하면 사라질 수 있습니다.',
+    );
   }
+  // 역할별 추가 검증 희망 항목 [저장 키, 표시 이름]
+  // (행사 관계자 항목은 TRUST-142에 따라 정책 확정 전 임시 목록)
+  const verificationItems =
+    profile.role === 'artist'
+      ? [
+          ['business', '사업자등록정보'],
+          ['rights', '작업물 이용 권리'],
+          ['performance', '공식 발매·실연 참여·공연 활동'],
+        ]
+      : [
+          ['business', '사업자등록정보 또는 고유번호'],
+          ['eventProof', '행사 개최 증빙'],
+          ['authority', '소속·주최 권한 증빙'],
+        ];
   // 공연 가능 일정 추가: 시간 순서·같은 날 겹침을 확인한 뒤 날짜·시간순으로 정렬해 저장
   function addSchedule(e) {
     e.preventDefault();
@@ -65,12 +83,16 @@ export default function MyPage({
       notify('같은 날짜에 겹치는 일정이 있습니다.');
       return;
     }
-    setSchedules(
+    const saved = setSchedules(
       [...schedules, { ...schedule, id: crypto.randomUUID() }].sort((a, b) =>
         (a.date + a.start).localeCompare(b.date + b.start),
       ),
     );
-    notify('공연 가능 일정을 저장했습니다.');
+    notify(
+      saved
+        ? '공연 가능 일정을 저장했습니다.'
+        : '일정이 화면에는 반영됐지만 브라우저 저장에 실패했습니다. 새로고침하면 사라질 수 있습니다.',
+    );
   }
   return (
     <>
@@ -233,18 +255,7 @@ export default function MyPage({
             </div>
             <h3>추가 검증 희망 항목</h3>
             {/* 역할별 추가 검증 희망 항목 [저장 키, 표시 이름] */}
-            {(profile.role === 'artist'
-              ? [
-                  ['business', '사업자등록정보'],
-                  ['rights', '작업물 이용 권리'],
-                  ['performance', '공식 발매·실연 참여·공연 활동'],
-                ]
-              : [
-                  ['business', '사업자등록정보 또는 고유번호'],
-                  ['eventProof', '행사 개최 증빙'],
-                  ['authority', '소속·주최 권한 증빙'],
-                ]
-            ).map(([key, label]) => (
+            {verificationItems.map(([key, label]) => (
               <label
                 key={key}
                 className="checkbox"
@@ -260,20 +271,23 @@ export default function MyPage({
             <button
               className="secondary"
               onClick={() => {
+                // 화면에 보이는 역할별 항목을 그대로 저장 (행사 관계자 항목이 빠지던 문제 수정)
                 const next = {
                   ...profile,
-                  business: draft.business,
-                  rights: draft.rights,
-                  performance: draft.performance,
+                  ...Object.fromEntries(
+                    verificationItems.map(([key]) => [key, Boolean(draft[key])]),
+                  ),
                   verification: '검토 희망 저장',
                 };
-                setProfile(next);
+                const saved = setProfile(next);
                 setDraft((prev) => ({
                   ...prev,
                   verification: next.verification,
                 }));
                 notify(
-                  '검토 희망 항목만 저장했습니다. 인증 완료나 실제 검토 접수는 아닙니다.',
+                  saved
+                    ? '검토 희망 항목만 저장했습니다. 인증 완료나 실제 검토 접수는 아닙니다.'
+                    : '검토 희망 항목이 화면에는 반영됐지만 브라우저 저장에 실패했습니다.',
                 );
               }}
             >

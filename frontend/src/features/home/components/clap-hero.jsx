@@ -30,11 +30,26 @@ const examples = [
 ];
 
 // 홈 CLAP 소개 영역: 왼쪽 음악 비교 그림, 오른쪽 예시 결과(링 그래프·항목 점수)
-// index: 선택한 예시, activeSegment: 강조 중인 항목 번호 (null이면 종합 점수 표시)
+// index: 선택한 예시
+// selectedSegment: 클릭·Enter로 고정한 항목, previewSegment: 마우스·포커스로 잠깐 보는 항목
+// 보여 줄 항목 = 미리 보기 > 고정 > 없으면 종합 점수
 export default function ClapHero({ navigate }) {
   const [index, setIndex] = useState(0);
-  const [activeSegment, setActiveSegment] = useState(null);
+  const [selectedSegment, setSelectedSegment] = useState(null);
+  const [previewSegment, setPreviewSegment] = useState(null);
+  const activeSegment = previewSegment ?? selectedSegment;
   const sample = examples[index];
+  // 클릭(또는 Enter·Space)으로 항목 고정/해제
+  function toggleSegment(idx) {
+    setSelectedSegment((current) => (current === idx ? null : idx));
+  }
+  // SVG 버튼은 기본 키보드 동작이 없어서 Enter·Space를 직접 처리 (Space의 화면 스크롤은 막음)
+  function segmentKeyDown(event, idx) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggleSegment(idx);
+    }
+  }
   const activeDetail = activeSegment === null ? null : sample.details[activeSegment];
 
   // 2. 다중 색상 원 그래프를 그리기 위한 누적 위치 계산 로직
@@ -118,7 +133,8 @@ export default function ClapHero({ navigate }) {
                 aria-pressed={index === i}
                 onClick={() => {
                   setIndex(i);
-                  setActiveSegment(null);
+                  setSelectedSegment(null);
+                  setPreviewSegment(null);
                 }}
               >
                 {example.name}
@@ -160,11 +176,13 @@ export default function ClapHero({ navigate }) {
                   tabIndex="0"
                   role="button"
                   aria-label={`${segment.name} ${segment.score}점`}
-                  onPointerEnter={() => setActiveSegment(idx)}
-                  onPointerLeave={() => setActiveSegment(null)}
-                  onFocus={() => setActiveSegment(idx)}
-                  onBlur={() => setActiveSegment(null)}
-                  onClick={() => setActiveSegment(activeSegment === idx ? null : idx)}
+                  onPointerEnter={() => setPreviewSegment(idx)}
+                  onPointerLeave={() => setPreviewSegment(null)}
+                  onFocus={() => setPreviewSegment(idx)}
+                  onBlur={() => setPreviewSegment(null)}
+                  aria-pressed={selectedSegment === idx}
+                  onClick={() => toggleSegment(idx)}
+                  onKeyDown={(event) => segmentKeyDown(event, idx)}
                   style={{
                     stroke: segment.color,
                     '--segment-color': segment.color,
@@ -192,11 +210,12 @@ export default function ClapHero({ navigate }) {
               <button
                 key={detail.name}
                 className={activeSegment === idx ? 'is-active' : ''}
-                onPointerEnter={() => setActiveSegment(idx)}
-                onPointerLeave={() => setActiveSegment(null)}
-                onFocus={() => setActiveSegment(idx)}
-                onBlur={() => setActiveSegment(null)}
-                onClick={() => setActiveSegment(activeSegment === idx ? null : idx)}
+                onPointerEnter={() => setPreviewSegment(idx)}
+                onPointerLeave={() => setPreviewSegment(null)}
+                onFocus={() => setPreviewSegment(idx)}
+                onBlur={() => setPreviewSegment(null)}
+                aria-pressed={selectedSegment === idx}
+                onClick={() => toggleSegment(idx)}
               >
                 <span style={{ backgroundColor: detail.color }} aria-hidden="true" />
                 {detail.name} <strong>{detail.score}</strong>

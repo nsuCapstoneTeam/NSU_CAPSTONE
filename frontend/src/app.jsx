@@ -41,6 +41,8 @@ const LOGIN_FLOW_PAGES = [
   'organizer-signup',
   'signup-complete',
 ];
+// 가입을 새로 시작하는 화면 (들어가면 기존 로그인 세션을 종료)
+const SIGNUP_START_PAGES = ['signup-role', 'artist-signup', 'organizer-signup'];
 
 // 앱 전체: 현재 화면(page) 전환, 공유 상태(테마·프로필·로그인·게시글·일정·관심 목록), 공통 헤더·푸터
 export default function App() {
@@ -105,6 +107,9 @@ export default function App() {
   // 화면 전환: 로그인 흐름 밖으로 나가면 돌아갈 화면을 잊고, 맨 위로 스크롤 후 본문에 포커스
   function navigate(next) {
     if (!LOGIN_FLOW_PAGES.includes(next)) setReturnTo(null);
+    // 가입을 새로 시작하면 기존 로그인은 끝냄.
+    // (로그인한 행사 관계자가 아티스트로 가입해도 예전 역할로 매칭 화면이 열리지 않도록)
+    if (SIGNUP_START_PAGES.includes(next) && session) setSession(null);
     setPage(next);
     setNotice('');
     window.scrollTo({ top: 0, behavior: 'instant' });

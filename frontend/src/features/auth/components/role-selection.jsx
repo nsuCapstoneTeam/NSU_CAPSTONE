@@ -18,7 +18,7 @@ export default function RoleSelection({
         className="text-button role-entry-back"
         onClick={onBack}
       >
-        ← 홈으로 돌아가기
+        {isSignUp ? '← 로그인으로 돌아가기' : '← 홈으로 돌아가기'}
       </button>
       {/* 상단 제목 */}
       <header className="role-entry-heading">
