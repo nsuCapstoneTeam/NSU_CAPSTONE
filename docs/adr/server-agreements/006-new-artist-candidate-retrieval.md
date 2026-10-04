@@ -7,7 +7,7 @@ Proposed — 2026-10-04 Backend 설계(NSU-71). AI 담당 확인 전.
 ## Context
 
 SSOT `AI-MATCH-155`는 Eligibility를 통과한 신규 아티스트 **전체** 중 종합 적합도가 가장 높은 1명을 기준으로 신규 노출 칸을 정한다.
-[005](https://github.com/nsuCapstoneTeam/NSU_CAPSTONE_AI/blob/main/docs/adr/server-agreements/005-audio-retrieval-responsibilities.md)에 따라 AI는 의미 유사도 기준 retrieval 50~100개 후보만 반환하고, 종합 적합도와 최종 Top10은 Backend Ranker가 계산한다.
+[005](005-audio-retrieval-responsibilities.md)에 따라 AI는 의미 유사도 기준 retrieval 50~100개 후보만 반환하고, 종합 적합도와 최종 Top10은 Backend Ranker가 계산한다.
 종합 적합도는 의미 적합도 외에 BPM·리듬·공연 스타일을 함께 쓰므로, retrieval 상위 밖의 신규 아티스트가 종합 적합도로는 Top10 또는 신규 노출 칸에 들어갈 수 있다.
 신규 판정 데이터(매칭 성사, 활성화일)는 Backend에 있다.
 
@@ -41,7 +41,7 @@ AI가 의미 점수를 후보군 상대 정규화로 바꾸면 이 결정이 성
 같은 요청 텍스트·같은 쌍·같은 모델 버전이면 호출이 달라도 같은 점수를 반환한다.
 `top_k`가 전달한 후보 쌍의 수 이상이면 AI는 전달한 모든 쌍의 결과를 반환한다. AI는 허용하는 `top_k` 상한을 정해 알리고, Backend는 신규 쌍을 그 상한 이하 크기로 나눠 호출한다.
 신규 아티스트의 ACTIVE 쌍이 없으면 Backend는 신규 retrieval을 하지 않는다. 빈 후보 목록은 빈 결과다(005).
-모든 호출의 timeout은 [004](https://github.com/nsuCapstoneTeam/NSU_CAPSTONE_AI/blob/main/docs/adr/server-agreements/004-timeout-and-stale-retry.md)의 설정을 따른다.
+모든 호출의 timeout은 [004](004-timeout-and-stale-retry.md)의 설정을 따른다.
 상세 응답 계약은 [추천 응답 확장](../../api/02_recommendation_trust_and_new_artist.md)에서 관리한다.
 
 관련 이슈: [NSU-71](https://linear.app/nsu-capstone/issue/NSU-71), [NSUAI-15](https://linear.app/nsu-capstone/issue/NSUAI-15), [NSUAI-16](https://linear.app/nsu-capstone/issue/NSUAI-16).
