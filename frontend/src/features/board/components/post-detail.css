@@ -1,0 +1,53 @@
+/* 게시글 상세 화면 (NSU-55) — 색은 app.css 변수만 사용 */
+.post-detail {
+  max-width: 760px;
+  margin: 8px auto 0;
+}
+.post-detail-back {
+  margin-bottom: 18px;
+}
+.post-detail-header {
+  padding-bottom: 22px;
+  border-bottom: 2px solid var(--ink);
+}
+.post-detail-header h1 {
+  margin: 14px 0 10px;
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+/* 프로그램으로 포커스를 옮긴 제목: 키보드로 왔을 때만 테두리 */
+.post-detail h1:focus,
+.post-detail h2:focus {
+  outline: none;
+}
+.post-detail h1:focus-visible,
+.post-detail h2:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+.post-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.post-detail-body {
+  padding: 28px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.post-detail-body p {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 16px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.post-detail-actions {
+  display: grid;
+  gap: 14px;
+  padding-top: 18px;
+}

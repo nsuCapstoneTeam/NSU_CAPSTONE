@@ -3,17 +3,19 @@ import Icon from '../../components/common/icon.jsx';
 import PageHeading from '../../components/common/page-heading.jsx';
 import Select from '../../components/common/select.jsx';
 import Tag from '../../components/common/tag.jsx';
+import PostDetail from './components/post-detail.jsx';
 
-// 체험 게시판: 분류·검색 필터, 글쓰기·수정·삭제 (이 브라우저에만 저장)
+// 체험 게시판: 목록(분류·검색 필터) ↔ 상세 화면, 글쓰기·수정·삭제 (이 브라우저에만 저장)
 // 본인(profile.id)이 쓴 글만 수정·삭제할 수 있습니다.
+// 목록 상태(분류·검색어)는 이 컴포넌트에 있어서 상세 화면에 다녀와도 그대로 유지됩니다.
 export default function Board({ posts, setPosts, profile, notify }) {
-  // filter: 분류 탭, query: 검색어, opened: 펼친 글 id,
-  // editing: 작성·수정 중인 글 (null이면 편집기 닫힘), deleteId: 삭제 확인 중인 글 id
+  // filter: 분류 탭, query: 검색어, detailId: 상세 화면으로 연 글 id (null이면 목록),
+  // editing: 작성·수정 중인 글 (null이면 편집기 닫힘)
   const [filter, setFilter] = useState('전체'),
     [query, setQuery] = useState(''),
-    [opened, setOpened] = useState(null),
-    [editing, setEditing] = useState(null),
-    [deleteId, setDeleteId] = useState(null);
+    [detailId, setDetailId] = useState(null),
+    [editing, setEditing] = useState(null);
+  const detailPost = posts.find((p) => p.id === detailId);
   // 분류와 검색어(제목·내용·작성자, 대소문자 무시)로 걸러낸 글 목록
   const visible = posts.filter(
     (p) =>
@@ -22,6 +24,28 @@ export default function Board({ posts, setPosts, profile, notify }) {
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
+  // 상세 화면 열기
+  function openDetail(id) {
+    setEditing(null);
+    setDetailId(id);
+  }
+  // 목록으로 돌아가기: 방금 보던 글 제목 버튼으로 포커스를 돌려 제자리에서 이어 보기
+  function closeDetail() {
+    const id = detailId;
+    setEditing(null);
+    setDetailId(null);
+    setTimeout(() => {
+      const button = document.querySelector(`[data-post-id="${id}"]`);
+      button?.scrollIntoView({ block: 'center' });
+      button?.focus({ preventScroll: true });
+    }, 0);
+  }
+  // 본인 글 삭제 → 목록으로
+  function deletePost(id) {
+    setPosts(posts.filter((x) => x.id !== id || x.owner !== profile.id));
+    setDetailId(null);
+    notify('게시글을 삭제했습니다.');
+  }
   // 글 저장: id가 있으면 본인 글 수정, 없으면 새 글을 맨 앞에 추가
   function save(e) {
     e.preventDefault();
@@ -57,6 +81,73 @@ export default function Board({ posts, setPosts, profile, notify }) {
         : '게시글이 화면에는 반영됐지만 브라우저 저장에 실패했습니다. 새로고침하면 사라질 수 있습니다.',
     );
   }
+  // 글쓰기·수정 편집기 (목록·상세 화면에서 같이 사용)
+  const editorForm = editing && (
+    <form
+      className="panel post-editor stacked-form"
+      onSubmit={save}
+    >
+      <h2>{editing.id ? '게시글 수정' : '새 게시글'}</h2>
+      <Select
+        label="분류"
+        value={editing.type}
+        options={['모집', '자유']}
+        onChange={(type) => setEditing({ ...editing, type })}
+      />
+      <label>
+        제목
+        <input
+          required
+          maxLength={100}
+          value={editing.title}
+          onChange={(e) =>
+            setEditing({ ...editing, title: e.target.value })
+          }
+        />
+      </label>
+      <label>
+        내용
+        <textarea
+          required
+          maxLength={3000}
+          rows={6}
+          value={editing.body}
+          onChange={(e) => setEditing({ ...editing, body: e.target.value })}
+        />
+      </label>
+      <div className="button-row">
+        <button
+          className="primary"
+          type="submit"
+        >
+          {editing.id ? '수정 저장' : '게시글 저장'}
+        </button>
+        <button
+          className="secondary"
+          type="button"
+          onClick={() => setEditing(null)}
+        >
+          취소
+        </button>
+      </div>
+    </form>
+  );
+
+  // 상세 화면: 수정 중이면 편집기, 아니면 글 내용
+  if (detailId !== null) {
+    return editing ? (
+      editorForm
+    ) : (
+      <PostDetail
+        post={detailPost}
+        isOwner={detailPost?.owner === profile.id}
+        onBack={closeDetail}
+        onEdit={() => setEditing({ ...detailPost })}
+        onDelete={() => deletePost(detailPost.id)}
+      />
+    );
+  }
+
   return (
     <>
       <PageHeading
@@ -101,58 +192,9 @@ export default function Board({ posts, setPosts, profile, notify }) {
         같은 브라우저에서 사용하는 체험 게시판입니다. 모집 글의 행사·작성자
         검증이나 실제 전송은 제공하지 않습니다.
       </p>
-      {/* 글쓰기·수정 편집기 */}
-      {editing && (
-        <form
-          className="panel post-editor stacked-form"
-          onSubmit={save}
-        >
-          <h2>{editing.id ? '게시글 수정' : '새 게시글'}</h2>
-          <Select
-            label="분류"
-            value={editing.type}
-            options={['모집', '자유']}
-            onChange={(type) => setEditing({ ...editing, type })}
-          />
-          <label>
-            제목
-            <input
-              required
-              maxLength={100}
-              value={editing.title}
-              onChange={(e) =>
-                setEditing({ ...editing, title: e.target.value })
-              }
-            />
-          </label>
-          <label>
-            내용
-            <textarea
-              required
-              maxLength={3000}
-              rows={6}
-              value={editing.body}
-              onChange={(e) => setEditing({ ...editing, body: e.target.value })}
-            />
-          </label>
-          <div className="button-row">
-            <button
-              className="primary"
-              type="submit"
-            >
-              {editing.id ? '수정 저장' : '게시글 저장'}
-            </button>
-            <button
-              className="secondary"
-              type="button"
-              onClick={() => setEditing(null)}
-            >
-              취소
-            </button>
-          </div>
-        </form>
-      )}
-      {/* 게시글 목록: 제목을 누르면 내용이 펼쳐짐 */}
+      {/* 새 글 작성 편집기 */}
+      {editorForm}
+      {/* 게시글 목록: 제목을 누르면 상세 화면으로 이동 */}
       <div className="board-list">
         {visible.map((p) => (
           <article
@@ -161,8 +203,8 @@ export default function Board({ posts, setPosts, profile, notify }) {
           >
             <button
               className="post-toggle"
-              onClick={() => setOpened(opened === p.id ? null : p.id)}
-              aria-expanded={opened === p.id}
+              data-post-id={p.id}
+              onClick={() => openDetail(p.id)}
             >
               <Tag tone={p.type === '모집' ? '' : 'subtle'}>{p.type}</Tag>
               <div>
@@ -172,60 +214,8 @@ export default function Board({ posts, setPosts, profile, notify }) {
                   {p.owner !== profile.id ? ' · 샘플 게시글' : ''}
                 </p>
               </div>
-              <span>{opened === p.id ? '−' : '↗'}</span>
+              <span aria-hidden="true">↗</span>
             </button>
-            {opened === p.id && (
-              <div className="post-content">
-                <p>{p.body}</p>
-                {/* 본인 글일 때만 수정·삭제 버튼 표시 */}
-                {p.owner === profile.id && (
-                  <div className="button-row">
-                    <button
-                      className="secondary"
-                      onClick={() => setEditing({ ...p })}
-                    >
-                      수정
-                    </button>
-                    <button
-                      className="text-button danger"
-                      onClick={() => setDeleteId(p.id)}
-                    >
-                      삭제
-                    </button>
-                  </div>
-                )}
-                {/* 삭제 확인 */}
-                {deleteId === p.id && (
-                  <div
-                    className="delete-confirm"
-                    role="alert"
-                  >
-                    <span>이 게시글을 삭제할까요?</span>
-                    <button
-                      className="secondary"
-                      onClick={() => {
-                        setPosts(
-                          posts.filter(
-                            (x) => x.id !== p.id || x.owner !== profile.id,
-                          ),
-                        );
-                        setDeleteId(null);
-                        setOpened(null);
-                        notify('게시글을 삭제했습니다.');
-                      }}
-                    >
-                      삭제 확인
-                    </button>
-                    <button
-                      className="text-button"
-                      onClick={() => setDeleteId(null)}
-                    >
-                      취소
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
           </article>
         ))}
         {/* 검색 결과가 없을 때 */}
