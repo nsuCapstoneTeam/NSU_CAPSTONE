@@ -730,8 +730,8 @@ Rights                VERIFIED
 Reliability가 순위에 들어가지 않으므로 이력이 없다는 이유로 순위가 내려가지는 않습니다. 신규 노출 슬롯은 신뢰 보정이 아니라 첫 매칭 기회를 주기 위한 노출 정책입니다.
 
 - 신규 아티스트: 매칭 성사 0건이고 Artist 활성화 후 90일 이내
-- TOP 5 아래 별도 1칸
-- 기본 TOP 5에 신규가 없고, PASS/FAIL Filter를 통과한 신규 후보의 최고 종합 적합도가 5위 대비 10점 이내일 때만 표시
+- Top10 아래 별도 1칸
+- Top10에 신규가 없고, PASS/FAIL Filter를 통과한 신규 후보의 최고 종합 적합도가 10위 대비 10점 이내일 때만 표시
 - 상세: [D21](./04_final_policy_decisions.md#d21-exploration)
 
 ---
@@ -850,11 +850,11 @@ flowchart TD
     Performance --> Ranker
     CLAP --> Ranker
 
-    Ranker --> Top5["TOP 5 + 신규 노출 1칸"]
+    Ranker --> Top10["Top10 + 신규 노출 1칸"]
 
     Ledger["공연 결과 원장(Outcome Ledger)"] --> TrustProfile["Trust Profile (조회 시 계산)"]
 
-    Top5 --> Response["추천 응답(Recommendation Response)"]
+    Top10 --> Response["추천 응답(Recommendation Response)"]
     TrustProfile -->|표시 전용| Response
 ```
 
@@ -1073,8 +1073,8 @@ Activity Freshness
   Matching Score만 사용, Trust Profile은 표시 전용
 
 신규 노출
-  TOP 5 아래 별도 1칸
-  신규 = 매칭 성사 0건 + 활성화 90일 이내, 5위 대비 10점 이내
+  Top10 아래 별도 1칸
+  신규 = 매칭 성사 0건 + 활성화 90일 이내, 10위 대비 10점 이내
 
 Review / Behavior
   Reliability 계산과 순위에서 제외, 설명용
