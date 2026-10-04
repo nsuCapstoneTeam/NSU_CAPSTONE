@@ -485,7 +485,7 @@ Artist Reliability = 근거 부족 (관측 0건)
 확신 수준          = 낮음
 ```
 
-Reliability는 추천 순위에 쓰지 않으므로 이력이 없다는 이유로 순위가 내려가지 않습니다. 첫 매칭 기회를 위해 TOP 5 아래 별도 1칸의 신규 노출 슬롯을 둡니다([D21](./04_final_policy_decisions.md#d21-exploration)).
+Reliability는 추천 순위에 쓰지 않으므로 이력이 없다는 이유로 순위가 내려가지 않습니다. 첫 매칭 기회를 위해 Top10 아래 별도 1칸의 신규 노출 슬롯을 둡니다([D21](./04_final_policy_decisions.md#d21-exploration)).
 
 <a id="d08-temporal-decay"></a>
 

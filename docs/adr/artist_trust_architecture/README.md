@@ -258,7 +258,7 @@ V1에서는 다음까지 확정했습니다.
 Risk Signal = RECENT_NO_SHOW / LATE_ARTIST_CANCELLATION / REPEATED_ARTIST_CANCELLATION
 Review = Reliability 계산 제외
 추천 순위 = Matching Score만 사용
-신규 노출 = TOP 5 아래 별도 1칸
+신규 노출 = Top10 아래 별도 1칸
 ```
 
 이 값들은 `reliability-v1` 정책으로 관리하며 이후 시뮬레이션과 운영 데이터에 따라 새 정책 버전으로 조정할 수 있습니다. γ 선택 근거는 [09 ADR](./09_reliability_decay_gamma.md)에 있습니다.

@@ -42,7 +42,7 @@
 | D18 | 공동 귀책을 비율로 수치화하지 않음 | [바로가기](./04_final_policy_decisions.md#d18-shared-fault) |
 | D19 | Review는 Reliability 계산 제외 | [바로가기](./04_final_policy_decisions.md#d19-review) |
 | D20 | Behavior Signal은 Reliability·순위 제외 | [바로가기](./04_final_policy_decisions.md#d20-behavior) |
-| D21 | 신규 노출 슬롯: TOP 5 아래 별도 1칸 | [바로가기](./04_final_policy_decisions.md#d21-exploration) |
+| D21 | 신규 노출 슬롯: Top10 아래 별도 1칸 | [바로가기](./04_final_policy_decisions.md#d21-exploration) |
 | D22 | Reliability만으로 Hard Filter하지 않음 | [바로가기](./04_final_policy_decisions.md#d22-hard-filter) |
 | D23 | V1 Fraud Guard는 Rule / Audit 중심 | [바로가기](./04_final_policy_decisions.md#d23-fraud) |
 | D24 | Policy Version은 계산 입력, Snapshot 미저장 | [바로가기](./04_final_policy_decisions.md#d24-snapshot-policy) |

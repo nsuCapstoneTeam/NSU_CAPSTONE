@@ -45,7 +45,7 @@ Trust Profile
 
 - 원장에는 판정이 끝난 공연 결과만 append-only로 기록합니다.
 - Reliability, 확신 수준, Risk Signal, 결과별 포함 여부는 조회 시 계산합니다.
-- 추천 1회에 필요한 아티스트는 최대 6명(TOP 5 + 신규 노출 1)이므로 조회 시 계산 비용이 작습니다. 성능이 필요해지면 캐시를 추가합니다.
+- 추천 1회에 필요한 아티스트는 최대 11명(Top10 + 신규 노출 1)이므로 조회 시 계산 비용이 작습니다. 성능이 필요해지면 캐시를 추가합니다.
 
 ## `performance_outcome` (개념 모델)
 
@@ -581,7 +581,7 @@ for (MatchingResult result : matchingResults) {
 권장 구조:
 
 ```text
-TOP 5 + 신규 노출 1 Artist IDs
+Top10 + 신규 노출 1 Artist IDs
     ↓
 공연 결과 원장 일괄 조회
 Verification 일괄 조회
