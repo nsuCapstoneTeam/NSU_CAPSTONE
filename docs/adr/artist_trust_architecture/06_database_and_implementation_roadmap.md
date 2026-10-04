@@ -545,10 +545,11 @@ V1 Risk Signal은 원장에서 조회 시 계산하며 별도 테이블에 저�
 
 - CLAP Embedding
 - 음악 의미 유사도
-- BPM / Rhythm / Audio Feature
+- BPM / Rhythm / Audio Feature 추출과 행사 요구 대비 BPM·리듬 적합도 점수화(NSUAI-9)
+- 추천 이유·후보 간 비교 설명 계산(NSUAI-5, 2026-09-30 #ai-recommend 결정)
 - ACTIVE 후보 쌍 안에서 의미 유사도 기반 후보 검색(retrieval 50~100개)
 
-AI/Matching 영역은 최종 Matching Score와 순위를 계산하지 않습니다. BPM·리듬 항목 점수를 어느 서버가 계산할지는 아직 정하지 않았습니다.
+AI/Matching 영역은 항목 점수(의미·BPM·리듬)를 계산하지만 최종 Matching Score(종합 적합도)와 순위는 계산하지 않습니다(서버 협의 005).
 
 AI/Matching 영역은 공연 완료·취소·노쇼의 기준 원본을 소유하지 않으므로 **Artist Reliability를 직접 계산하지 않습니다.**
 
