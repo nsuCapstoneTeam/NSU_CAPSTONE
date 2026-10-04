@@ -16,7 +16,7 @@
 | `eligibility`, `trustProfile`, `newArtistExposure` | `matching` 내부 필드(항목별 점수, 추천 이유, 비교 설명) — NSU-16·NSU-28 |
 | 신규 노출 칸의 선정 규칙과 후보 풀 구성 | 기본 retrieval 호출의 실패 처리 — 추천 API 본체, AI 협의 004 |
 
-이 문서는 `matching.totalScore`(종합 적합도, 0~100 정수)가 있다고 전제한다. `totalScore`와 `rank`는 서버 협의 005에 따라 Backend Ranker(Spring)가 계산한다. AI 서버는 retrieval 후보와 의미 유사도만 반환한다.
+이 문서는 `matching.totalScore`(종합 적합도, 0~100 정수)가 있다고 전제한다. `totalScore`와 `rank`는 서버 협의 005에 따라 Backend Ranker(Spring)가 계산한다. AI 서버는 retrieval 후보와 항목 점수(의미 유사도, BPM·리듬 적합도)를 제공한다. 항목 점수와 추천 이유를 서버 사이에서 주고받는 형식은 정해지지 않았다.
 
 > **SSOT 동기화 필요:** 최종 추천 인원은 AI 서버 협의 005에 따라 **Top10**이다. SSOT `AI-MATCH-053`(상위 5명)과 `AI-MATCH-155`(TOP 5 아래 1칸, 5위 대비)를 Top10 기준으로 고치는 Slack Human Confirm과 SSOT 반영이 필요하다.
 
