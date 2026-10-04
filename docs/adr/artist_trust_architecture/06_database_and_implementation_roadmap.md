@@ -521,7 +521,7 @@ V1 Risk Signal은 원장에서 조회 시 계산하며 별도 테이블에 저�
 
 # 17. Spring Boot와 AI/Matching 서버 책임 경계
 
-기존 `ADR-001`의 시스템 경계 결정을 유지합니다.
+기존 `ADR-001`의 시스템 경계 결정을 유지하고, 추천 계산의 분담은 [서버 협의 005](../server-agreements/005-audio-retrieval-responsibilities.md)를 따릅니다.
 
 ## Spring Boot Backend
 
@@ -535,6 +535,8 @@ V1 Risk Signal은 원장에서 조회 시 계산하며 별도 테이블에 저�
 - Risk Signal
 - Trust Profile 조합
 - Verification 결과
+- Eligibility Filter와 ACTIVE 후보 쌍 선정
+- Backend Ranker: 곡→아티스트 집계, Matching Score(종합 적합도), 최종 Top10 선정
 - 추천 API의 최종 조합
 
 ## AI / Matching 영역
@@ -544,7 +546,9 @@ V1 Risk Signal은 원장에서 조회 시 계산하며 별도 테이블에 저�
 - CLAP Embedding
 - 음악 의미 유사도
 - BPM / Rhythm / Audio Feature
-- 음악 기반 후보 검색 및 Matching 계산
+- ACTIVE 후보 쌍 안에서 의미 유사도 기반 후보 검색(retrieval 50~100개)
+
+AI/Matching 영역은 최종 Matching Score와 순위를 계산하지 않습니다. BPM·리듬 항목 점수를 어느 서버가 계산할지는 아직 정하지 않았습니다.
 
 AI/Matching 영역은 공연 완료·취소·노쇼의 기준 원본을 소유하지 않으므로 **Artist Reliability를 직접 계산하지 않습니다.**
 
@@ -556,7 +560,9 @@ flowchart LR
 
     Audio["음원 / 텍스트(Audio / Text)"]
     Audio --> AI["AI·매칭 영역(AI / Matching Domain)"]
-    AI --> Fit["Matching Score"]
+    AI --> Retrieval["retrieval 후보·의미 유사도"]
+    Retrieval --> Ranker["Backend Ranker"]
+    Ranker --> Fit["Matching Score · Top10"]
 
     Trust --> Recommendation["추천 조합(Recommendation Assembly)"]
     Fit --> Recommendation
