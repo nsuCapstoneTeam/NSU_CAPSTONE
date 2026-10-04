@@ -104,6 +104,7 @@ Authorization: Bearer {accessToken}
 - 외부 계정을 연동했다는 사실만으로는 넣지 않는다. 연동한 계정의 작업 내역 표시는 아티스트 프로필(작업물) API(NSU-79)가 맡는다. YouTube Music 아티스트 채널은 `YOUTUBE`로 표시한다.
 - provider별 제어권 확인 기준은 Verification 도메인(NSU-33)이 정한다.
 - 제어권 확인 결과는 연결이 유지되는 동안 유효하다. 자동으로 다시 확인하거나 기간 만료로 빼지 않는다(07 D45).
+- 연결을 해제하면 다음 조회부터 빠지고, 관리자가 검증을 취소하면 즉시 빠진다. 취소 사실과 사유는 내보내지 않는다. 다시 연결하면 OAuth로 다시 확인한 뒤에만 넣는다(07 D45).
 - Spotify는 계정 연동은 허용하지만 Verification 항목이 아니다. Artist URL/ID 입력이나 Spotify 사용자 계정 OAuth는 아티스트 프로필 소유를 증명하지 않으므로(07 §7), 아티스트 프로필에 Spotify 링크를 보여 주고 EVENT_PARTNER가 직접 링크로 확인한다. 소유 확인 수단이 생기면 `provider`에 `SPOTIFY`를 추가한다(enum 값 추가는 non-breaking).
 - 로그인용 간편가입(Google, Kakao, Naver)과 가입 필수 인증(이메일, 휴대폰)은 Verification 항목이 아니다.
 - 정렬: 위 표의 순서, `EXTERNAL_ACCOUNT`끼리는 `provider` 사전순.
