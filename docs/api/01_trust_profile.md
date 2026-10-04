@@ -94,7 +94,7 @@ Authorization: Bearer {accessToken}
 
 | `type` | `provider` | 넣는 조건 |
 |---|---|---|
-| `EXTERNAL_ACCOUNT` | `YOUTUBE` / `SOUNDCLOUD` / `SPOTIFY` | 해당 외부 계정의 **제어권이 확인됨** |
+| `EXTERNAL_ACCOUNT` | `YOUTUBE` / `SOUNDCLOUD` | 해당 외부 계정의 **제어권이 확인됨** |
 | `COPYRIGHT` | `null` | Rights Verified Work가 1개 이상 (SSOT `ADMIN-096`의 "저작권 검증 완료" 수준) |
 | `BUSINESS_REGISTRATION` | `null` | 사업자등록정보 검증 완료 |
 | `PERFORMANCE_PARTICIPATION` | `null` | 실연 참여 증빙 검증 완료 |
@@ -102,7 +102,8 @@ Authorization: Bearer {accessToken}
 
 - 확인이 끝난 항목만 넣는다. 진행 중, 반려, 취소된 검증은 넣지 않는다.
 - 외부 계정을 연동했다는 사실만으로는 넣지 않는다. 연동한 계정의 작업 내역 표시는 아티스트 프로필(작업물) API가 맡는다. YouTube Music 아티스트 채널은 `YOUTUBE`로 표시한다.
-- provider별 제어권 확인 기준은 Verification 도메인(NSU-33)이 정한다. Spotify Artist URL/ID 입력이나 Spotify 사용자 계정 OAuth는 아티스트 프로필 소유를 증명하지 않으므로, 별도의 소유 확인 수단이 생기기 전까지 `SPOTIFY`는 나오지 않는다(07 §7).
+- provider별 제어권 확인 기준은 Verification 도메인(NSU-33)이 정한다.
+- Spotify는 계정 연동은 허용하지만 Verification 항목이 아니다. Artist URL/ID 입력이나 Spotify 사용자 계정 OAuth는 아티스트 프로필 소유를 증명하지 않으므로(07 §7), 아티스트 프로필에 Spotify 링크를 보여 주고 EVENT_PARTNER가 직접 링크로 확인한다. 소유 확인 수단이 생기면 `provider`에 `SPOTIFY`를 추가한다(enum 값 추가는 non-breaking).
 - 로그인용 간편가입(Google, Kakao, Naver)과 가입 필수 인증(이메일, 휴대폰)은 Verification 항목이 아니다.
 - 정렬: 위 표의 순서, `EXTERNAL_ACCOUNT`끼리는 `provider` 사전순.
 - Verification은 표시만 하며 Reliability에 더하지 않는다(`TRUST-152`).
