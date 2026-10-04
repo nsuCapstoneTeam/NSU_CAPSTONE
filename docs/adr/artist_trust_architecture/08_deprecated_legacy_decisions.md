@@ -188,6 +188,62 @@ Evidence = LIMITED
 
 신규 아티스트가 영원히 노출되지 않는 문제를 줄이기 위해 추천에서는 조건을 만족할 경우 Top 10에 최대 1개의 Exploration Slot도 사용합니다.
 
+> 이후 `reliability-v1`에서 Exploration Slot은 아래 14번처럼 다시 바뀌었습니다.
+
+---
+
+## trust-v1에서 reliability-v1으로
+
+2026-10-03 설계 검토에서 `trust-v1`의 다음 결정을 폐기하거나 대체했습니다. 검토의 출발점은 Linear SSOT v1.0부터 Contract·취소·노쇼가 MVP에서 제거되어(`BOOKING-061`, `TRUST-144`) MVP에서는 공연 결과가 생기지 않는다는 사실이었습니다.
+
+### 8. Severity를 실패 건수로 환산
+
+**이전 결정:** 아티스트 취소 S = 1 / 2 / 3, 노쇼 S = 5를 `R/S`에 더했습니다.
+
+**폐기 이유:** 값이 어떤 사건의 확률도 아니게 되었고(정상 완료 10회 + 노쇼 1회 = 0.647, 실제 이행 비율은 10/11), 빈도와 심각도를 한 숫자에 섞었으며, 근거량을 따로 세야 했습니다. 공연 결과를 이진 관측으로 해석하고 심각도는 근거 분류와 Risk Signal로 옮겼습니다([D40](./04_final_policy_decisions.md#d40-binary-outcome)).
+
+### 9. 시간 감쇠 반감기 365일과 일일 재계산
+
+**이전 결정:** `W(t) = e^{−λΔt}`, 반감기 365일, 매일 배치로 감쇠를 반영하고 24시간이 지난 Snapshot은 조회 전에 다시 계산했습니다.
+
+**폐기 이유:** 근거의 양이 공연 빈도에 묶였습니다. 같은 무결점 20회가 연 1회 공연자는 0.750, 연 10회 공연자는 0.924였고, 연 1회 공연자는 20년이 지나도 Confidence가 LIMITED에 머물렀습니다. 또한 공연 없이 시간만 지나도 실패 이력이 희석되었습니다. 관측 순서 기반 감쇠 `γ = 0.95`로 대체했으며, 값이 결과 확정 시점에만 바뀌므로 일일 배치도 필요 없어졌습니다([09 ADR](./09_reliability_decay_gamma.md)).
+
+### 10. 지수 포화 Confidence
+
+**이전 결정:** `Confidence = 1 − e^{−0.16094 × N_eff}`, LIMITED < 0.40, MODERATE < 0.80, HIGH ≥ 0.80
+
+**폐기 이유:** 등급 경계가 `N_eff` 임계값과 같은 뜻이라 지수 함수가 역할을 하지 않았고, “Confidence 80%”는 확률로 오해받을 수 있었습니다. 확신 수준을 관측 건수(낮음 ≤ 3 / 보통 4~9 / 높음 ≥ 10)로 정하고, 낮음이면 Reliability를 숨깁니다([D09](./04_final_policy_decisions.md#d09-confidence-level)).
+
+### 11. Trust를 Explainable Ranker의 입력으로 사용
+
+**이전 결정:** Trust Profile을 Explainable Ranker에 넣되, 결합 방식은 정하지 않았습니다.
+
+**폐기 이유:** SSOT `TRUST-153`은 순위 보정에 별도 Human Decision을 요구했습니다. 또한 Reliability를 순위에 섞으면 이력이 없는 아티스트(0.5)가 정상 완료 1회 이상인 아티스트 전원보다 구조적으로 아래로 갑니다. Reliability는 표시 전용으로 두고 순위는 Matching Score만으로 정합니다([D39](./04_final_policy_decisions.md#d39-display-only)).
+
+### 12. 3계층 저장과 Snapshot 이력
+
+**이전 결정:** `trust_event`(상태 전이 포함) + `trust_evidence`(정책별 R/S) + `artist_trust_snapshot`(append-only 이력)
+
+**폐기 이유:** `trust_event`를 불변 사실이라 하면서 상태와 귀책이 바뀌었고, 처리 단계와 최종 결과가 섞였습니다. 이진 관측에서는 해석을 언제든 다시 계산할 수 있고, 관측 순서 감쇠에서는 원장만으로 어느 시점의 값이든 재현됩니다. 판정이 끝난 결과만 담는 공연 결과 원장 하나로 줄이고 조회 시 계산합니다([D42](./06_database_and_implementation_roadmap.md#d42-outcome-ledger)).
+
+### 13. 용어와 귀책 값
+
+**이전 결정:** `ORGANIZER`, `Trust Estimate`, `trust-v1`, 귀책 `ARTIST / ORGANIZER / NONE / UNKNOWN`, 문서마다 다른 `source_type`
+
+**폐기 이유:** Linear SSOT는 사용자 유형을 `EVENT_PARTNER`로, 귀책을 `ARTIST, EVENT_PARTNER, MUTUAL, FORCE_MAJEURE, PLATFORM, OTHER`로 정의합니다. 또한 “Trust”를 점수 이름으로 쓰면 “선택적 Trust Verification은 Trust에 반영하지 않는다”는 모순 문장이 생깁니다. Trust는 상위 개념(Trust Profile), 점수는 Artist Reliability로 구분하고, 판정 전 귀책은 값 대신 “아직 없음”으로 둡니다. 결과의 확정 경로는 `confirmation_source` 하나로 표현합니다([D38](./01_artist_trust_architecture.md#d38-vocabulary), [D25](./05_trust_event_catalog.md#d25-evidence-contract)).
+
+### 14. LIMITED Confidence 기준 Exploration Slot
+
+**이전 결정:** Top 10 안에서 최대 1명을 LIMITED Confidence 아티스트에게 할당했습니다.
+
+**폐기 이유:** SSOT의 추천 결과는 TOP 5라서 1자리는 결과의 20%였습니다. LIMITED는 “신규”가 아니어서 노쇼 3회 확정 아티스트(N_eff = 3 → 0.383)도 대상이 되었고, MVP에서는 전원이 LIMITED였습니다. 순위에 Reliability를 쓰지 않으므로 슬롯은 신뢰 보정이 아니라 노출 정책이 되었습니다. TOP 5 아래 별도 1칸으로 두고, 대상은 매칭 성사 0건이면서 활성화 90일 이내인 아티스트로 바꿨습니다([D21](./04_final_policy_decisions.md#d21-exploration)).
+
+### 15. 임계값 없는 Risk Signal 후보 목록
+
+**이전 결정:** `RECENT_NO_SHOW`, `REPEATED_ARTIST_CANCELLATION`, `REPEATED_LATE_ARRIVAL`, `REPEATED_NO_RESPONSE`, `REPUTATION_MANIPULATION_SUSPECTED`, `ACCOUNT_SANCTION`을 후보로만 두었습니다.
+
+**폐기 이유:** 심각도를 점수 밖으로 옮기면서 Risk Signal이 심각도를 전달하는 유일한 장치가 되었습니다. V1은 `RECENT_NO_SHOW`, `LATE_ARTIST_CANCELLATION`, `REPEATED_ARTIST_CANCELLATION` 3종을 최근 관측 14건 창으로 운영합니다. 활동 부족은 Activity Freshness, 계정 제재는 Eligibility, 평판 조작 의심은 관리자 전용 신호로 분리했습니다([D41](./04_final_policy_decisions.md#d41-risk-signal-rules)).
+
 ---
 
 ## 현재 기준
@@ -198,7 +254,9 @@ Evidence = LIMITED
 - [전체 Architecture](./01_artist_trust_architecture.md)
 - [문제와 Trade-off](./02_problem_solution_tradeoffs.md)
 - [V1 최종 정책](./04_final_policy_decisions.md)
-- [Trust Event Catalog](./05_trust_event_catalog.md)
+- [공연 결과 카탈로그](./05_trust_event_catalog.md)
 - [DB / 구현 Roadmap](./06_database_and_implementation_roadmap.md)
+- [γ 결정 ADR](./09_reliability_decay_gamma.md)
+- [용어집 CONTEXT.md](../../../CONTEXT.md)
 
-과거 정책과 현재 정책이 다르면 **현재 `trust-v1` 문서를 우선**합니다.
+과거 정책과 현재 정책이 다르면 **현재 `reliability-v1` 문서를 우선**합니다. `docs/architecture/artist-reliability-v2.md`도 이 문서들로 대체되었습니다.

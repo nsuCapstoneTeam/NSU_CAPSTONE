@@ -173,7 +173,7 @@ Rights Verification
 하지만 별점은 다음 문제를 가집니다.
 
 ```text
-주최자의 개인적인 취향
+EVENT_PARTNER의 개인적인 취향
 감정적인 평가
 보복성 평가
 담합
@@ -241,7 +241,7 @@ SETTLEMENT_COMPLETED
 
 **[확정된 방향] B를 핵심으로 사용**
 
-**[V1 확정] 리뷰/별점은 Beta Trust에서 제외하고 UI 보조 정보로만 사용**
+**[V1 확정] 리뷰/별점은 Artist Reliability 계산에서 제외하고 UI 보조 정보로만 사용**
 
 ---
 
@@ -296,9 +296,10 @@ Trust = 87
 
 ```text
 Verification
-Transaction Reliability
-Behavior Reliability
-Evidence Confidence
+Artist Reliability
+확신 수준
+Risk Signal
+Activity Freshness
 ```
 
 ### 장점
@@ -318,7 +319,7 @@ Evidence Confidence
 
 **[확정] 다차원 Signal을 유지한다.**
 
-V1 UI는 `Trust Estimate + Confidence + Evidence Breakdown`을 함께 보여주며, 단일 숫자만 단독으로 노출하지 않습니다.
+V1 UI는 `Artist Reliability + 확신 수준 + 근거 분류 + Risk Signal`을 함께 보여주며, 단일 숫자만 단독으로 노출하지 않습니다. 확신 수준이 낮으면 Reliability 숫자 자체를 숨깁니다.
 
 ---
 
@@ -425,11 +426,11 @@ trust_score = 82
 ## 선택지 B. Event + 파생 결과
 
 ```text
-TrustEvent
+공연 결과 원장
    ↓
-Trust Metrics
+Artist Reliability · 확신 수준 · Risk Signal
    ↓
-Trust Snapshot
+Trust Profile
 ```
 
 ### 장점
@@ -451,7 +452,7 @@ Trust Snapshot
 
 **[설계 방향] 선택지 B**
 
-V1에서는 `trust_event` 원본 사실 + `trust_evidence` 정책 해석 + `artist_trust_snapshot` 집계 구조를 사용합니다.
+V1에서는 판정이 끝난 공연 결과만 담는 append-only **공연 결과 원장** 하나를 원본으로 두고, Reliability·확신 수준·Risk Signal은 조회 시 계산합니다([D42](./06_database_and_implementation_roadmap.md#d42-outcome-ledger)).
 
 ---
 
@@ -475,52 +476,43 @@ V1에서는 `trust_event` 원본 사실 + `trust_evidence` 정책 해석 + `arti
 
 ## 현재 결정
 
-**[핵심 해결 원칙 확정] 중립 Prior + Confidence 분리**
+**[핵심 해결 원칙 확정] 근거 부족을 낮은 값과 구분**
 
-증거가 없으면:
-
-$$
-Trust = \frac{0+1}{0+0+2} = 0.5
-$$
-
-에서 시작하고, 거래 Evidence가 없으므로 Confidence는 0에 가깝게 표현합니다.
+관측이 없으면 내부 값은 `α = β = 1`에 따른 0.5지만, 확신 수준이 낮은 동안(관측 3건 이하)에는 Reliability를 표시하지 않습니다.
 
 ```text
-Trust Estimate       = 50% (Neutral Prior)
-Evidence Confidence  = LIMITED
+Artist Reliability = 근거 부족 (관측 0건)
+확신 수준          = 낮음
 ```
 
-V1에서는 Eligibility와 최소 Fit을 통과한 LIMITED Confidence 신규 후보에게 Top 10 기준 최대 1개의 Exploration Slot을 허용합니다.
+Reliability는 추천 순위에 쓰지 않으므로 이력이 없다는 이유로 순위가 내려가지 않습니다. 첫 매칭 기회를 위해 TOP 5 아래 별도 1칸의 신규 노출 슬롯을 둡니다([D21](./04_final_policy_decisions.md#d21-exploration)).
 
 <a id="d08-temporal-decay"></a>
 
-# Decision 08. 오래된 이력은 삭제하지 않고 지수 감쇠한다
+# Decision 08. 오래된 이력은 삭제하지 않고 관측 순서로 감쇠한다
 
 ## 문제
 
 모든 과거 기록을 동일하게 사용하면 현재 행동 변화가 늦게 반영되고, 최근 기록만 남기면 과거 문제 행동을 쉽게 세탁할 수 있습니다.
 
+달력 시간으로 감쇠하면 근거의 양이 공연 빈도에 묶이고, 공연 없이 시간만 지나도 실패 이력이 희석됩니다.
+
 ## 현재 결정
 
-**[수식 구조 확정] Exponential Decay 사용**
+**[V1 확정] 관측 순서 기반 감쇠, γ = 0.95**
 
-$$
-W(t) = e^{-\lambda \Delta t}
-$$
+```text
+αₜ = 0.95 × αₜ₋₁ + xₜ
+βₜ = 0.95 × βₜ₋₁ + (1 − xₜ)
+```
 
-반감기 `H`와의 관계:
+관측이 확정될 때마다 기존 누적값의 영향력을 95%로 줄이고 새 결과를 더합니다. 과거 관측 하나의 영향력은 이후 약 14건의 관측으로 절반이 됩니다.
 
-$$
-\lambda = \frac{\ln 2}{H}
-$$
-
-과거 Event 원본은 보존하고 계산 영향만 줄입니다.
-
-V1 반감기 `H`는 365일로 확정합니다.
+공연 결과 원본은 보존하고 계산 영향만 줄입니다. 시간 기반 반감기 365일은 폐기했습니다. 근거는 [09 ADR](./09_reliability_decay_gamma.md)에 있습니다.
 
 <a id="d09-confidence"></a>
 
-# Decision 09. Trust와 Confidence를 분리한다
+# Decision 09. Reliability와 확신 수준을 분리한다
 
 ## 문제
 
@@ -529,27 +521,19 @@ V1 반감기 `H`는 365일로 확정합니다.
 100 / 100 완료 = 100%
 ```
 
-처럼 성공률은 같아도 증거의 양은 다릅니다.
+처럼 성공률은 같아도 근거의 양은 다릅니다.
 
 ## 현재 결정
 
-**[수식 구조 확정] Trust Estimate와 Confidence를 분리**
+**[V1 확정] 확신 수준을 관측 건수로 정한다**
 
-Trust:
+| 확신 수준 | 관측 건수 n | Reliability 표시 |
+|---|---|---|
+| 낮음 | n ≤ 3 | 숨김 |
+| 보통 | 4 ≤ n ≤ 9 | 표시 |
+| 높음 | n ≥ 10 | 표시 |
 
-$$
-Trust = \frac{R + 1}{R + S + 2}
-$$
-
-Confidence:
-
-$$
-Confidence = 1 - e^{-kN_{\text{eff}}}
-$$
-
-`N_eff`는 Severity가 들어간 `R+S`와 분리하여 **독립적으로 검증된 거래 증거량**을 나타냅니다.
-
-`k=0.16094`, `LIMITED < 0.40`, `MODERATE < 0.80`, `HIGH >= 0.80`, Observation 단위는 최종 결과가 확정된 공연 계약 1건으로 확정합니다.
+관측 단위는 판정이 끝난 공연 결과 1건(정상 완료, 아티스트 귀책 취소, 노쇼)입니다. 이전의 `Confidence = 1 − e^{−0.16094·N_eff}`는 등급 경계와 같은 뜻이면서 확률로 오해받을 수 있어 폐기했습니다([D09 상세](./04_final_policy_decisions.md#d09-confidence-level)).
 
 <a id="d10-beta-peertrust"></a>
 
@@ -564,22 +548,16 @@ $$
 **[핵심 계산 구조 확정] Hybrid 사용**
 
 ```text
-PeerTrust-inspired Context Processing
+PeerTrust-inspired Context
+  ↓  귀책 해석, 판정 완료 여부, 관측 순서
+Binary Observations (x = 1 / 0)
   ↓
-Weighted R / S
+Beta Reputation (관측 순서 감쇠)
   ↓
-Beta Trust Estimate
+Artist Reliability
 ```
 
-Beta posterior mean 형태:
-
-$$
-Trust = \frac{R + 1}{R + S + 2}
-$$
-
-를 사용합니다.
-
-V1 Event Severity는 `COMPLETED R=1`, `ARTIST_CANCELLED S=1/2/3`, `NO_SHOW S=5`로 확정하고, 거래 금액 등 추가 Context 가중치는 V1에서 사용하지 않습니다.
+정상 완료는 성공, 아티스트 귀책 취소와 노쇼는 실패 1건입니다. 통지 시점과 노쇼 같은 심각도는 Severity 가중치 대신 근거 분류와 Risk Signal로 표현합니다([D40](./04_final_policy_decisions.md#d40-binary-outcome)). 거래 금액 등 추가 Context 가중치는 V1에서 사용하지 않습니다.
 
 <a id="d11-eigentrust"></a>
 
@@ -742,7 +720,7 @@ Trust Evidence
 
 ### 장점
 
-- 주최자가 직접 판단 가능
+- EVENT_PARTNER가 직접 판단 가능
 - 추천 시스템의 책임이 투명함
 - 디버깅에도 유리함
 
@@ -768,10 +746,10 @@ Trust Evidence
 | D04 | 다차원 Trust Profile | 확정 |
 | D05 | Music Fit / Trust 분리 | 확정 |
 | D06 | Event 우선 보존 | 설계 방향 |
-| D07 | Neutral Prior + Confidence + 최대 1개 Exploration Slot | V1 확정 |
-| D08 | Exponential Decay, 반감기 365일 | V1 확정 |
-| D09 | Trust / Confidence 분리, HIGH=0.80@N_eff=10 | V1 확정 |
-| D10 | Beta + PeerTrust-inspired Hybrid + V1 Severity | V1 확정 |
+| D07 | 근거 부족 시 Reliability 숨김 + 신규 노출 슬롯 | V1 확정 |
+| D08 | 관측 순서 기반 감쇠, γ = 0.95 | V1 확정 |
+| D09 | Reliability / 확신 수준 분리, 관측 건수 3 / 10 경계 | V1 확정 |
+| D10 | Beta + PeerTrust-inspired Hybrid, 이진 관측 | V1 확정 |
 | D11 | EigenTrust 직접 적용하지 않음 | 현재 방향 |
 | D12 | Eligibility / Trust Ranking 분리 | 확정 |
 | D13 | Explainability 우선 | 확정 |
@@ -832,10 +810,10 @@ Severity, 반감기, Confidence 기준을 완벽하게 결정하려고 구현을
 **[V1 확정] B**
 
 ```text
-policyVersion = trust-v1
+policyVersion = reliability-v1
 ```
 
-원본 `TrustEvent`에는 정책 점수를 저장하지 않고, `TrustEvidence`와 `TrustSnapshot`에 정책 버전을 기록합니다.
+공연 결과 원장에는 정책값을 저장하지 않고, 계산할 때 정책 버전을 입력으로 받습니다.
 
 ---
 
@@ -843,9 +821,9 @@ policyVersion = trust-v1
 
 ## 선택지
 
-### A. 주최자 신고 즉시 S += 5
+### A. EVENT_PARTNER 신고 즉시 실패로 반영
 
-구현은 쉽지만 보복성 신고로 Trust가 크게 훼손될 수 있습니다.
+구현은 쉽지만 보복성 신고로 Reliability가 크게 훼손될 수 있습니다.
 
 ### B. 신고는 PENDING, 관리자 확인 뒤 CONFIRMED
 
@@ -856,49 +834,66 @@ policyVersion = trust-v1
 **[V1 확정] B**
 
 - 신고 가능: 공연 시작 + 15분
-- `NO_SHOW_REPORTED` 자체는 R/S 0
+- 신고 자체는 공연 결과가 아니며 Reliability에 영향 없음
 - V1은 모든 No-show를 관리자 확인
 - 아티스트에게 48시간 소명 기회
 - GPS는 필수 아님
-- 체크인/QR은 보조 Evidence
-- `ARTIST_NO_SHOW_CONFIRMED`만 `S += 5`
+- 체크인/QR은 보조 근거
+- 판정이 끝난 아티스트 귀책 노쇼만 실패 1건 + `RECENT_NO_SHOW`
 
 ---
 
-# Decision 16. Trust Score에 리뷰를 넣지 않는다
+# Decision 16. Reliability에 리뷰를 넣지 않는다
 
 ## 선택지
 
-### A. 별점/텍스트를 R/S로 변환
+### A. 별점/텍스트를 관측으로 변환
 
 정성적 요소를 반영할 수 있지만 평가자 편향과 담합 방어가 핵심 계산식에 들어옵니다.
 
 ### B. 리뷰를 UI 보조 정보로 분리
 
-핵심 Trust는 플랫폼에서 검증 가능한 거래 결과에 집중됩니다.
+핵심 Reliability는 플랫폼에서 검증 가능한 거래 결과에 집중됩니다.
 
 ## 현재 결정
 
 **[V1 확정] B**
 
-리뷰는 거래 완료 사용자만 작성할 수 있지만 `R`, `S`에는 반영하지 않습니다.
+리뷰는 거래 완료 사용자만 작성할 수 있지만 Reliability에는 반영하지 않습니다.
 
 ---
 
-# Decision 17. Trust 점수만으로 Hard Filter하지 않는다
+# Decision 17. Reliability만으로 Hard Filter하지 않는다
 
 ## 선택지
 
-### A. Trust가 특정 점수 아래면 후보에서 제거
+### A. Reliability가 특정 값 아래면 후보에서 제거
 
 위험을 빠르게 줄일 수 있지만 Cold Start와 작은 표본에 취약합니다.
 
-### B. Hard Filter와 Trust Ranking을 분리
+### B. Hard Filter와 Reliability를 분리
 
-Eligibility는 검증·계정 상태·일정·정책 Suspension만 사용하고 Trust는 설명 가능한 랭킹 신호로 둡니다.
+Eligibility는 검증·계정 상태·일정·정책 Suspension만 사용하고 Reliability는 순위가 아닌 설명 정보로 둡니다.
 
 ## 현재 결정
 
 **[V1 확정] B**
 
 자동 제재 규칙은 V1에서 과도하게 확장하지 않고, 심각한 정책 위반은 관리자 Suspension 상태로 Eligibility에서 처리합니다.
+
+---
+
+# 2026-10-03 개정으로 추가된 결정
+
+`trust-v1`을 `reliability-v1`으로 바꾸면서 다음 결정을 추가했습니다. 각 결정의 선택지와 Trade-off는 링크한 문서에 있습니다.
+
+| ID | 결정 | 문서 |
+|---|---|---|
+| D37 | MVP는 계산 코어와 시뮬레이터까지 구현 (Contract가 MVP에서 제거됨) | [06](./06_database_and_implementation_roadmap.md#d37-mvp-scope) |
+| D38 | Linear SSOT 용어 사용 (Trust Profile, Artist Reliability, EVENT_PARTNER) | [01](./01_artist_trust_architecture.md#d38-vocabulary) |
+| D39 | Reliability는 추천 순위에 반영하지 않고 표시 전용 | [04](./04_final_policy_decisions.md#d39-display-only) |
+| D40 | 공연 결과를 이진 관측으로 해석, 심각도는 Risk Signal로 | [04](./04_final_policy_decisions.md#d40-binary-outcome) |
+| D41 | Risk Signal 3종, 최근 관측 14건 창 | [04](./04_final_policy_decisions.md#d41-risk-signal-rules) |
+| D42 | 공연 결과 원장 1개 + 조회 시 계산 | [06](./06_database_and_implementation_roadmap.md#d42-outcome-ledger) |
+| D43 | 관측 순서는 행동 시각 기준 | [04](./04_final_policy_decisions.md#d43-outcome-ordering) |
+| D44 | Activity Freshness를 Reliability와 분리 | [04](./04_final_policy_decisions.md#d44-activity-freshness) |

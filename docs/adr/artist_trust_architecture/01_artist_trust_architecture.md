@@ -1,8 +1,29 @@
 # Artist Trust Architecture
 
+> 2026-10-03 개정: Reliability 계산 모델을 `trust-v1`에서 `reliability-v1`으로 바꿨습니다(이진 관측, 관측 순서 감쇠 γ = 0.95, 관측 건수 기반 확신 수준, 순위 미반영). 폐기된 이전 결정은 [08 문서](./08_deprecated_legacy_decisions.md#trust-v1에서-reliability-v1으로)에 있습니다.
+
+<a id="d38-vocabulary"></a>
+
+# 0. 용어
+
+이 문서 묶음은 Linear SSOT의 용어를 따르며, 정의는 저장소 루트의 [CONTEXT.md](../../../CONTEXT.md)에 있습니다.
+
+| 용어 | 뜻 | 쓰지 않는 표현 |
+|---|---|---|
+| Trust Profile | Verification, Artist Reliability, Risk Signal, 근거를 묶어 보여 주는 상위 개념 | Trust Score |
+| Artist Reliability | 확정된 공연 결과로 추정한 공연 이행 가능성 | Trust Estimate, 신뢰도 점수 |
+| EVENT_PARTNER | 행사를 등록하고 아티스트를 섭외하는 사용자 | Organizer, 주최자 |
+| 공연 결과 | 공연 1건에 대해 판정으로 확정된 최종 결과와 귀책 | Trust Event |
+| 관측 | Reliability 계산에 들어가는 공연 결과(정상 완료, 아티스트 귀책 취소·노쇼) | Evidence |
+| 확신 수준 | Reliability를 뒷받침하는 관측이 얼마나 쌓였는지의 등급 | Confidence(%) |
+
+“Trust”는 검증 정보까지 포함하는 상위 개념으로만 씁니다. 그래서 SSOT의 “선택적 Trust Verification”은 Trust Profile에 표시되지만 Artist Reliability에는 더해지지 않습니다.
+
+---
+
 # 1. 문제 정의
 
-행사 주최자가 온라인에서 처음 보는 아티스트와 계약한다고 생각해 보겠습니다.
+EVENT_PARTNER가 온라인에서 처음 보는 아티스트와 계약한다고 생각해 보겠습니다.
 
 음악을 들어 보니 행사와 매우 잘 어울릴 수 있습니다.
 
@@ -98,23 +119,28 @@ flowchart LR
 
     Verification --> Eligibility["검증·자격(Verified / Eligibility)"]
 
-    Eligibility --> Signal["신뢰 신호 수집(Trust Signal Collection)"]
+    Eligibility --> Matching["매칭 점수(Matching Score)"]
 
-    Signal --> Evaluator["신뢰 평가기(Trust Evaluator)"]
-
-    Evaluator --> Profile["아티스트 신뢰 프로필(Artist Trust Profile)"]
-
-    Profile --> Ranker["설명 가능한 랭커(Explainable Ranker)"]
+    Matching --> Ranker["설명 가능한 랭커(Explainable Ranker)"]
 
     Ranker --> Result["추천 결과(Recommendation Result)"]
 
-    subgraph TrustSystem["아티스트 신뢰 시스템(Artist Trust System)"]
-        Signal
-        Evaluator
+    Ledger["공연 결과 원장(Performance Outcome Ledger)"] --> Calculator["Reliability 계산(Reliability Calculator)"]
+
+    Calculator --> Profile["Trust Profile"]
+
+    Verification --> Profile
+
+    Profile -->|표시 전용| Result
+
+    subgraph TrustSystem["Trust 도메인(Trust Domain)"]
+        Ledger
+        Calculator
         Profile
     end
 
     subgraph RecommendationSystem["추천 시스템(Recommendation System)"]
+        Matching
         Ranker
         Result
     end
@@ -125,15 +151,13 @@ flowchart LR
 ```text
 아티스트
   ↓
-실제 활동 가능한 사람인지 확인
+실제 활동 가능한 사람인지 확인 (Verification, Eligibility)
   ↓
-거래 과정에서 발생하는 신뢰 근거 수집
+행사 적합도로 순위 결정 (Matching Score)
   ↓
-신뢰 근거 평가
+판정이 끝난 공연 결과로 Artist Reliability 계산
   ↓
-신뢰 프로필 생성
-  ↓
-추천 시스템에서 하나의 독립 평가 축으로 사용
+Trust Profile을 추천 결과 옆에 표시 (순위에는 쓰지 않음)
 ```
 
 ---
@@ -314,7 +338,7 @@ flowchart TD
 
 ---
 
-## 7.2 Transaction Trust
+## 7.2 Transaction Trust (Artist Reliability)
 
 질문:
 
@@ -328,7 +352,7 @@ flowchart TD
 - 분쟁
 - 정산 완료
 
-현재 설계에서 가장 중요한 신뢰 축입니다.
+현재 설계에서 가장 중요한 신뢰 축이며, 판정이 끝난 공연 결과로 Artist Reliability를 계산합니다. 분쟁과 정산은 공연 결과를 확정하는 과정의 정보이며 별도 관측이 아닙니다.
 
 ---
 
@@ -347,7 +371,7 @@ flowchart TD
 
 단, 이런 데이터는 **실제 공연 완료 이벤트보다 조작 가능성이 높거나 상황 의존적일 수 있으므로** 향후 계산 시 같은 강도로 다룰 필요는 없습니다.
 
-V1에서는 Behavior Signal을 **Beta Trust 계산과 추천 랭킹에 직접 넣지 않고**, 별도 설명용 프로필로만 노출합니다. 데이터가 충분히 축적된 뒤 V2에서 재검토합니다.
+V1에서는 Behavior Signal을 **Artist Reliability 계산과 추천 순위에 넣지 않고**, 별도 설명용 프로필로만 노출합니다. 데이터가 충분히 축적된 뒤 V2에서 재검토합니다.
 
 ---
 
@@ -357,23 +381,24 @@ V1에서는 Behavior Signal을 **Beta Trust 계산과 추천 랭킹에 직접 �
 
 신뢰도를 직접 수정하는 대신 **실제로 발생한 사건을 먼저 기록**합니다.
 
+> MVP는 매칭 성사(Offer `ACCEPTED`)까지만 제공합니다(SSOT `BOOKING-061`). 계약 체결 이후 단계와 공연 결과 기록은 Contract 도입 시 활성화합니다.
+
 ```mermaid
 stateDiagram-v2
 
     [*] --> Offer
 
     state "제안(Offer)" as Offer
-    state "수락(Accepted)" as Accepted
+    state "매칭 성사(Accepted)" as Accepted
     state "거절(Rejected)" as Rejected
     state "계약 체결(Contracted)" as Contracted
     state "공연 예정(Scheduled)" as Scheduled
     state "공연 완료(Completed)" as Completed
-    state "아티스트 취소(Artist Cancelled)" as ArtistCancelled
-    state "주최자 취소(Organizer Cancelled)" as OrganizerCancelled
+    state "취소(Cancelled)" as Cancelled
     state "노쇼(No-show)" as NoShow
     state "정산(Settlement)" as Settlement
     state "피드백(Feedback)" as Feedback
-    state "신뢰 이벤트(Trust Event)" as TrustEvent
+    state "공연 결과 원장(Performance Outcome)" as Outcome
 
     Offer --> Accepted: ARTIST_ACCEPTED
     Offer --> Rejected: ARTIST_REJECTED
@@ -382,24 +407,22 @@ stateDiagram-v2
     Contracted --> Scheduled: PERFORMANCE_SCHEDULED
 
     Scheduled --> Completed: PERFORMANCE_COMPLETED
-    Scheduled --> ArtistCancelled: ARTIST_CANCELLED
-    Scheduled --> OrganizerCancelled: ORGANIZER_CANCELLED
-    Scheduled --> NoShow: ARTIST_NO_SHOW
+    Scheduled --> Cancelled: CANCELLED (귀책 판정)
+    Scheduled --> NoShow: NO_SHOW (관리자 판정)
 
     Completed --> Settlement: SETTLEMENT_COMPLETED
     Settlement --> Feedback: TRANSACTION_FEEDBACK
 
-    ArtistCancelled --> TrustEvent
-    NoShow --> TrustEvent
-    Completed --> TrustEvent
-    Settlement --> TrustEvent
-    Feedback --> TrustEvent
+    Completed --> Outcome
+    Cancelled --> Outcome
+    NoShow --> Outcome
 
-    TrustEvent --> [*]
-
+    Outcome --> [*]
+    Feedback --> [*]
     Rejected --> [*]
-    OrganizerCancelled --> [*]
 ```
+
+정산과 피드백은 공연 결과를 추가하지 않습니다. 공연 1건의 공연 결과는 하나입니다.
 
 ---
 
@@ -430,156 +453,84 @@ stateDiagram-v2
 따라서 개념적으로:
 
 ```text
-사실(Event)
+공연 결과(Outcome)
     ↓
-파생 지표(Metric)
+Artist Reliability · 확신 수준 · Risk Signal
     ↓
-신뢰 프로필(Profile)
+Trust Profile
 ```
 
 의 방향을 사용합니다.
 
 ---
 
-# 10. Trust Evaluation Pipeline (신뢰도 평가 수식)
+# 10. Artist Reliability 계산
 
-**상태: [V1 확정]**
+**상태: [V1 확정, `reliability-v1`]**
 
-수집된 이벤트(Event)를 바탕으로 아티스트의 신뢰도를 계산하기 위해 **Beta Reputation System의 확률 모델**을 중심으로 사용하고, **PeerTrust의 Context 개념**을 이벤트 전처리 단계에 결합합니다.
+판정이 끝난 공연 결과를 **이진 관측**으로 해석하고, **관측 순서 기반 감쇠**를 적용한 Beta-Bernoulli 모델로 Artist Reliability를 계산합니다. PeerTrust의 Context 개념은 “어떤 결과를 관측으로 볼 것인가”와 “어떤 순서로 반영할 것인가”에 결합합니다.
 
 > **논문과 프로젝트 수식의 경계**
 >
-> - `Trust = (R + 1) / (R + S + 2)`는 Beta 분포의 기댓값을 이용한 구조입니다.
-> - 이벤트별 Severity와 Context는 논문이 자동으로 정해 주는 값이 아니라 서비스 정책입니다. V1에서는 `COMPLETED=R1`, `ARTIST_CANCELLED=S1/2/3`, `NO_SHOW=S5`로 확정했습니다.
-> - 아래의 지수 시간 감쇠와 Confidence 포화 함수는 논문의 개념을 참고해 **프로젝트에서 채택한 구현 수식**이며, 논문의 수식을 그대로 복사한 것은 아닙니다.
+> - 성공·실패 관측으로 Beta 분포를 갱신하고 기댓값을 평판으로 쓰는 구조는 Beta Reputation System의 정의를 따릅니다.
+> - 관측 순서 기반 감쇠, `γ = 0.95`, 확신 수준 경계는 논문 개념을 참고해 **프로젝트가 정한 정책값**입니다. 근거는 [09 ADR](./09_reliability_decay_gamma.md)에 있습니다.
 
 ```mermaid
 flowchart LR
 
-    Events["확정된 신뢰 이벤트(Verified Trust Events)"]
+    Ledger["공연 결과 원장(Performance Outcome Ledger)"]
 
-    Events --> Context["문맥 처리(Context Processing)"]
-    Context --> Temporal["시간 가중치 W(t)(Temporal Weight)"]
+    Ledger --> Attribution["귀책 해석(Attribution)"]
+    Attribution --> Observation["관측: 성공 / 실패(Binary Observation)"]
+    Attribution --> Excluded["관측 아님(Not Observed)"]
 
-    Temporal --> Positive["긍정 증거 R(Positive Evidence)"]
-    Temporal --> Negative["부정 증거 S(Negative Evidence)"]
+    Observation --> Order["행동 시각 순서 정렬(Ordering)"]
+    Order --> Decay["관측 순서 감쇠 γ = 0.95(Discounting)"]
+    Decay --> Reliability["Artist Reliability"]
 
-    Positive --> Beta["Beta 신뢰도 추정(Beta Trust Estimation)"]
-    Negative --> Beta
+    Observation --> Count["관측 건수 n"]
+    Count --> Level["확신 수준(Confidence Level)"]
 
-    Beta --> Score["신뢰도 추정값(Trust Estimate)"]
+    Observation --> Risk["Risk Signal (최근 관측 14건)"]
 
-    Events --> Evidence["독립 증거량(Independent Evidence Count)"]
-    Evidence --> Confidence["확신도 계산(Confidence Estimation)"]
-
-    Score --> Profile["아티스트 신뢰 프로필(Artist Trust Profile)"]
-    Confidence --> Profile
+    Reliability --> Profile["Trust Profile"]
+    Level --> Profile
+    Risk --> Profile
 ```
 
-## 10.1 증거 수집 및 가중치 부여 (Context Processing)
+## 10.1 공연 결과를 관측으로 해석
 
-각 신뢰 이벤트는 **긍정 증거** 또는 **부정 증거**에 기여합니다.
+| 결과 | 귀책 | 관측 | `x` |
+|---|---|---|---:|
+| 정상 완료 | - | 예 | 1 |
+| 취소 | ARTIST | 예 | 0 |
+| 노쇼 | ARTIST | 예 | 0 |
+| 취소·노쇼 | EVENT_PARTNER, MUTUAL, FORCE_MAJEURE, PLATFORM, OTHER | 아니오 | - |
 
-이벤트 `i`의 기본 증거량을 `r_i`, `s_i`라고 하고, 사건이 오래될수록 작아지는 시간 가중치를 `W(t_i)`라고 하면:
-
-- 긍정 증거 누적:
-
-$$
-R = \sum_i r_i \times W(t_i)
-$$
-
-- 부정 증거 누적:
-
-$$
-S = \sum_i s_i \times W(t_i)
-$$
-
-여기서:
-
-- `R` = 시간과 Context가 반영된 긍정 증거량
-- `S` = 시간과 Context가 반영된 부정 증거량
-- `r_i` = 이벤트 `i`가 긍정 증거에 기여하는 정도
-- `s_i` = 이벤트 `i`가 부정 증거에 기여하는 정도
-- `W(t_i)` = 이벤트 `i`의 시간 가중치
-
-V1에서는 다음처럼 확정합니다.
-
-```text
-PERFORMANCE_COMPLETED
-  → Positive Evidence R = 1.0
-
-ARTIST_CANCELLED
-  → Negative Evidence S = 1.0 / 2.0 / 3.0
-
-ARTIST_NO_SHOW_CONFIRMED
-  → Negative Evidence S = 5.0
-```
-
-V1의 기본 Severity는 다음으로 확정합니다.
-
-```text
-PERFORMANCE_COMPLETED
-→ r_i = 1.0
-
-ARTIST_CANCELLED
-→ 7일 이상 전: s_i = 1.0
-→ 24시간~7일 전: s_i = 2.0
-→ 24시간 미만: s_i = 3.0
-
-ARTIST_NO_SHOW_CONFIRMED
-→ s_i = 5.0
-
-ORGANIZER_CANCELLED / EXCUSED_CANCELLATION
-→ R/S에 반영하지 않음
-```
-
-이 숫자들은 논문이 제시한 최적값이 아니라 **V1 서비스 정책값**이며, `trust-v1` 정책 버전으로 관리하고 시뮬레이션 결과에 따라 V2에서 조정할 수 있습니다.
+통지 시점(7일 이상 전 / 24시간~7일 전 / 24시간 미만)과 노쇼 여부 같은 심각도는 `x`에 넣지 않고 근거 분류와 Risk Signal로 표현합니다. 이유는 [D40](./04_final_policy_decisions.md#d40-binary-outcome)에 있습니다.
 
 ---
 
-## 10.2 신뢰 점수 추정 (Trust Score Calculation)
+## 10.2 계산식
 
-Beta 확률 분포의 기댓값 구조를 사용합니다.
+```text
+α₀ = 1,  β₀ = 1
+αₜ = 0.95 × αₜ₋₁ + xₜ
+βₜ = 0.95 × βₜ₋₁ + (1 − xₜ)
+Rₜ = αₜ / (αₜ + βₜ)
+```
 
-$$
-Trust = \frac{R + 1}{R + S + 2}
-$$
+- α는 지켜진 약속의 누적 무게, β는 깨진 약속의 누적 무게입니다.
+- 관측이 하나 확정될 때마다 기존 무게의 영향력을 95%로 줄이고 새 결과를 1만큼 더합니다.
+- Reliability는 전체 무게 중 지켜진 약속의 비율, 즉 관측(성패가 아티스트에게 달려 있었던 결과)에 대해 최근 결과에 더 큰 비중을 둔 이행률 추정치입니다. 아티스트 귀책이 아닌 결과는 분모에서 빠지므로 공연이 실제로 열릴 확률은 아닙니다.
 
-이를 Beta 분포의 파라미터로 쓰면:
+관측 순서는 행동 시각으로 정합니다. 정상 완료와 노쇼는 공연 예정 시작 시각, 아티스트 귀책 취소는 취소 통보 시각을 씁니다([D43](./04_final_policy_decisions.md#d43-outcome-ordering)).
 
-$$
-\alpha = R + 1
-$$
+### 예: 관측이 없는 신규 아티스트
 
-$$
-\beta = S + 1
-$$
+`α = β = 1`이므로 Reliability는 0.5입니다.
 
-따라서:
-
-$$
-Trust = E[p] = \frac{\alpha}{\alpha + \beta}
-$$
-
-입니다.
-
-### 예: 거래 증거가 전혀 없는 신규 아티스트
-
-`R = 0`, `S = 0`이면:
-
-$$
-Trust = \frac{0 + 1}{0 + 0 + 2} = 0.5
-$$
-
-즉 **중립 Prior의 기댓값 50%**에서 시작합니다.
-
-중요한 점은 이 `50%`를:
-
-> “이 아티스트가 실제로 공연을 성공할 확률이 정확히 50%다.”
-
-라고 해석하면 안 된다는 것입니다.
-
-아직 데이터가 하나도 없으므로 **관측 근거가 없는 중립 시작값**입니다. 이 때문에 반드시 다음 섹션의 `Confidence`와 함께 해석합니다.
+이 값을 “이 아티스트가 공연을 이행할 확률이 50%다”라고 해석하면 안 됩니다. 관측 근거가 없는 출발점일 뿐입니다. 그래서 확신 수준이 낮은 동안에는 화면에 표시하지 않습니다(11장).
 
 ---
 
@@ -589,33 +540,25 @@ $$
 
 ```text
 PeerTrust-inspired Context
-  └─ 어떤 사건인가?
-  └─ 얼마나 중요한 사건인가?
-  └─ 어떤 출처에서 나온 정보인가?
-  └─ 최근 사건인가?
+  └─ 누구의 귀책인가?            → 관측 여부
+  └─ 거래가 얼마나 쌓였는가?      → 확신 수준
+  └─ 어떤 출처로 확정되었는가?    → 판정이 끝난 결과만 원장에 기록
+  └─ 최근 행동인가?              → 관측 순서 감쇠
 
             ↓
 
-Weighted Positive / Negative Evidence
-            R / S
+Binary Observations (x = 1 / 0)
 
             ↓
 
 Beta Reputation
-  └─ 누적 Evidence를 확률 분포로 표현
-  └─ Trust Estimate 계산
+  └─ 관측을 확률 분포로 누적
+  └─ Artist Reliability 계산
 ```
-
-즉:
-
-- **PeerTrust에서 얻는 아이디어:** 거래 수, Context, 정보 출처의 신뢰성, 시간 적응성
-- **Beta Reputation에서 얻는 아이디어:** Positive / Negative Evidence를 확률적으로 누적하고 미래 행동에 대한 추정치를 표현
-
-으로 책임을 나눕니다.
 
 ---
 
-# 11. 데이터 충분도 (Confidence Estimation)
+# 11. 확신 수준
 
 **상태: [V1 확정]**
 
@@ -624,170 +567,61 @@ Beta Reputation
 ```text
 Artist A
 1번 공연 / 1번 성공
-→ 100%
 
 Artist B
 100번 공연 / 100번 성공
-→ 100%
 ```
 
-하지만 우리가 가진 **증거의 양**은 크게 다릅니다.
+하지만 근거의 양은 크게 다릅니다. 따라서 Reliability와 별개로 **확신 수준**을 둡니다(SSOT `TRUST-149`).
 
-따라서 `Trust`와 별개로 **데이터가 얼마나 충분한지**를 나타내는 `Confidence`를 둡니다.
+## 11.1 관측 건수로 정한다
 
-$$
-Confidence = 1 - e^{-kN_{\text{eff}}}
-$$
+| 확신 수준 | 관측 건수 n | Reliability 표시 |
+|---|---|---|
+| 낮음 | n ≤ 3 | 숨김 (“근거 부족 · 관측 n건”) |
+| 보통 | 4 ≤ n ≤ 9 | 표시 |
+| 높음 | n ≥ 10 | 표시 |
 
-여기서:
+n은 관측(정상 완료, 아티스트 귀책 취소, 노쇼)의 건수이며 감쇠하지 않습니다. 화면에 보이는 “관측 17건”과 등급의 근거가 같아서 그대로 설명할 수 있습니다.
 
-- `N_eff` = 독립적으로 검증된 거래 증거의 유효량
-- `k` = Confidence가 증가하는 속도를 결정하는 상수
-- `Confidence` = `0 ~ 1` 사이의 값
+## 11.2 연속 Confidence 공식을 쓰지 않는 이유
 
-데이터가 누적될수록 Confidence는 1에 가까워집니다.
+이전 설계의 `Confidence = 1 − e^{−0.16094·N_eff}`는 등급 경계(0.40, 0.80)가 결국 `N_eff` 임계값과 같은 뜻이라 지수 함수가 역할을 하지 않았고, “Confidence 80%”라는 표시는 확률로 오해받을 수 있었습니다. 관측 순서 감쇠에서는 감쇠된 근거량이 최대 20에서 멈추기도 합니다.
+
+경계값 3과 10은 이전 등급 경계(`N_eff` 3.17, 10)를 건수로 옮긴 값입니다.
+
+## 11.3 심각도와 근거량은 섞이지 않는다
+
+이전 설계에서는 노쇼 1건이 실패 5건으로 환산되어 근거량을 부풀렸기 때문에 근거량을 따로 세야 했습니다. 이진 관측에서는 결과 1건이 관측 1건이므로 이 문제가 생기지 않습니다. 심각도는 Risk Signal이 담당합니다.
 
 ---
 
-## 11.1 왜 `N = R + S`를 그대로 쓰지 않는가
-
-초기 설계에서는 다음처럼 생각할 수 있습니다.
-
-$$
-N = R + S
-$$
-
-하지만 현재 구조에서는 `R`, `S`에 **Severity 가중치**가 들어갑니다.
-
-예를 들어:
-
-```text
-No-show 1건 = Negative Evidence 5.0
-```
-
-으로 정하면 한 번의 No-show가 마치 **5개의 독립 거래를 관측한 것처럼 Confidence를 크게 높이는 문제**가 생깁니다.
-
-Confidence가 표현하려는 것은 사건의 심각도가 아니라 **얼마나 많은 독립적인 거래 근거가 쌓였는가**이므로 두 개념을 분리합니다.
-
-권장 구조는:
-
-$$
-N_{\text{eff}} = \sum_j W(t_j)
-$$
-
-입니다.
-
-여기서 `j`는 **검증된 독립 거래(예: 공연 계약 단위)**를 뜻합니다.
-
-따라서:
-
-```text
-Severity
-  → R / S에 반영
-
-Evidence Volume
-  → N_eff에 반영
-```
-
-으로 책임을 나눕니다.
-
-> 만약 모든 거래가 항상 `r_i + s_i = 1`이고 별도 Severity를 사용하지 않는 단순 모델이라면 `N = R + S`로 두어도 됩니다.
-
----
-
-## 11.2 V1 Confidence 정책
-
-V1은 `N_eff = 10`일 때 `Confidence = 0.80`이 되도록 정합니다.
-
-$$
-k = -\frac{\ln(1-0.8)}{10} \approx 0.16094
-$$
-
-따라서:
-
-$$
-Confidence = 1 - e^{-0.16094N_{\text{eff}}}
-$$
-
-등급은 다음과 같습니다.
-
-```text
-LIMITED   : Confidence < 0.40
-MODERATE  : 0.40 <= Confidence < 0.80
-HIGH      : Confidence >= 0.80
-```
-
-독립 Observation은 **최종 결과가 확정된 공연 계약 1건**입니다.
-
-- `PERFORMANCE_COMPLETED` → Observation 1
-- `ARTIST_CANCELLED` → Observation 1
-- `ARTIST_NO_SHOW_CONFIRMED` → Observation 1
-- `ORGANIZER_CANCELLED` → 아티스트 이행 능력을 관측하지 못했으므로 Observation 제외
-- `EXCUSED_CANCELLATION` → Observation 제외
-
-한 공연에서 여러 내부 Event가 발생하더라도 Confidence에는 한 번만 반영합니다.
-
----
-
-# 12. 시간 감쇠 (Temporal Trust)
+# 12. 최근성 감쇠
 
 **상태: [V1 확정]**
 
-과거의 행동을 현재의 행동과 완전히 똑같이 취급하면 현재 상태를 반영하기 어렵습니다.
+과거 행동을 현재 행동과 완전히 똑같이 취급하면 현재 상태를 반영하기 어렵습니다.
 
 반대로 과거 데이터를 삭제하면 과거의 반복적인 문제를 쉽게 세탁할 수 있습니다.
 
-따라서 기록은 보존하되 **Trust 계산에 미치는 영향만 점진적으로 줄이는 지수 감쇠(Exponential Decay)**를 사용합니다.
+따라서 기록은 보존하되 **계산에 미치는 영향만 점진적으로 줄입니다.**
 
-$$
-W(t) = e^{-\lambda \Delta t}
-$$
+## 12.1 시간이 아니라 관측 순서로 감쇠한다
 
-여기서:
-
-- `Δt` = 사건 발생 후 경과 시간
-- `λ` = 감쇠율
-- `W(t)` = 현재 계산에 적용할 시간 가중치
-
-`W(t)`는 10.1의 `R`, `S` 계산에 곱해집니다.
-
----
-
-## 12.1 반감기와 λ의 관계
-
-운영 정책에서는 `λ` 자체보다 **반감기(Half-life)**가 이해하기 쉽습니다.
-
-반감기를 `H`라고 하면:
-
-$$
-\lambda = \frac{\ln 2}{H}
-$$
-
-따라서 사건 발생 후 정확히 `H`만큼 시간이 지나면:
-
-$$
-W(H) = 0.5
-$$
-
-가 됩니다.
-
-예:
+새 관측이 하나 생길 때마다 이전 기록의 영향력은 95%만 남습니다.
 
 ```text
-반감기 = 1년
-
-오늘 발생한 사건       → weight ≈ 1.0
-1년 지난 사건          → weight = 0.5
-2년 지난 사건          → weight = 0.25
+사건 반감기 = ln(0.5) / ln(0.95) ≈ 13.5건
+장기 증거량 = 1 / (1 − 0.95) = 20
 ```
 
-V1에서는 **반감기 1년(365일)**을 사용합니다.
+- 과거 관측 하나의 영향력은 이후 약 14건의 관측이 쌓이면 절반이 됩니다.
+- 최근 20건의 관측이 전체 영향력의 약 2/3를 차지하고, 그보다 오래된 관측도 영향력이 0이 되지 않습니다.
+- 새 관측이 없으면 값이 변하지 않습니다. 시간만 지나서는 회복되지 않고, 과거 실패는 이후의 이행으로만 희석됩니다.
+- 공연 빈도가 값에 영향을 주지 않습니다. 같은 무결점 20회 이력이 시간 감쇠(반감기 365일)에서는 연 1회 공연자 0.750, 연 10회 공연자 0.924였지만, 관측 순서 감쇠에서는 둘 다 0.974입니다.
+- 최근 활동 여부는 Activity Freshness로 따로 표시합니다([D44](./04_final_policy_decisions.md#d44-activity-freshness)).
 
-$$
-\lambda = \frac{\ln 2}{365} \approx 0.001899 \text{ / day}
-$$
-
-6개월보다 과거 문제 행동을 더 오래 기억하면서도, 오래된 사건의 영향이 영구히 동일하게 유지되는 문제를 피하기 위한 균형안입니다.
+γ 후보 비교와 선택 근거는 [09 ADR](./09_reliability_decay_gamma.md)에 있습니다.
 
 ---
 
@@ -795,15 +629,7 @@ $$
 
 Beta Reputation System은 오래된 피드백의 영향력을 낮추기 위한 **forgetting factor**를 설명하고, PeerTrust 역시 최근 행동과 과거 행동을 다르게 다루는 **temporal adaptivity**를 논의합니다.
 
-현재 프로젝트의:
-
-$$
-W(t) = e^{-\lambda \Delta t}
-$$
-
-는 이 연구 방향을 서비스에 적용하기 위해 선택한 **연속 시간 기반 프로젝트 수식**입니다.
-
-즉 논문에서 이 식을 그대로 가져온 것이 아니라, 논문의 “오래된 증거의 영향력을 줄여야 한다”는 개념을 구현 가능한 형태로 구체화한 것입니다.
+현재 프로젝트는 이 개념을 “관측이 확정될 때마다 누적값에 γ를 곱한다”는 형태로 구체화했습니다. 실제 서비스 사례로 Storj의 Beta 평판 모델도 감사(audit) 1건마다 forgetting factor를 적용합니다.
 
 ---
 
@@ -822,14 +648,12 @@ $$
 
 이라고 판단하면 **정보가 없는 상태와 위험한 상태를 혼동**하게 됩니다.
 
-현재 수식에서는 신규 아티스트의 거래 증거가 없을 때:
+현재 설계에서는 신규 아티스트의 관측이 없을 때:
 
 ```text
-R = 0
-S = 0
-
-Trust Estimate = 0.5
-Confidence = 0
+n = 0
+확신 수준 = 낮음
+Artist Reliability = 표시하지 않음 (내부 값 0.5)
 ```
 
 로 표현합니다.
@@ -837,12 +661,12 @@ Confidence = 0
 따라서:
 
 ```text
-낮은 Trust
+낮은 Reliability
         ≠
-증거 부족
+근거 부족
 ```
 
-을 데이터 구조에서도 분리할 수 있습니다.
+을 데이터 구조와 화면 모두에서 분리할 수 있습니다.
 
 ---
 
@@ -853,31 +677,30 @@ flowchart TD
 
     NewArtist["신규 아티스트(New Artist)"]
 
-    NewArtist --> NoHistory["거래 증거 = 0(Transaction Evidence = 0)"]
+    NewArtist --> NoHistory["관측 0건(No Observations)"]
 
-    NoHistory --> Prior["신뢰 Prior = 0.5(Trust Prior = 0.5)"]
+    NoHistory --> Hidden["Reliability 숨김 · 확신 수준 낮음"]
 
-    Prior --> Verification["검증 증거(Verification Evidence)"]
+    NewArtist --> Verification["검증 근거(Verification Evidence)"]
 
     Verification --> Identity["신원 검증 완료(Identity Verified)"]
     Verification --> Account["외부 계정 검증 완료(External Account Verified)"]
     Verification --> Rights["권리 검증 완료(Rights Verified)"]
     Verification --> Work["검증된 작업물(Verified Work)"]
 
-    Identity --> InitialProfile["초기 신뢰 프로필(Initial Trust Profile)"]
+    Hidden --> InitialProfile["초기 Trust Profile"]
+    Identity --> InitialProfile
     Account --> InitialProfile
     Rights --> InitialProfile
     Work --> InitialProfile
 
-    InitialProfile --> Limited["확신도 = 0 / 증거 제한적(Confidence = 0 / Evidence LIMITED)"]
+    InitialProfile --> First["첫 플랫폼 공연(First Platform Performance)"]
 
-    Limited --> First["첫 플랫폼 공연(First Platform Performance)"]
+    First --> Outcome["판정이 끝난 공연 결과(Confirmed Outcome)"]
 
-    First --> TxEvidence["검증된 거래 증거(Verified Transaction Evidence)"]
+    Outcome --> Recalculate["Reliability · 확신 수준 계산"]
 
-    TxEvidence --> Recalculate["R / S / 확신도 재계산(Recalculate R / S / Confidence)"]
-
-    Recalculate --> Mature["축적된 신뢰 프로필(Mature Trust Profile)"]
+    Recalculate --> Mature["관측 4건부터 Reliability 표시"]
 ```
 
 ---
@@ -887,47 +710,29 @@ flowchart TD
 신규 아티스트에게 단순히 다음처럼 표시하지 않습니다.
 
 ```text
-Trust = LOW
+Reliability = 50%
 ```
 
 대신:
 
 ```text
-Trust Estimate        50% (Neutral Prior)
-Evidence Confidence   LIMITED
-Verified Transactions 0
+Artist Reliability    근거 부족 (관측 0건)
 Identity              VERIFIED
 Rights                VERIFIED
 ```
 
-처럼 **추정값과 데이터 충분도를 함께 표시**합니다.
+처럼 **근거 상태와 지금 확인할 수 있는 검증 정보를 함께 표시**합니다.
 
 ---
 
-## 13.3 V1 Cold Start 추천 노출 정책
+## 13.3 신규 노출 슬롯
 
-신규 아티스트를 단순히 낮은 Confidence 때문에 제거하지 않습니다.
+Reliability가 순위에 들어가지 않으므로 이력이 없다는 이유로 순위가 내려가지는 않습니다. 신규 노출 슬롯은 신뢰 보정이 아니라 첫 매칭 기회를 주기 위한 노출 정책입니다.
 
-V1에서는 다음 정책을 사용합니다.
-
-```text
-일반 Top 10 후보
-+
-최대 1개의 탐색 슬롯(Exploration Slot)
-```
-
-탐색 슬롯의 대상은 다음을 모두 만족해야 합니다.
-
-- Eligibility Filter 통과
-- 필수 Verification 완료
-- 계정 상태 정상
-- 행사 일정과 지역/예산/공연 조건 충족
-- Music Fit / Business Fit / Performance Fit의 최소 조건 통과
-- Confidence = LIMITED
-
-탐색 슬롯은 **항상 강제로 채우지 않으며**, 조건을 만족하는 신규 후보가 있을 때만 최대 1명을 포함합니다.
-
-또한 Ranker에서 `Trust × Confidence`처럼 Confidence를 직접 곱해 신규 아티스트를 이중 감점하지 않습니다. Confidence는 **근거 충분도를 설명하는 별도 신호**로 유지합니다.
+- 신규 아티스트: 매칭 성사 0건이고 Artist 활성화 후 90일 이내
+- TOP 5 아래 별도 1칸
+- 기본 TOP 5에 신규가 없고, PASS/FAIL Filter를 통과한 신규 후보의 최고 종합 적합도가 5위 대비 10점 이내일 때만 표시
+- 상세: [D21](./04_final_policy_decisions.md#d21-exploration)
 
 ---
 
@@ -976,9 +781,9 @@ flowchart LR
         D7["감사 로그(Audit Log)"]
     end
 
-    Defense --> Valid["검증 완료 신뢰 이벤트(Validated Trust Events)"]
+    Defense --> Valid["판정이 끝난 공연 결과(Confirmed Outcomes)"]
 
-    Valid --> Evaluator["신뢰 평가기(Trust Evaluator)"]
+    Valid --> Evaluator["Reliability 계산(Reliability Calculator)"]
 ```
 
 ---
@@ -1008,7 +813,7 @@ No-show 신고 및 검증
 
 설계 방향은 **플랫폼이 검증한 거래 사실을 더 강한 근거로 사용**하고, 후기와 별점은 필요하다면 보조 정보로 사용하는 것입니다.
 
-V1에서는 리뷰와 별점을 **Beta Trust Score에서 제외**합니다. 리뷰는 거래를 완료한 사용자만 작성할 수 있으며, UI의 정성적 보조 정보로만 제공합니다. 이렇게 하면 보복성 별점과 담합이 핵심 Trust 수식을 직접 움직이는 것을 막을 수 있습니다.
+V1에서는 리뷰와 별점을 **Artist Reliability 계산에서 제외**합니다. 리뷰는 거래를 완료한 사용자만 작성할 수 있으며, UI의 정성적 보조 정보로만 제공합니다. 이렇게 하면 보복성 별점과 담합이 핵심 수식을 직접 움직이는 것을 막을 수 있습니다.
 
 ---
 
@@ -1016,42 +821,41 @@ V1에서는 리뷰와 별점을 **Beta Trust Score에서 제외**합니다. 리�
 
 **상태: [확정]**
 
-현재 추천 시스템은 다음 흐름을 가집니다.
+현재 추천 시스템은 다음 흐름을 가집니다. 순위는 Matching Score만으로 정하고, Trust Profile은 추천 결과에 표시만 합니다([D39](./04_final_policy_decisions.md#d39-display-only)).
 
 ```mermaid
 flowchart TD
 
-    Organizer["행사 주최자(Event Organizer)"]
+    Partner["EVENT_PARTNER"]
 
-    Organizer --> Request["매칭 요청(Matching Request)"]
+    Partner --> Request["매칭 요청(Matching Request)"]
 
-    Request --> Eligibility["자격 필터(Eligibility Filter)"]
+    Request --> Eligibility["PASS/FAIL 필터(Eligibility Filter)"]
 
     Eligibility --> Retrieval["후보 검색(Candidate Retrieval)"]
 
     Retrieval --> DB["PostgreSQL + pgvector"]
 
-    DB --> Top100["상위 100명 후보(Top 100 Candidates)"]
+    DB --> Candidates["후보(Candidates)"]
 
-    Top100 --> Requirement["요구사항 매처(Requirement Matcher)"]
-    Top100 --> Music["음악 매처(Music Matcher)"]
-    Top100 --> Trust["신뢰 평가기(Trust Evaluator)"]
+    Candidates --> Requirement["요구사항 매처(Requirement Matcher)"]
+    Candidates --> Music["음악 매처(Music Matcher)"]
 
     Requirement --> Business["비즈니스 적합도(Business Fit)"]
     Requirement --> Performance["공연 적합도(Performance Fit)"]
 
     Music --> CLAP["CLAP 유사도(CLAP Similarity)"]
 
-    Trust --> TrustProfile["아티스트 신뢰 프로필(Artist Trust Profile)"]
-
-    Business --> Ranker["설명 가능한 랭커(Explainable Ranker)"]
+    Business --> Ranker["설명 가능한 랭커(Matching Score)"]
     Performance --> Ranker
     CLAP --> Ranker
-    TrustProfile --> Ranker
 
-    Ranker --> Top10["상위 10명 아티스트(Top 10 Artists)"]
+    Ranker --> Top5["TOP 5 + 신규 노출 1칸"]
 
-    Top10 --> Explanation["추천 설명(Recommendation Explanation)"]
+    Ledger["공연 결과 원장(Outcome Ledger)"] --> TrustProfile["Trust Profile (조회 시 계산)"]
+
+    Top5 --> Response["추천 응답(Recommendation Response)"]
+    TrustProfile -->|표시 전용| Response
 ```
 
 ---
@@ -1097,15 +901,15 @@ Business Fit
 Performance Fit
  └─ Performance Conditions
 
-Artist Trust
+Trust Profile
  ├─ Verification
- ├─ Completed Performances
- ├─ Cancellation
- ├─ No-show
- └─ Evidence Confidence
+ ├─ Artist Reliability
+ ├─ 확신 수준
+ ├─ Risk Signal
+ └─ Activity Freshness
 ```
 
-이후 Explainable Ranker가 이 정보를 사용합니다.
+Explainable Ranker는 Music Fit, Business Fit, Performance Fit으로 순위를 정하고, Trust Profile은 순위에 섞지 않고 별도 필드로 함께 보여 줍니다.
 
 ---
 
@@ -1114,7 +918,7 @@ Artist Trust
 아직 최종 UI는 아니지만 개념적으로 다음 형태가 적절합니다.
 
 ```text
-Artist Trust Profile
+Trust Profile
 
 신원 확인
   본인 인증                         완료
@@ -1124,19 +928,23 @@ Artist Trust Profile
   작업물 확인                      완료
   권리 확인                        완료
 
-플랫폼 거래
-  검증된 공연                      17회
+공연 이행 (Artist Reliability)
+  아티스트 귀책 기준 이행률        91%
+  확신 수준                        높음 (관측 17건)
   정상 완료                        16회
-  아티스트 귀책 취소               1회
-  No-show                           0회
-  분쟁                              0회
+  아티스트 귀책 취소               1회 (3일 전 통보)
+  노쇼                              0회
+  계산 제외                        1건 (EVENT_PARTNER 귀책 취소)
 
-최근 활동
-  최근 6개월 공연                   8회
+위험 신호
+  없음
 
-데이터 충분도
-  Confidence                       HIGH
+최근 활동 (Activity Freshness)
+  마지막 공연                      2026-08
+  최근 12개월 공연                  8회
 ```
+
+예시의 91%는 정상 완료 9회, 아티스트 귀책 취소 1회, 정상 완료 7회 순서로 계산한 값(0.911)입니다.
 
 중요한 점은 **점수만 보여주지 않고 원인도 함께 보여주는 것**입니다.
 
@@ -1151,7 +959,7 @@ flowchart LR
     Signals["신뢰 신호(Trust Signals)"]
     Lifecycle["거래 생명주기(Transaction Lifecycle)"]
     Evaluation["신뢰도 평가(Trust Evaluation)"]
-    Temporal["시간 감쇠 + 확신도(Temporal + Confidence)"]
+    Temporal["관측 순서 감쇠 + 확신 수준(Discounting + Confidence Level)"]
     ColdStart["콜드 스타트(Cold Start)"]
     Defense["공격 방어(Attack Defense)"]
     Recommendation["추천 통합(Recommendation Integration)"]
@@ -1189,7 +997,7 @@ Unknown != Bad
 ### 원칙 3. 원본 사건을 결과 점수보다 먼저 보존한다.
 
 ```text
-Event -> Metric -> Profile
+Outcome -> Reliability -> Profile
 ```
 
 ### 원칙 4. 음악 적합성과 거래 신뢰성을 섞지 않는다.
@@ -1216,6 +1024,18 @@ Historical Evidence -> Decay, not Delete
 Platform Evidence + Transaction History
 ```
 
+### 원칙 8. 공연 빈도는 신뢰성에 유리하게도 불리하게도 작용하지 않는다.
+
+```text
+Same Outcome Order -> Same Reliability
+```
+
+### 원칙 9. 시간이 지나기만 해서는 신뢰가 회복되지 않는다.
+
+```text
+Recovery <- New Fulfillment, not Waiting
+```
+
 ---
 
 # 21. V1 최종 정책 요약
@@ -1223,48 +1043,52 @@ Platform Evidence + Transaction History
 현재 구현에 필요한 핵심 정책은 V1 기준으로 확정했습니다.
 
 ```text
-Trust Model
-  Beta + PeerTrust-inspired Context
+Reliability Model
+  사건 순서 기반 Discounted Beta-Bernoulli
+  α₀ = β₀ = 1, γ = 0.95
 
-Positive Evidence
-  PERFORMANCE_COMPLETED = +1.0 R
+관측
+  정상 완료 = 성공 1건
+  아티스트 귀책 취소 = 실패 1건
+  아티스트 귀책 노쇼 = 실패 1건
 
-Negative Evidence
-  ARTIST_CANCELLED = +1 / +2 / +3 S
-  ARTIST_NO_SHOW_CONFIRMED = +5 S
+관측 아님
+  EVENT_PARTNER / MUTUAL / FORCE_MAJEURE / PLATFORM / OTHER 귀책
 
-Neutral to Artist Trust
-  ORGANIZER_CANCELLED
-  EXCUSED_CANCELLATION
+관측 순서
+  행동 시각 (완료·노쇼 = 공연 예정 시작, 취소 = 통보 시각)
 
-Temporal Decay
-  Half-life = 365 days
+확신 수준
+  관측 건수 n: 낮음 ≤ 3 (점수 숨김) / 보통 4~9 / 높음 ≥ 10
 
-Confidence
-  k = 0.16094
-  HIGH = 0.80 이상
-  HIGH 도달 기준 = N_eff 10
+Risk Signal (최근 관측 14건)
+  RECENT_NO_SHOW
+  LATE_ARTIST_CANCELLATION
+  REPEATED_ARTIST_CANCELLATION
 
-Review
-  Beta Trust 계산 제외
+Activity Freshness
+  마지막 공연 시점, 최근 12개월 공연 횟수 (Risk Signal 아님)
 
-Behavior
-  V1 점수·랭킹 계산 제외, 설명용 프로필
+추천 순위
+  Matching Score만 사용, Trust Profile은 표시 전용
 
-Cold Start
-  Neutral Prior 0.5 + 별도 Confidence
-  Top 10에 최대 1개 Exploration Slot
+신규 노출
+  TOP 5 아래 별도 1칸
+  신규 = 매칭 성사 0건 + 활성화 90일 이내, 5위 대비 10점 이내
+
+Review / Behavior
+  Reliability 계산과 순위에서 제외, 설명용
 
 Hard Filter
-  Trust 점수만으로 제거하지 않음
-  Verification / 계정 상태 / 활성 Suspension만 Eligibility에 사용
+  Reliability만으로 제거하지 않음
+  Eligibility는 04 §18 Hard Filter 기준을 따름
+  (필수 Verification / 계정 상태 / 일정 / 필수 계약·동의 / 활성 Suspension)
 
-Dispute
-  PENDING 상태에서는 Trust 미반영
-  V1의 분쟁 Trust Event는 관리자 확인 후 확정
+판정
+  판정이 끝난 공연 결과만 원장에 기록
 
 Policy Version
-  trust-v1
+  reliability-v1
 ```
 
-이 값들은 **V1 구현을 위한 정책 결정**이며 학술적으로 최적이라고 주장하지 않습니다. 실제 시뮬레이션과 테스트 데이터에서 민감도 분석을 수행하고, 값이 변경되면 `trust-v2`처럼 새 정책 버전으로 재계산합니다.
+이 값들은 **V1 구현을 위한 정책 결정**이며 학술적으로 최적이라고 주장하지 않습니다. 시뮬레이션과 운영 데이터로 재검증하고, 값이 변경되면 `reliability-v2`처럼 새 정책 버전으로 재계산합니다.

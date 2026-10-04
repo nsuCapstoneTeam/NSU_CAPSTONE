@@ -1,5 +1,7 @@
 # 아티스트 신뢰성 모델 V2
 
+> ⚠️ **Superseded (2026-10-03)**: 이 문서의 계산 모델(4개 신뢰성 영역 가중 합산, `N_eff / (N_eff + K)` 확신 계수, 시간 반감기 감쇠)은 [`docs/adr/artist_trust_architecture/`](../adr/artist_trust_architecture/README.md)의 `reliability-v1`로 대체되었습니다. 구현은 그 문서를 기준으로 하며, 이 문서는 이력 보존을 위해 남겨 둡니다.
+
 > 문서 상태: 설계 제안 — PR 검토 대상  
 > 제품 요구사항 기준: Linear SSOT v1.3 `TRUST-142~154`  
 > 구현 책임 범위: Spring Boot 백엔드  
