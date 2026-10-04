@@ -16,7 +16,7 @@
 | `eligibility`, `trustProfile`, `newArtistExposure` | `matching` 내부 필드(항목별 점수, 추천 이유, 비교 설명) — NSU-16·NSU-28 |
 | 신규 노출 칸의 선정 규칙과 후보 풀 구성 | 기본 retrieval 호출의 실패 처리 — 추천 API 본체, AI 협의 004 |
 
-이 문서는 `matching.totalScore`(종합 적합도, 0~100)가 있다고 전제한다. `totalScore`와 `rank`는 서버 협의 005에 따라 Backend Ranker(Spring)가 계산한다. AI 서버는 retrieval 후보와 의미 유사도만 반환한다.
+이 문서는 `matching.totalScore`(종합 적합도, 0~100 정수)가 있다고 전제한다. `totalScore`와 `rank`는 서버 협의 005에 따라 Backend Ranker(Spring)가 계산한다. AI 서버는 retrieval 후보와 의미 유사도만 반환한다.
 
 > **SSOT 동기화 필요:** 최종 추천 인원은 AI 서버 협의 005에 따라 **Top10**이다. SSOT `AI-MATCH-053`(상위 5명)과 `AI-MATCH-155`(TOP 5 아래 1칸, 5위 대비)를 Top10 기준으로 고치는 Slack Human Confirm과 SSOT 반영이 필요하다.
 
@@ -73,6 +73,7 @@
 | `rank` | 정수 1~10 | 종합 적합도 순위 |
 | `artistId` | UUID 문자열 | `users.id` |
 | `matching` | 객체 | Matching 정보 (NSU-16·NSU-28) |
+| `matching.totalScore` | 정수 0~100 | 종합 적합도. 항목 점수 평균을 반올림한 값 |
 | `eligibility.passedConditions` | enum 배열 | 통과한 필수 조건 (§2.3) |
 | `trustProfile` | 객체 | Trust Profile. 순위에 쓰지 않는다 |
 
@@ -88,7 +89,7 @@
 | `artistId` | UUID 문자열 | 신규 아티스트의 `users.id` |
 | `matchedCount` | 정수 | 매칭 성사 건수. 정의상 `0` |
 | `lastRankedPosition` | 정수 | 비교 대상 순위. 표시될 때 항상 `10` |
-| `scoreGapFromLastRanked` | 수 | `newArtistExposure.matching.totalScore − recommendations[last].matching.totalScore` |
+| `scoreGapFromLastRanked` | 정수 | `newArtistExposure.matching.totalScore − recommendations[last].matching.totalScore` |
 | `matching` | 객체 | `recommendations[]`와 같은 형식 |
 | `eligibility` | 객체 | `recommendations[]`와 같은 형식 |
 | `trustProfile` | 객체 | `recommendations[]`와 같은 형식 |
@@ -96,7 +97,7 @@
 - `rank`가 없다. 순위 밖 노출이라는 것을 타입으로 드러낸다.
 - 이 칸에 있다는 것 자체가 "신규 아티스트" 표시다. 별도 boolean을 두지 않는다.
 - 화면 예: "신규 아티스트 · 매칭 성사 0건 · 종합 적합도 81% (10위 대비 −4점)"
-- `scoreGapFromLastRanked`는 응답에 실린 `totalScore` 값끼리의 차이이며 같은 정밀도를 쓴다. `totalScore`의 정밀도(정수·소수)는 NSU-16에서 정한다.
+- `scoreGapFromLastRanked`는 응답에 실린 `totalScore` 값끼리의 차이이므로 정수다(`−10` 이상 `0` 이하).
 
 ### 2.3 `eligibility.passedConditions`
 
