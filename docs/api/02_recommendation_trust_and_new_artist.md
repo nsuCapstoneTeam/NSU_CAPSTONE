@@ -25,8 +25,9 @@
 ```text
 1. Eligibility Filter (Spring, AI-MATCH-051) → ACTIVE (music_id, audioRevision) 쌍
 2. 기본 retrieval: AI POST /internal/v1/audio-search (top_k 50~100)
-3. 신규 retrieval: 같은 API를 신규 아티스트의 ACTIVE 쌍으로만 1회 더 호출
-   (신규 아티스트의 쌍이 없으면 호출하지 않음)
+3. 신규 retrieval: 같은 API를 신규 아티스트의 ACTIVE 쌍으로만 호출해 모든 쌍의 점수를 받음
+   (top_k = 전달한 쌍의 수, AI의 top_k 상한을 넘으면 나눠서 여러 번 호출,
+    신규 아티스트의 쌍이 없으면 호출하지 않음)
 4. 후보 풀 = 2의 결과 ∪ 3의 결과
 5. Backend Ranker: 곡을 아티스트로 묶고 종합 적합도 계산
 6. 종합 적합도 내림차순 상위 10명 → recommendations
@@ -193,11 +194,11 @@ Top10에 신규가 있거나, 신규 후보가 10위보다 10점 넘게 낮거�
 
 | 실패 | 동작 |
 |---|---|
-| 신규 retrieval(§1의 3) 실패·timeout | 추천을 실패시키지 않는다. 기본 retrieval 결과만으로 §1의 4~7을 진행한다. 서버 로그와 메트릭에 남기고 응답에는 표시하지 않는다 |
+| 신규 retrieval(§1의 3) 일부 또는 전부 실패·timeout | 추천을 실패시키지 않는다. 기본 retrieval 결과와 성공한 신규 retrieval 결과만으로 §1의 4~7을 진행한다. 서버 로그와 메트릭에 남기고 응답에는 표시하지 않는다 |
 | 기본 retrieval(§1의 2) 실패 | 추천 API 본체의 오류 처리를 따른다 |
 | Trust Profile 조합 실패 | 추천 API의 `500 INTERNAL_ERROR`. Trust Profile은 Spring DB에서 조회하므로 부분 응답을 만들지 않는다 |
 
-신규 retrieval이 실패하면 retrieval 상위 밖에 있던 신규 아티스트가 그 요청의 Top10과 신규 칸에서 빠질 수 있다. `AI-MATCH-155`는 부가 노출이므로 핵심 결과의 가용성을 우선한다. timeout 값은 두 호출 모두 AI 서버 협의 004의 설정을 따른다.
+신규 retrieval이 실패하면 실패한 호출에 속한 신규 아티스트가 그 요청의 Top10과 신규 칸에서 빠질 수 있다. `AI-MATCH-155`는 부가 노출이므로 핵심 결과의 가용성을 우선한다. timeout 값은 기본·신규 retrieval 모두 AI 서버 협의 004의 설정을 따른다.
 
 ## 6. 테스트 기준
 
@@ -207,6 +208,7 @@ Top10에 신규가 있거나, 신규 후보가 10위보다 10점 넘게 낮거�
 | Top10에 신규가 있으면 `newArtistExposure = null` | `AI-MATCH-155`, NSU-71 AC |
 | 신규 후보가 10위보다 10점 넘게 낮으면 `null`, 정확히 10점 낮으면 표시 | §3.2 |
 | retrieval 상위 밖의 신규 아티스트도 신규 retrieval로 채점되어 Top10 또는 신규 칸에 들어간다 | §1, 서버 협의 006 |
+| 신규 ACTIVE 쌍이 AI의 `top_k` 상한보다 많아도 모든 쌍이 채점된다 | §1, 서버 협의 006 |
 | 신규 retrieval 실패 시 추천이 성공하고 기본 retrieval 결과로 계산된다 | §5 |
 | 첫 매칭 성사 또는 활성화 90일 경과 후 신규에서 빠진다 | §3.1, NSU-71 AC |
 | §3.4 불변식이 모든 응답에서 성립한다 | 본 문서 |
