@@ -1,0 +1,244 @@
+/* 원형 로그인 창 (아티스트·행사 관계자 공통)
+   - 선택자 앞에 .has-cd를 붙여 우선순위를 높임: CSS 파일이 합쳐지는 순서와 관계없이
+     artist-login.css / organizer-login.css의 기본 카드 스타일을 항상 덮어씀
+   - 왼쪽 CD와 어울리는 원(레코드판) 모양, 지름 400~500px
+   - 원 안 공간이 작아서: 소개 문구 숨김, 입력칸 라벨은 '떠오르는 라벨'(칸 안 → 테두리 위)
+   - 안내 문구(체험판 안내·간편 로그인 메시지)는 원 아래로 뺌 */
+
+.has-cd .login-circle {
+  --panel-size: clamp(400px, 34vw, 500px);
+  position: relative;
+  box-sizing: border-box;
+  width: var(--panel-size);
+  height: var(--panel-size);
+  margin: 0;
+  /* 오른쪽 칸 가운데에 배치 */
+  justify-self: center;
+  padding: calc(var(--panel-size) * 0.08) calc(var(--panel-size) * 0.18);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface);
+  /* 레코드판 테두리 느낌의 바깥 링 */
+  /* 테두리: 반투명 링(10px) + 또렷한 흰 선(3px), 사진 배경 위에서도 선명하게 */
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 0 0 10px rgba(255, 255, 255, 0.22),
+    0 0 0 13px rgba(255, 255, 255, 0.92),
+    0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+/* 제목: 가운데 정렬, 작게 */
+.has-cd .login-circle > .eyebrow,
+.has-cd .login-circle > h1 {
+  text-align: center;
+}
+.has-cd .login-circle > .eyebrow {
+  font-size: 12px;
+  letter-spacing: 1.5px;
+}
+.has-cd .login-circle > h1 {
+  margin: 4px 0 14px;
+  font-size: 22px;
+}
+/* 소개 문구는 원 안 공간 확보를 위해 숨김 */
+.has-cd .login-circle > .artist-login-intro,
+.has-cd .login-circle > .organizer-login-intro {
+  display: none;
+}
+
+/* 떠오르는 라벨 (DESIGN.md 11.2-8: 보이는 라벨)
+   - 비어 있을 때: 라벨이 칸 가운데에 placeholder처럼 보임
+   - 누르거나 입력했을 때: 라벨이 테두리 위로 올라가 작게(12px) 남고, 칸에는 형식 안내가 보임
+   - 원 안 공간을 더 쓰지 않으면서 입력 중에도 무슨 칸인지 계속 보임 */
+.has-cd .login-circle .login-float {
+  position: relative;
+  display: block;
+}
+.has-cd .login-circle .login-float > label {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  margin: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 180ms ease,
+    background-color 180ms ease;
+}
+.has-cd .login-circle .login-float:focus-within > label,
+.has-cd .login-circle .login-float.is-filled > label {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 700;
+  /* 13px × 0.93 ≈ 12px */
+  transform: translate(-50%, calc(-50% - 21px)) scale(0.93);
+}
+.has-cd .login-circle .login-float:focus-within > label {
+  color: var(--blue);
+}
+.has-cd .login-circle .login-float:has(input[aria-invalid='true']) > label {
+  color: #c93643;
+}
+/* 형식 안내(placeholder)는 칸을 눌렀을 때만 보임 (비어 있을 땐 라벨과 겹치지 않게) */
+.has-cd .login-circle .login-float input::placeholder {
+  color: transparent;
+}
+.has-cd .login-circle .login-float:focus-within input::placeholder {
+  color: var(--muted);
+}
+/* 원 안에 맞게 입력칸 · 비밀번호 보기 버튼 · 제출 버튼 크기 축소 */
+.has-cd .login-circle input {
+  padding: 11px 20px;
+  font-size: 13px;
+}
+.has-cd .login-circle .login-password-field {
+  /* 위로 떠오른 라벨 자리 */
+  margin-top: 16px;
+}
+.has-cd .login-circle .login-password-field input {
+  padding-right: 50px;
+}
+.has-cd .login-circle .login-password-toggle {
+  width: 34px;
+  height: 34px;
+}
+.has-cd .login-circle .artist-login-submit,
+.has-cd .login-circle .organizer-phone-submit {
+  margin-top: 12px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.has-cd .login-circle .organizer-code-form {
+  margin-top: 12px;
+  padding-top: 16px;
+}
+/* 오류·Caps Lock 안내는 작게 가운데 정렬 */
+.has-cd .login-circle .error,
+.has-cd .login-circle .login-capslock {
+  margin: 6px 0 0;
+  font-size: 12px;
+  text-align: center;
+}
+/* 입력 글자·안내 글자 가운데 정렬 (원 모양에 맞춤) */
+.has-cd .login-circle input {
+  text-align: center;
+}
+.has-cd .login-circle .login-password-field input {
+  padding-left: 50px;
+}
+
+/* 간편 로그인 영역 압축 */
+.has-cd .login-circle .artist-login-divider,
+.has-cd .login-circle .organizer-login-divider {
+  margin: 14px 0 10px;
+  font-size: 12px;
+}
+.has-cd .login-circle .artist-social,
+.has-cd .login-circle .organizer-social {
+  gap: 16px;
+  padding: 0;
+}
+.has-cd .login-circle .artist-social-button,
+.has-cd .login-circle .organizer-social-button {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  flex-basis: 40px;
+}
+.has-cd .login-circle .artist-provider-mark,
+.has-cd .login-circle .organizer-provider-mark {
+  font-size: 19px;
+}
+.has-cd .login-circle .artist-provider-mark svg,
+.has-cd .login-circle .organizer-provider-mark svg {
+  width: 20px;
+  height: 20px;
+}
+/* '처음이신가요? 가입할래!' 글자 축소 */
+.has-cd .login-circle .artist-signup,
+.has-cd .login-circle .organizer-signup {
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.has-cd .login-circle .artist-signup button,
+.has-cd .login-circle .organizer-signup button {
+  font-size: 12px;
+}
+
+/* 안내 문구는 원 아래에 표시
+   (가운데 정렬은 transform 대신 left/right + margin: 등장 애니메이션이 transform을 덮어쓰기 때문) */
+.has-cd .login-circle .artist-login-feedback,
+.has-cd .login-circle .organizer-login-feedback,
+.has-cd .login-circle .artist-login-note,
+.has-cd .login-circle .organizer-login-note {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: min(480px, 110%);
+  margin: 0 auto;
+  text-align: center;
+}
+.has-cd .login-circle .artist-login-feedback,
+.has-cd .login-circle .organizer-login-feedback {
+  top: calc(100% + 22px);
+}
+.has-cd .login-circle .artist-login-note,
+.has-cd .login-circle .organizer-login-note {
+  top: calc(100% + 50px);
+}
+
+/* 안내 문구가 두 줄이 되면 아래 체험판 안내와 겹치지 않게, 안내 문구가 있을 때만 아래로 내림 */
+.has-cd .login-circle:has(.artist-login-feedback:not(:empty)) .artist-login-note,
+.has-cd .login-circle:has(.organizer-login-feedback:not(:empty)) .organizer-login-note {
+  top: calc(100% + 80px);
+}
+/* 만료된 인증번호 칸처럼 잠긴 입력칸은 흐리게 */
+.has-cd .login-circle input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 원 아래 안내 문구 공간 확보 */
+.has-cd {
+  padding-bottom: 140px;
+}
+
+/* 좁은 브라우저 창: 원 대신 둥근 카드로 (내용이 잘리지 않게) */
+@media (max-width: 960px) {
+  .has-cd .login-circle {
+    width: 100%;
+    height: auto;
+    padding: 32px 24px;
+    border-radius: 32px;
+  }
+  .has-cd .login-circle .artist-login-feedback,
+  .has-cd .login-circle .organizer-login-feedback,
+  .has-cd .login-circle .artist-login-note,
+  .has-cd .login-circle .organizer-login-note {
+    position: static;
+    width: auto;
+    margin-top: 14px;
+  }
+  .has-cd {
+    padding-bottom: 65px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .has-cd .login-circle .login-float > label {
+    transition: none;
+  }
+}

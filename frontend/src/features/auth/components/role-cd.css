@@ -1,0 +1,409 @@
+/* 로그인 화면 왼쪽의 큰 CD + 현재 역할 표시 칸 */
+
+/* 2단 배치: 왼쪽 CD 영역, 오른쪽 로그인 카드 */
+.artist-login.has-cd,
+.organizer-login.has-cd {
+  max-width: 1176px;
+  /* CD 크기: 화면 폭에 맞춰 560~760px (배경 장식도 같은 값을 사용) */
+  --cd-size: clamp(560px, 50vw, 760px);
+  /* 화면 왼쪽 끝 위치 (콘텐츠 영역 기준) */
+  --viewport-left: calc((100vw - min(1176px, 100vw - 64px)) / -2);
+}
+/* 큰 CD가 '홈으로 돌아가기'를 덮지 않도록 위로 올림 */
+.has-cd > .text-button {
+  position: relative;
+  z-index: 2;
+}
+.login-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: center;
+  min-height: 760px;
+}
+
+/* CD 라벨 색: 아티스트 파랑, 행사 관계자 주황 */
+.role-cd {
+  --label-a: #1682ff;
+  --label-b: #0866df;
+  position: relative;
+  align-self: stretch;
+  min-height: 640px;
+}
+.role-cd--organizer {
+  --label-a: #ff8a5b;
+  --label-b: #e8505b;
+}
+
+/* CD 위치: 왼쪽 30%가 화면 밖으로 살짝 걸치도록 */
+.role-cd-stage {
+  position: absolute;
+  top: calc(50% - var(--cd-size) / 2);
+  left: calc(var(--viewport-left) - var(--cd-size) * 0.3);
+  width: var(--cd-size);
+  height: var(--cd-size);
+  animation: role-cd-float 6s ease-in-out infinite;
+}
+/* CD가 위아래로 살짝 떠다니는 움직임 */
+@keyframes role-cd-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+/* 원판 버튼 */
+.role-cd-disc {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  filter: drop-shadow(0 24px 40px rgba(20, 40, 64, 0.2));
+  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+/* 마우스를 올리면 살짝 커지고, 누르면 작아짐 */
+.role-cd-disc:hover {
+  transform: scale(1.02);
+}
+.role-cd-disc:active {
+  transform: scale(0.98);
+}
+.role-cd-disc:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 8px;
+}
+
+/* 회전하는 부분: 무지개빛 표면 + 트랙 홈 + 가운데 라벨 */
+.role-cd-body {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(
+      circle at center,
+      rgba(255, 255, 255, 0) 0 2px,
+      rgba(255, 255, 255, 0.07) 2px 3px
+    ),
+    conic-gradient(
+      from 20deg,
+      #e9eef5,
+      #c9f1ff,
+      #f6d6ff,
+      #fff3c4,
+      #c8ffe0,
+      #e9eef5,
+      #d6e3ff,
+      #ffd9e8,
+      #fff6d1,
+      #e9eef5
+    );
+  /* 테두리: 바깥 흰 선(4px) + 반투명 링, 안쪽 가장자리 선도 진하게 */
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.92),
+    0 0 0 9px rgba(255, 255, 255, 0.22),
+    inset 0 0 0 2px rgba(20, 40, 64, 0.2),
+    inset 0 0 0 14px rgba(255, 255, 255, 0.35);
+}
+.role-cd-label {
+  position: absolute;
+  width: 44%;
+  height: 44%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--label-a), var(--label-b));
+  color: #fff;
+  /* 가운데 라벨 테두리도 굵고 선명하게 */
+  box-shadow:
+    0 0 0 6px rgba(255, 255, 255, 0.9),
+    0 0 0 7px rgba(20, 40, 64, 0.12);
+}
+/* 가운데 라벨 안의 역할 아이콘 · 글자 */
+.role-cd-icon {
+  display: grid;
+  line-height: 1;
+  transform: translateY(calc(var(--cd-size) * -0.12));
+}
+/* 역할 아이콘(SVG): CD 크기에 맞춰 커짐, 색은 라벨 글자색(흰색) */
+.role-cd-icon svg {
+  width: calc(var(--cd-size) * 0.07);
+  height: calc(var(--cd-size) * 0.07);
+  stroke-width: 1.6;
+}
+.role-cd-text {
+  font-size: calc(var(--cd-size) * 0.026);
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  transform: translateY(calc(var(--cd-size) * 0.1));
+}
+/* 가운데 구멍 */
+.role-cd-hole {
+  position: absolute;
+  width: 12%;
+  height: 12%;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow:
+    0 0 0 calc(var(--cd-size) * 0.012) rgba(255, 255, 255, 0.75),
+    inset 0 1px 3px rgba(20, 40, 64, 0.25);
+}
+
+/* 돌지 않는 반사광 */
+.role-cd-shine {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: linear-gradient(
+    125deg,
+    rgba(255, 255, 255, 0) 30%,
+    rgba(255, 255, 255, 0.55) 45%,
+    rgba(255, 255, 255, 0) 58%
+  );
+  mix-blend-mode: soft-light;
+}
+
+/* 눌렀을 때: 점점 빨라지며 회전 → 다음 화면에서 서서히 멈춤 */
+.role-cd-disc.is-spinning .role-cd-body {
+  /* --spin-from: 누른 순간의 각도 (평소 회전 중이던 위치에서 이어서 빨라짐) */
+  animation: role-cd-spin-up 650ms cubic-bezier(0.55, 0, 1, 0.45) forwards;
+}
+/* 화면에 들어오면 서서히 멈춘 뒤(1.1초), 평소에는 한 바퀴 20초로 천천히 계속 회전 */
+.role-cd-disc.is-settling .role-cd-body {
+  animation:
+    role-cd-settle 1100ms cubic-bezier(0, 0.55, 0.45, 1) both,
+    role-cd-idle 20s linear 1100ms infinite;
+}
+/* 빠른 회전 → 평소 느린 회전 → 서서히 멈춤 애니메이션 */
+@keyframes role-cd-spin-up {
+  from { transform: rotate(var(--spin-from, 0deg)); }
+  to { transform: rotate(calc(var(--spin-from, 0deg) + 900deg)); }
+}
+@keyframes role-cd-idle {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes role-cd-settle {
+  from { transform: rotate(-1080deg); }
+  to { transform: rotate(0deg); }
+}
+
+/* 회전 중 오른쪽(화면 안쪽)으로 퍼지는 음표 */
+.role-cd-notes {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.role-cd-notes span {
+  --angle: calc(var(--i) * 36deg - 10deg);
+  position: absolute;
+  color: var(--label-b);
+  font-size: 30px;
+  font-weight: 700;
+  animation: role-cd-note 950ms ease-out both;
+  animation-delay: calc(var(--i) * 60ms);
+}
+@keyframes role-cd-note {
+  from {
+    opacity: 0;
+    transform: rotate(var(--angle)) translateY(calc(var(--cd-size) * -0.3))
+      rotate(calc(var(--angle) * -1)) scale(0.6);
+  }
+  25% { opacity: 1; }
+  to {
+    opacity: 0;
+    transform: rotate(var(--angle)) translateY(calc(var(--cd-size) * -0.68))
+      rotate(calc(var(--angle) * -1)) scale(1.15);
+  }
+}
+
+/* 현재 역할 표시 칸: CD 링 위(라벨 오른쪽)에 반투명 유리 카드로 고정
+   - 회전하지 않고, 클릭은 그대로 아래 CD로 전달(pointer-events: none) */
+.role-cd-indicator {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--cd-size) * 0.735);
+  width: calc(var(--cd-size) * 0.235);
+  padding: 14px 12px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(10px) saturate(1.2);
+  box-shadow: 0 12px 30px rgba(20, 40, 64, 0.12);
+  transform: translateY(-50%);
+  pointer-events: none;
+  animation: role-cd-indicator-in 520ms 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes role-cd-indicator-in {
+  from {
+    opacity: 0;
+    transform: translate(-12px, -50%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+}
+/* 표시 칸 제목 '지금 로그인하는 사람' */
+.role-cd-indicator-title {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+/* 위(아티스트) / 아래(행사 관계자) 두 칸, 하이라이트가 위아래로 이동 */
+.role-cd-switch {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--soft);
+}
+.role-cd-switch-thumb {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  height: calc(50% - 4px);
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--label-a), var(--label-b));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--label-b) 35%, transparent);
+}
+.role-cd-switch.is-artist .role-cd-switch-thumb {
+  animation: role-cd-thumb-to-artist 560ms 300ms cubic-bezier(0.34, 1.3, 0.64, 1) both;
+}
+.role-cd-switch.is-organizer .role-cd-switch-thumb {
+  transform: translateY(100%);
+  animation: role-cd-thumb-to-organizer 560ms 300ms cubic-bezier(0.34, 1.3, 0.64, 1) both;
+}
+/* 하이라이트가 아티스트 / 행사 관계자 칸으로 미끄러지는 움직임 */
+@keyframes role-cd-thumb-to-artist {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes role-cd-thumb-to-organizer {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+/* 각 역할 칸 (선택된 칸은 흰 글자) */
+.role-cd-switch-option {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: color 300ms 400ms ease;
+}
+.role-cd-switch-option.is-active {
+  color: #fff;
+}
+/* 'CD를 눌러 바꿔 보세요' 안내 + 왼쪽으로 까딱이는 화살표 */
+.role-cd-hint {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+.role-cd-hint span {
+  display: inline-block;
+  color: var(--label-b);
+  font-weight: 800;
+  /* 처음 3번만 까딱이고 멈춤 (계속 움직이면 입력에 방해, DESIGN.md 10.6) */
+  animation: role-cd-nudge 1.4s ease-in-out 600ms 3;
+}
+@keyframes role-cd-nudge {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-4px); }
+}
+
+/* 다크 모드: CD 그림자 진하게, 화살표 밝게 */
+:root[data-theme='dark'] .role-cd-disc {
+  filter: drop-shadow(0 24px 40px rgba(0, 0, 0, 0.45));
+}
+:root[data-theme='dark'] .role-cd-hint span {
+  color: var(--label-a);
+}
+
+/* 좁은 브라우저 창: CD를 카드 위에 작게 (겹침 방지용 최소 처리) */
+@media (max-width: 960px) {
+  .login-layout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+  .role-cd {
+    --cd-size: 220px;
+    display: grid;
+    justify-items: center;
+    gap: 18px;
+    min-height: 0;
+  }
+  .role-cd-stage {
+    position: relative;
+    top: auto;
+    left: auto;
+    display: grid;
+    justify-items: center;
+    gap: 16px;
+    width: auto;
+    height: auto;
+  }
+  .role-cd-disc {
+    position: relative;
+    inset: auto;
+    width: var(--cd-size);
+    height: var(--cd-size);
+  }
+  .role-cd-indicator {
+    position: static;
+    width: 220px;
+    transform: none;
+    animation: none;
+  }
+}
+
+/* 동작 줄이기 설정: CD 회전·떠다님·음표·하이라이트 애니메이션 끔 */
+@media (prefers-reduced-motion: reduce) {
+  .role-cd-stage,
+  .role-cd-disc .role-cd-body,
+  .role-cd-notes span,
+  .role-cd-indicator,
+  .role-cd-switch-thumb,
+  .role-cd-hint span {
+    animation: none !important;
+  }
+  .role-cd-disc,
+  .role-cd-switch-option {
+    transition: none;
+  }
+}
+
+/* 역할 표시 칸 안 작은 아이콘, 회전 중 퍼지는 음표 아이콘 */
+.role-cd-switch-option svg {
+  flex: none;
+}
+.role-cd-notes span svg {
+  display: block;
+  stroke-width: 2;
+}

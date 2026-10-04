@@ -1,0 +1,62 @@
+/* 홈 서비스 소개 영역 (service-intro.jsx): 왼쪽 문구 + 오른쪽 일러스트 */
+
+.service-intro {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 40px;
+  align-items: center;
+  padding: 64px 0;
+  border-bottom: 1px solid var(--line);
+}
+/* 제목 (강조 단어는 파란색) */
+.service-intro-copy h2 {
+  color: var(--ink);
+  font-size: clamp(25px, 3vw, 38px);
+  line-height: 1.5;
+  letter-spacing: -1px;
+  margin: 20px 0;
+  word-break: keep-all;
+}
+.service-intro-copy h2 span {
+  color: var(--blue);
+}
+/* 소개 문구 */
+.service-intro-invitation {
+  color: var(--muted);
+  font-size: 17px;
+}
+.service-intro-challenge {
+  color: var(--blue);
+  font-size: 24px;
+  font-weight: 800;
+  margin-top: 24px;
+}
+/* 연결 일러스트 */
+.service-intro-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 24px;
+  background: white;
+}
+/* 800px 이하: 문구와 그림을 세로로 */
+@media (max-width: 800px) {
+  .service-intro {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 40px 0;
+  }
+  .service-intro-image {
+    max-width: 600px;
+    justify-self: center;
+  }
+}
+
+/* '섭외 할래말래?!' 강조 문구 */
+.service-intro-connection {
+  color: var(--blue);
+  font-size: clamp(26px, 3vw, 36px);
+  font-weight: 800;
+  line-height: 1.4;
+  margin: 28px 0 0;
+}
