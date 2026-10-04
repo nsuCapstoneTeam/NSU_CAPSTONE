@@ -83,6 +83,28 @@ Risk Signal
 
 이 값들은 정책이 바뀌면 달라지므로 원장에 저장하지 않습니다.
 
+### 열 제약
+
+아래 조건 제약들은 값이 NULL이면 검사 결과가 NULL로 평가되어 통과합니다. 그래서 필수 열은 `NOT NULL`로, 값 목록은 열 단위 `CHECK`로 먼저 막습니다.
+
+```sql
+ALTER TABLE performance_outcome
+    ALTER COLUMN performance_id SET NOT NULL,
+    ALTER COLUMN revision SET NOT NULL,
+    ALTER COLUMN outcome_type SET NOT NULL,
+    ALTER COLUMN confirmation_source SET NOT NULL;
+
+ALTER TABLE performance_outcome
+    ADD CONSTRAINT ck_performance_outcome_type CHECK (
+        outcome_type IN ('COMPLETED', 'CANCELLED', 'NO_SHOW', 'VOIDED')),
+    ADD CONSTRAINT ck_performance_outcome_party CHECK (
+        responsible_party IN ('ARTIST', 'EVENT_PARTNER', 'MUTUAL', 'FORCE_MAJEURE', 'PLATFORM', 'OTHER')),
+    ADD CONSTRAINT ck_performance_outcome_source CHECK (
+        confirmation_source IN ('PLATFORM_AUTOMATIC', 'BILATERAL_CONFIRMATION', 'EVENT_PARTNER_CONFIRMATION', 'ADMIN_DECISION'));
+```
+
+`responsible_party`는 정상 완료와 무효화에서 비어 있어야 하므로 `NOT NULL`을 두지 않고, 결과 유형별 규칙은 아래 `ck_responsible_party`가 맡습니다.
+
 ### 유일성 제약: 공연별 revision
 
 공연 1건의 결과 이력은 revision 1부터 1씩 증가하는 한 줄로 기록하고, **가장 큰 revision이 유효한 공연 결과**입니다. 정정은 기존 행을 고치지 않고 다음 revision을 추가합니다.
@@ -95,7 +117,7 @@ ALTER TABLE performance_outcome
 ALTER TABLE performance_outcome
     ADD CONSTRAINT ck_performance_outcome_revision CHECK (
         (revision = 1 AND previous_revision IS NULL)
-        OR (revision > 1 AND previous_revision = revision - 1)
+        OR (revision > 1 AND previous_revision IS NOT NULL AND previous_revision = revision - 1)
     );
 
 -- 직전 revision이 실제로 있어야 다음 revision을 기록할 수 있다
@@ -129,7 +151,9 @@ ALTER TABLE performance_outcome
     );
 ```
 
-결과별로 허용하는 확정 출처와 그 이유는 [05 §13.1](./05_trust_event_catalog.md#131-확정-출처)에 있습니다. 위 제약들은 PostgreSQL에서 자기 참조, 순환, revision 건너뛰기, 동시 정정 경쟁, 허용되지 않은 확정 출처 17개 조합을 거부하는 것을 확인했습니다.
+결과별로 허용하는 확정 출처와 그 이유는 [05 §13.1](./05_trust_event_catalog.md#131-확정-출처)에 있습니다.
+
+이 절의 열 제약과 조건 제약을 모두 적용한 PostgreSQL에서 다음 행이 거부되는 것을 확인했습니다: 자기 참조, 순환, revision 건너뛰기(직전 revision을 비운 경우 포함), 동시 정정 경쟁, 비어 있거나 허용값 밖인 결과 유형·확정 출처, 결과별로 허용되지 않은 확정 출처. 조건 제약만 두면 NULL이 들어간 행이 통과하므로 열 제약을 함께 두어야 합니다.
 
 판정 전 단계(신고, 소명, 분쟁)는 Booking/Dispute 도메인의 테이블이 소유하며 Contract 도입 시 설계합니다.
 
@@ -367,7 +391,8 @@ flowchart TD
 | 24시간 미만 통보 아티스트 귀책 취소 | 실패 1건, `LATE_ARTIST_CANCELLATION` 활성 |
 | 최근 관측 14건 안에 아티스트 귀책 취소 2건 | `REPEATED_ARTIST_CANCELLATION` 활성 |
 | 같은 공연에 revision 1을 다시 기록 | 거부 (유일성 제약) |
-| revision을 건너뛰거나 자기 번호를 직전 revision으로 지정 | 거부 (FK, CHECK) |
+| revision을 건너뛰거나(직전 revision을 비운 경우 포함) 자기 번호를 직전 revision으로 지정 | 거부 (FK, CHECK) |
+| 결과 유형이나 확정 출처가 비어 있거나 허용값 밖인 행 | 거부 (열 제약) |
 | 한 문장으로 서로를 가리키는 두 행 기록 | 거부 (CHECK) |
 | 두 정정이 동시에 같은 revision을 기록 | 하나만 성공, 나머지는 최신 결과 재확인 |
 | EVENT_PARTNER 단독 확인으로 노쇼·아티스트 귀책 취소 확정 | 거부 (확정 출처 제약) |
