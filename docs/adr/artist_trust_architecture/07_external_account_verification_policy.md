@@ -208,3 +208,34 @@ Provider Account ID + Verification 결과 저장
 | Spotify | Artist URL / ID | 공개 Artist Profile 존재 | 없음 |
 
 Provider 연결 결과는 `Verification` 영역에 저장하고 Reliability 관측으로 변환하지 않습니다.
+
+---
+
+<a id="d45-verification-validity"></a>
+
+# 8. 계정 제어권 확인 결과의 유효기간
+
+> 2026-10-04 결정 (NSU-33)
+
+## 선택지 A. 연결이 유지되는 동안 유효
+
+YouTube·SoundCloud 계정의 제어권 확인 결과는 연결이 유지되는 동안 유효합니다. 자동 재확인과 기간 만료를 두지 않습니다.
+
+## 선택지 B. 기간 만료 후 재인증
+
+일정 기간(예: 1년)이 지나면 확인 결과가 만료되고 아티스트가 다시 OAuth 인증을 해야 합니다. 표시가 더 정확하지만 만료 처리 작업, 재인증 안내, 아티스트의 재인증 부담이 생깁니다.
+
+## 선택지 C. 조회할 때마다 확인
+
+Trust Profile을 조회할 때마다 외부 계정을 확인합니다. Refresh Token을 장기 보관해야 하므로 [D36](#d36-oauth-token)과 충돌합니다.
+
+**추천 및 적용: A**
+
+- MVP는 자동 동기화를 하지 않고 Refresh Token을 장기 보관하지 않습니다([D36](#d36-oauth-token)). 서버가 단독으로 다시 확인할 수단이 없습니다.
+- 채널이나 계정의 주인이 바뀌는 경우는 드뭅니다. 문제가 확인되면 관리자가 검증을 취소할 수 있습니다(`VERIFICATION_REVOKED`, [05 §10](./05_trust_event_catalog.md)).
+- Trust Profile 응답은 검증 일시를 내보내지 않으므로 이후 B로 바꿔도 API 형태가 바뀌지 않습니다.
+
+### Trade-off
+
+연결 후 채널 삭제나 소유권 이전이 일어나도 자동으로 알 수 없습니다. 이 기간 동안 Trust Profile의 "검증됨" 표시가 실제와 다를 수 있습니다.
+

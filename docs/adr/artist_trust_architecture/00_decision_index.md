@@ -50,6 +50,7 @@
 | D41 | Risk Signal 3종, 최근 관측 14건 창 | [바로가기](./04_final_policy_decisions.md#d41-risk-signal-rules) |
 | D43 | 관측 순서 = 행동 시각 | [바로가기](./04_final_policy_decisions.md#d43-outcome-ordering) |
 | D44 | Activity Freshness를 Reliability와 분리 | [바로가기](./04_final_policy_decisions.md#d44-activity-freshness) |
+| D45 | 계정 제어권 확인 결과는 연결이 유지되는 동안 유효 | [바로가기](./07_external_account_verification_policy.md#d45-verification-validity) |
 
 ---
 
