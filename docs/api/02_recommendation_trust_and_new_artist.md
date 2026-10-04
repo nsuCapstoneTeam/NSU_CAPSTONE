@@ -5,7 +5,7 @@
 - 구현 이슈: NSU-71 (신규 노출), NSU-70 (Trust Profile 조합)
 - 관련 이슈: NSU-16, NSU-28, NSUAI-15, NSUAI-16
 - 요구사항: SSOT v1.4 `AI-MATCH-051`·`053`·`054`·`155`, `TRUST-151`·`153`
-- 서버 협의: AI 레포 [server-agreements/005](https://github.com/nsuCapstoneTeam/NSU_CAPSTONE_AI/blob/main/docs/adr/server-agreements/005-audio-retrieval-responsibilities.md), [006](../adr/server-agreements/006-new-artist-candidate-retrieval.md)
+- 서버 협의: [005](../adr/server-agreements/005-audio-retrieval-responsibilities.md), [006](../adr/server-agreements/006-new-artist-candidate-retrieval.md)
 - 공통 규칙: [00_conventions.md](./00_conventions.md), Trust Profile 스키마: [01_trust_profile.md](./01_trust_profile.md)
 
 ## 0. 범위
