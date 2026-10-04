@@ -1081,8 +1081,8 @@ Review / Behavior
 
 Hard Filter
   Reliability만으로 제거하지 않음
-  Eligibility는 04 §18 Hard Filter 기준을 따름
-  (필수 Verification / 계정 상태 / 일정 / 필수 계약·동의 / 활성 Suspension)
+  Eligibility는 SSOT AI-MATCH-051을 따름 (04 §18)
+  (계정/인증 상태 / 일정 / 활동 정지 / 저작권 / 지역 이동 / 예산)
 
 판정
   판정이 끝난 공연 결과만 원장에 기록

@@ -509,13 +509,16 @@ Reliability가 순위에 들어가지 않으므로, 신규 노출 슬롯은 신�
 
 Reliability, 확신 수준, Risk Signal만으로 후보를 Hard Filter하지 않습니다.
 
-Hard Filter는 다음에 한정합니다.
+Hard Filter 항목은 SSOT `AI-MATCH-051`의 PASS/FAIL 필수 조건을 따릅니다.
 
-- 필수 Verification 미완료
-- 계정 비활성/정지
-- 일정 불가능
-- 필수 계약·동의 조건 미충족
-- 관리자에 의해 활성화된 Suspension
+- Artist 계정/인증 상태
+- 행사 날짜 공연 가능 여부
+- 활동 정지 여부(관리자 Suspension 포함)
+- 저작권 조건 충족 여부
+- 행사 지역 이동 가능 여부
+- 예산 범위 충족 여부
+
+AI 분석 동의 등 AI 추천 참여 조건(SSOT `AI-031`)은 후보 풀에 들어가기 전 단계에서 걸러지므로 Hard Filter 항목으로 따로 두지 않습니다. 추천 응답의 표시 형식은 [추천 응답 확장 §2.3](../../api/02_recommendation_trust_and_new_artist.md#23-eligibilitypassedconditions)에 있습니다.
 
 반복 노쇼 자동 Suspension 횟수 규칙은 V1에서 두지 않습니다. 실제 운영 데이터 없이 임의의 정지 기준을 만들지 않기 위함입니다.
 
