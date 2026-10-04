@@ -1081,7 +1081,8 @@ Review / Behavior
 
 Hard Filter
   Reliability만으로 제거하지 않음
-  Verification / 계정 상태 / 활성 Suspension만 Eligibility에 사용
+  Eligibility는 04 §18 Hard Filter 기준을 따름
+  (필수 Verification / 계정 상태 / 일정 / 필수 계약·동의 / 활성 Suspension)
 
 판정
   판정이 끝난 공연 결과만 원장에 기록
