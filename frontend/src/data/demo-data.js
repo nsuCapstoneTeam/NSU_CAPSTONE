@@ -1,0 +1,45 @@
+// 처음 방문했을 때 보여 줄 체험용 프로필 (저장된 값이 없을 때 사용)
+export const INITIAL_PROFILE = {
+  id: 'local-owner',
+  name: '나의 활동명',
+  role: 'artist',
+  bio: '',
+  genre: '보컬',
+  region: '서울',
+  fee: 40,
+  channel: '',
+  verification: '미제출',
+  business: false,
+  performance: false,
+  rights: false,
+};
+// 게시판 첫 화면에 보이는 가상 게시글 (owner가 seed-*이면 샘플 글)
+export const INITIAL_POSTS = [
+  {
+    id: 'post-1',
+    owner: 'seed-1',
+    author: '캠퍼스 기획팀',
+    type: '모집',
+    title: '가을 축제, 함께 무대를 채울 밴드를 찾습니다',
+    body: '10월 서울에서 진행할 대학 축제에 함께할 밴드를 찾고 있어요. 공연 시간은 약 30분입니다.\n\n이 글은 화면을 살펴보기 위한 가상 모집 글입니다.',
+    date: '2026-09-19',
+  },
+  {
+    id: 'post-2',
+    owner: 'seed-2',
+    author: '싱어송라이터 서하',
+    type: '자유',
+    title: '처음 공연을 준비할 때 꼭 챙기는 것들',
+    body: '셋리스트, 반주 파일, 무대 동선부터 하나씩 확인해요. 서로의 준비 경험을 나누어 주세요.\n\n가상 게시글입니다.',
+    date: '2026-09-18',
+  },
+  {
+    id: 'post-3',
+    owner: 'seed-3',
+    author: '로컬 스테이지',
+    type: '모집',
+    title: '작은 공간을 따뜻하게 채워줄 재즈 공연',
+    body: '소규모 기업 행사에 어울리는 재즈 공연을 기획 중입니다. 차분한 분위기의 팀을 찾고 있습니다.\n\n가상 게시글입니다.',
+    date: '2026-09-17',
+  },
+];

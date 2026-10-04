@@ -1,0 +1,187 @@
+/* 아티스트 로그인 화면 (원형 창 공통 모양은 login-circle.css) */
+
+/* 화면 전체 영역 */
+.artist-login {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 32px 0 65px;
+}
+.artist-login > .text-button { font-size: 12px; }
+/* 로그인 창 · 제목 · 소개 문구 */
+.artist-login-panel {
+  margin-top: 24px;
+  padding: 36px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.artist-login-panel h1 {
+  margin: 14px 0;
+  font-size: 28px;
+  letter-spacing: -1px;
+}
+.artist-login-intro {
+  margin-bottom: 28px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+/* 입력칸 라벨 */
+.artist-login-panel form > label {
+  display: block;
+  margin: 16px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.artist-login-panel form > label:first-child { margin-top: 0; }
+.artist-login-submit { margin-top: 18px; justify-content: center; }
+/* '간편 로그인' 가운데 글자 + 양옆 가로선 */
+.artist-login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 28px 0 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.artist-login-divider::before,
+.artist-login-divider::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
+/* 간편 로그인 원형 버튼 (카카오·네이버·구글) */
+.artist-social {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  padding: 8px 0 14px;
+}
+.artist-social-button {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.artist-social-button.kakao { background: #fee500; color: #191919; }
+.artist-social-button.naver { background: #03c75a; color: #fff; }
+.artist-social-button.google { background: #fff; color: #4285f4; border-color: #ccd5df; }
+.artist-provider-mark {
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+}
+.artist-social-button:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 4px;
+}
+/* '처음이신가요? 가입할래!' 안내 */
+.artist-signup {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.artist-signup button {
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+/* 간편 로그인 안내 메시지 · 하단 미리보기 안내 */
+.artist-login-feedback {
+  margin: 18px 0 0;
+  color: var(--blue);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.artist-login-feedback:empty { display: none; }
+.artist-login-note {
+  margin: 24px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+/* 휴대폰: 창 여백·제목 축소 */
+@media (max-width: 580px) {
+  .artist-login-panel { padding: 26px 20px; }
+  .artist-login-panel h1 { font-size: 25px; }
+}
+/* 아주 좁은 화면: 간편 로그인 버튼 축소 */
+@media (max-width: 360px) {
+  .artist-social { gap: 20px; }
+  .artist-social-button { width: 56px; height: 56px; }
+}
+
+/* 아이디·비밀번호 입력칸과 로그인 버튼을 둥근 모양으로 */
+.artist-login-panel form > label {
+  padding-left: 18px;
+}
+.artist-login-panel input {
+  padding: 14px 22px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+.artist-login-submit {
+  border-radius: 999px;
+}
+
+/* 비밀번호 칸 + 보기 버튼 */
+.login-password-field {
+  position: relative;
+  display: block;
+}
+.login-password-field input {
+  padding-right: 54px;
+}
+.login-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  transform: translateY(-50%);
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.login-password-toggle:hover {
+  background: var(--soft);
+  color: var(--ink);
+}
+.login-password-toggle:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 1px;
+}
+/* Caps Lock 안내 */
+.login-capslock {
+  margin: 8px 0 0 18px;
+  color: #b7791f;
+  font-size: 12px;
+  font-weight: 600;
+}
+:root[data-theme='dark'] .login-capslock {
+  color: #f6c768;
+}

@@ -1,0 +1,33 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Claude 작업 미리보기 파일
+Claude outputs/
+
+# archify 다이어그램 작업 폴더 (완성본은 docs 등으로 옮겨서 공유)
+.archify/
+
+# AI 디자인 스킬 (팀 공유 여부 결정 전까지 올리지 않음)
+.claude/
