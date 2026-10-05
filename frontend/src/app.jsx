@@ -17,6 +17,7 @@ import SignUpComplete from './features/auth/pages/sign-up-complete-page.jsx';
 import AuthRequired from './features/auth/pages/auth-required-page.jsx';
 import MyPage from './features/my-page/my-page.jsx';
 import Board from './features/board/board-page.jsx';
+import { STATUS_VALUES as SCHEDULE_STATUSES } from './features/my-page/availability.js';
 
 // 저장소에서 읽은 값이 올바른 형식인지 확인하는 함수들 (형식이 틀리면 초기값 사용)
 const arrayValue = (value) => Array.isArray(value);
@@ -83,7 +84,9 @@ export default function App() {
           s &&
           typeof s.date === 'string' &&
           typeof s.start === 'string' &&
-          typeof s.end === 'string',
+          typeof s.end === 'string' &&
+          // 상태(ART-029)는 예전 일정에 없을 수 있으므로 있을 때만 확인
+          (s.status === undefined || SCHEDULE_STATUSES.includes(s.status)),
       ),
   );
   const [saved, setSaved, savedError] = useStoredState(
