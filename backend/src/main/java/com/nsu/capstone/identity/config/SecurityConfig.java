@@ -14,7 +14,31 @@ public class SecurityConfig {
 
     private static final RequestMatcher ARTIST_SIGNUP_ENDPOINTS = new OrRequestMatcher(
         PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/signup/artist"),
-        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/signup/artist/session")
+        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/signup/artist/session"),
+        PathPatternRequestMatcher.pathPattern(
+            HttpMethod.POST,
+            "/api/v1/auth/signup/artist/session/email-verification/send"
+        ),
+        PathPatternRequestMatcher.pathPattern(
+            HttpMethod.POST,
+            "/api/v1/auth/signup/artist/session/email-verification/confirm"
+        ),
+        PathPatternRequestMatcher.pathPattern(
+            HttpMethod.POST,
+            "/api/v1/auth/signup/artist/session/phone-verification/send"
+        ),
+        PathPatternRequestMatcher.pathPattern(
+            HttpMethod.POST,
+            "/api/v1/auth/signup/artist/session/phone-verification/confirm"
+        ),
+        PathPatternRequestMatcher.pathPattern(
+            HttpMethod.PUT,
+            "/api/v1/auth/signup/artist/session/required-terms-agreement"
+        ),
+        PathPatternRequestMatcher.pathPattern(
+            HttpMethod.POST,
+            "/api/v1/auth/signup/artist/session/adult-confirmation"
+        )
     );
 
     @Bean

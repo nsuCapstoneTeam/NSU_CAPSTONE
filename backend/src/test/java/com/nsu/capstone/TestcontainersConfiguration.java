@@ -3,6 +3,7 @@ package com.nsu.capstone;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
+import org.springframework.test.context.DynamicPropertyRegistrar;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
@@ -28,5 +29,19 @@ class TestcontainersConfiguration {
     GenericContainer<?> redisContainer() {
         return new GenericContainer<>(REDIS_IMAGE)
             .withExposedPorts(6379);
+    }
+
+    @Bean
+    DynamicPropertyRegistrar signupVerificationTestProperties() {
+        return registry -> {
+            registry.add(
+                "auth.signup-verification.hmac-secret",
+                () -> "test-only-signup-verification-hmac-secret"
+            );
+            registry.add(
+                "auth.signup-verification.required-terms",
+                () -> "service-terms:v1,privacy-policy:v1"
+            );
+        };
     }
 }
