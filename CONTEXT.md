@@ -30,7 +30,7 @@ _Avoid_: 계약 체결, Contract, Booking 완료
 ### 매칭과 신뢰의 경계
 
 **Matching Score**:
-특정 행사 조건에 아티스트가 얼마나 잘 맞는지를 나타내는 적합도.
+특정 행사 조건에 곡이 얼마나 잘 맞는지를 나타내는 적합도. 의미·BPM·리듬 항목 점수의 평균이며, 추천은 곡 단위로 이 점수의 순서를 따른다.
 _Avoid_: 추천 점수, 종합 점수(신뢰 정보를 섞은 의미로)
 
 **Eligibility**:
@@ -38,11 +38,11 @@ _Avoid_: 추천 점수, 종합 점수(신뢰 정보를 섞은 의미로)
 _Avoid_: 자격 점수, 신뢰 필터
 
 **후보 풀**:
-Backend Ranker가 종합 적합도로 순위를 매기는 아티스트 후보 전체. 기본 retrieval 결과와 신규 아티스트 전용 retrieval 결과를 합친 것이다.
+Backend Ranker가 종합 적합도로 순위를 매기는 곡 후보 전체. 기본 retrieval 결과와 신규 아티스트 전용 retrieval 결과를 합친 것이다.
 _Avoid_: retrieval 결과(기본 retrieval만 뜻하는 의미로)
 
 **Exploration Slot**:
-추천 결과에서 신규 아티스트에게 허용하는 노출 자리. 신뢰 정보와 무관한 노출 정책이다.
+추천 결과에서 신규 아티스트의 곡 1개에 허용하는 노출 자리. 신뢰 정보와 무관한 노출 정책이다.
 _Avoid_: Cold Start 보정, Trust 보정
 
 **Trust Profile**:
