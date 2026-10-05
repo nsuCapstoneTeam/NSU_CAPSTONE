@@ -14,6 +14,10 @@ Spring Boot Backend와 AI 매칭 서버(`NSU_CAPSTONE_AI`) 사이의 책임 분�
 | [004](004-timeout-and-stale-retry.md) | timeout 상태 확인·stale 재처리 | Accepted |
 | [005](005-audio-retrieval-responsibilities.md) | ACTIVE 후보 검색·최종 추천 역할 분담 | Accepted |
 | [006](006-new-artist-candidate-retrieval.md) | 신규 아티스트 후보 retrieval | Proposed |
+| [007](007-recommendation-unit-song.md) | 추천 단위는 곡 | Accepted |
+| [008](008-recommendation-explanation-flow.md) | 추천 이유·비교 설명 생성 흐름 | Proposed |
+| [009](009-matching-score-items.md) | 종합 적합도의 항목 구성 | Accepted |
+| [010](010-ai-search-failure-response.md) | AI 곡 검색 실패·시간 초과 시 추천 API 응답 | Accepted |
 
 Accepted는 합의된 처리 원칙을 뜻하며 구현 완료를 뜻하지 않는다.
 Proposed는 한쪽 서버가 제안하고 상대 담당자의 확인을 기다리는 상태다.
