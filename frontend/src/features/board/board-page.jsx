@@ -29,22 +29,38 @@ export default function Board({ posts, setPosts, profile, notify }) {
     setEditing(null);
     setDetailId(id);
   }
-  // 목록으로 돌아가기: 방금 보던 글 제목 버튼으로 포커스를 돌려 제자리에서 이어 보기
+  // 목록이 다시 그려진 뒤 포커스 옮기기
+  // 방금 보던 글이 목록에 있으면 그 제목 버튼으로, 없으면(삭제됐거나 검색 결과에서 빠짐) 검색칸으로
+  function focusListAfterReturn(id) {
+    setTimeout(() => {
+      const button = id && document.querySelector(`[data-post-id="${id}"]`);
+      if (button) {
+        button.scrollIntoView({ block: 'center' });
+        button.focus({ preventScroll: true });
+      } else {
+        document.getElementById('board-search')?.focus();
+      }
+    }, 0);
+  }
+  // 목록으로 돌아가기: 보던 분류·검색어는 그대로, 포커스는 보던 글로
   function closeDetail() {
     const id = detailId;
     setEditing(null);
     setDetailId(null);
-    setTimeout(() => {
-      const button = document.querySelector(`[data-post-id="${id}"]`);
-      button?.scrollIntoView({ block: 'center' });
-      button?.focus({ preventScroll: true });
-    }, 0);
+    focusListAfterReturn(id);
   }
-  // 본인 글 삭제 → 목록으로
+  // 본인 글 삭제 → 목록으로 (브라우저 저장에 실패하면 그 사실을 안내)
   function deletePost(id) {
-    setPosts(posts.filter((x) => x.id !== id || x.owner !== profile.id));
+    const saved = setPosts(
+      posts.filter((x) => x.id !== id || x.owner !== profile.id),
+    );
     setDetailId(null);
-    notify('게시글을 삭제했습니다.');
+    focusListAfterReturn(null);
+    notify(
+      saved
+        ? '게시글을 삭제했습니다.'
+        : '게시글이 화면에서는 삭제됐지만 브라우저 저장에 실패했습니다. 새로고침하면 다시 보일 수 있습니다.',
+    );
   }
   // 글 저장: id가 있으면 본인 글 수정, 없으면 새 글을 맨 앞에 추가
   function save(e) {
@@ -175,6 +191,7 @@ export default function Board({ posts, setPosts, profile, notify }) {
             size={18}
           />
           <input
+            id="board-search"
             aria-label="게시글 검색"
             placeholder="제목, 내용, 작성자 검색"
             value={query}
