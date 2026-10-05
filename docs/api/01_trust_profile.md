@@ -305,7 +305,7 @@ Authorization: Bearer {accessToken}
 
 ## 7. 내부 일괄 조회 계약
 
-추천 응답 조합(Spring 내부)에서 쓰는 Application Service 계약이다. HTTP로 공개하지 않는다.
+추천 응답 조합(Spring 내부)에서 쓰는 Application Service 계약이다. HTTP로 공개하지 않는다. 추천은 곡 단위이므로 추천 곡들의 아티스트 ID를 중복 없이 모아 한 번에 조회한다.
 
 ```java
 Map<UUID, TrustProfile> findByArtistIds(Collection<UUID> artistIds);
