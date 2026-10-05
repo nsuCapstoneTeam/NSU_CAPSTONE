@@ -45,10 +45,10 @@ class SignupSessionStoreIntegrationTest {
         signupSessionStore.save(session);
 
         assertTrue(Boolean.TRUE.equals(redisTemplate.hasKey(
-            "signup:artist:" + session.signupSessionId()
+            "signup:artist:{" + session.signupSessionId() + "}"
         )));
         Long ttlSeconds = redisTemplate.getExpire(
-            "signup:artist:" + session.signupSessionId(),
+            "signup:artist:{" + session.signupSessionId() + "}",
             TimeUnit.SECONDS
         );
         assertTrue(ttlSeconds > 0);
@@ -74,7 +74,7 @@ class SignupSessionStoreIntegrationTest {
             true,
             UserRole.ARTIST
         );
-        String key = "signup:artist:" + session.signupSessionId();
+        String key = "signup:artist:{" + session.signupSessionId() + "}";
         signupSessionStore.save(session);
 
         redisTemplate.expire(key, Duration.ZERO);

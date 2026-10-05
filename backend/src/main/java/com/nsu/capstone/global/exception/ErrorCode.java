@@ -39,6 +39,51 @@ public enum ErrorCode {
         HttpStatus.BAD_REQUEST,
         "만 18세 이상 확인이 필요합니다."
     ),
+    VERIFICATION_CODE_INVALID(
+        "VERIFICATION_CODE_INVALID",
+        HttpStatus.BAD_REQUEST,
+        "인증 코드가 올바르지 않습니다."
+    ),
+    VERIFICATION_CODE_EXPIRED(
+        "VERIFICATION_CODE_EXPIRED",
+        HttpStatus.BAD_REQUEST,
+        "인증 코드가 만료되었습니다."
+    ),
+    VERIFICATION_REQUEST_LIMIT_EXCEEDED(
+        "VERIFICATION_REQUEST_LIMIT_EXCEEDED",
+        HttpStatus.TOO_MANY_REQUESTS,
+        "인증 코드 재요청 제한 시간을 확인해 주세요."
+    ),
+    VERIFICATION_ATTEMPT_LIMIT_EXCEEDED(
+        "VERIFICATION_ATTEMPT_LIMIT_EXCEEDED",
+        HttpStatus.TOO_MANY_REQUESTS,
+        "인증 코드 확인 가능 횟수를 초과했습니다."
+    ),
+    VERIFICATION_DELIVERY_FAILED(
+        "VERIFICATION_DELIVERY_FAILED",
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "인증 코드를 발송할 수 없습니다."
+    ),
+    TERMS_AGREEMENT_INVALID(
+        "TERMS_AGREEMENT_INVALID",
+        HttpStatus.BAD_REQUEST,
+        "약관 동의 정보가 올바르지 않습니다."
+    ),
+    REQUIRED_TERMS_NOT_AGREED(
+        "REQUIRED_TERMS_NOT_AGREED",
+        HttpStatus.BAD_REQUEST,
+        "모든 필수 약관에 동의해야 합니다."
+    ),
+    ADULT_CONFIRMATION_EVIDENCE_INVALID(
+        "ADULT_CONFIRMATION_EVIDENCE_INVALID",
+        HttpStatus.BAD_REQUEST,
+        "성인 확인 근거가 올바르지 않습니다."
+    ),
+    ADULT_REQUIREMENT_NOT_MET(
+        "ADULT_REQUIREMENT_NOT_MET",
+        HttpStatus.BAD_REQUEST,
+        "만 18세 이상만 가입할 수 있습니다."
+    ),
     INTERNAL_SERVER_ERROR(
         "INTERNAL_SERVER_ERROR",
         HttpStatus.INTERNAL_SERVER_ERROR,

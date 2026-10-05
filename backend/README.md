@@ -46,9 +46,14 @@ POSTGRES_DB=capstone_db
 POSTGRES_PORT=5432
 
 REDIS_PORT=6379
+
+SIGNUP_VERIFICATION_HMAC_SECRET=
+SIGNUP_REQUIRED_TERMS=
 ```
 
 `POSTGRES_PASSWORD`에는 팀원별로 사용할 로컬 비밀번호를 직접 입력한다.
+`SIGNUP_VERIFICATION_HMAC_SECRET`에는 충분히 긴 임의의 비밀값을 입력하고 저장소에 커밋하지 않는다.
+`SIGNUP_REQUIRED_TERMS`는 `약관ID:버전`을 쉼표로 구분해 입력한다.
 
 Spring Boot는 Docker Compose의 PostgreSQL 서비스를 인식하여 `.env`에 지정한 사용자, 비밀번호, 데이터베이스 및 포트를 자동으로 사용한다.
 
