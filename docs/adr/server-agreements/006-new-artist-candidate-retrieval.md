@@ -6,9 +6,9 @@ Proposed — 2026-10-04 Backend 설계(NSU-71). AI 담당 확인 전.
 
 ## Context
 
-SSOT `AI-MATCH-155`는 Eligibility를 통과한 신규 아티스트 **전체** 중 종합 적합도가 가장 높은 1명을 기준으로 신규 노출 칸을 정한다.
+SSOT `AI-MATCH-155`는 Eligibility를 통과한 신규 아티스트 **전체**를 대상으로 신규 노출 칸을 정한다. 추천 단위가 곡이므로([007](007-recommendation-unit-song.md)) 신규 아티스트의 곡 중 종합 적합도가 가장 높은 1곡이 대상이다.
 [005](005-audio-retrieval-responsibilities.md)에 따라 AI는 의미 유사도 기준 retrieval 50~100개 후보만 반환하고, 종합 적합도와 최종 Top10은 Backend Ranker가 계산한다.
-종합 적합도는 의미 적합도 외에 BPM·리듬·공연 스타일을 함께 쓰므로, retrieval 상위 밖의 신규 아티스트가 종합 적합도로는 Top10 또는 신규 노출 칸에 들어갈 수 있다.
+종합 적합도는 의미 점수 외에 BPM·리듬 점수를 함께 쓰므로([009](009-matching-score-items.md)), retrieval 상위 밖에 있는 신규 아티스트의 곡이 종합 적합도로는 Top10 또는 신규 노출 칸에 들어갈 수 있다.
 신규 판정 데이터(매칭 성사, 활성화일)는 Backend에 있다.
 
 ## Decision
@@ -32,7 +32,7 @@ AI가 의미 점수를 후보군 상대 정규화로 바꾸면 이 결정이 성
 
 ## Server Responsibilities
 
-- Backend: 신규 아티스트 판정, 신규 ACTIVE 쌍 구성과 상한 단위 분할, 신규 retrieval 호출, 결과 병합, 아티스트 집계·종합 적합도·Top10·신규 노출 칸 판정, 신규 retrieval 실패 시 계속 진행.
+- Backend: 신규 아티스트 판정, 신규 ACTIVE 쌍 구성과 상한 단위 분할, 신규 retrieval 호출, 결과 병합, 곡별 종합 적합도·Top10·신규 노출 칸 판정, 신규 retrieval 실패 시 계속 진행.
 - AI: 전달된 후보 쌍 안에서 기존과 같은 방식으로 검색하고 점수를 반환. `top_k`가 전달한 쌍의 수와 같으면 모든 쌍의 결과를 반환. `top_k` 상한을 공개. 신규 여부를 판단하지 않는다.
 
 ## Contract
