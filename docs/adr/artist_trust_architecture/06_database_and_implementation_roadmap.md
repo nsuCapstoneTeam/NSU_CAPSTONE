@@ -45,7 +45,7 @@ Trust Profile
 
 - 원장에는 판정이 끝난 공연 결과만 append-only로 기록합니다.
 - Reliability, 확신 수준, Risk Signal, 결과별 포함 여부는 조회 시 계산합니다.
-- 추천 1회에 필요한 아티스트는 최대 11명(Top10 + 신규 노출 1)이므로 조회 시 계산 비용이 작습니다. 성능이 필요해지면 캐시를 추가합니다.
+- 추천 1회에 필요한 아티스트는 최대 11명(Top10 곡 + 신규 노출 1곡의 아티스트)이므로 조회 시 계산 비용이 작습니다. 성능이 필요해지면 캐시를 추가합니다.
 
 ## `performance_outcome` (개념 모델)
 
@@ -536,7 +536,7 @@ V1 Risk Signal은 원장에서 조회 시 계산하며 별도 테이블에 저�
 - Trust Profile 조합
 - Verification 결과
 - Eligibility Filter와 ACTIVE 후보 쌍 선정
-- Backend Ranker: 곡→아티스트 집계, Matching Score(종합 적합도), 최종 Top10 선정
+- Backend Ranker: 곡별 Matching Score(종합 적합도), 최종 Top10 곡 선정. 곡을 아티스트로 묶지 않는다([서버 협의 007](../server-agreements/007-recommendation-unit-song.md))
 - 추천 API의 최종 조합
 
 ## AI / Matching 영역
@@ -546,7 +546,7 @@ V1 Risk Signal은 원장에서 조회 시 계산하며 별도 테이블에 저�
 - CLAP Embedding
 - 음악 의미 유사도
 - BPM / Rhythm / Audio Feature 추출과 행사 요구 대비 BPM·리듬 적합도 점수화(NSUAI-9)
-- 추천 이유·후보 간 비교 설명 계산(NSUAI-5, 2026-09-30 #ai-recommend 결정)
+- 추천 이유·후보 간 비교 설명 계산(NSUAI-5, 2026-09-30 #ai-recommend 결정). Top10이 정해진 뒤 Backend가 설명 API를 호출한다([서버 협의 008](../server-agreements/008-recommendation-explanation-flow.md))
 - ACTIVE 후보 쌍 안에서 의미 유사도 기반 후보 검색(retrieval 50~100개)
 
 AI/Matching 영역은 항목 점수(의미·BPM·리듬)를 계산하지만 최종 Matching Score(종합 적합도)와 순위는 계산하지 않습니다(서버 협의 005).
@@ -588,7 +588,7 @@ for (MatchingResult result : matchingResults) {
 권장 구조:
 
 ```text
-Top10 + 신규 노출 1 Artist IDs
+Top10 곡 + 신규 노출 1곡의 Artist IDs (중복 제거)
     ↓
 공연 결과 원장 일괄 조회
 Verification 일괄 조회
