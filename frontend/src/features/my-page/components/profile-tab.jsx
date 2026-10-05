@@ -19,12 +19,14 @@ export default function ProfileTab({ profile, setProfile, notify }) {
       notify('이름을 입력해 주세요.');
       return;
     }
-    // 사진·영상은 각자 바로 저장되므로 최신 값을 그대로 유지
+    // 사진·영상과 검토 희망 항목은 각자 따로 저장하므로 지금 저장된 값을 그대로 유지
     const saved = setProfile({
       ...draft,
       name: draft.name.trim(),
       avatar: profile.avatar,
       videos: profile.videos,
+      verification: profile.verification,
+      ...Object.fromEntries(verificationItems.map(([key]) => [key, profile[key]])),
     });
     notify(
       saved

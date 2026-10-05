@@ -3,7 +3,7 @@ import Icon from '../../../components/common/icon.jsx';
 import VideoLinks from './video-links.jsx';
 
 // 마이페이지 '작업물·섭외' 탭 (아티스트): 공연 영상 링크, 작업물 미리 듣기, 섭외 요청 우편함
-export default function WorksTab({ profile, setProfile, notify }) {
+export default function WorksTab({ active, profile, setProfile, notify }) {
   // 미리 듣기용으로 선택한 오디오 파일 (서버에 올리지 않음)
   const [audioFile, setAudioFile] = useState(null);
   const audioRef = useRef(null);
@@ -14,9 +14,14 @@ export default function WorksTab({ profile, setProfile, notify }) {
     if (audioRef.current) audioRef.current.src = url;
     return () => URL.revokeObjectURL(url);
   }, [audioFile]);
+  // 다른 탭으로 가면 미리 듣기를 일시 정지 (선택한 파일은 유지)
+  useEffect(() => {
+    if (!active) audioRef.current?.pause();
+  }, [active]);
   return (
     <div className="works-stack">
       <VideoLinks
+        active={active}
         profile={profile}
         setProfile={setProfile}
         notify={notify}

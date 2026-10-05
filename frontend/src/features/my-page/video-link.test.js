@@ -17,6 +17,11 @@ describe('parseVideoUrl', () => {
       videoId: '76979871',
     });
   });
+  it('목록에 없는 Vimeo 영상의 해시를 보존한다', () => {
+    const want = { platform: 'vimeo', videoId: '76979871', hash: 'a1b2c3d4e5' };
+    assert.deepEqual(parseVideoUrl('https://vimeo.com/76979871/a1b2c3d4e5'), want);
+    assert.deepEqual(parseVideoUrl('https://player.vimeo.com/video/76979871?h=a1b2c3d4e5'), want);
+  });
   it('지원하지 않거나 잘못된 주소는 null', () => {
     assert.equal(parseVideoUrl('https://example.com/video.mp4'), null);
     assert.equal(parseVideoUrl('youtube.com/watch?v=dQw4w9WgXcQ'), null);
@@ -34,6 +39,16 @@ describe('embedUrl', () => {
     assert.equal(
       embedUrl({ platform: 'vimeo', videoId: '76979871' }),
       'https://player.vimeo.com/video/76979871',
+    );
+  });
+  it('Vimeo 해시와 자동 재생을 쿼리로 함께 붙인다', () => {
+    assert.equal(
+      embedUrl({ platform: 'vimeo', videoId: '76979871', hash: 'a1b2c3d4e5' }, { autoplay: true }),
+      'https://player.vimeo.com/video/76979871?h=a1b2c3d4e5&autoplay=1',
+    );
+    assert.equal(
+      embedUrl({ platform: 'youtube', videoId: 'dQw4w9WgXcQ' }, { autoplay: true }),
+      'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1',
     );
   });
   it('형식이 틀린 값은 null (저장소가 바뀌어도 이상한 주소를 열지 않음)', () => {

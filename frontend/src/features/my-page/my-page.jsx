@@ -71,6 +71,7 @@ export default function MyPage({
     ),
     works: (
       <WorksTab
+        active={tab === 'works'}
         profile={profile}
         setProfile={setProfile}
         notify={notify}

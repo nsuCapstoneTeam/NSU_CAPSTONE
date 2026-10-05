@@ -8,7 +8,8 @@ import './video-links.css';
 
 const MAX_VIDEOS = 10;
 
-export default function VideoLinks({ profile, setProfile, notify }) {
+// active가 false(다른 탭)면 재생기를 내려서 영상 재생을 멈춥니다.
+export default function VideoLinks({ active, profile, setProfile, notify }) {
   const videos = Array.isArray(profile.videos) ? profile.videos : [];
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
@@ -117,9 +118,9 @@ export default function VideoLinks({ profile, setProfile, notify }) {
           return (
             <li key={v.id}>
               <div className="video-frame">
-                {playingId === v.id ? (
+                {active && playingId === v.id ? (
                   <iframe
-                    src={`${src}?autoplay=1`}
+                    src={embedUrl(v, { autoplay: true })}
                     title={`${v.title} (${PLATFORM_LABEL[v.platform]})`}
                     allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                     allowFullScreen

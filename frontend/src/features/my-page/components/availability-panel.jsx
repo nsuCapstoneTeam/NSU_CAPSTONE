@@ -100,11 +100,13 @@ export default function AvailabilityPanel({ active, schedules, setSchedules, not
   }
 
   // 주간 시간표 빈 칸: 그 날짜·시간부터 2시간으로 폼을 채우고 상태 선택칸으로 이동
+  // 수정 중이었다면 그 일정의 상태를 넘겨받지 않도록 기본값('가능')으로 되돌림
   function pickSlot(key, hour) {
+    const wasEditing = editingId !== null;
     setEditingId(null);
     selectDate(key);
     setForm((prev) => ({
-      ...prev,
+      ...(wasEditing ? EMPTY_FORM : prev),
       start: `${pad(hour)}:00`,
       end: hour >= 22 ? '23:59' : `${pad(hour + 2)}:00`,
     }));
