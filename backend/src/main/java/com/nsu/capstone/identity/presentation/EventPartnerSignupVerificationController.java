@@ -16,19 +16,19 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/auth/signup/artist/session")
-public class ArtistSignupVerificationController {
+@RequestMapping("/api/v1/auth/signup/event-partner/session")
+public class EventPartnerSignupVerificationController {
 
     private final SignupVerificationService verificationService;
 
-    public ArtistSignupVerificationController(SignupVerificationService verificationService) {
+    public EventPartnerSignupVerificationController(SignupVerificationService verificationService) {
         this.verificationService = verificationService;
     }
 
     @PostMapping("/email-verification/send")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void sendEmailCode(@Valid @RequestBody SignupSessionVerificationRequest request) {
-        verificationService.sendEmailCode(request.signupSessionId(), UserRole.ARTIST);
+        verificationService.sendEmailCode(request.signupSessionId(), UserRole.EVENT_PARTNER);
     }
 
     @PostMapping("/email-verification/confirm")
@@ -37,14 +37,14 @@ public class ArtistSignupVerificationController {
         verificationService.confirmEmailCode(
             request.signupSessionId(),
             request.code(),
-            UserRole.ARTIST
+            UserRole.EVENT_PARTNER
         );
     }
 
     @PostMapping("/phone-verification/send")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void sendPhoneCode(@Valid @RequestBody SignupSessionVerificationRequest request) {
-        verificationService.sendPhoneCode(request.signupSessionId(), UserRole.ARTIST);
+        verificationService.sendPhoneCode(request.signupSessionId(), UserRole.EVENT_PARTNER);
     }
 
     @PostMapping("/phone-verification/confirm")
@@ -53,7 +53,7 @@ public class ArtistSignupVerificationController {
         verificationService.confirmPhoneCode(
             request.signupSessionId(),
             request.code(),
-            UserRole.ARTIST
+            UserRole.EVENT_PARTNER
         );
     }
 
@@ -63,7 +63,7 @@ public class ArtistSignupVerificationController {
         verificationService.agreeRequiredTerms(
             request.signupSessionId(),
             request.agreements().stream().map(agreement -> agreement.toTermVersion()).toList(),
-            UserRole.ARTIST
+            UserRole.EVENT_PARTNER
         );
     }
 
@@ -73,7 +73,7 @@ public class ArtistSignupVerificationController {
         verificationService.confirmAdult(
             request.signupSessionId(),
             request.birthDate(),
-            UserRole.ARTIST
+            UserRole.EVENT_PARTNER
         );
     }
 }

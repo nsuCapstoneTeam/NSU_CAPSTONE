@@ -1,5 +1,6 @@
 package com.nsu.capstone.identity.verification;
 
+import com.nsu.capstone.identity.domain.UserRole;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -7,6 +8,7 @@ public interface VerificationChallengeStore {
 
     ChallengeIssueResult issue(
         String signupSessionId,
+        UserRole expectedRole,
         VerificationChannel channel,
         String codeDigest,
         String destinationDigest,
@@ -18,6 +20,7 @@ public interface VerificationChallengeStore {
 
     ChallengeVerificationResult verifyAndConsume(
         String signupSessionId,
+        UserRole expectedRole,
         VerificationChannel channel,
         String generationId,
         String codeDigest,

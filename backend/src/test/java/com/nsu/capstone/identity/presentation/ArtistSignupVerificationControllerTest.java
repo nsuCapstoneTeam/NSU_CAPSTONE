@@ -15,7 +15,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.global.exception.GlobalExceptionHandler;
-import com.nsu.capstone.identity.application.ArtistSignupVerificationService;
+import com.nsu.capstone.identity.application.SignupVerificationService;
+import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.verification.terms.TermVersion;
 import java.time.LocalDate;
 import java.util.List;
@@ -28,7 +29,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class ArtistSignupVerificationControllerTest {
 
-    @Mock ArtistSignupVerificationService verificationService;
+    @Mock SignupVerificationService verificationService;
 
     private MockMvc mockMvc;
 
@@ -56,8 +57,12 @@ class ArtistSignupVerificationControllerTest {
                     """))
             .andExpect(status().isNoContent());
 
-        verify(verificationService).sendEmailCode("session-id");
-        verify(verificationService).confirmEmailCode("session-id", "123456");
+        verify(verificationService).sendEmailCode("session-id", UserRole.ARTIST);
+        verify(verificationService).confirmEmailCode(
+            "session-id",
+            "123456",
+            UserRole.ARTIST
+        );
     }
 
     @Test
@@ -91,15 +96,20 @@ class ArtistSignupVerificationControllerTest {
 
         verify(verificationService).agreeRequiredTerms(
             "session-id",
-            List.of(new TermVersion("service-terms", "v1"))
+            List.of(new TermVersion("service-terms", "v1")),
+            UserRole.ARTIST
         );
-        verify(verificationService).confirmAdult("session-id", LocalDate.of(2000, 1, 1));
+        verify(verificationService).confirmAdult(
+            "session-id",
+            LocalDate.of(2000, 1, 1),
+            UserRole.ARTIST
+        );
     }
 
     @Test
     void hidesProviderDetailsBehindNsu81ErrorResponse() throws Exception {
         doThrow(new BusinessException(ErrorCode.VERIFICATION_DELIVERY_FAILED))
-            .when(verificationService).sendEmailCode("session-id");
+            .when(verificationService).sendEmailCode("session-id", UserRole.ARTIST);
 
         mockMvc.perform(post("/api/v1/auth/signup/artist/session/email-verification/send")
                 .contentType(APPLICATION_JSON)

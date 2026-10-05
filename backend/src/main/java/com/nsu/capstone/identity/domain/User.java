@@ -66,6 +66,15 @@ public class User {
         return new User(id, email, passwordHash, phone, UserRole.ARTIST, UserStatus.ACTIVE);
     }
 
+    public static User createEventPartner(
+        UUID id,
+        String email,
+        String passwordHash,
+        String phone
+    ) {
+        return new User(id, email, passwordHash, phone, UserRole.EVENT_PARTNER, UserStatus.ACTIVE);
+    }
+
     public UUID getId() {
         return id;
     }

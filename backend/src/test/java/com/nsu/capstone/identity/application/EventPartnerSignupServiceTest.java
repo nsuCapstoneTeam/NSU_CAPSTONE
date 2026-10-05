@@ -15,7 +15,7 @@ import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.domain.UserStatus;
-import com.nsu.capstone.identity.presentation.dto.ArtistSignupResponse;
+import com.nsu.capstone.identity.presentation.dto.EventPartnerSignupResponse;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.signup.SignupSession;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
@@ -30,34 +30,30 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-class ArtistSignupServiceTest {
+class EventPartnerSignupServiceTest {
 
-    private static final UUID USER_ID = UUID.fromString("0199f278-cc35-7c24-9d82-0242ac120002");
-    private static final String SESSION_ID = "signup-session-id";
-    private static final String EMAIL = "artist@example.com";
-    private static final String PHONE = "01012345678";
-    private static final String PASSWORD = "plain-password";
+    private static final UUID USER_ID = UUID.fromString("0199f278-cc35-7c24-9d82-0242ac120003");
+    private static final String SESSION_ID = "event-partner-session-id";
+    private static final String EMAIL = "partner@example.com";
+    private static final String PHONE = "01098765432";
+    private static final String PASSWORD = "password";
 
-    @Mock
-    private UserRepository userRepository;
-
-    @Mock
-    private SignupSessionStore signupSessionStore;
-
-    @Mock
-    private UserIdGenerator userIdGenerator;
+    @Mock UserRepository userRepository;
+    @Mock SignupSessionStore signupSessionStore;
+    @Mock UserIdGenerator userIdGenerator;
 
     private PasswordEncoder passwordEncoder;
-    private ArtistSignupService artistSignupService;
+    private EventPartnerSignupService service;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
         passwordEncoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
-        artistSignupService = new ArtistSignupService(
+        service = new EventPartnerSignupService(
             userRepository,
             signupSessionStore,
             passwordEncoder,
@@ -67,41 +63,39 @@ class ArtistSignupServiceTest {
     }
 
     @Test
-    void createsArtistSignupSessionWithUnverifiedConditions() {
-        var response = artistSignupService.createSession(EMAIL, PHONE);
+    void createsEventPartnerSessionWithUnverifiedConditions() {
+        var response = service.createSession(EMAIL, PHONE);
 
         ArgumentCaptor<SignupSession> captor = ArgumentCaptor.forClass(SignupSession.class);
         verify(signupSessionStore).save(captor.capture());
-        SignupSession savedSession = captor.getValue();
-
-        assertEquals(response.signupSessionId(), savedSession.signupSessionId());
-        assertEquals(EMAIL, savedSession.email());
-        assertEquals(PHONE, savedSession.phone());
-        assertFalse(savedSession.emailVerified());
-        assertFalse(savedSession.phoneVerified());
-        assertFalse(savedSession.requiredTermsAgreed());
-        assertFalse(savedSession.adultConfirmed());
-        assertEquals(UserRole.ARTIST, savedSession.role());
+        SignupSession session = captor.getValue();
+        assertEquals(response.signupSessionId(), session.signupSessionId());
+        assertEquals(EMAIL, session.email());
+        assertEquals(PHONE, session.phone());
+        assertEquals(UserRole.EVENT_PARTNER, session.role());
+        assertFalse(session.emailVerified());
+        assertFalse(session.phoneVerified());
+        assertFalse(session.requiredTermsAgreed());
+        assertFalse(session.adultConfirmed());
     }
 
     @Test
-    void signsUpArtistAndDeletesSignupSession() {
-        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(verifiedArtistSession()));
+    void createsActiveEventPartnerWithHashedPasswordAndDeletesSession() {
+        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(verifiedSession()));
         when(userRepository.existsByEmail(EMAIL)).thenReturn(false);
         when(userIdGenerator.generate()).thenReturn(USER_ID);
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ArtistSignupResponse response = artistSignupService.signup(SESSION_ID, PASSWORD);
+        EventPartnerSignupResponse response = service.signup(SESSION_ID, PASSWORD);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).saveAndFlush(captor.capture());
         User savedUser = captor.getValue();
-
         assertEquals(USER_ID, response.userId());
         assertEquals(EMAIL, response.email());
-        assertEquals(UserRole.ARTIST, response.role());
+        assertEquals(UserRole.EVENT_PARTNER, response.role());
         assertEquals(UserStatus.ACTIVE, response.status());
-        assertEquals(UserRole.ARTIST, savedUser.getRole());
+        assertEquals(UserRole.EVENT_PARTNER, savedUser.getRole());
         assertEquals(UserStatus.ACTIVE, savedUser.getStatus());
         assertNotEquals(PASSWORD, savedUser.getPasswordHash());
         assertTrue(passwordEncoder.matches(PASSWORD, savedUser.getPasswordHash()));
@@ -109,13 +103,13 @@ class ArtistSignupServiceTest {
     }
 
     @Test
-    void rejectsDuplicatedEmailWithoutCreatingUserOrDeletingSession() {
-        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(verifiedArtistSession()));
+    void rejectsDuplicateEmailWithoutCreatingUserOrDeletingSession() {
+        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(verifiedSession()));
         when(userRepository.existsByEmail(EMAIL)).thenReturn(true);
 
         BusinessException exception = assertThrows(
             BusinessException.class,
-            () -> artistSignupService.signup(SESSION_ID, PASSWORD)
+            () -> service.signup(SESSION_ID, PASSWORD)
         );
 
         assertEquals(ErrorCode.EMAIL_ALREADY_EXISTS, exception.getErrorCode());
@@ -124,48 +118,52 @@ class ArtistSignupServiceTest {
     }
 
     @Test
-    void rejectsMissingOrExpiredSignupSessionWithoutCreatingUser() {
-        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.empty());
+    void mapsConcurrentDatabaseDuplicateToEmailConflict() {
+        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(verifiedSession()));
+        when(userRepository.existsByEmail(EMAIL)).thenReturn(false);
+        when(userIdGenerator.generate()).thenReturn(USER_ID);
+        when(userRepository.saveAndFlush(any(User.class)))
+            .thenThrow(new DataIntegrityViolationException("duplicate"));
 
         BusinessException exception = assertThrows(
             BusinessException.class,
-            () -> artistSignupService.signup(SESSION_ID, PASSWORD)
+            () -> service.signup(SESSION_ID, PASSWORD)
         );
 
-        assertEquals(ErrorCode.SIGNUP_SESSION_INVALID, exception.getErrorCode());
-        verify(userRepository, never()).saveAndFlush(any());
+        assertEquals(ErrorCode.EMAIL_ALREADY_EXISTS, exception.getErrorCode());
+        verify(signupSessionStore, never()).deleteById(any());
     }
 
     @ParameterizedTest
-    @MethodSource("invalidRequiredConditions")
-    void rejectsUnmetRequiredConditionWithoutCreatingUser(
-        SignupSession signupSession,
-        ErrorCode expectedErrorCode
+    @MethodSource("invalidSessions")
+    void rejectsInvalidOrIncompleteSessionWithoutCreatingUser(
+        SignupSession session,
+        ErrorCode expectedError
     ) {
-        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(signupSession));
+        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(session));
 
         BusinessException exception = assertThrows(
             BusinessException.class,
-            () -> artistSignupService.signup(SESSION_ID, PASSWORD)
+            () -> service.signup(SESSION_ID, PASSWORD)
         );
 
-        assertEquals(expectedErrorCode, exception.getErrorCode());
+        assertEquals(expectedError, exception.getErrorCode());
         verify(userRepository, never()).saveAndFlush(any());
         verify(signupSessionStore, never()).deleteById(any());
     }
 
-    private static Stream<Arguments> invalidRequiredConditions() {
+    private static Stream<Arguments> invalidSessions() {
         return Stream.of(
-            Arguments.of(session(false, true, true, true, UserRole.ARTIST), ErrorCode.EMAIL_VERIFICATION_REQUIRED),
-            Arguments.of(session(true, false, true, true, UserRole.ARTIST), ErrorCode.PHONE_VERIFICATION_REQUIRED),
-            Arguments.of(session(true, true, false, true, UserRole.ARTIST), ErrorCode.REQUIRED_TERMS_AGREEMENT_REQUIRED),
-            Arguments.of(session(true, true, true, false, UserRole.ARTIST), ErrorCode.ADULT_CONFIRMATION_REQUIRED),
-            Arguments.of(session(true, true, true, true, UserRole.EVENT_PARTNER), ErrorCode.SIGNUP_SESSION_INVALID)
+            Arguments.of(session(false, true, true, true, UserRole.EVENT_PARTNER), ErrorCode.EMAIL_VERIFICATION_REQUIRED),
+            Arguments.of(session(true, false, true, true, UserRole.EVENT_PARTNER), ErrorCode.PHONE_VERIFICATION_REQUIRED),
+            Arguments.of(session(true, true, false, true, UserRole.EVENT_PARTNER), ErrorCode.REQUIRED_TERMS_AGREEMENT_REQUIRED),
+            Arguments.of(session(true, true, true, false, UserRole.EVENT_PARTNER), ErrorCode.ADULT_CONFIRMATION_REQUIRED),
+            Arguments.of(session(true, true, true, true, UserRole.ARTIST), ErrorCode.SIGNUP_SESSION_INVALID)
         );
     }
 
-    private SignupSession verifiedArtistSession() {
-        return session(true, true, true, true, UserRole.ARTIST);
+    private SignupSession verifiedSession() {
+        return session(true, true, true, true, UserRole.EVENT_PARTNER);
     }
 
     private static SignupSession session(
