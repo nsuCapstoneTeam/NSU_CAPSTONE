@@ -14,6 +14,23 @@ public record SignupSession(
 ) {
 
     public static SignupSession createArtist(String signupSessionId, String email, String phone) {
+        return create(signupSessionId, email, phone, UserRole.ARTIST);
+    }
+
+    public static SignupSession createEventPartner(
+        String signupSessionId,
+        String email,
+        String phone
+    ) {
+        return create(signupSessionId, email, phone, UserRole.EVENT_PARTNER);
+    }
+
+    private static SignupSession create(
+        String signupSessionId,
+        String email,
+        String phone,
+        UserRole role
+    ) {
         return new SignupSession(
             signupSessionId,
             email,
@@ -22,7 +39,7 @@ public record SignupSession(
             false,
             false,
             false,
-            UserRole.ARTIST
+            role
         );
     }
 }

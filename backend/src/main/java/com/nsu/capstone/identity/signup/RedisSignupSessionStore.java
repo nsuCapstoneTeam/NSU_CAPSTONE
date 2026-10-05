@@ -11,15 +11,14 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class RedisSignupSessionStore implements SignupSessionStore {
 
-    private static final String KEY_PREFIX = "signup:artist:{";
     private static final DefaultRedisScript<Long> MARK_VERIFIED_SCRIPT = new DefaultRedisScript<>("""
         if redis.call('EXISTS', KEYS[1]) == 0 then
             return 0
         end
-        if redis.call('HGET', KEYS[1], 'role') ~= 'ARTIST' then
+        if redis.call('HGET', KEYS[1], 'role') ~= ARGV[1] then
             return 0
         end
-        redis.call('HSET', KEYS[1], ARGV[1], 'true')
+        redis.call('HSET', KEYS[1], ARGV[2], 'true')
         return 1
         """, Long.class);
 
@@ -36,7 +35,7 @@ public class RedisSignupSessionStore implements SignupSessionStore {
 
     @Override
     public void save(SignupSession signupSession) {
-        String key = key(signupSession.signupSessionId());
+        String key = SignupRedisKeys.session(signupSession.signupSessionId());
         redisTemplate.opsForHash().putAll(key, Map.of(
             "signupSessionId", signupSession.signupSessionId(),
             "email", signupSession.email(),
@@ -57,7 +56,8 @@ public class RedisSignupSessionStore implements SignupSessionStore {
 
     @Override
     public Optional<SignupSession> findById(String signupSessionId) {
-        Map<Object, Object> values = redisTemplate.opsForHash().entries(key(signupSessionId));
+        Map<Object, Object> values = redisTemplate.opsForHash()
+            .entries(SignupRedisKeys.session(signupSessionId));
         if (values.isEmpty()) {
             return Optional.empty();
         }
@@ -75,38 +75,35 @@ public class RedisSignupSessionStore implements SignupSessionStore {
     }
 
     @Override
-    public boolean markEmailVerified(String signupSessionId) {
-        return mark(signupSessionId, "emailVerified");
+    public boolean markEmailVerified(String signupSessionId, UserRole expectedRole) {
+        return mark(signupSessionId, expectedRole, "emailVerified");
     }
 
     @Override
-    public boolean markPhoneVerified(String signupSessionId) {
-        return mark(signupSessionId, "phoneVerified");
+    public boolean markPhoneVerified(String signupSessionId, UserRole expectedRole) {
+        return mark(signupSessionId, expectedRole, "phoneVerified");
     }
 
     @Override
-    public boolean markRequiredTermsAgreed(String signupSessionId) {
-        return mark(signupSessionId, "requiredTermsAgreed");
+    public boolean markRequiredTermsAgreed(String signupSessionId, UserRole expectedRole) {
+        return mark(signupSessionId, expectedRole, "requiredTermsAgreed");
     }
 
     @Override
-    public boolean markAdultConfirmed(String signupSessionId) {
-        return mark(signupSessionId, "adultConfirmed");
+    public boolean markAdultConfirmed(String signupSessionId, UserRole expectedRole) {
+        return mark(signupSessionId, expectedRole, "adultConfirmed");
     }
 
     @Override
     public void deleteById(String signupSessionId) {
-        redisTemplate.delete(key(signupSessionId));
+        redisTemplate.delete(SignupRedisKeys.session(signupSessionId));
     }
 
-    private String key(String signupSessionId) {
-        return KEY_PREFIX + signupSessionId + "}";
-    }
-
-    private boolean mark(String signupSessionId, String field) {
+    private boolean mark(String signupSessionId, UserRole expectedRole, String field) {
         Long result = redisTemplate.execute(
             MARK_VERIFIED_SCRIPT,
-            List.of(key(signupSessionId)),
+            List.of(SignupRedisKeys.session(signupSessionId)),
+            expectedRole.name(),
             field
         );
         return Long.valueOf(1L).equals(result);

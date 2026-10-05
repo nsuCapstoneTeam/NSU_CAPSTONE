@@ -1,5 +1,7 @@
 package com.nsu.capstone.identity.verification;
 
+import com.nsu.capstone.identity.domain.UserRole;
+import com.nsu.capstone.identity.signup.SignupRedisKeys;
 import com.nsu.capstone.identity.signup.SignupVerificationProperties;
 import java.time.Instant;
 import java.util.List;
@@ -16,10 +18,10 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         if redis.call('EXISTS', KEYS[1]) == 0 then
             return 1
         end
-        if redis.call('HGET', KEYS[1], 'role') ~= 'ARTIST' then
+        if redis.call('HGET', KEYS[1], 'role') ~= ARGV[1] then
             return 1
         end
-        if redis.call('HGET', KEYS[1], ARGV[1]) == 'true' then
+        if redis.call('HGET', KEYS[1], ARGV[2]) == 'true' then
             return 2
         end
         if redis.call('EXISTS', KEYS[3]) == 1 then
@@ -29,17 +31,17 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         if sessionTtl <= 0 then
             return 1
         end
-        local challengeTtl = math.min(sessionTtl, tonumber(ARGV[6]))
-        local cooldownTtl = math.min(sessionTtl, tonumber(ARGV[7]))
+        local challengeTtl = math.min(sessionTtl, tonumber(ARGV[7]))
+        local cooldownTtl = math.min(sessionTtl, tonumber(ARGV[8]))
         redis.call('DEL', KEYS[2])
         redis.call('HSET', KEYS[2],
-            'codeDigest', ARGV[2],
-            'destinationDigest', ARGV[3],
-            'generationId', ARGV[4],
-            'issuedAt', ARGV[5],
+            'codeDigest', ARGV[3],
+            'destinationDigest', ARGV[4],
+            'generationId', ARGV[5],
+            'issuedAt', ARGV[6],
             'failedAttempts', '0')
         redis.call('PEXPIRE', KEYS[2], challengeTtl)
-        redis.call('SET', KEYS[3], ARGV[4], 'PX', cooldownTtl)
+        redis.call('SET', KEYS[3], ARGV[5], 'PX', cooldownTtl)
         return 0
         """, Long.class);
 
@@ -47,33 +49,33 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         if redis.call('EXISTS', KEYS[1]) == 0 then
             return 2
         end
-        if redis.call('HGET', KEYS[1], 'role') ~= 'ARTIST' then
+        if redis.call('HGET', KEYS[1], 'role') ~= ARGV[1] then
             return 2
         end
-        if redis.call('HGET', KEYS[1], ARGV[1]) == 'true' then
+        if redis.call('HGET', KEYS[1], ARGV[2]) == 'true' then
             redis.call('DEL', KEYS[2])
             return 1
         end
         if redis.call('EXISTS', KEYS[2]) == 0 then
             return 3
         end
-        if redis.call('HGET', KEYS[2], 'generationId') ~= ARGV[2]
-            or redis.call('HGET', KEYS[2], 'destinationDigest') ~= ARGV[4] then
+        if redis.call('HGET', KEYS[2], 'generationId') ~= ARGV[3]
+            or redis.call('HGET', KEYS[2], 'destinationDigest') ~= ARGV[5] then
             return 4
         end
         local attempts = tonumber(redis.call('HGET', KEYS[2], 'failedAttempts') or '0')
-        if attempts >= tonumber(ARGV[5]) then
+        if attempts >= tonumber(ARGV[6]) then
             return 5
         end
-        if redis.call('HGET', KEYS[2], 'codeDigest') ~= ARGV[3] then
+        if redis.call('HGET', KEYS[2], 'codeDigest') ~= ARGV[4] then
             attempts = redis.call('HINCRBY', KEYS[2], 'failedAttempts', 1)
-            if attempts >= tonumber(ARGV[5]) then
+            if attempts >= tonumber(ARGV[6]) then
                 return 5
             end
             return 4
         end
         redis.call('DEL', KEYS[2])
-        redis.call('HSET', KEYS[1], ARGV[1], 'true')
+        redis.call('HSET', KEYS[1], ARGV[2], 'true')
         return 0
         """, Long.class);
 
@@ -101,6 +103,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
     @Override
     public ChallengeIssueResult issue(
         String signupSessionId,
+        UserRole expectedRole,
         VerificationChannel channel,
         String codeDigest,
         String destinationDigest,
@@ -110,6 +113,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         Long result = redisTemplate.execute(
             ISSUE_SCRIPT,
             keys(signupSessionId, channel),
+            expectedRole.name(),
             channel.sessionField(),
             codeDigest,
             destinationDigest,
@@ -133,7 +137,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         VerificationChannel channel
     ) {
         Map<Object, Object> values = redisTemplate.opsForHash()
-            .entries(challengeKey(signupSessionId, channel));
+            .entries(SignupRedisKeys.challenge(signupSessionId, channel));
         if (values.isEmpty()) {
             return Optional.empty();
         }
@@ -149,6 +153,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
     @Override
     public ChallengeVerificationResult verifyAndConsume(
         String signupSessionId,
+        UserRole expectedRole,
         VerificationChannel channel,
         String generationId,
         String codeDigest,
@@ -156,7 +161,11 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
     ) {
         Long result = redisTemplate.execute(
             VERIFY_SCRIPT,
-            List.of(sessionKey(signupSessionId), challengeKey(signupSessionId, channel)),
+            List.of(
+                SignupRedisKeys.session(signupSessionId),
+                SignupRedisKeys.challenge(signupSessionId, channel)
+            ),
+            expectedRole.name(),
             channel.sessionField(),
             generationId,
             codeDigest,
@@ -178,29 +187,20 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
     public void cancel(String signupSessionId, VerificationChannel channel, String generationId) {
         redisTemplate.execute(
             CANCEL_SCRIPT,
-            List.of(challengeKey(signupSessionId, channel), cooldownKey(signupSessionId, channel)),
+            List.of(
+                SignupRedisKeys.challenge(signupSessionId, channel),
+                SignupRedisKeys.cooldown(signupSessionId, channel)
+            ),
             generationId
         );
     }
 
     private List<String> keys(String signupSessionId, VerificationChannel channel) {
         return List.of(
-            sessionKey(signupSessionId),
-            challengeKey(signupSessionId, channel),
-            cooldownKey(signupSessionId, channel)
+            SignupRedisKeys.session(signupSessionId),
+            SignupRedisKeys.challenge(signupSessionId, channel),
+            SignupRedisKeys.cooldown(signupSessionId, channel)
         );
-    }
-
-    private String sessionKey(String signupSessionId) {
-        return "signup:artist:{" + signupSessionId + "}";
-    }
-
-    private String challengeKey(String signupSessionId, VerificationChannel channel) {
-        return sessionKey(signupSessionId) + ":verification:" + channel.keyPart();
-    }
-
-    private String cooldownKey(String signupSessionId, VerificationChannel channel) {
-        return sessionKey(signupSessionId) + ":cooldown:" + channel.keyPart();
     }
 
     private String value(Map<Object, Object> values, String field) {

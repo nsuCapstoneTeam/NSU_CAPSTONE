@@ -12,43 +12,51 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 @Configuration
 public class SecurityConfig {
 
-    private static final RequestMatcher ARTIST_SIGNUP_ENDPOINTS = new OrRequestMatcher(
-        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/signup/artist"),
-        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/signup/artist/session"),
-        PathPatternRequestMatcher.pathPattern(
-            HttpMethod.POST,
-            "/api/v1/auth/signup/artist/session/email-verification/send"
-        ),
-        PathPatternRequestMatcher.pathPattern(
-            HttpMethod.POST,
-            "/api/v1/auth/signup/artist/session/email-verification/confirm"
-        ),
-        PathPatternRequestMatcher.pathPattern(
-            HttpMethod.POST,
-            "/api/v1/auth/signup/artist/session/phone-verification/send"
-        ),
-        PathPatternRequestMatcher.pathPattern(
-            HttpMethod.POST,
-            "/api/v1/auth/signup/artist/session/phone-verification/confirm"
-        ),
-        PathPatternRequestMatcher.pathPattern(
-            HttpMethod.PUT,
-            "/api/v1/auth/signup/artist/session/required-terms-agreement"
-        ),
-        PathPatternRequestMatcher.pathPattern(
-            HttpMethod.POST,
-            "/api/v1/auth/signup/artist/session/adult-confirmation"
-        )
+    private static final RequestMatcher PRE_LOGIN_SIGNUP_ENDPOINTS = new OrRequestMatcher(
+        signupEndpoints("artist"),
+        signupEndpoints("event-partner")
     );
+
+    private static RequestMatcher signupEndpoints(String rolePath) {
+        String basePath = "/api/v1/auth/signup/" + rolePath;
+        return new OrRequestMatcher(
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, basePath),
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, basePath + "/session"),
+            PathPatternRequestMatcher.pathPattern(
+                HttpMethod.POST,
+                basePath + "/session/email-verification/send"
+            ),
+            PathPatternRequestMatcher.pathPattern(
+                HttpMethod.POST,
+                basePath + "/session/email-verification/confirm"
+            ),
+            PathPatternRequestMatcher.pathPattern(
+                HttpMethod.POST,
+                basePath + "/session/phone-verification/send"
+            ),
+            PathPatternRequestMatcher.pathPattern(
+                HttpMethod.POST,
+                basePath + "/session/phone-verification/confirm"
+            ),
+            PathPatternRequestMatcher.pathPattern(
+                HttpMethod.PUT,
+                basePath + "/session/required-terms-agreement"
+            ),
+            PathPatternRequestMatcher.pathPattern(
+                HttpMethod.POST,
+                basePath + "/session/adult-confirmation"
+            )
+        );
+    }
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests(authorize -> authorize
-                .requestMatchers(ARTIST_SIGNUP_ENDPOINTS).permitAll()
+                .requestMatchers(PRE_LOGIN_SIGNUP_ENDPOINTS).permitAll()
                 .anyRequest().authenticated()
             )
-            .csrf(csrf -> csrf.ignoringRequestMatchers(ARTIST_SIGNUP_ENDPOINTS));
+            .csrf(csrf -> csrf.ignoringRequestMatchers(PRE_LOGIN_SIGNUP_ENDPOINTS));
 
         return http.build();
     }

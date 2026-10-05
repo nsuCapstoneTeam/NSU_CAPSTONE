@@ -29,7 +29,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 @Service
-public class ArtistSignupVerificationService {
+public class SignupVerificationService {
 
     private final SignupSessionStore signupSessionStore;
     private final VerificationChallengeStore challengeStore;
@@ -42,7 +42,7 @@ public class ArtistSignupVerificationService {
     private final SignupVerificationProperties properties;
     private final Clock clock;
 
-    public ArtistSignupVerificationService(
+    public SignupVerificationService(
         SignupSessionStore signupSessionStore,
         VerificationChallengeStore challengeStore,
         OtpCodeGenerator codeGenerator,
@@ -66,40 +66,44 @@ public class ArtistSignupVerificationService {
         this.clock = clock;
     }
 
-    public void sendEmailCode(String signupSessionId) {
-        SignupSession session = artistSession(signupSessionId);
+    public void sendEmailCode(String signupSessionId, UserRole expectedRole) {
+        SignupSession session = signupSession(signupSessionId, expectedRole);
         if (session.emailVerified()) {
             return;
         }
-        issueAndSend(session, VerificationChannel.EMAIL, session.email());
+        issueAndSend(session, expectedRole, VerificationChannel.EMAIL, session.email());
     }
 
-    public void confirmEmailCode(String signupSessionId, String code) {
-        SignupSession session = artistSession(signupSessionId);
+    public void confirmEmailCode(String signupSessionId, String code, UserRole expectedRole) {
+        SignupSession session = signupSession(signupSessionId, expectedRole);
         if (session.emailVerified()) {
             return;
         }
-        verify(session, VerificationChannel.EMAIL, session.email(), code);
+        verify(session, expectedRole, VerificationChannel.EMAIL, session.email(), code);
     }
 
-    public void sendPhoneCode(String signupSessionId) {
-        SignupSession session = artistSession(signupSessionId);
+    public void sendPhoneCode(String signupSessionId, UserRole expectedRole) {
+        SignupSession session = signupSession(signupSessionId, expectedRole);
         if (session.phoneVerified()) {
             return;
         }
-        issueAndSend(session, VerificationChannel.PHONE, session.phone());
+        issueAndSend(session, expectedRole, VerificationChannel.PHONE, session.phone());
     }
 
-    public void confirmPhoneCode(String signupSessionId, String code) {
-        SignupSession session = artistSession(signupSessionId);
+    public void confirmPhoneCode(String signupSessionId, String code, UserRole expectedRole) {
+        SignupSession session = signupSession(signupSessionId, expectedRole);
         if (session.phoneVerified()) {
             return;
         }
-        verify(session, VerificationChannel.PHONE, session.phone(), code);
+        verify(session, expectedRole, VerificationChannel.PHONE, session.phone(), code);
     }
 
-    public void agreeRequiredTerms(String signupSessionId, List<TermVersion> agreements) {
-        SignupSession session = artistSession(signupSessionId);
+    public void agreeRequiredTerms(
+        String signupSessionId,
+        List<TermVersion> agreements,
+        UserRole expectedRole
+    ) {
+        SignupSession session = signupSession(signupSessionId, expectedRole);
         if (session.requiredTermsAgreed()) {
             return;
         }
@@ -111,13 +115,17 @@ public class ArtistSignupVerificationService {
         if (!uniqueAgreements.containsAll(requiredTermsPolicy.requiredTerms())) {
             throw new BusinessException(ErrorCode.REQUIRED_TERMS_NOT_AGREED);
         }
-        if (!signupSessionStore.markRequiredTermsAgreed(signupSessionId)) {
+        if (!signupSessionStore.markRequiredTermsAgreed(signupSessionId, expectedRole)) {
             throw new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID);
         }
     }
 
-    public void confirmAdult(String signupSessionId, LocalDate birthDate) {
-        SignupSession session = artistSession(signupSessionId);
+    public void confirmAdult(
+        String signupSessionId,
+        LocalDate birthDate,
+        UserRole expectedRole
+    ) {
+        SignupSession session = signupSession(signupSessionId, expectedRole);
         if (session.adultConfirmed()) {
             return;
         }
@@ -127,13 +135,14 @@ public class ArtistSignupVerificationService {
         if (!adultEvidenceVerifier.isAdult(birthDate)) {
             throw new BusinessException(ErrorCode.ADULT_REQUIREMENT_NOT_MET);
         }
-        if (!signupSessionStore.markAdultConfirmed(signupSessionId)) {
+        if (!signupSessionStore.markAdultConfirmed(signupSessionId, expectedRole)) {
             throw new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID);
         }
     }
 
     private void issueAndSend(
         SignupSession session,
+        UserRole expectedRole,
         VerificationChannel channel,
         String destination
     ) {
@@ -150,6 +159,7 @@ public class ArtistSignupVerificationService {
 
         ChallengeIssueResult result = challengeStore.issue(
             session.signupSessionId(),
+            expectedRole,
             channel,
             codeDigest,
             destinationDigest,
@@ -189,6 +199,7 @@ public class ArtistSignupVerificationService {
 
     private void verify(
         SignupSession session,
+        UserRole expectedRole,
         VerificationChannel channel,
         String destination,
         String code
@@ -205,6 +216,7 @@ public class ArtistSignupVerificationService {
         );
         ChallengeVerificationResult result = challengeStore.verifyAndConsume(
             session.signupSessionId(),
+            expectedRole,
             channel,
             challenge.generationId(),
             candidateDigest,
@@ -223,10 +235,10 @@ public class ArtistSignupVerificationService {
         }
     }
 
-    private SignupSession artistSession(String signupSessionId) {
+    private SignupSession signupSession(String signupSessionId, UserRole expectedRole) {
         SignupSession session = signupSessionStore.findById(signupSessionId)
             .orElseThrow(() -> new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID));
-        if (session.role() != UserRole.ARTIST) {
+        if (session.role() != expectedRole) {
             throw new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID);
         }
         return session;

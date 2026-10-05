@@ -63,13 +63,13 @@ class ArtistSignupVerificationServiceTest {
     @Mock AdultEvidenceVerifier adultEvidenceVerifier;
 
     private OtpDigestService digestService;
-    private ArtistSignupVerificationService service;
+    private SignupVerificationService service;
 
     @BeforeEach
     void setUp() {
         SignupVerificationProperties properties = properties();
         digestService = new OtpDigestService(properties);
-        service = new ArtistSignupVerificationService(
+        service = new SignupVerificationService(
             signupSessionStore,
             challengeStore,
             codeGenerator,
@@ -87,10 +87,10 @@ class ArtistSignupVerificationServiceTest {
     @Test
     void sendsEmailCodeOnlyToSessionEmail() {
         when(codeGenerator.generate()).thenReturn(CODE);
-        when(challengeStore.issue(anyString(), any(), anyString(), anyString(), anyString(), any()))
+        when(challengeStore.issue(anyString(), any(), any(), anyString(), anyString(), anyString(), any()))
             .thenReturn(ChallengeIssueResult.ISSUED);
 
-        service.sendEmailCode(SESSION_ID);
+        service.sendEmailCode(SESSION_ID, UserRole.ARTIST);
 
         verify(emailSender).sendVerificationCode(EMAIL, CODE, Duration.ofMinutes(5));
         verify(smsSender, never()).sendVerificationCode(anyString(), anyString(), any());
@@ -99,23 +99,56 @@ class ArtistSignupVerificationServiceTest {
     @Test
     void sendsPhoneCodeOnlyToSessionPhone() {
         when(codeGenerator.generate()).thenReturn(CODE);
-        when(challengeStore.issue(anyString(), any(), anyString(), anyString(), anyString(), any()))
+        when(challengeStore.issue(anyString(), any(), any(), anyString(), anyString(), anyString(), any()))
             .thenReturn(ChallengeIssueResult.ISSUED);
 
-        service.sendPhoneCode(SESSION_ID);
+        service.sendPhoneCode(SESSION_ID, UserRole.ARTIST);
 
         verify(smsSender).sendVerificationCode(PHONE, CODE, Duration.ofMinutes(5));
     }
 
     @Test
+    void supportsEventPartnerWithTheSameVerificationFlow() {
+        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(eventPartnerSession()));
+        when(codeGenerator.generate()).thenReturn(CODE);
+        when(challengeStore.issue(anyString(), any(), any(), anyString(), anyString(), anyString(), any()))
+            .thenReturn(ChallengeIssueResult.ISSUED);
+
+        service.sendEmailCode(SESSION_ID, UserRole.EVENT_PARTNER);
+
+        verify(challengeStore).issue(
+            org.mockito.ArgumentMatchers.eq(SESSION_ID),
+            org.mockito.ArgumentMatchers.eq(UserRole.EVENT_PARTNER),
+            org.mockito.ArgumentMatchers.eq(VerificationChannel.EMAIL),
+            anyString(),
+            anyString(),
+            anyString(),
+            any()
+        );
+        verify(emailSender).sendVerificationCode(EMAIL, CODE, Duration.ofMinutes(5));
+    }
+
+    @Test
+    void rejectsRoleMismatchBeforeIssuingOrSendingChallenge() {
+        BusinessException exception = assertThrows(
+            BusinessException.class,
+            () -> service.sendEmailCode(SESSION_ID, UserRole.EVENT_PARTNER)
+        );
+
+        assertEquals(ErrorCode.SIGNUP_SESSION_INVALID, exception.getErrorCode());
+        verify(challengeStore, never()).issue(anyString(), any(), any(), anyString(), anyString(), anyString(), any());
+        verify(emailSender, never()).sendVerificationCode(anyString(), anyString(), any());
+    }
+
+    @Test
     void rejectsRequestDuringCooldown() {
         when(codeGenerator.generate()).thenReturn(CODE);
-        when(challengeStore.issue(anyString(), any(), anyString(), anyString(), anyString(), any()))
+        when(challengeStore.issue(anyString(), any(), any(), anyString(), anyString(), anyString(), any()))
             .thenReturn(ChallengeIssueResult.COOLDOWN_ACTIVE);
 
         BusinessException exception = assertThrows(
             BusinessException.class,
-            () -> service.sendEmailCode(SESSION_ID)
+            () -> service.sendEmailCode(SESSION_ID, UserRole.ARTIST)
         );
 
         assertEquals(ErrorCode.VERIFICATION_REQUEST_LIMIT_EXCEEDED, exception.getErrorCode());
@@ -125,14 +158,14 @@ class ArtistSignupVerificationServiceTest {
     @Test
     void cancelsChallengeWhenProviderDeliveryFails() {
         when(codeGenerator.generate()).thenReturn(CODE);
-        when(challengeStore.issue(anyString(), any(), anyString(), anyString(), anyString(), any()))
+        when(challengeStore.issue(anyString(), any(), any(), anyString(), anyString(), anyString(), any()))
             .thenReturn(ChallengeIssueResult.ISSUED);
         org.mockito.Mockito.doThrow(new VerificationDeliveryException("provider detail"))
             .when(emailSender).sendVerificationCode(EMAIL, CODE, Duration.ofMinutes(5));
 
         BusinessException exception = assertThrows(
             BusinessException.class,
-            () -> service.sendEmailCode(SESSION_ID)
+            () -> service.sendEmailCode(SESSION_ID, UserRole.ARTIST)
         );
 
         assertEquals(ErrorCode.VERIFICATION_DELIVERY_FAILED, exception.getErrorCode());
@@ -144,13 +177,14 @@ class ArtistSignupVerificationServiceTest {
         VerificationChallenge challenge = challenge();
         when(challengeStore.find(SESSION_ID, VerificationChannel.EMAIL))
             .thenReturn(Optional.of(challenge));
-        when(challengeStore.verifyAndConsume(anyString(), any(), anyString(), anyString(), anyString()))
+        when(challengeStore.verifyAndConsume(anyString(), any(), any(), anyString(), anyString(), anyString()))
             .thenReturn(ChallengeVerificationResult.VERIFIED);
 
-        service.confirmEmailCode(SESSION_ID, CODE);
+        service.confirmEmailCode(SESSION_ID, CODE, UserRole.ARTIST);
 
         verify(challengeStore).verifyAndConsume(
             SESSION_ID,
+            UserRole.ARTIST,
             VerificationChannel.EMAIL,
             GENERATION_ID,
             digestService.codeDigest(
@@ -168,19 +202,19 @@ class ArtistSignupVerificationServiceTest {
     void rejectsInvalidAndExpiredCodes() {
         when(challengeStore.find(SESSION_ID, VerificationChannel.EMAIL))
             .thenReturn(Optional.of(challenge()));
-        when(challengeStore.verifyAndConsume(anyString(), any(), anyString(), anyString(), anyString()))
+        when(challengeStore.verifyAndConsume(anyString(), any(), any(), anyString(), anyString(), anyString()))
             .thenReturn(ChallengeVerificationResult.INVALID);
 
         BusinessException invalid = assertThrows(
             BusinessException.class,
-            () -> service.confirmEmailCode(SESSION_ID, "000000")
+            () -> service.confirmEmailCode(SESSION_ID, "000000", UserRole.ARTIST)
         );
         assertEquals(ErrorCode.VERIFICATION_CODE_INVALID, invalid.getErrorCode());
 
         when(challengeStore.find(SESSION_ID, VerificationChannel.EMAIL)).thenReturn(Optional.empty());
         BusinessException expired = assertThrows(
             BusinessException.class,
-            () -> service.confirmEmailCode(SESSION_ID, CODE)
+            () -> service.confirmEmailCode(SESSION_ID, CODE, UserRole.ARTIST)
         );
         assertEquals(ErrorCode.VERIFICATION_CODE_EXPIRED, expired.getErrorCode());
     }
@@ -189,12 +223,12 @@ class ArtistSignupVerificationServiceTest {
     void mapsAttemptLimit() {
         when(challengeStore.find(SESSION_ID, VerificationChannel.EMAIL))
             .thenReturn(Optional.of(challenge()));
-        when(challengeStore.verifyAndConsume(anyString(), any(), anyString(), anyString(), anyString()))
+        when(challengeStore.verifyAndConsume(anyString(), any(), any(), anyString(), anyString(), anyString()))
             .thenReturn(ChallengeVerificationResult.ATTEMPT_LIMIT_EXCEEDED);
 
         BusinessException exception = assertThrows(
             BusinessException.class,
-            () -> service.confirmEmailCode(SESSION_ID, "000000")
+            () -> service.confirmEmailCode(SESSION_ID, "000000", UserRole.ARTIST)
         );
         assertEquals(ErrorCode.VERIFICATION_ATTEMPT_LIMIT_EXCEEDED, exception.getErrorCode());
     }
@@ -206,20 +240,21 @@ class ArtistSignupVerificationServiceTest {
             new TermVersion("privacy-policy", "v1")
         );
         when(requiredTermsPolicy.requiredTerms()).thenReturn(required);
-        when(signupSessionStore.markRequiredTermsAgreed(SESSION_ID)).thenReturn(true);
+        when(signupSessionStore.markRequiredTermsAgreed(SESSION_ID, UserRole.ARTIST)).thenReturn(true);
 
         BusinessException missing = assertThrows(
             BusinessException.class,
             () -> service.agreeRequiredTerms(
                 SESSION_ID,
-                List.of(new TermVersion("service-terms", "v1"))
+                List.of(new TermVersion("service-terms", "v1")),
+                UserRole.ARTIST
             )
         );
         assertEquals(ErrorCode.REQUIRED_TERMS_NOT_AGREED, missing.getErrorCode());
-        verify(signupSessionStore, never()).markRequiredTermsAgreed(SESSION_ID);
+        verify(signupSessionStore, never()).markRequiredTermsAgreed(SESSION_ID, UserRole.ARTIST);
 
-        service.agreeRequiredTerms(SESSION_ID, List.copyOf(required));
-        verify(signupSessionStore).markRequiredTermsAgreed(SESSION_ID);
+        service.agreeRequiredTerms(SESSION_ID, List.copyOf(required), UserRole.ARTIST);
+        verify(signupSessionStore).markRequiredTermsAgreed(SESSION_ID, UserRole.ARTIST);
     }
 
     @Test
@@ -228,16 +263,16 @@ class ArtistSignupVerificationServiceTest {
         LocalDate minorBirthDate = LocalDate.of(2008, 10, 6);
         when(adultEvidenceVerifier.isAdult(minorBirthDate)).thenReturn(false);
         when(adultEvidenceVerifier.isAdult(adultBirthDate)).thenReturn(true);
-        when(signupSessionStore.markAdultConfirmed(SESSION_ID)).thenReturn(true);
+        when(signupSessionStore.markAdultConfirmed(SESSION_ID, UserRole.ARTIST)).thenReturn(true);
 
         BusinessException minor = assertThrows(
             BusinessException.class,
-            () -> service.confirmAdult(SESSION_ID, minorBirthDate)
+            () -> service.confirmAdult(SESSION_ID, minorBirthDate, UserRole.ARTIST)
         );
         assertEquals(ErrorCode.ADULT_REQUIREMENT_NOT_MET, minor.getErrorCode());
 
-        service.confirmAdult(SESSION_ID, adultBirthDate);
-        verify(signupSessionStore).markAdultConfirmed(SESSION_ID);
+        service.confirmAdult(SESSION_ID, adultBirthDate, UserRole.ARTIST);
+        verify(signupSessionStore).markAdultConfirmed(SESSION_ID, UserRole.ARTIST);
     }
 
     private SignupSession session() {
@@ -250,6 +285,19 @@ class ArtistSignupVerificationServiceTest {
             false,
             false,
             UserRole.ARTIST
+        );
+    }
+
+    private SignupSession eventPartnerSession() {
+        return new SignupSession(
+            SESSION_ID,
+            EMAIL,
+            PHONE,
+            false,
+            false,
+            false,
+            false,
+            UserRole.EVENT_PARTNER
         );
     }
 

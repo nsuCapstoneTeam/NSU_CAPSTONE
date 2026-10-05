@@ -103,6 +103,31 @@ class ArtistSignupControllerTest {
     }
 
     @Test
+    void rejectsSevenCharacterPassword() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/signup/artist")
+                .contentType(APPLICATION_JSON)
+                .content("{\"signupSessionId\":\"session-id\",\"password\":\"1234567\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void acceptsEightCharacterPassword() throws Exception {
+        when(artistSignupService.signup("session-id", "12345678"))
+            .thenReturn(new ArtistSignupResponse(
+                USER_ID,
+                "artist@example.com",
+                UserRole.ARTIST,
+                UserStatus.ACTIVE
+            ));
+
+        mockMvc.perform(post("/api/v1/auth/signup/artist")
+                .contentType(APPLICATION_JSON)
+                .content("{\"signupSessionId\":\"session-id\",\"password\":\"12345678\"}"))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
     void returnsConflictForDuplicatedEmail() throws Exception {
         when(artistSignupService.signup("session-id", "plain-password"))
             .thenThrow(new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS));

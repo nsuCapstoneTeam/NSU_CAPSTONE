@@ -6,8 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.nsu.capstone.identity.application.ArtistSignupService;
+import com.nsu.capstone.identity.application.EventPartnerSignupService;
+import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
+import com.nsu.capstone.identity.domain.UserStatus;
 import com.nsu.capstone.identity.presentation.dto.ArtistSignupResponse;
+import com.nsu.capstone.identity.presentation.dto.EventPartnerSignupResponse;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.signup.SignupSession;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
@@ -29,6 +33,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
@@ -41,7 +46,9 @@ class VerificationChallengeStoreIntegrationTest {
     @Autowired OtpDigestService digestService;
     @Autowired StringRedisTemplate redisTemplate;
     @Autowired ArtistSignupService artistSignupService;
+    @Autowired EventPartnerSignupService eventPartnerSignupService;
     @Autowired UserRepository userRepository;
+    @Autowired PasswordEncoder passwordEncoder;
 
     @Test
     void storesOnlyDigestWithFiveMinuteBoundAndConsumesSuccessfulChallenge() {
@@ -60,6 +67,7 @@ class VerificationChallengeStoreIntegrationTest {
 
         ChallengeVerificationResult result = challengeStore.verifyAndConsume(
             session.signupSessionId(),
+            UserRole.ARTIST,
             VerificationChannel.EMAIL,
             data.generationId(),
             data.codeDigest(),
@@ -73,6 +81,7 @@ class VerificationChallengeStoreIntegrationTest {
             ChallengeVerificationResult.ALREADY_VERIFIED,
             challengeStore.verifyAndConsume(
                 session.signupSessionId(),
+                UserRole.ARTIST,
                 VerificationChannel.EMAIL,
                 data.generationId(),
                 data.codeDigest(),
@@ -98,6 +107,7 @@ class VerificationChallengeStoreIntegrationTest {
                 ChallengeVerificationResult.INVALID,
                 challengeStore.verifyAndConsume(
                     session.signupSessionId(),
+                    UserRole.ARTIST,
                     VerificationChannel.EMAIL,
                     data.generationId(),
                     wrongDigest,
@@ -109,6 +119,7 @@ class VerificationChallengeStoreIntegrationTest {
             ChallengeVerificationResult.ATTEMPT_LIMIT_EXCEEDED,
             challengeStore.verifyAndConsume(
                 session.signupSessionId(),
+                UserRole.ARTIST,
                 VerificationChannel.EMAIL,
                 data.generationId(),
                 wrongDigest,
@@ -131,6 +142,7 @@ class VerificationChallengeStoreIntegrationTest {
             ChallengeVerificationResult.EXPIRED,
             challengeStore.verifyAndConsume(
                 session.signupSessionId(),
+                UserRole.ARTIST,
                 VerificationChannel.EMAIL,
                 data.generationId(),
                 data.codeDigest(),
@@ -161,6 +173,7 @@ class VerificationChallengeStoreIntegrationTest {
             ChallengeIssueResult.ISSUED,
             challengeStore.issue(
                 session.signupSessionId(),
+                UserRole.ARTIST,
                 VerificationChannel.EMAIL,
                 second.codeDigest(),
                 second.destinationDigest(),
@@ -173,6 +186,7 @@ class VerificationChallengeStoreIntegrationTest {
             ChallengeVerificationResult.INVALID,
             challengeStore.verifyAndConsume(
                 session.signupSessionId(),
+                UserRole.ARTIST,
                 VerificationChannel.EMAIL,
                 first.generationId(),
                 first.codeDigest(),
@@ -183,6 +197,7 @@ class VerificationChallengeStoreIntegrationTest {
             ChallengeVerificationResult.VERIFIED,
             challengeStore.verifyAndConsume(
                 session.signupSessionId(),
+                UserRole.ARTIST,
                 VerificationChannel.EMAIL,
                 second.generationId(),
                 second.codeDigest(),
@@ -198,8 +213,14 @@ class VerificationChallengeStoreIntegrationTest {
         redisTemplate.expire(key, Duration.ofMinutes(10));
         Long before = redisTemplate.getExpire(key, TimeUnit.MILLISECONDS);
 
-        assertTrue(signupSessionStore.markRequiredTermsAgreed(session.signupSessionId()));
-        assertTrue(signupSessionStore.markAdultConfirmed(session.signupSessionId()));
+        assertTrue(signupSessionStore.markRequiredTermsAgreed(
+            session.signupSessionId(),
+            UserRole.ARTIST
+        ));
+        assertTrue(signupSessionStore.markAdultConfirmed(
+            session.signupSessionId(),
+            UserRole.ARTIST
+        ));
         Long after = redisTemplate.getExpire(key, TimeUnit.MILLISECONDS);
 
         assertNotNull(before);
@@ -242,7 +263,10 @@ class VerificationChallengeStoreIntegrationTest {
         SignupSession session = saveSession("expired-update");
         redisTemplate.delete(sessionKey(session.signupSessionId()));
 
-        assertFalse(signupSessionStore.markEmailVerified(session.signupSessionId()));
+        assertFalse(signupSessionStore.markEmailVerified(
+            session.signupSessionId(),
+            UserRole.ARTIST
+        ));
         assertEquals(
             ChallengeIssueResult.SESSION_INVALID,
             issueResult(session, VerificationChannel.EMAIL, CODE, "expired-generation")
@@ -250,12 +274,58 @@ class VerificationChallengeStoreIntegrationTest {
     }
 
     @Test
+    void rejectsExpectedRoleMismatchWithoutIssuingChallengeOrChangingState() {
+        SignupSession artistSession = saveSession("role-mismatch");
+
+        assertFalse(signupSessionStore.markEmailVerified(
+            artistSession.signupSessionId(),
+            UserRole.EVENT_PARTNER
+        ));
+        ChallengeData data = challengeData(
+            artistSession,
+            VerificationChannel.EMAIL,
+            CODE,
+            "mismatched-generation"
+        );
+        assertEquals(
+            ChallengeIssueResult.SESSION_INVALID,
+            challengeStore.issue(
+                artistSession.signupSessionId(),
+                UserRole.EVENT_PARTNER,
+                VerificationChannel.EMAIL,
+                data.codeDigest(),
+                data.destinationDigest(),
+                data.generationId(),
+                Instant.now()
+            )
+        );
+        assertFalse(Boolean.TRUE.equals(redisTemplate.hasKey(
+            challengeKey(artistSession.signupSessionId(), VerificationChannel.EMAIL)
+        )));
+        assertFalse(signupSessionStore.findById(artistSession.signupSessionId())
+            .orElseThrow()
+            .emailVerified());
+    }
+
+    @Test
     void completedConditionsEnableExistingFinalSignupFlow() {
         SignupSession session = saveSession("final-flow-" + UUID.randomUUID());
-        assertTrue(signupSessionStore.markEmailVerified(session.signupSessionId()));
-        assertTrue(signupSessionStore.markPhoneVerified(session.signupSessionId()));
-        assertTrue(signupSessionStore.markRequiredTermsAgreed(session.signupSessionId()));
-        assertTrue(signupSessionStore.markAdultConfirmed(session.signupSessionId()));
+        assertTrue(signupSessionStore.markEmailVerified(
+            session.signupSessionId(),
+            UserRole.ARTIST
+        ));
+        assertTrue(signupSessionStore.markPhoneVerified(
+            session.signupSessionId(),
+            UserRole.ARTIST
+        ));
+        assertTrue(signupSessionStore.markRequiredTermsAgreed(
+            session.signupSessionId(),
+            UserRole.ARTIST
+        ));
+        assertTrue(signupSessionStore.markAdultConfirmed(
+            session.signupSessionId(),
+            UserRole.ARTIST
+        ));
 
         ArtistSignupResponse response = artistSignupService.signup(
             session.signupSessionId(),
@@ -267,6 +337,51 @@ class VerificationChallengeStoreIntegrationTest {
         assertTrue(signupSessionStore.findById(session.signupSessionId()).isEmpty());
     }
 
+    @Test
+    void completesEventPartnerSignupThroughRedisChallengesAndPostgres() {
+        String unique = UUID.randomUUID().toString();
+        String email = "partner-" + unique + "@example.com";
+        String phone = "01098765432";
+        String password = "password";
+        String sessionId = eventPartnerSignupService.createSession(email, phone).signupSessionId();
+        SignupSession session = signupSessionStore.findById(sessionId).orElseThrow();
+        assertEquals(UserRole.EVENT_PARTNER, session.role());
+
+        ChallengeData emailChallenge = issue(
+            session,
+            VerificationChannel.EMAIL,
+            "111111",
+            "event-email-generation"
+        );
+        ChallengeData phoneChallenge = issue(
+            session,
+            VerificationChannel.PHONE,
+            "222222",
+            "event-phone-generation"
+        );
+        assertEquals(
+            ChallengeVerificationResult.VERIFIED,
+            verify(session, VerificationChannel.EMAIL, emailChallenge)
+        );
+        assertEquals(
+            ChallengeVerificationResult.VERIFIED,
+            verify(session, VerificationChannel.PHONE, phoneChallenge)
+        );
+        assertTrue(signupSessionStore.markRequiredTermsAgreed(sessionId, UserRole.EVENT_PARTNER));
+        assertTrue(signupSessionStore.markAdultConfirmed(sessionId, UserRole.EVENT_PARTNER));
+
+        EventPartnerSignupResponse response = eventPartnerSignupService.signup(sessionId, password);
+
+        User saved = userRepository.findById(response.userId()).orElseThrow();
+        assertEquals(7, saved.getId().version());
+        assertEquals(email, saved.getEmail());
+        assertEquals(phone, saved.getPhone());
+        assertEquals(UserRole.EVENT_PARTNER, saved.getRole());
+        assertEquals(UserStatus.ACTIVE, saved.getStatus());
+        assertTrue(passwordEncoder.matches(password, saved.getPasswordHash()));
+        assertTrue(signupSessionStore.findById(sessionId).isEmpty());
+    }
+
     private ChallengeVerificationResult verify(
         SignupSession session,
         VerificationChannel channel,
@@ -274,6 +389,7 @@ class VerificationChallengeStoreIntegrationTest {
     ) {
         return challengeStore.verifyAndConsume(
             session.signupSessionId(),
+            session.role(),
             channel,
             data.generationId(),
             data.codeDigest(),
@@ -292,6 +408,7 @@ class VerificationChallengeStoreIntegrationTest {
             ChallengeIssueResult.ISSUED,
             challengeStore.issue(
                 session.signupSessionId(),
+                session.role(),
                 channel,
                 data.codeDigest(),
                 data.destinationDigest(),
@@ -311,6 +428,7 @@ class VerificationChallengeStoreIntegrationTest {
         ChallengeData data = challengeData(session, channel, code, generationId);
         return challengeStore.issue(
             session.signupSessionId(),
+            session.role(),
             channel,
             data.codeDigest(),
             data.destinationDigest(),
@@ -350,7 +468,7 @@ class VerificationChallengeStoreIntegrationTest {
     }
 
     private String sessionKey(String sessionId) {
-        return "signup:artist:{" + sessionId + "}";
+        return "signup:session:{" + sessionId + "}";
     }
 
     private String challengeKey(String sessionId, VerificationChannel channel) {
