@@ -1,0 +1,163 @@
+/* 프로필 사진 (표시 + 꾸미기) */
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  overflow: hidden;
+}
+.avatar-default {
+  background: var(--tint);
+  color: var(--blue);
+}
+/* 이니셜 배경: 흰 글자와 대비가 충분한 색만 사용 */
+.avatar-initial {
+  color: #fff;
+  font-weight: 800;
+  line-height: 1;
+}
+.avatar-initial.blue,
+.avatar-swatch.blue span {
+  background: #0866df;
+}
+.avatar-initial.bright,
+.avatar-swatch.bright span {
+  background: #1682ff;
+}
+.avatar-initial.ink,
+.avatar-swatch.ink span {
+  background: #142840;
+}
+.avatar-initial.green,
+.avatar-swatch.green span {
+  background: #18775e;
+}
+
+.avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin: 6px 0 18px;
+}
+.avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+/* 파일 선택칸은 숨기고 라벨을 버튼처럼 (키보드 포커스는 유지) */
+.avatar-file {
+  position: relative;
+  cursor: pointer;
+}
+.avatar-file input {
+  position: absolute;
+  inset: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.avatar-file:focus-within {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* 이니셜 배경색 선택 */
+.avatar-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+.avatar-colors legend {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.avatar-swatch {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.avatar-swatch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.avatar-swatch span {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+.avatar-swatch:has(input:checked) {
+  border-color: var(--blue);
+  background: var(--tint);
+  color: var(--blue);
+}
+.avatar-swatch:has(input:focus-visible) {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* 편집 틀 */
+.avatar-crop-area {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+.avatar-crop {
+  position: relative;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--soft);
+  box-shadow: 0 0 0 1px var(--line);
+  cursor: grab;
+  touch-action: none;
+}
+.avatar-crop:active {
+  cursor: grabbing;
+}
+.avatar-crop:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 3px;
+}
+.avatar-crop img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: none;
+  user-select: none;
+  pointer-events: none;
+}
+.avatar-zoom {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 260px);
+  font-size: 13px;
+}
+.avatar-zoom input {
+  flex: 1;
+}
+.avatar-help {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* 마이페이지 위쪽 이름 띠의 사진 */
+.profile-strip .avatar {
+  box-shadow: 0 0 0 3px var(--surface);
+}
