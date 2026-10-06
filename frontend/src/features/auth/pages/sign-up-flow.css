@@ -1,0 +1,162 @@
+/* 공통 회원가입 화면 (SignUpFlow) 전용 스타일 */
+
+/* 체험 모드 안내 */
+.signup-mode-note {
+  margin: 0 0 6px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 가입 방법 카드 4개 (2열, 좁은 화면 1열) */
+.signup-methods {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.signup-methods legend {
+  grid-column: 1 / -1;
+  margin-bottom: 10px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.signup-method {
+  position: relative;
+  display: flex;
+  /* 전역 label 스타일(세로 배치)을 덮어써 표시·글자·꼬리표를 한 줄로 */
+  flex-direction: row;
+  align-items: center;
+  text-align: left;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.signup-method:hover {
+  border-color: var(--blue);
+}
+/* 라디오 동그라미는 숨기되 키보드 포커스는 받게 (opacity 0, 크기 1px) */
+.signup-method input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.signup-method:has(input:checked) {
+  border-color: var(--blue);
+  background: var(--tint);
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+.signup-method:has(input:focus-visible) {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.signup-method-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  font-size: 15px;
+  font-weight: 800;
+}
+/* 서비스별 표시 색 (로그인 화면 간편 로그인 버튼과 같은 색) */
+.signup-method-mark.email { background: var(--blue); color: var(--on-blue); }
+.signup-method-mark.google { background: #fff; color: #4285f4; border-color: #ccd5df; }
+.signup-method-mark.kakao { background: #fee500; color: #191919; }
+.signup-method-mark.naver { background: #03c75a; color: #fff; }
+.signup-method-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.signup-method-text strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+.signup-method-text small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.signup-method-badge {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.signup-coming {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* 간편가입 결과 안내 */
+.signup-oauth-note {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 13px;
+}
+.signup-oauth-note.is-verified {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+/* 인증 시작 버튼 / 진행 중 안내 */
+.signup-start-button {
+  width: 100%;
+  margin-top: 18px;
+}
+.signup-session-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.signup-flow-error {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+/* 이메일·비밀번호 입력칸 아래 도움말 */
+.signup-form small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* 가입 요청 실패 안내 */
+.signup-submit-error {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid #c93643;
+  border-radius: 12px;
+}
+.signup-submit-error p {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  .signup-methods {
+    grid-template-columns: 1fr;
+  }
+}
