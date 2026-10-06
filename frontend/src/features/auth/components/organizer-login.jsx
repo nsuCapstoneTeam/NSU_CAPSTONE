@@ -5,6 +5,7 @@ import './login-circle.css';
 import './login-backdrop.css';
 import RoleCd from './role-cd.jsx';
 import LoginSlideshow from './login-slideshow.jsx';
+import DevQuickLogin from './dev-quick-login.jsx';
 
 // 인증 API 연결 전 UI. 인증 성공이나 로그인 상태를 임의로 만들지 않습니다.
 // 행사 관계자 로그인 화면: 왼쪽 역할 전환 CD + 오른쪽 원형 로그인 창 (휴대폰 번호 → 인증번호)
@@ -91,6 +92,8 @@ export default function OrganizerLogin({ onBack, onSignUp, onChangeRole, onLogin
     >
       {/* 배경 사진 슬라이드쇼 */}
       <LoginSlideshow />
+      {/* 개발용 빠른 로그인: npm run dev에서만 보임 */}
+      {import.meta.env.DEV && <DevQuickLogin onLogin={onLogin} />}
       <button
         className="text-button"
         onClick={onBack}
