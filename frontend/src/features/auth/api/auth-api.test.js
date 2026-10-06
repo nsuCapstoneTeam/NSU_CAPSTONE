@@ -3,12 +3,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { AuthApiError, createAuthApi, messageFor } from './auth-api.js';
 
-// 가짜 fetch: 보낸 요청을 기록하고, 정해 둔 응답을 돌려줌
+// 가짜 fetch: 보낸 요청을 기록하고, 정해 둔 응답을 돌려줌 (body가 글자면 그대로, 객체면 JSON으로)
 function fakeFetch(status, body = '') {
   const calls = [];
   const fn = async (url, options) => {
     calls.push({ url, method: options.method, body: JSON.parse(options.body) });
-    return { ok: status < 400, status, text: async () => (body ? JSON.stringify(body) : '') };
+    const text = typeof body === 'string' ? body : JSON.stringify(body);
+    return { ok: status < 400, status, text: async () => text };
   };
   fn.calls = calls;
   return fn;
@@ -57,6 +58,27 @@ describe('서버 모드', () => {
       },
     });
     await assert.rejects(api.sendEmailCode('artist', 's1'), { code: 'NETWORK_ERROR' });
+  });
+
+  it('JSON이 아닌 오류 응답(HTML)도 SyntaxError 없이 AuthApiError로 바꾼다', async () => {
+    const api = createAuthApi({
+      mode: 'server',
+      fetchImpl: fakeFetch(400, '<html><body>Bad Request</body></html>'),
+    });
+    await assert.rejects(api.sendEmailCode('artist', 's1'), { name: 'AuthApiError', code: 'UNKNOWN_ERROR' });
+  });
+
+  it('백엔드가 꺼져 proxy가 본문 없는 500을 주면 NETWORK_ERROR로 안내한다', async () => {
+    const api = createAuthApi({ mode: 'server', fetchImpl: fakeFetch(500, '') });
+    await assert.rejects(api.sendEmailCode('artist', 's1'), { code: 'NETWORK_ERROR' });
+  });
+
+  it('백엔드가 보낸 500(code 있음)은 그 code를 그대로 쓴다', async () => {
+    const api = createAuthApi({
+      mode: 'server',
+      fetchImpl: fakeFetch(500, { code: 'INTERNAL_SERVER_ERROR', message: '...' }),
+    });
+    await assert.rejects(api.sendEmailCode('artist', 's1'), { code: 'INTERNAL_SERVER_ERROR' });
   });
 
   it('간편가입은 아직 서버 API가 없어 준비 중으로 안내한다', async () => {

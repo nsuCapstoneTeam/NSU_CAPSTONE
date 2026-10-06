@@ -52,6 +52,25 @@ export class AuthApiError extends Error {
 export const messageFor = (error) =>
   error instanceof AuthApiError ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR;
 
+// 글자를 JSON으로 바꾸되, 비어 있거나 JSON이 아니면 null
+function parseJson(text) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+// 실패 응답 → 오류 코드
+// 백엔드가 보낸 code가 있으면 그대로 쓰고, 없으면 상태 번호로 추측
+//   5xx + code 없음: 백엔드가 꺼져 있어 Vite proxy·게이트웨이가 대신 답한 경우가 대부분 → NETWORK_ERROR
+//   그 밖에 code 없음: UNKNOWN_ERROR
+export function errorCodeOf(data, status) {
+  if (typeof data?.code === 'string' && data.code) return data.code;
+  return status >= 500 ? 'NETWORK_ERROR' : 'UNKNOWN_ERROR';
+}
+
 // ── 서버 모드: fetch로 실제 백엔드 호출 ─────────────────────────
 function createServerApi(fetchImpl) {
   // JSON 요청을 보내고, 실패하면 AuthApiError를 던짐
@@ -67,10 +86,10 @@ function createServerApi(fetchImpl) {
       // 서버가 꺼져 있거나 인터넷이 끊긴 경우
       throw new AuthApiError('NETWORK_ERROR');
     }
-    // 202·204 응답은 본문이 비어 있으므로 글자로 먼저 읽고, 있을 때만 JSON으로 바꿈
-    const text = await response.text();
-    const data = text ? JSON.parse(text) : null;
-    if (!response.ok) throw new AuthApiError(data?.code || 'UNKNOWN_ERROR', response.status);
+    // 202·204 응답은 본문이 비어 있으므로 글자로 먼저 읽고, JSON일 때만 바꿈
+    // (Spring 기본 오류 화면·프록시 오류처럼 JSON이 아닌 응답이 와도 SyntaxError가 나지 않게)
+    const data = parseJson(await response.text().catch(() => ''));
+    if (!response.ok) throw new AuthApiError(errorCodeOf(data, response.status), response.status);
     return data;
   }
 
