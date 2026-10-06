@@ -1,0 +1,47 @@
+/* 개발용 빠른 로그인 (npm run dev에서만 보임) */
+.dev-quick-login {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px dashed var(--muted);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.dev-quick-login p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.dev-quick-login strong {
+  margin-right: 4px;
+  color: var(--ink);
+}
+.dev-quick-login div {
+  display: flex;
+  gap: 8px;
+}
+.dev-quick-login button {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--blue);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dev-quick-login button:hover {
+  border-color: var(--blue);
+  background: var(--tint);
+}
+.dev-quick-login button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}

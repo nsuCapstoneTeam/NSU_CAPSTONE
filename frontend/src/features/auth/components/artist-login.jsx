@@ -5,6 +5,7 @@ import './login-circle.css';
 import './login-backdrop.css';
 import RoleCd from './role-cd.jsx';
 import LoginSlideshow from './login-slideshow.jsx';
+import DevQuickLogin from './dev-quick-login.jsx';
 import Icon from '../../../components/common/icon.jsx';
 
 // 간편 로그인 버튼 목록 [키, 표시 이름]
@@ -90,6 +91,8 @@ export default function ArtistLogin({ onBack, onSignUp, onChangeRole, onLogin })
     <section className="artist-login has-cd" aria-labelledby="artist-login-title">
       {/* 배경 사진 슬라이드쇼 */}
       <LoginSlideshow />
+      {/* 개발용 빠른 로그인: npm run dev에서만 보임 */}
+      {import.meta.env.DEV && <DevQuickLogin onLogin={onLogin} />}
       <button className="text-button" onClick={onBack}>
         ← 홈으로 돌아가기
       </button>
