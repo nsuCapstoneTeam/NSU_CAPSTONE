@@ -364,7 +364,7 @@
 .auth-required > p:not(.eyebrow) { color: var(--muted); line-height: 1.9; }
 .signup-complete-actions,
 .auth-required > div:last-child { display: flex; justify-content: center; gap: 10px; margin: 28px 0 22px; }
-.signup-complete small { color: var(--muted); font-size: 10px; }
+.signup-complete small { color: var(--muted); font-size: 12px; }
 .auth-required > svg { color: var(--blue); }
 @media (max-width: 520px) {
   .signup-complete,
@@ -647,4 +647,27 @@
 }
 .signup-contact-details .signup-field-hint {
   margin: 0;
+}
+
+/* 인증번호 남은 유효시간 (유효시간과 재요청 시간이 다를 때만 표시) */
+.signup-verification-timer {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--blue);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 가입 완료: 다음에 할 일 목록 */
+.signup-complete-steps {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+  margin: 20px auto 4px;
+  padding: 16px 20px 16px 40px;
+  border-radius: 14px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 14px;
+  text-align: left;
 }
