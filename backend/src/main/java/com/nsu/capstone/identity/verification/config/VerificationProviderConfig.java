@@ -7,11 +7,14 @@ import com.nsu.capstone.identity.verification.port.SmsSender;
 import com.nsu.capstone.identity.verification.port.VerificationDeliveryException;
 import com.solapi.sdk.SolapiClient;
 import com.solapi.sdk.message.service.DefaultMessageService;
+import java.net.http.HttpClient;
+import java.time.Duration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 @Configuration(proxyBeanMethods = false)
@@ -80,12 +83,23 @@ public class VerificationProviderConfig {
     @EnableConfigurationProperties(ResendEmailProperties.class)
     static class ResendProviderConfig {
 
+        private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
+        private static final Duration READ_TIMEOUT = Duration.ofSeconds(10);
+
         @Bean
         ResendEmailSender resendEmailSender(
             RestClient.Builder restClientBuilder,
             ResendEmailProperties properties
         ) {
+            HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(CONNECT_TIMEOUT)
+                .build();
+            JdkClientHttpRequestFactory requestFactory =
+                new JdkClientHttpRequestFactory(httpClient);
+            requestFactory.setReadTimeout(READ_TIMEOUT);
+
             RestClient restClient = restClientBuilder.clone()
+                .requestFactory(requestFactory)
                 .baseUrl("https://api.resend.com")
                 .defaultHeader("Authorization", "Bearer " + properties.getApiKey())
                 .build();
