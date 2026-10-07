@@ -84,6 +84,21 @@ public enum ErrorCode {
         HttpStatus.BAD_REQUEST,
         "만 18세 이상만 가입할 수 있습니다."
     ),
+    INVALID_LOGIN_CREDENTIALS(
+        "INVALID_LOGIN_CREDENTIALS",
+        HttpStatus.UNAUTHORIZED,
+        "이메일 또는 비밀번호가 올바르지 않습니다."
+    ),
+    AUTHENTICATION_REQUIRED(
+        "AUTHENTICATION_REQUIRED",
+        HttpStatus.UNAUTHORIZED,
+        "인증이 필요합니다."
+    ),
+    ACCESS_DENIED(
+        "ACCESS_DENIED",
+        HttpStatus.FORBIDDEN,
+        "접근 권한이 없습니다."
+    ),
     INTERNAL_SERVER_ERROR(
         "INTERNAL_SERVER_ERROR",
         HttpStatus.INTERNAL_SERVER_ERROR,

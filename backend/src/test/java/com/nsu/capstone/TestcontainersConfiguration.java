@@ -1,5 +1,7 @@
 package com.nsu.capstone;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -10,6 +12,10 @@ import org.testcontainers.utility.DockerImageName;
 
 @TestConfiguration(proxyBeanMethods = false)
 class TestcontainersConfiguration {
+
+    private static final String TEST_JWT_SECRET = Base64.getEncoder().encodeToString(
+        "test-only-jwt-secret-at-least-32-bytes".getBytes(StandardCharsets.UTF_8)
+    );
 
     private static final DockerImageName POSTGRES_IMAGE =
         DockerImageName.parse("pgvector/pgvector:0.8.6-pg18")
@@ -42,6 +48,7 @@ class TestcontainersConfiguration {
                 "auth.signup-verification.required-terms",
                 () -> "service-terms:v1,privacy-policy:v1"
             );
+            registry.add("auth.jwt.access-token.secret", () -> TEST_JWT_SECRET);
         };
     }
 }
