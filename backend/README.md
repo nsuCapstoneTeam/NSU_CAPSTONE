@@ -53,6 +53,30 @@ SIGNUP_REQUIRED_TERMS=
 JWT_ACCESS_TOKEN_SECRET=
 JWT_ACCESS_TOKEN_TTL=PT30M
 
+OAUTH_ENABLED=false
+OAUTH_FRONTEND_REDIRECT_URI=
+GOOGLE_OAUTH_ENABLED=false
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+KAKAO_OAUTH_ENABLED=false
+KAKAO_CLIENT_ID=
+KAKAO_CLIENT_SECRET=
+KAKAO_ISSUER_URI=
+KAKAO_AUTHORIZATION_URI=
+KAKAO_TOKEN_URI=
+KAKAO_JWK_SET_URI=
+KAKAO_USER_INFO_URI=https://kapi.kakao.com/v1/oidc/userinfo
+KAKAO_CLIENT_AUTHENTICATION_METHOD=
+NAVER_OAUTH_ENABLED=false
+NAVER_CLIENT_ID=
+NAVER_CLIENT_SECRET=
+NAVER_ISSUER_URI=
+NAVER_AUTHORIZATION_URI=
+NAVER_TOKEN_URI=
+NAVER_JWK_SET_URI=
+NAVER_USER_INFO_URI=
+NAVER_CLIENT_AUTHENTICATION_METHOD=
+
 SOLAPI_ENABLED=false
 SOLAPI_API_KEY=
 SOLAPI_API_SECRET=
@@ -68,6 +92,16 @@ RESEND_FROM_EMAIL=
 `SIGNUP_REQUIRED_TERMS`는 `약관ID:버전`을 쉼표로 구분해 입력한다.
 `JWT_ACCESS_TOKEN_SECRET`에는 Base64로 인코딩한 256-bit 이상의 임의 비밀값을 입력하고 저장소에 커밋하지 않는다.
 `JWT_ACCESS_TOKEN_TTL`의 기본값은 `PT30M`이며 ISO-8601 Duration 형식으로 재정의할 수 있다.
+
+OAuth 로그인은 기본적으로 비활성화되어 있다. 먼저 `OAUTH_ENABLED=true`로 전체 OAuth 기능을 켠 뒤 사용할 Provider의 `GOOGLE_OAUTH_ENABLED`, `KAKAO_OAUTH_ENABLED`, `NAVER_OAUTH_ENABLED`만 `true`로 설정한다. 활성화된 Provider만 client credential과 Provider URI를 검증하고 `ClientRegistration`을 생성하므로, 비활성 Provider 설정은 비어 있어도 된다. 활성 Provider의 필수 설정이나 고정된 frontend 결과 redirect URL이 누락되면 애플리케이션 기동에 실패한다. 실제 client secret은 저장소에 커밋하지 않는다.
+
+각 Provider에는 다음 backend callback URI를 등록한다.
+
+```text
+{backend-base-url}/api/v1/auth/oauth/callback/{registrationId}
+```
+
+자동 테스트는 외부 OAuth Provider를 호출하지 않는다. 실제 authorization, callback, 동의 scope 및 OIDC claim은 Provider 개발자 콘솔 설정 후 별도의 수동 smoke test로 확인한다.
 
 회원가입 인증 코드를 실제 발송하려면 사용할 Provider를 명시적으로 활성화한다.
 

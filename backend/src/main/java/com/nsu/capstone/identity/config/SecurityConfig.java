@@ -2,6 +2,7 @@ package com.nsu.capstone.identity.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
@@ -14,6 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.savedrequest.NullRequestCache;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
@@ -24,6 +26,27 @@ public class SecurityConfig {
 
     private static final RequestMatcher LOGIN_ENDPOINT =
         PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login");
+
+    private static final RequestMatcher OAUTH_AUTHORIZATION_ENDPOINT =
+        PathPatternRequestMatcher.pathPattern(
+            HttpMethod.GET,
+            "/api/v1/auth/oauth/authorization/{provider}"
+        );
+
+    private static final RequestMatcher OAUTH_CALLBACK_ENDPOINT =
+        PathPatternRequestMatcher.pathPattern(
+            HttpMethod.GET,
+            "/api/v1/auth/oauth/callback/{registrationId}"
+        );
+
+    private static final RequestMatcher OAUTH_RESULT_ENDPOINT =
+        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/oauth/result");
+
+    private static final RequestMatcher OAUTH_PUBLIC_ENDPOINTS = new OrRequestMatcher(
+        OAUTH_AUTHORIZATION_ENDPOINT,
+        OAUTH_CALLBACK_ENDPOINT,
+        OAUTH_RESULT_ENDPOINT
+    );
 
     private static final RequestMatcher PRE_LOGIN_SIGNUP_ENDPOINTS = new OrRequestMatcher(
         signupEndpoints("artist"),
@@ -67,20 +90,27 @@ public class SecurityConfig {
         HttpSecurity http,
         JwtAuthenticationConverter jwtAuthenticationConverter,
         JsonAuthenticationEntryPoint authenticationEntryPoint,
-        JsonAccessDeniedHandler accessDeniedHandler
+        JsonAccessDeniedHandler accessDeniedHandler,
+        ObjectProvider<OAuthSecurityConfigurer> oauthSecurityConfigurerProvider
     ) throws Exception {
         http
             .authorizeHttpRequests(authorize -> authorize
-                .requestMatchers(PRE_LOGIN_SIGNUP_ENDPOINTS, LOGIN_ENDPOINT).permitAll()
+                .requestMatchers(
+                    PRE_LOGIN_SIGNUP_ENDPOINTS,
+                    LOGIN_ENDPOINT,
+                    OAUTH_PUBLIC_ENDPOINTS
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .csrf(csrf -> csrf.ignoringRequestMatchers(
                 PRE_LOGIN_SIGNUP_ENDPOINTS,
-                LOGIN_ENDPOINT
+                LOGIN_ENDPOINT,
+                OAUTH_RESULT_ENDPOINT
             ))
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
+            .requestCache(cache -> cache.requestCache(new NullRequestCache()))
             .exceptionHandling(exceptions -> exceptions
                 .authenticationEntryPoint(authenticationEntryPoint)
                 .accessDeniedHandler(accessDeniedHandler)
@@ -90,6 +120,12 @@ public class SecurityConfig {
                 .accessDeniedHandler(accessDeniedHandler)
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))
             );
+
+        OAuthSecurityConfigurer oauthSecurityConfigurer =
+            oauthSecurityConfigurerProvider.getIfAvailable();
+        if (oauthSecurityConfigurer != null) {
+            oauthSecurityConfigurer.configure(http);
+        }
 
         return http.build();
     }

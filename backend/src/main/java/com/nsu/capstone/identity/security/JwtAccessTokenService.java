@@ -2,6 +2,8 @@ package com.nsu.capstone.identity.security;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.UUID;
+import com.nsu.capstone.identity.domain.UserRole;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
@@ -25,11 +27,15 @@ public class JwtAccessTokenService {
     }
 
     public IssuedAccessToken issue(LoginPrincipal principal) {
+        return issue(principal.userId(), principal.role());
+    }
+
+    public IssuedAccessToken issue(UUID userId, UserRole role) {
         Instant issuedAt = clock.instant();
         Instant expiresAt = issuedAt.plus(properties.ttl());
         JwtClaimsSet claims = JwtClaimsSet.builder()
-            .subject(principal.userId().toString())
-            .claim("role", principal.role().name())
+            .subject(userId.toString())
+            .claim("role", role.name())
             .issuedAt(issuedAt)
             .expiresAt(expiresAt)
             .build();
