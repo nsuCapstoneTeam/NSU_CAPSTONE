@@ -10,6 +10,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -42,7 +43,6 @@ public class OAuthAuthenticationSuccessHandler implements AuthenticationSuccessH
         HttpServletResponse response,
         Authentication authentication
     ) throws IOException, ServletException {
-        String resultCode;
         try {
             if (!(authentication instanceof OAuth2AuthenticationToken oauthToken)
                 || !(oauthToken.getPrincipal() instanceof OidcUser oidcUser)) {
@@ -52,10 +52,20 @@ public class OAuthAuthenticationSuccessHandler implements AuthenticationSuccessH
                 oauthToken.getAuthorizedClientRegistrationId(),
                 oidcUser
             );
-            resultCode = loginService.completeAuthentication(identity);
+            redirectService.redirect(response, loginService.completeAuthentication(identity));
         } catch (BusinessException exception) {
-            resultCode = resultStore.saveError(exception.getErrorCode());
+            redirectWithErrorResult(response, exception.getErrorCode());
+        } catch (DataAccessException exception) {
+            redirectWithErrorResult(response, ErrorCode.OAUTH_AUTHENTICATION_FAILED);
         }
-        redirectService.redirect(response, resultCode);
+    }
+
+    private void redirectWithErrorResult(HttpServletResponse response, ErrorCode errorCode)
+        throws IOException {
+        try {
+            redirectService.redirect(response, resultStore.saveError(errorCode));
+        } catch (DataAccessException exception) {
+            redirectService.redirectWithFallbackError(response);
+        }
     }
 }

@@ -9,6 +9,8 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Component
 public class OAuthFrontendRedirectService {
 
+    private static final String FALLBACK_ERROR = "OAUTH_AUTHENTICATION_FAILED";
+
     private final OAuthProperties properties;
 
     public OAuthFrontendRedirectService(OAuthProperties properties) {
@@ -19,6 +21,16 @@ public class OAuthFrontendRedirectService {
         String redirectUri = UriComponentsBuilder
             .fromUriString(properties.getFrontendRedirectUri())
             .queryParam("code", resultCode)
+            .build()
+            .encode()
+            .toUriString();
+        response.sendRedirect(redirectUri);
+    }
+
+    public void redirectWithFallbackError(HttpServletResponse response) throws IOException {
+        String redirectUri = UriComponentsBuilder
+            .fromUriString(properties.getFrontendRedirectUri())
+            .queryParam("error", FALLBACK_ERROR)
             .build()
             .encode()
             .toUriString();
