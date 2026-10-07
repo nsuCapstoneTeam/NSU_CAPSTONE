@@ -99,6 +99,21 @@ public enum ErrorCode {
         HttpStatus.FORBIDDEN,
         "접근 권한이 없습니다."
     ),
+    OAUTH_AUTHENTICATION_FAILED(
+        "OAUTH_AUTHENTICATION_FAILED",
+        HttpStatus.UNAUTHORIZED,
+        "OAuth 인증에 실패했습니다."
+    ),
+    OAUTH_PROVIDER_UNAVAILABLE(
+        "OAUTH_PROVIDER_UNAVAILABLE",
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "OAuth Provider에 연결할 수 없습니다."
+    ),
+    OAUTH_RESULT_INVALID(
+        "OAUTH_RESULT_INVALID",
+        HttpStatus.BAD_REQUEST,
+        "유효하지 않은 OAuth 결과입니다."
+    ),
     INTERNAL_SERVER_ERROR(
         "INTERNAL_SERVER_ERROR",
         HttpStatus.INTERNAL_SERVER_ERROR,
