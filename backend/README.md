@@ -49,11 +49,29 @@ REDIS_PORT=6379
 
 SIGNUP_VERIFICATION_HMAC_SECRET=
 SIGNUP_REQUIRED_TERMS=
+
+SOLAPI_ENABLED=false
+SOLAPI_API_KEY=
+SOLAPI_API_SECRET=
+SOLAPI_FROM_NUMBER=
+
+RESEND_ENABLED=false
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=
 ```
 
 `POSTGRES_PASSWORD`에는 팀원별로 사용할 로컬 비밀번호를 직접 입력한다.
 `SIGNUP_VERIFICATION_HMAC_SECRET`에는 충분히 긴 임의의 비밀값을 입력하고 저장소에 커밋하지 않는다.
 `SIGNUP_REQUIRED_TERMS`는 `약관ID:버전`을 쉼표로 구분해 입력한다.
+
+회원가입 인증 코드를 실제 발송하려면 사용할 Provider를 명시적으로 활성화한다.
+
+- SMS는 SOLAPI를 사용한다. SOLAPI 콘솔에 발신번호를 먼저 등록하고 `SOLAPI_FROM_NUMBER`에 동일한 번호를 설정한다. SOLAPI에는 동일 수신번호 기준 5분당 3건의 Provider-side 제한이 별도로 적용된다.
+- 이메일은 Resend를 사용한다. Resend에서 발신 주소 또는 도메인 설정을 완료하고 `RESEND_FROM_EMAIL`에 해당 주소를 설정한다.
+- 실제 API Key와 Secret은 `.env` 또는 배포 환경의 Secret 저장소에서 주입하고 저장소에 커밋하지 않는다.
+- 자동 테스트에서는 실제 SOLAPI 또는 Resend 발송을 수행하지 않는다. 실제 발송 확인은 별도의 수동 smoke test로 수행한다.
+
+Provider가 비활성화된 기본 상태에서도 애플리케이션은 정상 기동하지만 인증 코드 발송 요청은 `VERIFICATION_DELIVERY_FAILED`로 실패한다. Provider를 활성화한 상태에서 필수 credential이 누락되면 애플리케이션 설정 오류로 기동에 실패한다.
 
 Spring Boot는 Docker Compose의 PostgreSQL 서비스를 인식하여 `.env`에 지정한 사용자, 비밀번호, 데이터베이스 및 포트를 자동으로 사용한다.
 
