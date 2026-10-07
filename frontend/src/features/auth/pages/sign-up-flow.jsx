@@ -434,6 +434,16 @@ export default function SignUpFlow({ role, navigate, notify, onComplete }) {
               <small id="signup-birth-hint">만 18세 이상인지 확인하는 데만 써요.</small>
             </label>
             <div className="signup-consent">
+              {/* 전체 동의: 필수 약관 두 항목을 한 번에 체크·해제 */}
+              <label className="signup-consent-all">
+                <input
+                  id="signup-terms-all"
+                  type="checkbox"
+                  checked={form.terms.service && form.terms.privacy}
+                  onChange={(e) => update('terms', { service: e.target.checked, privacy: e.target.checked })}
+                />{' '}
+                약관 전체 동의
+              </label>
               <label>
                 <input
                   id="signup-terms-service"
