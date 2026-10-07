@@ -6,6 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.stereotype.Component;
@@ -34,8 +35,11 @@ public class OAuthAuthenticationFailureHandler implements AuthenticationFailureH
         ErrorCode errorCode = hasCause(exception, RestClientException.class)
             ? ErrorCode.OAUTH_PROVIDER_UNAVAILABLE
             : ErrorCode.OAUTH_AUTHENTICATION_FAILED;
-        String resultCode = resultStore.saveError(errorCode);
-        redirectService.redirect(response, resultCode);
+        try {
+            redirectService.redirect(response, resultStore.saveError(errorCode));
+        } catch (DataAccessException dataAccessException) {
+            redirectService.redirectWithFallbackError(response);
+        }
     }
 
     private boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {
