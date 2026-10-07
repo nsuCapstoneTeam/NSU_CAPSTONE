@@ -4,7 +4,7 @@ import { ARTISTS } from './features/matching/matching.js';
 import { INITIAL_PROFILE, INITIAL_POSTS } from './data/demo-data.js';
 import useStoredState from './hooks/use-stored-state.js';
 import './app.css';
-import RoleSelection from './features/auth/components/role-selection.jsx';
+import SignupRoleSelect from './features/auth/components/signup-role-select.jsx';
 import OrganizerLogin from './features/auth/components/organizer-login.jsx';
 import ArtistLogin from './features/auth/components/artist-login.jsx';
 
@@ -307,13 +307,12 @@ export default function App() {
         )}{' '}
         {/* 회원가입 역할 선택 */}
         {page === 'signup-role' && (
-          <RoleSelection
-            mode="signup"
+          <SignupRoleSelect
             onSelect={(role) => {
               navigate(role === 'artist' ? 'artist-signup' : 'organizer-signup');
             }}
             onBack={() => navigate('artist-login')}
-            onSwitchMode={() => navigate('artist-login')}
+            onLogin={() => navigate('artist-login')}
           />
         )}{' '}
         {/* 역할별 로그인 화면 (CD를 누르면 서로 전환) */}
