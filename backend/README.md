@@ -50,6 +50,9 @@ REDIS_PORT=6379
 SIGNUP_VERIFICATION_HMAC_SECRET=
 SIGNUP_REQUIRED_TERMS=
 
+JWT_ACCESS_TOKEN_SECRET=
+JWT_ACCESS_TOKEN_TTL=PT30M
+
 SOLAPI_ENABLED=false
 SOLAPI_API_KEY=
 SOLAPI_API_SECRET=
@@ -63,6 +66,8 @@ RESEND_FROM_EMAIL=
 `POSTGRES_PASSWORD`에는 팀원별로 사용할 로컬 비밀번호를 직접 입력한다.
 `SIGNUP_VERIFICATION_HMAC_SECRET`에는 충분히 긴 임의의 비밀값을 입력하고 저장소에 커밋하지 않는다.
 `SIGNUP_REQUIRED_TERMS`는 `약관ID:버전`을 쉼표로 구분해 입력한다.
+`JWT_ACCESS_TOKEN_SECRET`에는 Base64로 인코딩한 256-bit 이상의 임의 비밀값을 입력하고 저장소에 커밋하지 않는다.
+`JWT_ACCESS_TOKEN_TTL`의 기본값은 `PT30M`이며 ISO-8601 Duration 형식으로 재정의할 수 있다.
 
 회원가입 인증 코드를 실제 발송하려면 사용할 Provider를 명시적으로 활성화한다.
 

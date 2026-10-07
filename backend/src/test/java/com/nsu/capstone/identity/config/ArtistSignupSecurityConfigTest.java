@@ -8,15 +8,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.nsu.capstone.identity.application.ArtistSignupService;
 import com.nsu.capstone.identity.application.EventPartnerSignupService;
+import com.nsu.capstone.identity.application.LoginService;
 import com.nsu.capstone.identity.application.SignupVerificationService;
 import com.nsu.capstone.identity.presentation.ArtistSignupController;
 import com.nsu.capstone.identity.presentation.ArtistSignupVerificationController;
 import com.nsu.capstone.identity.presentation.EventPartnerSignupController;
 import com.nsu.capstone.identity.presentation.EventPartnerSignupVerificationController;
+import com.nsu.capstone.identity.presentation.LoginController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -24,15 +29,24 @@ import org.springframework.test.web.servlet.MockMvc;
     ArtistSignupController.class,
     ArtistSignupVerificationController.class,
     EventPartnerSignupController.class,
-    EventPartnerSignupVerificationController.class
+    EventPartnerSignupVerificationController.class,
+    LoginController.class
 })
-@Import(SecurityConfig.class)
+@Import({
+    SecurityConfig.class,
+    JsonAuthenticationEntryPoint.class,
+    JsonAccessDeniedHandler.class
+})
 class ArtistSignupSecurityConfigTest {
 
     @Autowired MockMvc mockMvc;
     @MockitoBean ArtistSignupService artistSignupService;
     @MockitoBean EventPartnerSignupService eventPartnerSignupService;
     @MockitoBean SignupVerificationService verificationService;
+    @MockitoBean LoginService loginService;
+    @MockitoBean UserDetailsService userDetailsService;
+    @MockitoBean PasswordEncoder passwordEncoder;
+    @MockitoBean JwtDecoder jwtDecoder;
 
     @Test
     void permitsOnlyDeclaredPreLoginSignupEndpointsWithoutCsrfToken() throws Exception {
@@ -98,7 +112,15 @@ class ArtistSignupSecurityConfigTest {
                 .content("{\"signupSessionId\":\"session-id\",\"password\":\"password\"}"))
             .andExpect(status().isCreated());
 
+        mockMvc.perform(post("/api/v1/auth/login")
+                .contentType(APPLICATION_JSON)
+                .content("{\"email\":\"user@example.com\",\"password\":\"password\"}"))
+            .andExpect(status().isOk());
+
         mockMvc.perform(get("/api/v1/auth/signup/artist/session/email-verification/send"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/v1/auth/login"))
+            .andExpect(status().isUnauthorized());
     }
 }
