@@ -19,6 +19,11 @@ body.login-full-bleed {
   overflow-x: clip;
 }
 
+/* 아티스트·행사 관계자 로그인 화면에서 하단 푸터 숨김 */
+body.login-full-bleed .site-footer {
+  display: none;
+}
+
 /* 화면 왼쪽 끝 ~ 오른쪽 끝, 로그인 영역 위~아래 */
 .has-cd .login-slideshow {
   position: absolute;
