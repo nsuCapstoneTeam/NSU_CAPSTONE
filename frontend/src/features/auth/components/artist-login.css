@@ -6,7 +6,10 @@
   margin: 0 auto;
   padding: 32px 0 65px;
 }
-.artist-login > .text-button { font-size: 12px; }
+.artist-login > .text-button {
+  font-size: 12px;
+  translate: 5px 0;
+}
 /* 로그인 창 · 제목 · 소개 문구 */
 .artist-login-panel {
   margin-top: 24px;
