@@ -18,6 +18,7 @@ import AuthRequired from './features/auth/pages/auth-required-page.jsx';
 import MyPage from './features/my-page/my-page.jsx';
 import Board from './features/board/board-page.jsx';
 import { STATUS_VALUES as SCHEDULE_STATUSES } from './features/my-page/availability.js';
+import { isEventList } from './features/my-page/organizer-events.js';
 
 // 저장소에서 읽은 값이 올바른 형식인지 확인하는 함수들 (형식이 틀리면 초기값 사용)
 const arrayValue = (value) => Array.isArray(value);
@@ -89,6 +90,8 @@ export default function App() {
           (s.status === undefined || SCHEDULE_STATUSES.includes(s.status)),
       ),
   );
+  // 행사 관계자 '내 행사' 목록 (NSU-56, 서버 API 전까지 체험 저장)
+  const [events, setEvents, eventsError] = useStoredState('hm-mvp-events-v1', [], isEventList);
   const [saved, setSaved, savedError] = useStoredState(
     'hm-mvp-saved-v1',
     [],
@@ -243,6 +246,7 @@ export default function App() {
         profileError ||
         postsError ||
         scheduleError ||
+        eventsError ||
         savedError ||
         sessionError) && (
         <div
@@ -378,6 +382,8 @@ export default function App() {
             setProfile={setProfile}
             schedules={schedules}
             setSchedules={setSchedules}
+            events={events}
+            setEvents={setEvents}
             saved={saved}
             toggleSaved={toggleSaved}
             notify={setNotice}

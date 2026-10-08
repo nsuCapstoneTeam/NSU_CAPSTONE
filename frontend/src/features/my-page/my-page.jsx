@@ -6,6 +6,7 @@ import ProfileTab from './components/profile-tab.jsx';
 import AvailabilityPanel from './components/availability-panel.jsx';
 import WorksTab from './components/works-tab.jsx';
 import SavedArtistsTab from './components/saved-artists-tab.jsx';
+import EventsTab from './components/events-tab.jsx';
 import './my-page.css';
 
 // 역할별 탭 목록 [id, 탭 이름]
@@ -17,6 +18,7 @@ const TABS = {
   ],
   organizer: [
     ['profile', '프로필'],
+    ['events', '내 행사'],
     ['saved', '관심 아티스트'],
   ],
 };
@@ -28,6 +30,8 @@ export default function MyPage({
   setProfile,
   schedules,
   setSchedules,
+  events,
+  setEvents,
   saved,
   toggleSaved,
   notify,
@@ -74,6 +78,13 @@ export default function MyPage({
         active={tab === 'works'}
         profile={profile}
         setProfile={setProfile}
+        notify={notify}
+      />
+    ),
+    events: (
+      <EventsTab
+        events={events}
+        setEvents={setEvents}
         notify={notify}
       />
     ),

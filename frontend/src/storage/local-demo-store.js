@@ -6,6 +6,7 @@ const DEMO_KEYS = new Set([
   'hm-mvp-profile-v1',
   'hm-mvp-posts-v1',
   'hm-mvp-schedules-v1',
+  'hm-mvp-events-v1',
   'hm-mvp-saved-v1',
   'hm-mvp-session-v1',
 ]);
