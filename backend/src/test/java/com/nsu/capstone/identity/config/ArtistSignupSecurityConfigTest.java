@@ -7,6 +7,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.identity.application.ArtistSignupService;
+import com.nsu.capstone.identity.application.ArtistOAuthSignupService;
+import com.nsu.capstone.identity.presentation.ArtistOAuthSignupController;
+import com.nsu.capstone.identity.oauth.OAuthSignupStateStore.Prepared;
+import static org.mockito.Mockito.when;
 import com.nsu.capstone.identity.application.EventPartnerSignupService;
 import com.nsu.capstone.identity.application.LoginService;
 import com.nsu.capstone.identity.application.SignupVerificationService;
@@ -26,6 +30,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = {
+    ArtistOAuthSignupController.class,
     ArtistSignupController.class,
     ArtistSignupVerificationController.class,
     EventPartnerSignupController.class,
@@ -40,6 +45,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class ArtistSignupSecurityConfigTest {
 
     @Autowired MockMvc mockMvc;
+    @MockitoBean ArtistOAuthSignupService oauthSignup;
     @MockitoBean ArtistSignupService artistSignupService;
     @MockitoBean EventPartnerSignupService eventPartnerSignupService;
     @MockitoBean SignupVerificationService verificationService;
@@ -47,6 +53,22 @@ class ArtistSignupSecurityConfigTest {
     @MockitoBean UserDetailsService userDetailsService;
     @MockitoBean PasswordEncoder passwordEncoder;
     @MockitoBean JwtDecoder jwtDecoder;
+
+    @Test
+    void permitsOnlyExactArtistOAuthPostRoutes() throws Exception {
+        when(oauthSignup.prepare("session", "01012345678", null)).thenReturn(
+            new Prepared("session", "u@example.com", true, true));
+        mockMvc.perform(post("/api/v1/auth/signup/artist/oauth/session").contentType(APPLICATION_JSON)
+            .content("{\"oauthSignupSessionId\":\"session\",\"phone\":\"01012345678\"}"))
+            .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/auth/signup/artist/oauth").contentType(APPLICATION_JSON)
+            .content("{\"oauthSignupSessionId\":\"session\"}"))
+            .andExpect(status().isCreated());
+        mockMvc.perform(get("/api/v1/auth/signup/artist/oauth")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/auth/signup/artist/oauth/session")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/signup/event-partner/oauth")).andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/auth/signup/artist/oauth/other")).andExpect(status().isForbidden());
+    }
 
     @Test
     void permitsOnlyDeclaredPreLoginSignupEndpointsWithoutCsrfToken() throws Exception {

@@ -8,6 +8,7 @@ import com.nsu.capstone.identity.presentation.dto.ArtistSignupResponse;
 import com.nsu.capstone.identity.presentation.dto.CreateArtistSignupSessionResponse;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.signup.SignupSession;
+import com.nsu.capstone.identity.signup.SignupMethod;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -48,6 +49,9 @@ public class ArtistSignupService {
         SignupSession signupSession = signupSessionStore.findById(signupSessionId)
             .orElseThrow(() -> new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID));
 
+        if (signupSession.signupMethod() != SignupMethod.LOCAL) {
+            throw new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID);
+        }
         conditionsValidator.validate(signupSession, UserRole.ARTIST);
 
         if (userRepository.existsByEmail(signupSession.email())) {

@@ -143,6 +143,6 @@ class ArtistSignupControllerTest {
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.*", hasSize(2)))
             .andExpect(jsonPath("$.code").value("EMAIL_ALREADY_EXISTS"))
-            .andExpect(jsonPath("$.message").value("이미 가입된 이메일입니다."));
+            .andExpect(jsonPath("$.message").value("이미 가입된 이메일입니다. 기존 로그인 방식을 사용해 주세요."));
     }
 }

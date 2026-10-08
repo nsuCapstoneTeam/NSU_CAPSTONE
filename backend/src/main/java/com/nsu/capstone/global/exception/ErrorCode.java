@@ -12,7 +12,7 @@ public enum ErrorCode {
     EMAIL_ALREADY_EXISTS(
         "EMAIL_ALREADY_EXISTS",
         HttpStatus.CONFLICT,
-        "이미 가입된 이메일입니다."
+        "이미 가입된 이메일입니다. 기존 로그인 방식을 사용해 주세요."
     ),
     SIGNUP_SESSION_INVALID(
         "SIGNUP_SESSION_INVALID",
@@ -113,6 +113,14 @@ public enum ErrorCode {
         "OAUTH_RESULT_INVALID",
         HttpStatus.BAD_REQUEST,
         "유효하지 않은 OAuth 결과입니다."
+    ),
+    OAUTH_ACCOUNT_ALREADY_EXISTS(
+        "OAUTH_ACCOUNT_ALREADY_EXISTS", HttpStatus.CONFLICT,
+        "이미 가입된 OAuth 계정입니다. 기존 OAuth 로그인을 사용해 주세요."
+    ),
+    OAUTH_SIGNUP_IN_PROGRESS(
+        "OAUTH_SIGNUP_IN_PROGRESS", HttpStatus.CONFLICT,
+        "OAuth 가입이 처리 중입니다. 잠시 후 다시 시도해 주세요."
     ),
     INTERNAL_SERVER_ERROR(
         "INTERNAL_SERVER_ERROR",
