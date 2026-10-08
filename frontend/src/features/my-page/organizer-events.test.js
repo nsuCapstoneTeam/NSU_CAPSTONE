@@ -94,8 +94,16 @@ test('지난 행사 판정과 예산 표시', () => {
   assert.equal(budgetText({ budgetMin: 50, budgetMax: 50 }), '50만 원');
 });
 
-test('저장소 형식 검사', () => {
-  assert.equal(isEventList([{ ...normalizeEvent(FULL), id: 'e1' }]), true);
+test('저장소 형식 검사: 화면에서 쓰는 칸이 하나라도 없거나 형식이 틀리면 거부', () => {
+  const saved = { ...normalizeEvent(FULL), id: 'e1' };
+  assert.equal(isEventList([saved]), true);
+  assert.equal(isEventList([]), true);
   assert.equal(isEventList([{ name: '이름만' }]), false);
   assert.equal(isEventList('x'), false);
+  // 화면이 toLocaleString()을 부르는 숫자 칸이 빠진 예전 데이터
+  const { audience, ...noAudience } = saved;
+  assert.equal(isEventList([noAudience]), false);
+  assert.equal(isEventList([{ ...saved, budgetMax: '50' }]), false);
+  assert.equal(isEventList([{ ...saved, venue: undefined }]), false);
+  assert.equal(isEventList([{ ...saved, genres: [1] }]), false);
 });

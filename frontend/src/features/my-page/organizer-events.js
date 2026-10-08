@@ -136,16 +136,32 @@ export function budgetText(event) {
 }
 
 // 저장소에서 읽은 행사 목록이 올바른 형식인지 (형식이 틀리면 빈 목록 사용)
+// 화면(events-tab.jsx)에서 쓰는 칸을 모두 확인해야, 예전 형식이나 손상된 값 때문에 탭이 깨지지 않음
+const STRING_KEYS = [
+  'id',
+  'name',
+  'eventType',
+  'date',
+  'startTime',
+  'endTime',
+  'venue',
+  'region',
+  'artistType',
+  'description',
+  'visibility',
+];
+const NUMBER_KEYS = ['budgetMin', 'budgetMax', 'audience', 'performanceMinutes'];
+
 export function isEventList(value) {
   return (
     Array.isArray(value) &&
     value.every(
       (e) =>
         e &&
-        typeof e.id === 'string' &&
-        typeof e.name === 'string' &&
-        typeof e.date === 'string' &&
-        Array.isArray(e.genres),
+        STRING_KEYS.every((key) => typeof e[key] === 'string') &&
+        NUMBER_KEYS.every((key) => Number.isFinite(e[key])) &&
+        Array.isArray(e.genres) &&
+        e.genres.every((g) => typeof g === 'string'),
     )
   );
 }
