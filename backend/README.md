@@ -103,6 +103,8 @@ OAuth 로그인은 기본적으로 비활성화되어 있다. 먼저 `OAUTH_ENAB
 
 자동 테스트는 외부 OAuth Provider를 호출하지 않는다. 실제 authorization, callback, 동의 scope 및 OIDC claim은 Provider 개발자 콘솔 설정 후 별도의 수동 smoke test로 확인한다.
 
+ARTIST OAuth 최종 가입의 API 계약·세션 연결·실패 복구는 [API 문서](../docs/api/artist-oauth-signup.md)에 기록한다.
+
 회원가입 인증 코드를 실제 발송하려면 사용할 Provider를 명시적으로 활성화한다.
 
 - SMS는 SOLAPI를 사용한다. SOLAPI 콘솔에 발신번호를 먼저 등록하고 `SOLAPI_FROM_NUMBER`에 동일한 번호를 설정한다. SOLAPI에는 동일 수신번호 기준 5분당 3건의 Provider-side 제한이 별도로 적용된다.

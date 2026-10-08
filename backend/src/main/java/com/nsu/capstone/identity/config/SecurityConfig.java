@@ -49,6 +49,10 @@ public class SecurityConfig {
     );
 
     private static final RequestMatcher PRE_LOGIN_SIGNUP_ENDPOINTS = new OrRequestMatcher(
+        PathPatternRequestMatcher.pathPattern(
+            HttpMethod.POST, "/api/v1/auth/signup/artist/oauth/session"),
+        PathPatternRequestMatcher.pathPattern(
+            HttpMethod.POST, "/api/v1/auth/signup/artist/oauth"),
         signupEndpoints("artist"),
         signupEndpoints("event-partner")
     );

@@ -11,6 +11,7 @@ public class OAuthProperties implements InitializingBean {
     private boolean enabled;
     private Duration authorizationRequestTtl = Duration.ofMinutes(5);
     private Duration signupSessionTtl = Duration.ofMinutes(30);
+    private Duration signupClaimLease = Duration.ofSeconds(30);
     private Duration resultTtl = Duration.ofMinutes(1);
     private String frontendRedirectUri;
     private Provider google = new Provider();
@@ -21,6 +22,7 @@ public class OAuthProperties implements InitializingBean {
     public void afterPropertiesSet() {
         requirePositive(authorizationRequestTtl, "authorization-request-ttl");
         requirePositive(signupSessionTtl, "signup-session-ttl");
+        requirePositive(signupClaimLease, "signup-claim-lease");
         requirePositive(resultTtl, "result-ttl");
         if (!enabled) {
             return;
@@ -89,6 +91,14 @@ public class OAuthProperties implements InitializingBean {
 
     public void setSignupSessionTtl(Duration signupSessionTtl) {
         this.signupSessionTtl = signupSessionTtl;
+    }
+
+    public Duration getSignupClaimLease() {
+        return signupClaimLease;
+    }
+
+    public void setSignupClaimLease(Duration signupClaimLease) {
+        this.signupClaimLease = signupClaimLease;
     }
 
     public Duration getResultTtl() {

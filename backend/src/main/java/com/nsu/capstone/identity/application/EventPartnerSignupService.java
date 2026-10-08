@@ -8,6 +8,7 @@ import com.nsu.capstone.identity.presentation.dto.CreateEventPartnerSignupSessio
 import com.nsu.capstone.identity.presentation.dto.EventPartnerSignupResponse;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.signup.SignupSession;
+import com.nsu.capstone.identity.signup.SignupMethod;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -52,6 +53,9 @@ public class EventPartnerSignupService {
         SignupSession signupSession = signupSessionStore.findById(signupSessionId)
             .orElseThrow(() -> new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID));
 
+        if (signupSession.signupMethod() != SignupMethod.LOCAL) {
+            throw new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID);
+        }
         conditionsValidator.validate(signupSession, UserRole.EVENT_PARTNER);
 
         if (userRepository.existsByEmail(signupSession.email())) {

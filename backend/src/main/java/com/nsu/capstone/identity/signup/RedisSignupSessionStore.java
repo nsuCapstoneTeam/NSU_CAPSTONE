@@ -44,7 +44,8 @@ public class RedisSignupSessionStore implements SignupSessionStore {
             "phoneVerified", Boolean.toString(signupSession.phoneVerified()),
             "requiredTermsAgreed", Boolean.toString(signupSession.requiredTermsAgreed()),
             "adultConfirmed", Boolean.toString(signupSession.adultConfirmed()),
-            "role", signupSession.role().name()
+            "role", signupSession.role().name(),
+            "signupMethod", signupSession.signupMethod().name()
         ));
 
         Boolean expirationSet = redisTemplate.expire(key, properties.ttl());
@@ -70,7 +71,8 @@ public class RedisSignupSessionStore implements SignupSessionStore {
             Boolean.parseBoolean(value(values, "phoneVerified")),
             Boolean.parseBoolean(value(values, "requiredTermsAgreed")),
             Boolean.parseBoolean(value(values, "adultConfirmed")),
-            UserRole.valueOf(value(values, "role"))
+            UserRole.valueOf(value(values, "role")),
+            SignupMethod.valueOf((String) values.getOrDefault("signupMethod", "LOCAL"))
         ));
     }
 
