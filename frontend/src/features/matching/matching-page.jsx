@@ -16,13 +16,42 @@ import PageHeading from '../../components/common/page-heading.jsx';
 import Select from '../../components/common/select.jsx';
 import Tag from '../../components/common/tag.jsx';
 import ArtistResult from './components/artist-result.jsx';
+import { eventOptionLabel, eventToSearch } from './event-to-search.js';
+import { sortEvents } from '../my-page/organizer-events.js';
+import { toDateKey } from '../my-page/availability.js';
 
 // 행사 관계자용 매칭 화면: 왼쪽 행사 조건 입력, 오른쪽 추천 결과
 // search: 마지막으로 검색한 조건 (App이 보관하므로 다른 화면에 다녀와도 결과 유지)
-export default function Matching({ saved, toggleSaved, search, setSearch }) {
+// events: 마이페이지 '내 행사'에 등록한 행사 목록, onGoToEvents: 내 행사 탭으로 이동 (NSU-95)
+export default function Matching({ saved, toggleSaved, search, setSearch, events = [], onGoToEvents }) {
   // form: 입력 중인 조건 (검색 버튼을 눌러야 search에 반영)
   const [form, setForm] = useState(search || DEFAULT_EVENT);
   const [error, setError] = useState('');
+  // 불러온 행사 id와 안내 { name, skipped }
+  const [importId, setImportId] = useState('');
+  const [importNote, setImportNote] = useState(null);
+  const today = toDateKey(new Date());
+  // 다가오는 행사를 먼저(가까운 날짜순), 지난 행사는 맨 아래로
+  const sortedEvents = sortEvents(events);
+  const importOptions = [
+    ...sortedEvents.filter((ev) => ev.date >= today),
+    ...sortedEvents.filter((ev) => ev.date < today),
+  ];
+
+  // 내 행사 하나를 골라 매칭 조건 칸을 채움 ('' = 직접 입력으로 되돌림, 입력값은 그대로)
+  function importEvent(id) {
+    setImportId(id);
+    if (!id) {
+      setImportNote(null);
+      return;
+    }
+    const event = events.find((ev) => ev.id === id);
+    if (!event) return;
+    const { search: next, skipped } = eventToSearch(event, form);
+    setForm(next);
+    setError('');
+    setImportNote({ name: event.name, skipped });
+  }
   const resultsRef = useRef(null);
   // 저장된 검색 조건이 있을 때만 추천 계산
   const report = search ? matchArtists(search) : null;
@@ -60,10 +89,67 @@ export default function Matching({ saved, toggleSaved, search, setSearch }) {
                 onClick={() => {
                   setForm({ ...DEFAULT_EVENT });
                   setError('');
+                  setImportId('');
+                  setImportNote(null);
                 }}
               >
                 예시 채우기
               </button>
+            </div>
+            {/* 내 행사에서 불러오기 (요구사항 AI-MATCH-050: 매칭은 등록한 행사 기준) */}
+            <div className="match-import">
+              {events.length ? (
+                <>
+                  <label>
+                    내 행사에서 불러오기
+                    <select
+                      value={importId}
+                      onChange={(e) => importEvent(e.target.value)}
+                    >
+                      <option value="">직접 입력</option>
+                      {importOptions.map((ev) => (
+                        <option
+                          key={ev.id}
+                          value={ev.id}
+                        >
+                          {eventOptionLabel(ev, today)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {importNote && (
+                    <div
+                      className="match-import-note"
+                      role="status"
+                    >
+                      <p>
+                        <strong>'{importNote.name}'</strong> 정보를 불러왔어요. 분위기·템포·리듬은
+                        행사 정보에 없어서 직접 골라 주세요.
+                      </p>
+                      {importNote.skipped.length > 0 && (
+                        <ul>
+                          {importNote.skipped.map((text) => (
+                            <li key={text}>{text}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="match-import-empty">
+                  마이페이지에 행사를 등록해 두면 여기서 바로 불러올 수 있어요.{' '}
+                  {onGoToEvents && (
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={onGoToEvents}
+                    >
+                      행사 등록하러 가기 →
+                    </button>
+                  )}
+                </p>
+              )}
             </div>
             <label>
               원하는 음악과 분위기

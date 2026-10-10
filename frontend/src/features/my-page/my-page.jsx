@@ -35,9 +35,13 @@ export default function MyPage({
   saved,
   toggleSaved,
   notify,
+  initialTab = 'profile',
 }) {
   const tabs = TABS[profile.role] || TABS.artist;
-  const [tab, setTab] = useState('profile');
+  // 처음 열 탭 (예: 매칭 화면의 '행사 등록하러 가기' → 내 행사). 역할에 없는 탭이면 프로필
+  const [tab, setTab] = useState(() =>
+    tabs.some(([id]) => id === initialTab) ? initialTab : 'profile',
+  );
   const tabRefs = useRef({});
 
   // 탭 목록에서 ←/→, Home/End로 탭 이동 (화면낭독기 탭 패턴)
