@@ -676,6 +676,33 @@ svg {
 .form-heading .text-button {
   font-size: 11px;
 }
+/* 매칭 화면: 내 행사에서 불러오기 (NSU-95) */
+.match-import {
+  margin-bottom: 20px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--soft);
+}
+.match-import-note {
+  margin-top: 10px;
+  font-size: 12px;
+}
+.match-import-note p,
+.match-import-empty {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.match-import-note ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.match-import-empty .text-button {
+  padding: 2px 0;
+  font-size: 12px;
+}
 /* 입력 요소 공통 (라벨 · 입력칸 · 선택 상자 · 여러 줄 입력) */
 label {
   display: flex;

@@ -99,6 +99,8 @@ export default function App() {
   );
   // search: 마지막 매칭 검색 조건, notice: 화면 위 알림 문구
   const [search, setSearch] = useState(null);
+  // 마이페이지를 열 때 처음 보여 줄 탭 (보통 프로필)
+  const [myPageTab, setMyPageTab] = useState('profile');
   const [notice, setNotice] = useState('');
   // 로그인이 필요한 화면에서 로그인하러 갔다면, 로그인 후 그 화면으로 돌아감
   const [returnTo, setReturnTo] = useState(null);
@@ -113,6 +115,7 @@ export default function App() {
   // 화면 전환: 로그인 흐름 밖으로 나가면 돌아갈 화면을 잊고, 맨 위로 스크롤 후 본문에 포커스
   function navigate(next) {
     if (!LOGIN_FLOW_PAGES.includes(next)) setReturnTo(null);
+    setMyPageTab('profile');
     // 가입을 새로 시작하면 기존 로그인은 끝냄.
     // (로그인한 행사 관계자가 아티스트로 가입해도 예전 역할로 매칭 화면이 열리지 않도록)
     if (SIGNUP_START_PAGES.includes(next) && session) setSession(null);
@@ -120,6 +123,11 @@ export default function App() {
     setNotice('');
     window.scrollTo({ top: 0, behavior: 'instant' });
     setTimeout(() => mainRef.current?.focus(), 0);
+  }
+  // 매칭 화면에서 '행사 등록하러 가기' → 마이페이지 '내 행사' 탭으로 (NSU-95)
+  function openMyEvents() {
+    navigate('mypage');
+    setMyPageTab('events');
   }
   // 관심 아티스트 저장/해제 토글
   function toggleSaved(id) {
@@ -291,6 +299,8 @@ export default function App() {
             toggleSaved={toggleSaved}
             search={search}
             setSearch={setSearch}
+            events={events}
+            onGoToEvents={openMyEvents}
           />
         )}{' '}
         {/* 아티스트이거나 비로그인이면 행사 관계자 로그인 안내 */}
@@ -384,6 +394,7 @@ export default function App() {
             setSchedules={setSchedules}
             events={events}
             setEvents={setEvents}
+            initialTab={myPageTab}
             saved={saved}
             toggleSaved={toggleSaved}
             notify={setNotice}
