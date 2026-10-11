@@ -73,6 +73,16 @@ describe('토큰 보관함', () => {
     assert.deepEqual(store.authHeader(), {});
   });
 
+  it('저장할 때 저장소를 한 번만 가져온다', () => {
+    const storage = memoryStorage();
+    let calls = 0;
+    // 첫 호출만 저장소를 주고, 그 뒤로는 없음 → 두 번 부르면 결과가 어긋남
+    const store = createTokenStore(() => (calls++ === 0 ? storage : null), () => 0);
+    assert.equal(store.save(LOGIN), true);
+    assert.equal(calls, 1);
+    assert.ok(storage.getItem(TOKEN_KEY));
+  });
+
   it('백엔드 역할을 화면 역할로 바꾼다', () => {
     assert.equal(toAppRole('ARTIST'), 'artist');
     assert.equal(toAppRole('EVENT_PARTNER'), 'organizer');

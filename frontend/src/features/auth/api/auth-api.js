@@ -197,7 +197,10 @@ function createDemoApi(wait) {
     },
     async login(email, password, { roleHint = 'artist' } = {}) {
       await wait();
-      if (password.length < 8) throw new AuthApiError('INVALID_LOGIN_CREDENTIALS', 401);
+      // null·undefined·빈 값도 서버처럼 '로그인 정보가 틀림'으로 통일
+      const validEmail = typeof email === 'string' && email.trim() !== '';
+      const validPassword = typeof password === 'string' && password.length >= 8;
+      if (!validEmail || !validPassword) throw new AuthApiError('INVALID_LOGIN_CREDENTIALS', 401);
       return {
         accessToken: `demo-token-${Date.now()}`,
         tokenType: 'Bearer',

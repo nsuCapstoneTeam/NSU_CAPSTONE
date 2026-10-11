@@ -42,9 +42,11 @@ export function createTokenStore(getStorage, now = () => Date.now()) {
   function save({ accessToken, expiresIn, userId, role }) {
     const value = { accessToken, expiresAt: now() + Number(expiresIn) * 1000, userId, role };
     if (!isSaved(value)) return false;
+    const target = storage(); // 한 번만 가져와서 같은 저장소에 쓰고 결과를 판단
+    if (!target) return false;
     try {
-      storage()?.setItem(TOKEN_KEY, JSON.stringify(value));
-      return Boolean(storage());
+      target.setItem(TOKEN_KEY, JSON.stringify(value));
+      return true;
     } catch {
       return false;
     }
@@ -52,7 +54,7 @@ export function createTokenStore(getStorage, now = () => Date.now()) {
 
   // 저장된 토큰 읽기. 없거나 깨졌거나 만료됐으면 지우고 null
   function read() {
-    let value = null;
+    let value;
     try {
       value = JSON.parse(storage()?.getItem(TOKEN_KEY) ?? 'null');
     } catch {

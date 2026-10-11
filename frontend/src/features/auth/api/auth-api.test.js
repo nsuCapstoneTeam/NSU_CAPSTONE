@@ -183,4 +183,10 @@ describe('로그인 (데모 모드)', () => {
   it('8자보다 짧은 비밀번호는 틀린 것으로 처리한다', async () => {
     await assert.rejects(api.login('a@b.com', 'short'), { code: 'INVALID_LOGIN_CREDENTIALS' });
   });
+
+  it('이메일이나 비밀번호가 비어 있으면(null·undefined 포함) 오류 없이 거절한다', async () => {
+    for (const [email, password] of [[null, 'password1'], [undefined, 'password1'], ['  ', 'password1'], ['a@b.com', null], ['a@b.com', undefined]]) {
+      await assert.rejects(api.login(email, password), { code: 'INVALID_LOGIN_CREDENTIALS' });
+    }
+  });
 });
