@@ -1,4 +1,4 @@
-// 회원가입 API 창구 (백엔드 PR #99·#101·#103 기준)
+// 회원가입·로그인 API 창구 (백엔드 PR #99·#101·#103 가입, #114 로그인 기준)
 // 화면은 이 파일의 함수만 부르고, 실제 서버와 데모 중 어디로 갈지는 여기서 정합니다.
 //   - server: Vite 개발 서버가 /api 요청을 백엔드(localhost:8080)로 넘김 (vite.config.js)
 //   - demo  : 서버 없이 같은 규칙으로 흉내 (기본값)
@@ -32,6 +32,9 @@ export const ERROR_MESSAGES = {
   REQUIRED_TERMS_NOT_AGREED: '모든 필수 약관에 동의해 주세요.',
   ADULT_CONFIRMATION_EVIDENCE_INVALID: '생년월일을 다시 확인해 주세요.',
   ADULT_REQUIREMENT_NOT_MET: '만 18세 이상만 가입할 수 있어요.',
+  INVALID_LOGIN_CREDENTIALS: '이메일 또는 비밀번호가 맞지 않아요.',
+  AUTHENTICATION_REQUIRED: '로그인이 필요해요. 다시 로그인해 주세요.',
+  ACCESS_DENIED: '이 기능을 쓸 수 있는 권한이 없어요.',
   INTERNAL_SERVER_ERROR: '서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요.',
   NETWORK_ERROR: '서버에 연결할 수 없어요. 백엔드가 켜져 있는지 확인해 주세요.',
   OAUTH_NOT_READY: '간편가입은 아직 준비 중이에요. 이메일로 가입해 주세요.',
@@ -114,6 +117,8 @@ function createServerApi(fetchImpl) {
     confirmAdult: (role, signupSessionId, birthDate) =>
       request(`${base(role)}/session/adult-confirmation`, { signupSessionId, birthDate }),
     signUp: (role, signupSessionId, password) => request(base(role), { signupSessionId, password }),
+    // 일반 로그인 (NSU-78): 성공하면 { accessToken, tokenType, expiresIn, userId, role, status }
+    login: (email, password) => request('/api/v1/auth/login', { email, password }),
     // 간편가입 API(NSU-75)는 아직 없음
     startOAuth: async () => {
       throw new AuthApiError('OAUTH_NOT_READY');
@@ -123,6 +128,8 @@ function createServerApi(fetchImpl) {
 
 // ── 데모 모드: 서버 없이 백엔드와 같은 규칙으로 흉내 ──────────────
 // taken@example.com 은 이미 가입된 이메일로 처리합니다. 인증번호는 숫자 6자리면 통과합니다.
+// 로그인: 비밀번호가 8자 이상이면 통과(실제 비밀번호는 8자 이상이라 그보다 짧으면 틀린 것으로 처리).
+//         역할은 로그인 화면에서 넘겨준 roleHint를 따릅니다 (서버 모드에서는 서버가 알려 준 역할 사용).
 export const DEMO_TAKEN_EMAIL = 'taken@example.com';
 
 function createDemoApi(wait) {
@@ -185,6 +192,21 @@ function createDemoApi(wait) {
         userId: `demo-user-${Date.now()}`,
         email: s.email,
         role: role === 'artist' ? 'ARTIST' : 'EVENT_PARTNER',
+        status: 'ACTIVE',
+      };
+    },
+    async login(email, password, { roleHint = 'artist' } = {}) {
+      await wait();
+      // null·undefined·빈 값도 서버처럼 '로그인 정보가 틀림'으로 통일
+      const validEmail = typeof email === 'string' && email.trim() !== '';
+      const validPassword = typeof password === 'string' && password.length >= 8;
+      if (!validEmail || !validPassword) throw new AuthApiError('INVALID_LOGIN_CREDENTIALS', 401);
+      return {
+        accessToken: `demo-token-${Date.now()}`,
+        tokenType: 'Bearer',
+        expiresIn: 3600,
+        userId: `demo-user-${email.trim().toLowerCase()}`,
+        role: roleHint === 'organizer' ? 'EVENT_PARTNER' : 'ARTIST',
         status: 'ACTIVE',
       };
     },

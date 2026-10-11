@@ -87,6 +87,40 @@ describe('서버 모드', () => {
   });
 });
 
+describe('로그인 (서버 모드)', () => {
+  it('이메일·비밀번호를 로그인 주소로 보내고 토큰 응답을 돌려준다', async () => {
+    const body = {
+      accessToken: 'jwt',
+      tokenType: 'Bearer',
+      expiresIn: 3600,
+      userId: 'u1',
+      role: 'EVENT_PARTNER',
+      status: 'ACTIVE',
+    };
+    const fetchImpl = fakeFetch(200, body);
+    const api = createAuthApi({ mode: 'server', fetchImpl });
+    assert.deepEqual(await api.login('a@b.com', 'password1'), body);
+    assert.deepEqual(fetchImpl.calls[0], {
+      url: '/api/v1/auth/login',
+      method: 'POST',
+      body: { email: 'a@b.com', password: 'password1' },
+    });
+  });
+
+  it('틀린 이메일·비밀번호(401)는 INVALID_LOGIN_CREDENTIALS 안내로 바꾼다', async () => {
+    const api = createAuthApi({
+      mode: 'server',
+      fetchImpl: fakeFetch(401, { code: 'INVALID_LOGIN_CREDENTIALS', message: '...' }),
+    });
+    await assert.rejects(api.login('a@b.com', 'wrongpass'), (error) => {
+      assert.equal(error.code, 'INVALID_LOGIN_CREDENTIALS');
+      assert.equal(error.status, 401);
+      assert.equal(messageFor(error), '이메일 또는 비밀번호가 맞지 않아요.');
+      return true;
+    });
+  });
+});
+
 describe('데모 모드', () => {
   const demo = () => createAuthApi({ mode: 'demo', delayMs: 0 });
 
@@ -132,5 +166,27 @@ describe('데모 모드', () => {
     const api = demo();
     assert.equal((await api.startOAuth('google')).emailVerified, true);
     assert.deepEqual(await api.startOAuth('kakao'), { provider: 'kakao', email: '', emailVerified: false });
+  });
+});
+
+describe('로그인 (데모 모드)', () => {
+  const api = createAuthApi({ mode: 'demo', delayMs: 0 });
+
+  it('비밀번호가 8자 이상이면 로그인 화면의 역할로 로그인된다', async () => {
+    const artist = await api.login('a@b.com', 'password1');
+    assert.equal(artist.role, 'ARTIST');
+    assert.equal(artist.tokenType, 'Bearer');
+    const organizer = await api.login('a@b.com', 'password1', { roleHint: 'organizer' });
+    assert.equal(organizer.role, 'EVENT_PARTNER');
+  });
+
+  it('8자보다 짧은 비밀번호는 틀린 것으로 처리한다', async () => {
+    await assert.rejects(api.login('a@b.com', 'short'), { code: 'INVALID_LOGIN_CREDENTIALS' });
+  });
+
+  it('이메일이나 비밀번호가 비어 있으면(null·undefined 포함) 오류 없이 거절한다', async () => {
+    for (const [email, password] of [[null, 'password1'], [undefined, 'password1'], ['  ', 'password1'], ['a@b.com', null], ['a@b.com', undefined]]) {
+      await assert.rejects(api.login(email, password), { code: 'INVALID_LOGIN_CREDENTIALS' });
+    }
   });
 });
