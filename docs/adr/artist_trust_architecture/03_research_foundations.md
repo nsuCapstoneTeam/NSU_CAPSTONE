@@ -666,7 +666,7 @@ $$
 Risk Signal 창 = 최근 관측 14건
 No-show report grace = 15 minutes
 Artist response window = 48 hours
-신규 노출 = TOP 5 아래 1칸, 신규 기간 90일, 5위 대비 10점
+신규 아티스트 표시 = 신규 기간 90일 (Top10 아래 노출 칸·10위 대비 10점은 2026-10-06 폐지)
 ```
 
 이 값들은 **연구 개념을 실제 졸업작품 도메인에 적용하기 위해 선택한 V1 정책값**입니다.

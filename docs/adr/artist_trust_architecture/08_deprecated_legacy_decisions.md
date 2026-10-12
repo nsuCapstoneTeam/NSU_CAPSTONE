@@ -244,6 +244,12 @@ Evidence = LIMITED
 
 **폐기 이유:** 심각도를 점수 밖으로 옮기면서 Risk Signal이 심각도를 전달하는 유일한 장치가 되었습니다. V1은 `RECENT_NO_SHOW`, `LATE_ARTIST_CANCELLATION`, `REPEATED_ARTIST_CANCELLATION` 3종을 최근 관측 14건 창으로 운영합니다. 활동 부족은 Activity Freshness, 계정 제재는 Eligibility, 평판 조작 의심은 관리자 전용 신호로 분리했습니다([D41](./04_final_policy_decisions.md#d41-risk-signal-rules)).
 
+### 16. Top10 아래 신규 노출 슬롯 (D21)
+
+**이전 결정:** Top10에 신규 아티스트의 곡이 없고, 신규 아티스트 곡의 최고 종합 적합도가 10위 곡 대비 10점 이내이면 Top10 아래 별도 1칸에 그 곡을 보여 줬습니다. 신규 아티스트의 곡이 retrieval 상위 밖에 있어도 채점되도록 신규 retrieval을 따로 호출했습니다.
+
+**폐기 이유:** 2026-10-06 추천 순위를 음악 유사도 하나로 바꾸고 추천 결과를 최대 100곡으로 늘렸습니다([서버 협의 012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)). 신규 아티스트의 곡도 목록 안에서 노출될 수 있어, 별도 칸의 판정 규칙과 신규 retrieval이 필요 없어졌습니다. 신규 아티스트의 곡은 목록 안에서 '신규' 표시로 구분합니다. 2026-10-06 팀 상의로 정했습니다(기록: 김동엽).
+
 ---
 
 ## 현재 기준
@@ -257,6 +263,6 @@ Evidence = LIMITED
 - [공연 결과 카탈로그](./05_trust_event_catalog.md)
 - [DB / 구현 Roadmap](./06_database_and_implementation_roadmap.md)
 - [γ 결정 ADR](./09_reliability_decay_gamma.md)
-- [용어집 CONTEXT.md](../../../CONTEXT.md)
+- [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
 
 과거 정책과 현재 정책이 다르면 **현재 `reliability-v1` 문서를 우선**합니다. `docs/architecture/artist-reliability-v2.md`도 이 문서들로 대체되었습니다.

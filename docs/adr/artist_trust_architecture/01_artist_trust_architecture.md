@@ -6,7 +6,7 @@
 
 # 0. 용어
 
-이 문서 묶음은 Linear SSOT의 용어를 따르며, 정의는 저장소 루트의 [CONTEXT.md](../../../CONTEXT.md)에 있습니다.
+이 문서 묶음은 Linear SSOT의 용어를 따르며, 정의는 Linear의 [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)에 있습니다.
 
 | 용어 | 뜻 | 쓰지 않는 표현 |
 |---|---|---|
@@ -119,7 +119,7 @@ flowchart LR
 
     Verification --> Eligibility["검증·자격(Verified / Eligibility)"]
 
-    Eligibility --> Matching["매칭 점수(Matching Score)"]
+    Eligibility --> Matching["음악 유사도(Music Similarity)"]
 
     Matching --> Ranker["설명 가능한 랭커(Explainable Ranker)"]
 
@@ -153,7 +153,7 @@ flowchart LR
   ↓
 실제 활동 가능한 사람인지 확인 (Verification, Eligibility)
   ↓
-행사 적합도로 순위 결정 (Matching Score)
+행사 요청과의 음악 유사도로 순위 결정
   ↓
 판정이 끝난 공연 결과로 Artist Reliability 계산
   ↓
@@ -725,13 +725,12 @@ Rights                VERIFIED
 
 ---
 
-## 13.3 신규 노출 슬롯
+## 13.3 신규 아티스트 표시
 
-Reliability가 순위에 들어가지 않으므로 이력이 없다는 이유로 순위가 내려가지는 않습니다. 신규 노출 슬롯은 신뢰 보정이 아니라 첫 매칭 기회를 주기 위한 노출 정책입니다.
+Reliability가 순위에 들어가지 않으므로 이력이 없다는 이유로 순위가 내려가지는 않습니다. 신규 아티스트의 곡은 추천 결과 목록 안에서 '신규' 표시로 구분하며, 이 표시는 순위에 영향을 주지 않습니다.
 
 - 신규 아티스트: 매칭 성사 0건이고 Artist 활성화 후 90일 이내
-- TOP 5 아래 별도 1칸
-- 기본 TOP 5에 신규가 없고, PASS/FAIL Filter를 통과한 신규 후보의 최고 종합 적합도가 5위 대비 10점 이내일 때만 표시
+- Top10 아래 별도 1칸에 신규 아티스트의 곡을 보여 주던 신규 노출 슬롯은 2026-10-06 폐지했습니다([서버 협의 012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba))
 - 상세: [D21](./04_final_policy_decisions.md#d21-exploration)
 
 ---
@@ -821,40 +820,28 @@ V1에서는 리뷰와 별점을 **Artist Reliability 계산에서 제외**합니
 
 **상태: [확정]**
 
-현재 추천 시스템은 다음 흐름을 가집니다. 순위는 Matching Score만으로 정하고, Trust Profile은 추천 결과에 표시만 합니다([D39](./04_final_policy_decisions.md#d39-display-only)).
+현재 추천 시스템은 다음 흐름을 가집니다([서버 협의 012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba), 2026-10-10 Accepted). 순위는 AI 서버가 음악 유사도만으로 정하고, Trust Profile은 추천 결과에 표시만 합니다([D39](./04_final_policy_decisions.md#d39-display-only)).
 
 ```mermaid
 flowchart TD
 
     Partner["EVENT_PARTNER"]
 
-    Partner --> Request["매칭 요청(Matching Request)"]
+    Partner --> Request["행사 요청(Event 원문)"]
 
-    Request --> Eligibility["PASS/FAIL 필터(Eligibility Filter)"]
+    Request --> Eligibility["PASS/FAIL 필터(Eligibility Filter, Spring)"]
 
-    Eligibility --> Retrieval["후보 검색(Candidate Retrieval)"]
+    Eligibility --> Pairs["ACTIVE 곡 (music_id, audioRevision)"]
 
-    Retrieval --> DB["PostgreSQL + pgvector"]
+    Pairs --> AI["AI 서버: 요청 해석 · CLAP 음악 유사도 정렬"]
 
-    DB --> Candidates["후보(Candidates)"]
+    AI --- DB["PostgreSQL + pgvector"]
 
-    Candidates --> Requirement["요구사항 매처(Requirement Matcher)"]
-    Candidates --> Music["음악 매처(Music Matcher)"]
-
-    Requirement --> Business["비즈니스 적합도(Business Fit)"]
-    Requirement --> Performance["공연 적합도(Performance Fit)"]
-
-    Music --> CLAP["CLAP 유사도(CLAP Similarity)"]
-
-    Business --> Ranker["설명 가능한 랭커(Matching Score)"]
-    Performance --> Ranker
-    CLAP --> Ranker
-
-    Ranker --> Top5["TOP 5 + 신규 노출 1칸"]
+    AI --> Result["추천 결과(최대 100곡) · 상세 정보"]
 
     Ledger["공연 결과 원장(Outcome Ledger)"] --> TrustProfile["Trust Profile (조회 시 계산)"]
 
-    Top5 --> Response["추천 응답(Recommendation Response)"]
+    Result --> Response["추천 응답(Recommendation Response)"]
     TrustProfile -->|표시 전용| Response
 ```
 
@@ -1070,19 +1057,19 @@ Activity Freshness
   마지막 공연 시점, 최근 12개월 공연 횟수 (Risk Signal 아님)
 
 추천 순위
-  Matching Score만 사용, Trust Profile은 표시 전용
+  음악 유사도만 사용, Trust Profile은 표시 전용
 
-신규 노출
-  TOP 5 아래 별도 1칸
-  신규 = 매칭 성사 0건 + 활성화 90일 이내, 5위 대비 10점 이내
+신규 아티스트
+  별도 노출 칸 없음(2026-10-06 폐지), 목록 안 '신규' 표시
+  신규 = 매칭 성사 0건 + 활성화 90일 이내
 
 Review / Behavior
   Reliability 계산과 순위에서 제외, 설명용
 
 Hard Filter
   Reliability만으로 제거하지 않음
-  Eligibility는 04 §18 Hard Filter 기준을 따름
-  (필수 Verification / 계정 상태 / 일정 / 필수 계약·동의 / 활성 Suspension)
+  Eligibility는 SSOT AI-MATCH-051을 따름 (04 §18)
+  (계정/인증 상태 / 일정 / 활동 정지 / 저작권 / 지역 이동 / 예산)
 
 판정
   판정이 끝난 공연 결과만 원장에 기록

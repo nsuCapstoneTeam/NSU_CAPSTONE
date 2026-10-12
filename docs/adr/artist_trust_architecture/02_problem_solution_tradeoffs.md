@@ -485,7 +485,7 @@ Artist Reliability = 근거 부족 (관측 0건)
 확신 수준          = 낮음
 ```
 
-Reliability는 추천 순위에 쓰지 않으므로 이력이 없다는 이유로 순위가 내려가지 않습니다. 첫 매칭 기회를 위해 TOP 5 아래 별도 1칸의 신규 노출 슬롯을 둡니다([D21](./04_final_policy_decisions.md#d21-exploration)).
+Reliability는 추천 순위에 쓰지 않으므로 이력이 없다는 이유로 순위가 내려가지 않습니다. 첫 매칭 기회를 위해 두었던 Top10 아래 신규 노출 슬롯은 2026-10-06 폐지했고, 신규 아티스트의 곡은 추천 결과 목록 안에서 '신규' 표시로 구분합니다([D21](./04_final_policy_decisions.md#d21-exploration)).
 
 <a id="d08-temporal-decay"></a>
 
@@ -746,7 +746,7 @@ Trust Evidence
 | D04 | 다차원 Trust Profile | 확정 |
 | D05 | Music Fit / Trust 분리 | 확정 |
 | D06 | Event 우선 보존 | 설계 방향 |
-| D07 | 근거 부족 시 Reliability 숨김 + 신규 노출 슬롯 | V1 확정 |
+| D07 | 근거 부족 시 Reliability 숨김 + 신규 아티스트 표시(신규 노출 슬롯은 2026-10-06 폐지) | V1 확정 |
 | D08 | 관측 순서 기반 감쇠, γ = 0.95 | V1 확정 |
 | D09 | Reliability / 확신 수준 분리, 관측 건수 3 / 10 경계 | V1 확정 |
 | D10 | Beta + PeerTrust-inspired Hybrid, 이진 관측 | V1 확정 |

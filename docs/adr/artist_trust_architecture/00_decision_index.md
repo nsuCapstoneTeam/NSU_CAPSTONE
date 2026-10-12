@@ -4,7 +4,7 @@
 
 > 기준 경로: `docs/adr/artist_trust_architecture/`  
 > 현재 정책 버전: `reliability-v1` (2026-10-03 개정, 이전 `trust-v1`)  
-> 용어: [CONTEXT.md](../../../CONTEXT.md)
+> 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
 
 ---
 
@@ -42,7 +42,7 @@
 | D18 | 공동 귀책을 비율로 수치화하지 않음 | [바로가기](./04_final_policy_decisions.md#d18-shared-fault) |
 | D19 | Review는 Reliability 계산 제외 | [바로가기](./04_final_policy_decisions.md#d19-review) |
 | D20 | Behavior Signal은 Reliability·순위 제외 | [바로가기](./04_final_policy_decisions.md#d20-behavior) |
-| D21 | 신규 노출 슬롯: TOP 5 아래 별도 1칸 | [바로가기](./04_final_policy_decisions.md#d21-exploration) |
+| D21 | 신규 노출 슬롯: 2026-10-06 폐지, 목록 안 '신규' 표시로 대체 | [바로가기](./04_final_policy_decisions.md#d21-exploration) |
 | D22 | Reliability만으로 Hard Filter하지 않음 | [바로가기](./04_final_policy_decisions.md#d22-hard-filter) |
 | D23 | V1 Fraud Guard는 Rule / Audit 중심 | [바로가기](./04_final_policy_decisions.md#d23-fraud) |
 | D24 | Policy Version은 계산 입력, Snapshot 미저장 | [바로가기](./04_final_policy_decisions.md#d24-snapshot-policy) |
@@ -50,6 +50,7 @@
 | D41 | Risk Signal 3종, 최근 관측 14건 창 | [바로가기](./04_final_policy_decisions.md#d41-risk-signal-rules) |
 | D43 | 관측 순서 = 행동 시각 | [바로가기](./04_final_policy_decisions.md#d43-outcome-ordering) |
 | D44 | Activity Freshness를 Reliability와 분리 | [바로가기](./04_final_policy_decisions.md#d44-activity-freshness) |
+| D45 | 계정 제어권 확인 결과는 연결이 유지되는 동안 유효 | [바로가기](./07_external_account_verification_policy.md#d45-verification-validity) |
 
 ---
 
@@ -72,6 +73,7 @@
 | D27 | ~~Snapshot을 History로 누적~~ → 폐기, D42로 대체 | [바로가기](./06_database_and_implementation_roadmap.md#d27-snapshot-history) |
 | D28 | Risk Signal과 Reliability 분리 | [바로가기](./06_database_and_implementation_roadmap.md#d28-risk-signal) |
 | D29 | Reliability 계산은 Spring Boot가 소유, AI는 Matching 담당 | [바로가기](./06_database_and_implementation_roadmap.md#d29-system-ownership) |
+| API | AI 음악 순위 소비 검사·버전 저장·근거 기반 템플릿·원본 재생 (2026-10-08) | [바로가기](./06_database_and_implementation_roadmap.md#recommendation-response-consumption) |
 | D30 | 추천 결과의 Trust Profile 일괄 조회 | [바로가기](./06_database_and_implementation_roadmap.md#d30-batch-query) |
 | D42 | 공연 결과 원장 1개 + 조회 시 계산 | [바로가기](./06_database_and_implementation_roadmap.md#d42-outcome-ledger) |
 | DB | 계산 시점: 조회 시 계산 | [바로가기](./06_database_and_implementation_roadmap.md#6-계산-시점-조회-시-계산) |

@@ -6,7 +6,7 @@
 
 > 중요: 아래 숫자들은 서비스 정책값입니다. 논문이 공연 플랫폼의 최적값으로 보장한 값이 아닙니다. 공연 결과 원장을 보존하고 `reliability-v1` 정책 버전으로 관리하여 이후 재계산 가능하게 설계합니다.
 
-> 2026-10-03 개정: 이전 `trust-v1` 정책(Severity S=1/2/3/5, 시간 감쇠 365일, 지수 Confidence, Top 10 Exploration Slot)을 `reliability-v1`으로 대체했습니다. 폐기한 결정과 이유는 [08 문서](./08_deprecated_legacy_decisions.md#trust-v1에서-reliability-v1으로)에 있습니다. 용어는 [CONTEXT.md](../../../CONTEXT.md)를 따릅니다.
+> 2026-10-03 개정: 이전 `trust-v1` 정책(Severity S=1/2/3/5, 시간 감쇠 365일, 지수 Confidence, Top 10 Exploration Slot)을 `reliability-v1`으로 대체했습니다. 폐기한 결정과 이유는 [08 문서](./08_deprecated_legacy_decisions.md#trust-v1에서-reliability-v1으로)에 있습니다. 용어는 [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)을 따릅니다.
 
 ---
 
@@ -27,8 +27,8 @@
 | 점수 표시 | 확신 수준이 낮음이면 숨기고 관측 건수만 표시 |
 | Risk Signal | `RECENT_NO_SHOW`, `LATE_ARTIST_CANCELLATION`, `REPEATED_ARTIST_CANCELLATION` (최근 관측 14건 창) |
 | Activity Freshness | Reliability와 분리한 중립 정보 |
-| 추천 순위 | Matching Score만 사용, Reliability는 표시 전용 |
-| 신규 노출 | TOP 5 아래 별도 1칸 (신규 = 매칭 성사 0건 + 활성화 90일 이내, 5위 대비 10점 이내) |
+| 추천 순위 | 음악 유사도만 사용, Reliability는 표시 전용 |
+| 신규 노출 | 별도 칸 없음(2026-10-06 폐지). 추천 결과 목록에서 신규 아티스트의 곡에 '신규' 표시 (신규 = 매칭 성사 0건 + 활성화 90일 이내) |
 | 노쇼 신고 가능 | 공연 시작 + 15분 (Contract 도입 시 적용) |
 | 노쇼 최종 확정 | 관리자 판정 (Contract 도입 시 적용) |
 | 아티스트 소명 기간 | 48시간 (Contract 도입 시 적용) |
@@ -448,7 +448,7 @@ Risk Signal로 두지 않는 것:
 
 ## 선택지 A. 표시 전용
 
-순위는 Matching Score만으로 정하고, Reliability·근거·Risk Signal은 Trust Profile 필드로 표시합니다.
+순위는 음악 유사도만으로 정하고, Reliability·근거·Risk Signal은 Trust Profile 필드로 표시합니다.
 
 ## 선택지 B. Risk Signal 기반 하향
 
@@ -461,7 +461,8 @@ Reliability를 순위 계산에 섞습니다. 이력이 없는 신규 아티스�
 **추천 및 적용: A**
 
 - SSOT `TRUST-153`의 기본값(“기존 Matching Score 중심 후보 순위 정책을 유지”)과 일치하며, SSOT v1.4에서 Human Decision으로 확정되었습니다(2026-10-04 승인).
-- 순위 설명은 매칭 항목 차이만으로 유지됩니다(`AI-MATCH-054`).
+- 순위 설명은 음악 유사도 차이만으로 유지됩니다(`AI-MATCH-054`).
+- 2026-10-06 [서버 협의 012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)(2026-10-10 Accepted)로 순위 기준이 종합 적합도에서 음악 유사도로 바뀌었지만, Reliability를 순위에 쓰지 않는다는 이 결정은 그대로입니다.
 - MVP에는 공연 결과가 없어 어떤 보정 방식을 고르든 순위 효과가 없습니다.
 
 Contract 도입 후 보정이 필요해지면 선택지 B를 우선 검토하고, `TRUST-153`에 따른 별도 기술 설계와 Human Decision을 거칩니다.
@@ -470,7 +471,9 @@ Contract 도입 후 보정이 필요해지면 선택지 B를 우선 검토하고
 
 <a id="d21-exploration"></a>
 
-# 17. 신규 노출 슬롯
+# 17. 신규 노출 슬롯 (2026-10-06 폐지)
+
+> **2026-10-06 폐지:** 신규 노출 슬롯을 폐지했습니다. 추천 결과가 최대 100곡으로 늘었고, 신규 아티스트의 곡은 목록 안에서 '신규' 표시로 구분합니다(2026-10-06 팀 상의, [서버 협의 012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba), SSOT v1.9, 2026-10-07 승인). 아래의 신규 아티스트 정의는 '신규' 표시에 그대로 쓰고, 슬롯 규칙은 이력으로 남깁니다. 현재 응답 계약은 [추천 응답](../../api/02_recommendation_trust_and_new_artist.md)에 있습니다.
 
 Reliability가 순위에 들어가지 않으므로, 신규 노출 슬롯은 신뢰 보정이 아니라 **신규 아티스트에게 첫 매칭 기회를 주는 노출 정책**입니다.
 
@@ -478,21 +481,28 @@ Reliability가 순위에 들어가지 않으므로, 신규 노출 슬롯은 신�
 
 - 매칭 성사는 양측이 같은 Offer Revision을 Accept한 상태로, MVP에서도 관측할 수 있습니다.
 - 첫 매칭이 성사되거나 90일이 지나면 자동으로 신규에서 벗어납니다.
-- Artist 활성화에 실명 본인확인이 필요하므로 계정 재가입으로 신규 자격을 되찾기 어렵습니다.
+- 활성화일은 ARTIST 사용자의 가입 완료 시점(`users.created_at`)입니다. SSOT `AUTH-008`에 따라 User는 가입 완료 시점에 생성되어 바로 `ACTIVE`가 됩니다.
+- 가입에 휴대폰 인증이 필요하지만 휴대폰 번호는 유일 제약이 아니므로, 탈퇴 후 재가입으로 신규 자격을 다시 얻는 것을 V1에서 막지 않습니다. 신규 칸은 1칸이고 Top10 순위를 바꾸지 않으므로 악용 효과는 노출 1칸으로 제한됩니다.
 
 **슬롯 규칙**
 
-- TOP 5는 Matching Score 순서 그대로 유지합니다.
-- TOP 5 아래에 별도 1칸을 둡니다.
-- 다음 조건을 모두 만족할 때만 표시합니다.
-  - 기본 TOP 5에 신규 아티스트가 없음
-  - PASS/FAIL Filter를 통과한 신규 아티스트가 있음
-  - 그중 가장 높은 종합 적합도가 5위 대비 10점 이내
-- 표시 예: “신규 아티스트 · 매칭 성사 0건 · 종합 적합도 81% (5위 대비 −4점)”
+> 2026-10-04 개정: 최종 추천 인원을 AI 서버 협의 005에 따라 Top10으로 바꾸면서 기준을 TOP 5·5위에서 Top10·10위로 바꿨습니다.
+>
+> 2026-10-05 개정: 추천 단위가 곡으로 정해져([서버 협의 007](https://linear.app/nsu-capstone/document/007-추천-단위는-곡-69137a45b2c6)) Top10은 곡 10개이고, 신규 노출 칸은 신규 아티스트의 곡 1개를 보여 줍니다. SSOT `AI-MATCH-053`·`AI-MATCH-155`의 동기화가 필요합니다.
 
-절대 임계값 대신 5위 대비 격차를 쓰는 이유는, 종합 적합도 분포가 행사마다 다르고 실제 점수 차이로 설명할 수 있기 때문입니다.
+- Top10 곡은 Matching Score 순서 그대로 유지합니다.
+- Top10 아래에 별도 1칸을 둡니다.
+- 다음 조건을 모두 만족할 때만 신규 아티스트의 곡 1개를 표시합니다.
+  - Top10에 신규 아티스트의 곡이 없음
+  - PASS/FAIL Filter를 통과한 신규 아티스트의 곡이 있음
+  - 그중 가장 높은 종합 적합도가 10위 곡 대비 10점 이내
+- 표시 예: “신규 아티스트 · 매칭 성사 0건 · 종합 적합도 81% (10위 대비 −4점)”
 
-이 슬롯은 SSOT v1.4의 `AI-MATCH-155`로 반영되었습니다(2026-10-04 승인). 90일과 10점은 정책값으로 관리합니다.
+절대 임계값 대신 마지막 순위 대비 격차를 쓰는 이유는, 종합 적합도 분포가 행사마다 다르고 실제 점수 차이로 설명할 수 있기 때문입니다. 비교 대상을 화면에 노출되는 마지막 곡으로 두는 이유는, 그보다 높은 신규 아티스트의 곡은 이미 Top10에 들어가기 때문입니다.
+
+신규 아티스트의 곡이 retrieval 상위 후보 밖에 있어도 채점되도록, Backend는 신규 아티스트의 곡만으로 retrieval을 한 번 더 요청해 같은 후보 풀에서 순위를 매깁니다([서버 협의 006](https://linear.app/nsu-capstone/document/006-신규-아티스트-후보-retrieval-1e8b11cbba5b)). 응답 계약은 [추천 응답 확장](../../api/02_recommendation_trust_and_new_artist.md)에 있습니다.
+
+이 슬롯은 SSOT v1.4의 `AI-MATCH-155`로 반영되었습니다(2026-10-04 승인). 추천 곡 수 10, 90일, 10점은 정책값으로 관리합니다.
 
 ---
 
@@ -504,13 +514,16 @@ Reliability가 순위에 들어가지 않으므로, 신규 노출 슬롯은 신�
 
 Reliability, 확신 수준, Risk Signal만으로 후보를 Hard Filter하지 않습니다.
 
-Hard Filter는 다음에 한정합니다.
+Hard Filter 항목은 SSOT `AI-MATCH-051`의 PASS/FAIL 필수 조건을 따릅니다.
 
-- 필수 Verification 미완료
-- 계정 비활성/정지
-- 일정 불가능
-- 필수 계약·동의 조건 미충족
-- 관리자에 의해 활성화된 Suspension
+- Artist 계정/인증 상태
+- 행사 날짜 공연 가능 여부
+- 활동 정지 여부(관리자 Suspension 포함)
+- 저작권 조건 충족 여부
+- 행사 지역 이동 가능 여부
+- 예산 범위 충족 여부
+
+AI 분석 동의 등 AI 추천 참여 조건(SSOT `AI-031`)은 후보 풀에 들어가기 전 단계에서 걸러지므로 Hard Filter 항목으로 따로 두지 않습니다. 추천 응답의 표시 형식은 [추천 응답 확장 §2.3](../../api/02_recommendation_trust_and_new_artist.md#23-eligibilitypassedconditions)에 있습니다.
 
 반복 노쇼 자동 Suspension 횟수 규칙은 V1에서 두지 않습니다. 실제 운영 데이터 없이 임의의 정지 기준을 만들지 않기 위함입니다.
 
