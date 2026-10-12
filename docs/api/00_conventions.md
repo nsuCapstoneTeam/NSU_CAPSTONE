@@ -2,13 +2,13 @@
 
 Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서는 이 문서의 규칙을 따르고, 예외가 있으면 해당 문서에 이유와 함께 적는다.
 
-> 상태: Trust Profile API(NSU-70) 설계에서 처음 정했다. **Slack 확인 필요** 표시가 붙은 항목은 다른 API 담당자와 합의한 뒤 확정한다.
+> 상태: Trust Profile API(NSU-70) 설계에서 처음 정했다. **PR 리뷰 확인 필요** 표시가 붙은 항목은 확인 전에도 이 규칙으로 구현한다. 이 문서가 들어간 PR의 리뷰에서 다른 Spring 담당자(Seokyun Kang)가 확인하면 확정한다(2026-10-05 결정).
 
 ---
 
 ## 1. 경로와 버전
 
-**Slack 확인 필요**
+**PR 리뷰 확인 필요**
 
 ```text
 /api/v1/{자원}
@@ -42,8 +42,10 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 | 형식 | 표기 | 기준 |
 |---|---|---|
 | 월 | `YYYY-MM` 문자열 | `Asia/Seoul` |
+| 시각 | ISO-8601 `YYYY-MM-DDTHH:mm:ss+09:00` 문자열. 초 단위이며 소수 초는 쓰지 않는다 | `Asia/Seoul` (오프셋 `+09:00`을 항상 붙인다) |
 
-다른 형식은 처음 필요한 API에서 정하고 이 표에 추가한다.
+- 시각은 [02 추천 응답](./02_recommendation_trust_and_new_artist.md)의 `createdAt`에서 처음 정했다(2026-10-07).
+- 다른 형식은 처음 필요한 API에서 정하고 이 표에 추가한다.
 
 ## 5. 페이지네이션
 
@@ -58,6 +60,8 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 
 ## 7. 인증과 호출 주체
 
+**PR 리뷰 확인 필요**
+
 `users` 테이블, 회원가입, 로그인, 토큰 발급은 Auth/User 도메인이 소유한다. 다른 API는 아래를 전제로 한다.
 
 - `Authorization: Bearer {accessToken}` (JWT)
@@ -66,7 +70,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 
 ## 8. 에러 형식
 
-**Slack 확인 필요**
+**PR 리뷰 확인 필요**
 
 모든 에러 응답은 RFC 9457 Problem Details(`Content-Type: application/problem+json`)에 확장 필드 `code`를 더한 형식이다.
 
@@ -96,6 +100,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 | 401 | `UNAUTHENTICATED` | 토큰 없음, 만료, 서명 오류 |
 | 403 | `ACCESS_DENIED` | 인증은 됐지만 호출 주체에게 허용되지 않은 요청 |
 | 404 | `{대상}_NOT_FOUND` | 대상이 없거나 호출 주체에게 존재를 드러내지 않는 대상 |
+| 429 | `TOO_MANY_REQUESTS` | 요청 제한을 넘음. `Retry-After` 헤더에 다시 시도할 수 있을 때까지 남은 초를 준다 |
 | 500 | `INTERNAL_ERROR` | 서버 오류. 예외 메시지·스택 트레이스 등 내부 정보를 담지 않는다 |
 
 구현 메모:
@@ -110,4 +115,4 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 | 항목 | 정할 시점 | 기록할 곳 |
 |---|---|---|
 | 페이지네이션 방식(offset·cursor), 파라미터 이름, 응답 형태, 최대 페이지 크기 | 크기가 늘어나는 첫 목록 API | §5 |
-| 월(`YYYY-MM`) 이외의 날짜·시각 형식(날짜, 시각, 시간대 표기) | 해당 값을 처음 내보내는 API | §4 |
+| 월·시각 이외의 날짜 형식(예: 날짜 `YYYY-MM-DD`) | 해당 값을 처음 내보내는 API | §4 |
