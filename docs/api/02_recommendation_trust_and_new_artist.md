@@ -36,7 +36,7 @@
 | 다시 보기 범위 | 그 행사의 가장 최근 추천 결과만 조회한다 |
 | 동시 생성 | 사용자당 1건. 생성하는 중에 같은 사용자가 다시 요청하면 행사가 달라도 `409`(§5.1) |
 | 생성 횟수 제한 | 같은 행사는 직전 생성 후 1분 안에 다시 만들 수 없고, 사용자당 하루 5회까지다. 넘으면 `429`(§5.2) |
-| 곡 재생 주소 | `GET /api/v1/events/{eventId}/recommendations/latest/music/{musicId}/audio-url` → `200 OK`, 본문은 §2.5 |
+| 곡 재생 주소 | `GET /api/v1/events/{eventId}/recommendations/{recommendationId}/music/{musicId}/audio-url` → `200 OK`, 본문은 §2.5 |
 
 - 생성이 끝난 뒤의 재요청은 허용한다. 새 결과가 하나 더 저장된다.
 - 이전 결과도 지우지 않고 저장해 둔다. 이전 결과를 보는 목록 API는 화면에 필요해질 때 추가하며, 그때 페이지네이션 규칙(00 §5)을 정한다. 데이터가 남아 있으므로 하위 호환을 깨지 않고 추가할 수 있다.
@@ -111,6 +111,7 @@ Spring은 AI 응답을 저장하기 전에 검사한다. AI가 반환한 순서�
 
 ```json
 {
+  "recommendationId": "0192f3c8-5d6e-7f80-9a1b-2c3d4e5f6a7b",
   "createdAt": "2026-10-06T14:00:00+09:00",
   "isEventChanged": false,
   "excludedCount": 0,
@@ -153,6 +154,7 @@ Spring은 AI 응답을 저장하기 전에 검사한다. AI가 반환한 순서�
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
+| `recommendationId` | UUID 문자열 | 이 추천 결과의 ID. 결과를 저장할 때 정하며, 같은 결과를 다시 볼 때도 같은 값이다. 재생 주소를 요청할 때 경로에 넣는다(§2.5) |
 | `createdAt` | 시각 문자열 (00 §4) | 이 추천 결과를 만든 시각. 다시 볼 때도 저장 시점의 값이다 |
 | `isEventChanged` | boolean | 추천에 쓴 행사 정보(생성을 시작할 때의 snapshot)가 응답 시점의 행사와 다른지(§4.3). AI를 기다리는 동안 행사가 바뀌면 생성 응답에서도 `true`다 |
 | `excludedCount` | 정수 0 이상 | 응답 시점에 섭외하거나 들을 수 없게 되어 목록에서 뺀 곡 수(§4.2) |
@@ -244,7 +246,7 @@ SSOT `AI-MATCH-051`의 필수 조건을 따른다. 필수 조건은 곡이 아�
 추천 목록에서 곡을 바로 들을 수 있게, 재생 버튼을 누를 때 그 곡 원본의 재생 주소(Signed URL)를 발급한다.
 
 ```http
-GET /api/v1/events/{eventId}/recommendations/latest/music/{musicId}/audio-url
+GET /api/v1/events/{eventId}/recommendations/{recommendationId}/music/{musicId}/audio-url
 Authorization: Bearer {accessToken}
 ```
 
@@ -273,9 +275,12 @@ Authorization: Bearer {accessToken}
 - 인증이 `Authorization` 헤더 방식이라 `<audio>` 요소는 토큰을 보낼 수 없다. 그래서 프론트가 이 API로 주소를 받은 뒤 `<audio>`에 넣는다.
 - 추천 응답에 주소를 미리 넣지 않는다. 실제로 들은 곡만 주소가 나가도록 해 원본을 한꺼번에 내려받기 어렵게 하고, 재생 기록과 요청 제한(`SEC-118` Audit Log·Rate Limiting)을 적용하기 위해서다.
 - 경로에 `rank` 대신 `musicId`를 쓴다. 다시 볼 때 순위 번호가 바뀔 수 있기 때문이다(§4.2).
+- 경로의 `recommendationId`는 화면에 보이는 추천 결과의 ID(§2.0)다. 그 행사의 최신 추천 결과가 아니면 주소를 발급하지 않고 `409 RECOMMENDATION_OUTDATED`로 응답한다(2026-10-12 결정, Codex 리뷰).
+- 이유: 다른 탭이나 기기에서 새 추천을 만들면 최신 결과가 바뀐다. 이전 목록에서 재생할 때 최신 결과로 판정하면 `availability`와 `404`가 화면에 보이지 않는 결과를 기준으로 하게 된다.
+- 화면은 `409 RECOMMENDATION_OUTDATED`를 받으면 다시 보기(`GET .../latest`)로 목록을 새로 불러온다.
 - 재생 중 만료 오류로 끊기면 프론트가 이 API를 다시 불러 이어서 재생한다.
 - `availability = MUSIC_REVISED`인 곡은 현재 ACTIVE revision의 원본 주소를 준다(2026-10-07 결정). 화면은 "추천 당시와 다른 음원이에요. 유사도·BPM은 이전 음원 기준이에요."처럼 안내한다. 옛 revision 원본을 추천 결과 때문에 따로 보존하지 않고, 아티스트가 바꾼 소리가 계속 나가지 않게 하기 위해서다.
-- 목록을 받은 뒤 재생하기 전에 음원이 바뀔 수 있다. 그래서 이 API의 응답에도 발급 시점에 판정한 `availability`를 담는다. 화면은 목록의 값 대신 이 값으로 음원 변경 안내를 갱신한다(2026-10-12 Codex 리뷰).
+- 목록을 받은 뒤 재생하기 전에 음원이 바뀔 수 있다. 그래서 이 API의 응답에도 발급 시점에 판정한 `availability`를 담는다. 최신 결과일 때만 발급하므로 이 값은 화면에 보이는 결과 기준이다. 화면은 목록의 값 대신 이 값으로 음원 변경 안내를 갱신한다(2026-10-12 Codex 리뷰).
 - 발급할 때마다 재생 기록(사용자, 행사, `musicId`, `audioRevision`, 발급 시각)을 남긴다.
 
 | 상황 | 응답 |
@@ -283,9 +288,12 @@ Authorization: Bearer {accessToken}
 | 로그인하지 않음 | `401 UNAUTHENTICATED` |
 | 행사가 없거나 호출자가 볼 수 없는 PRIVATE 행사 | `404 EVENT_NOT_FOUND` |
 | 호출자가 볼 수 있는 행사지만 그 행사를 등록한 EVENT_PARTNER가 아님 | `403 ACCESS_DENIED` |
-| 추천을 한 번도 받지 않은 행사 | `404 RECOMMENDATION_NOT_FOUND` |
-| 곡이 최신 추천 결과에 없거나, 발급 시점에 다시 보기에서 빠지는 곡(§4.2) | `404 MUSIC_NOT_FOUND` |
+| `recommendationId`가 그 행사의 추천 결과가 아님(추천을 한 번도 받지 않은 행사 포함) | `404 RECOMMENDATION_NOT_FOUND` |
+| `recommendationId`가 그 행사의 최신 추천 결과가 아님 | `409 RECOMMENDATION_OUTDATED` |
+| 곡이 그 추천 결과에 없거나, 발급 시점에 다시 보기에서 빠지는 곡(§4.2) | `404 MUSIC_NOT_FOUND` |
 | 요청 제한을 넘음 | `429 TOO_MANY_REQUESTS` |
+
+- 추천 결과는 `404 RECOMMENDATION_NOT_FOUND` → `409 RECOMMENDATION_OUTDATED` → `404 MUSIC_NOT_FOUND` 순서로 확인한다. 최신 결과가 아니면 곡을 확인하지 않고 `409`로 응답해, 화면이 목록부터 새로 불러오게 한다.
 
 ## 3. 신규 아티스트 표시
 
@@ -361,7 +369,8 @@ Authorization: Bearer {accessToken}
 | Trust Profile 조합 실패 | `500 INTERNAL_ERROR`. Trust Profile은 Spring DB에서 조회하므로 부분 응답을 만들지 않는다 |
 | 같은 사용자의 추천을 생성하는 중(다른 행사 포함) | `409`, `code: RECOMMENDATION_IN_PROGRESS`. AI를 호출하지 않는다 (§5.1) |
 | 생성 잠금을 걸 수 없음(Redis 접속 불가) | `503`, `code: RECOMMENDATION_UNAVAILABLE`. AI를 호출하지 않고 서버 경보를 남긴다 (§5.1) |
-| 생성 횟수 제한을 넘음 | `429`, `code: TOO_MANY_REQUESTS`, `Retry-After` 헤더. AI를 호출하지 않는다 (§5.2) |
+| 생성 횟수 제한을 넘음(잠금을 얻은 뒤 검사) | `429`, `code: TOO_MANY_REQUESTS`, `Retry-After` 헤더. AI를 호출하지 않는다 (§5.2) |
+| 저장할 때 다시 센 횟수가 제한을 넘음(잠금이 저장 전에 만료된 경우) | `429`, `code: TOO_MANY_REQUESTS`, `Retry-After` 헤더. AI는 이미 호출했고, 결과는 저장하지 않는다 (§5.2) |
 | 로그인하지 않음 | `401`, `code: UNAUTHENTICATED` |
 | 행사가 없거나, 호출자가 볼 수 없는 PRIVATE 행사 (생성·다시 보기) | `404`, `code: EVENT_NOT_FOUND` |
 | 호출자가 볼 수 있는 행사지만 그 행사를 등록한 EVENT_PARTNER가 아님 | `403`, `code: ACCESS_DENIED` |
@@ -407,6 +416,7 @@ Authorization: Bearer {accessToken}
 - 확인 순서는 권한 검사(§5) → 사용자 잠금(§5.1) → 횟수 제한이다. 잠금을 얻은 뒤에 세므로, 같은 사용자의 요청이 동시에 들어와도 한도를 넘지 못한다(2026-10-07 결정, Codex 설계 리뷰).
 - 횟수는 저장된 추천 결과(PostgreSQL)의 요청한 사용자와 `createdAt`으로 센다. 성공한 생성만 결과가 저장되므로 "성공한 생성만 센다"와 같다. Redis에는 카운터를 두지 않는다.
 - 결과를 저장하는 트랜잭션 안에서 사용자 단위로 직렬화(예: PostgreSQL advisory lock)한 뒤 1분 간격과 하루 5회를 한 번 더 확인한다. 넘었으면 저장하지 않고 `429`로 응답한다. 저장이 늦어져 잠금이 먼저 만료되고 다른 요청이 들어와도 한도를 넘지 않게 하기 위해서다(2026-10-12 Codex 리뷰).
+- 저장 단계의 `429`는 AI를 호출한 뒤의 거절이다. 그래서 "AI를 호출하지 않는다"는 잠금을 얻은 뒤의 검사에서 거절한 경우에만 해당한다(2026-10-12 Codex 리뷰).
 
 ## 6. 이전 계약(v1.8 기준)과의 차이
 
@@ -417,7 +427,7 @@ Authorization: Bearer {accessToken}
 | `matching.reasons[]`: AI 설명 API가 만든 `item`·`text`·`evidence`, 실패하면 `null` | Spring 템플릿이 만든 항목별 `item`·`text`, 항상 2개 이상(`MUSIC_SIMILARITY`·`ELIGIBILITY`) |
 | `newArtistExposure`(Top10 아래 신규 노출 칸) | 없음. 곡마다 `isNewArtist` |
 | `rank` 1~10, Backend 정렬 규칙 | `rank` 1~100, AI 순서 |
-| 없음 | `availability`(`AVAILABLE`·`MUSIC_REVISED`), 최상위 `createdAt`·`isEventChanged`·`excludedCount` |
+| 없음 | `availability`(`AVAILABLE`·`MUSIC_REVISED`), 최상위 `recommendationId`·`createdAt`·`isEventChanged`·`excludedCount` |
 
 프론트 코드(`frontend/src/features/matching/matching.js`)의 로컬 샘플 계산은 이전 항목 평균·Top5 흐름이다. 새 API 소비는 NSU-90에서 프론트 담당과 맞춘다.
 
@@ -449,14 +459,16 @@ Authorization: Bearer {accessToken}
 | 다시 볼 때 AI를 호출하지 않고, `rank`·`musicSimilarity`·`passedConditions`는 저장 값, `trustProfile`·`isNewArtist`는 현재 값이다 | §4.1 |
 | 같은 행사에 추천을 여러 번 받으면 결과가 모두 저장되고, 다시 보기는 가장 최근 결과를 보여 준다 | §0.1 |
 | 생성은 `201`, 다시 보기는 `200`이며 두 응답의 본문 형식이 같고 `createdAt`이 `+09:00` 오프셋 시각이다 | §0.1, §2.0, 00 §4 |
+| 생성 응답과 그 결과의 다시 보기 응답은 `recommendationId`가 같고, 새 추천을 만들면 다시 보기의 `recommendationId`가 바뀐다 | §2.0 |
 | 추천을 받은 적 없는 행사의 다시 보기는 `404 RECOMMENDATION_NOT_FOUND`, 없는 행사는 `404 EVENT_NOT_FOUND`다 | §5 |
 | 추천 뒤 Eligibility 입력이나 AI 원문 필드가 바뀌면 `isEventChanged = true`, 행사명 등 다른 필드만 바뀌거나 값을 되돌리면 `false`다 | §4.3 |
-| 재생 주소는 그 행사의 등록자에게, 최신 추천 결과에 있고 다시 보기에서 빠지지 않는 곡에 대해서만 발급되며, 10분 뒤 만료되고, 발급마다 재생 기록이 남는다 | §2.5 |
+| 재생 주소는 그 행사의 등록자에게, 경로의 `recommendationId`가 최신 추천 결과이고 그 결과에 있으며 다시 보기에서 빠지지 않는 곡에 대해서만 발급되며, 10분 뒤 만료되고, 발급마다 재생 기록이 남는다 | §2.5 |
+| 재생 주소 요청의 `recommendationId`가 그 행사의 최신 결과가 아니면 `409 RECOMMENDATION_OUTDATED`이고 주소를 발급하지 않는다. 그 행사의 결과가 아닌 ID는 `404 RECOMMENDATION_NOT_FOUND`다 | §2.5 |
 | 최신 추천 결과에 없는 곡이나 다시 보기에서 빠지는 곡의 재생 주소 요청은 `404 MUSIC_NOT_FOUND`다 | §2.5 |
 | `MUSIC_REVISED` 곡의 재생 주소는 현재 ACTIVE revision의 원본을 가리키고, 응답의 `availability`가 `MUSIC_REVISED`다. 목록을 받은 뒤 음원이 바뀐 곡도 재생 주소 응답에서 `MUSIC_REVISED`다 | §2.5 |
-| 같은 행사를 직전 생성 후 1분 안에 다시 만들거나, 사용자가 하루 5회를 넘기면 `429 TOO_MANY_REQUESTS`와 `Retry-After`를 받고 AI를 호출하지 않는다. 실패한 생성은 횟수에 들어가지 않는다 | §5.2 |
+| 같은 행사를 직전 생성 후 1분 안에 다시 만들거나 사용자가 하루 5회를 넘기면, 잠금을 얻은 뒤의 검사에서 `429 TOO_MANY_REQUESTS`와 `Retry-After`를 받고 AI를 호출하지 않는다. 실패한 생성은 횟수에 들어가지 않는다 | §5.2 |
 | 하루 4회 성공한 사용자가 서로 다른 두 행사로 동시에 요청하면 AI 호출은 1번이고, 하루 성공 횟수는 5를 넘지 않는다. 결과 저장이 커밋된 뒤에 잠금이 풀린다 | §5.1·§5.2 |
-| 저장 전에 잠금이 만료돼 다른 요청이 들어와도, 저장 트랜잭션에서 다시 세어 1분 간격이나 하루 5회를 넘는 결과는 저장하지 않고 `429`다 | §5.2 |
+| 저장 전에 잠금이 만료돼 다른 요청이 들어와도, 저장 트랜잭션에서 다시 세어 1분 간격이나 하루 5회를 넘는 결과는 저장하지 않고 `429`와 `Retry-After`를 준다. 이 경우는 AI를 호출한 뒤의 거절이다 | §5.2 |
 | 다시 볼 때 활동 정지·탈퇴한 아티스트의 곡, `AI_RECOMMENDATION_ENABLED`가 아니게 된 아티스트의 곡, 삭제된 곡은 빠지고, 남은 곡의 `rank`가 1부터 다시 매겨지며, `excludedCount`가 뺀 곡 수와 같다. revision이 바뀐 곡은 남고 `availability = MUSIC_REVISED`다 | §4.2 |
 | 추천 뒤 곡 아티스트가 AI 추천을 끄거나 AI 분석 동의를 철회하면 그 곡의 재생 주소 발급은 `404 MUSIC_NOT_FOUND`다. 철회 전에 발급한 주소는 `expiresAt`까지만 쓸 수 있다 | §2.5·§4.2 |
 | `AI_RECOMMENDATION_ENABLED`가 아닌 아티스트의 곡은 추천 후보가 되지 않는다 | §1 |
