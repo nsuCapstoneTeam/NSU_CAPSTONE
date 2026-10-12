@@ -45,12 +45,12 @@ EVENT_PARTNER 입장에서는 다음과 같은 걱정이 있습니다.
 최근성 감쇠           관측 순서 기준, γ = 0.95 (약 14건마다 영향력 절반)
 확신 수준             관측 건수: 낮음 ≤ 3 (점수 숨김) / 보통 4~9 / 높음 ≥ 10
 Risk Signal           최근 관측 14건 안의 노쇼·24시간 미만 통보 취소·반복 취소
-추천 순위             Matching Score만 사용, Trust Profile은 표시 전용
+추천 순위             음악 유사도만 사용, Trust Profile은 표시 전용
 ```
 
 이 값들은 학술적으로 영구 고정된 정답이 아니라 `reliability-v1` 서비스 정책입니다. 공연 결과 원장을 보존하므로 이후 시뮬레이션과 운영 데이터에 따라 `reliability-v2`로 재계산할 수 있습니다. 2026-10-03에 이전 `trust-v1`을 대체했습니다.
 
-용어 정의는 저장소 루트의 [CONTEXT.md](../../../CONTEXT.md)를 따릅니다.
+용어 정의는 Linear의 [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)을 따릅니다.
 
 ---
 
@@ -82,7 +82,7 @@ V1 실제 운영 정책값을 확정한 문서입니다.
 
 ### [06_database_and_implementation_roadmap.md](./06_database_and_implementation_roadmap.md)
 
-공연 결과 원장, 조회 시 계산, Risk Signal, Spring Boot 책임 경계와 구현 순서를 설명합니다.
+공연 결과 원장, 조회 시 계산, Risk Signal, Spring Boot 책임 경계와 구현 순서를 설명합니다. 2026-10-08 확정한 AI 음악 순위 소비 검사·결과 버전 저장·템플릿 근거·원본 재생의 Spring 적용은 §17.1에 있습니다. 서버간 협의 원문은 Linear P-NSU-3에서 관리합니다.
 
 ### [07_external_account_verification_policy.md](./07_external_account_verification_policy.md)
 
@@ -109,7 +109,7 @@ flowchart LR
 
     Verification --> Eligibility["2. Eligibility"]
 
-    Eligibility --> Ranker["3. Explainable Ranker (Matching Score)"]
+    Eligibility --> Ranker["3. 음악 유사도 순위 (AI 서버)"]
 
     Ranker --> Result["4. Recommendation"]
 
@@ -257,8 +257,8 @@ V1에서는 다음까지 확정했습니다.
 확신 수준 = 관측 건수 (낮음 ≤ 3 / 보통 4~9 / 높음 ≥ 10)
 Risk Signal = RECENT_NO_SHOW / LATE_ARTIST_CANCELLATION / REPEATED_ARTIST_CANCELLATION
 Review = Reliability 계산 제외
-추천 순위 = Matching Score만 사용
-신규 노출 = Top10 아래 별도 1칸
+추천 순위 = 음악 유사도만 사용
+신규 아티스트 = 별도 노출 칸 없음(2026-10-06 폐지), 목록 안 '신규' 표시
 ```
 
 이 값들은 `reliability-v1` 정책으로 관리하며 이후 시뮬레이션과 운영 데이터에 따라 새 정책 버전으로 조정할 수 있습니다. γ 선택 근거는 [09 ADR](./09_reliability_decay_gamma.md)에 있습니다.

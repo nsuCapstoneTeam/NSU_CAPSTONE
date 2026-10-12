@@ -45,7 +45,7 @@ Trust Profile
 
 - 원장에는 판정이 끝난 공연 결과만 append-only로 기록합니다.
 - Reliability, 확신 수준, Risk Signal, 결과별 포함 여부는 조회 시 계산합니다.
-- 추천 1회에 필요한 아티스트는 최대 11명(Top10 곡 + 신규 노출 1곡의 아티스트)이므로 조회 시 계산 비용이 작습니다. 성능이 필요해지면 캐시를 추가합니다.
+- 추천 1회에 필요한 아티스트는 최대 100명(추천 결과 최대 100곡의 아티스트, [서버 협의 012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba))입니다. 일괄 조회의 쿼리 수가 아티스트 수에 비례하지 않으므로(§18) 조회 시 계산을 유지합니다. 100명분 조회 시간을 측정해 느릴 때만 캐시를 추가합니다.
 
 ## `performance_outcome` (개념 모델)
 
@@ -361,7 +361,7 @@ flowchart TD
     S3 --> S4["4. RiskSignalEvaluator"]
     S4 --> S5["5. 시나리오 테스트 + 시뮬레이터"]
     S5 --> S6["6. Trust Profile 조회 API (MVP: 근거 부족 · 관측 0건)"]
-    S6 --> S7["7. 신규 노출 슬롯 (Recommendation)"]
+    S6 --> S7["7. 신규 아티스트 표시 (Recommendation)"]
     S7 -.->|Contract 도입 후| S8["8. 공연 결과 원장 테이블·저장소"]
     S8 --> S9["9. 판정 흐름(신고·소명·분쟁) 연동"]
     S9 --> S10["10. 운영 데이터로 γ·경계값 재검증"]
@@ -521,7 +521,7 @@ V1 Risk Signal은 원장에서 조회 시 계산하며 별도 테이블에 저�
 
 # 17. Spring Boot와 AI/Matching 서버 책임 경계
 
-기존 `ADR-001`의 시스템 경계 결정을 유지하고, 추천 계산의 분담은 [서버 협의 005](../server-agreements/005-audio-retrieval-responsibilities.md)를 따릅니다.
+기존 `ADR-001`의 시스템 경계 결정을 유지하고, 추천 계산의 분담은 [서버 협의 012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)(2026-10-10 Accepted, 005·008·009 대체)를 따릅니다.
 
 ## Spring Boot Backend
 
@@ -536,7 +536,7 @@ V1 Risk Signal은 원장에서 조회 시 계산하며 별도 테이블에 저�
 - Trust Profile 조합
 - Verification 결과
 - Eligibility Filter와 ACTIVE 후보 쌍 선정
-- Backend Ranker: 곡별 Matching Score(종합 적합도), 최종 Top10 곡 선정. 곡을 아티스트로 묶지 않는다([서버 협의 007](../server-agreements/007-recommendation-unit-song.md))
+- AI 응답 검사, 추천 이유 템플릿 생성, 추천 결과 저장과 다시 보기. 순위는 정하지 않고 AI가 음악 유사도로 정한 순서를 그대로 쓴다. 곡을 아티스트로 묶지 않는다([서버 협의 007](https://linear.app/nsu-capstone/document/007-추천-단위는-곡-69137a45b2c6))
 - 추천 API의 최종 조합
 
 ## AI / Matching 영역
@@ -544,14 +544,39 @@ V1 Risk Signal은 원장에서 조회 시 계산하며 별도 테이블에 저�
 소유 책임:
 
 - CLAP Embedding
-- 음악 의미 유사도
-- BPM / Rhythm / Audio Feature 추출과 행사 요구 대비 BPM·리듬 적합도 점수화(NSUAI-9)
-- 추천 이유·후보 간 비교 설명 계산(NSUAI-5, 2026-09-30 #ai-recommend 결정). Top10이 정해진 뒤 Backend가 설명 API를 호출한다([서버 협의 008](../server-agreements/008-recommendation-explanation-flow.md))
-- ACTIVE 후보 쌍 안에서 의미 유사도 기반 후보 검색(retrieval 50~100개)
+- 행사 요청 자연어 해석. 번역·규칙·LLM 중 적절한 방식은 AI가 검증 후 선택하며, 원문에 없는 정밀 BPM은 만들지 않는다
+- 음악 유사도 계산과 정렬: ACTIVE 후보 쌍 안에서 상위 100곡. 청취 평가·calibration 실험과 구체 변환 함수 결정은 ai-recommend-server가 수행한다
+- BPM / Rhythm / Audio Feature 추출. 설명용 상세 정보로만 제공하고 순위에 쓰지 않는다(NSUAI-9)
+- 추천 이유 문장은 만들지 않는다. Spring이 상세 정보로 템플릿 문장을 만든다(012 결정 6.2, 2026-10-06 AI 동의)
 
-AI/Matching 영역은 항목 점수(의미·BPM·리듬)를 계산하지만 최종 Matching Score(종합 적합도)와 순위는 계산하지 않습니다(서버 협의 005).
+AI/Matching 영역이 음악 유사도로 최종 순위를 정합니다. Spring은 그 순서를 다시 정렬하지 않습니다(서버 협의 012).
 
 AI/Matching 영역은 공연 완료·취소·노쇼의 기준 원본을 소유하지 않으므로 **Artist Reliability를 직접 계산하지 않습니다.**
+
+<a id="recommendation-response-consumption"></a>
+
+## 17.1 Spring의 추천 응답 소비 결정 (2026-10-08)
+
+김동엽이 AI 질문 1~8의 답안을 확정했습니다. 서버간 협의 원문은 Linear P-NSU-3의 012·013이 관리하며, 이번 Slack 답변을 근거로 AI 담당에게 원문·목록·관련 이슈 동기화를 요청합니다. 이 절은 Spring이 적용할 응답 검사·저장·설명·재생 원칙을 기록합니다. 상세 API 계약은 [추천 응답](../../api/02_recommendation_trust_and_new_artist.md)을 따릅니다.
+
+| Spring 결정 | 적용과 이유 |
+|---|---|
+| AI가 준 순서를 음악 순위로 사용 | 후보 쌍·중복·개수·순위 연속성·배열 순서·표시 유사도의 유효성을 검사합니다. raw cosine은 요청하지 않으며 동점 순서를 재계산하지 않습니다. 원본 정렬의 정확성은 AI가 테스트합니다. |
+| `resultVersion` 1개 저장 | 내부 모델·전처리·변환·분석·해석 버전은 AI가 추적합니다. 원본 `audioRevision`과 Embedding 생성 조건은 별도로 유지합니다. |
+| 실험 후 정한 고정 변환 사용 | 청취 평가·calibration은 ai-recommend-server가 수행합니다. 구간별 선형 변환은 예시입니다. Spring은 변환값을 재계산하지 않고 반올림 전 소수와 버전을 보존합니다. |
+| 원문에 근거한 해석만 설명에 사용 | "빠른 음악"을 `FAST`로 해석할 수 있지만 근거 없는 정밀 BPM을 사용자 요구로 만들지 않습니다. AI 해석이 Spring Eligibility 조건을 바꾸지 않습니다. |
+| 전체 후보를 한 번에 전달 | 입력 상한은 AI의 실측 후 공개합니다. 반환 상한 100과 구분하고 Spring이 후보를 임의로 자르지 않습니다. |
+| 상세 정보로 템플릿 생성 | 측정값·요청 해석·비교 결과를 구분합니다. 분석 실패와 요청 조건 없음을 구분하고, 없는 근거의 문장은 생략합니다. BPM·리듬 점수는 순위에 넣지 않습니다. |
+| 업로드 원본을 재생 | 정해진 길이의 MP3·M4A(AAC), 10MB 이하로 허용 범위를 제한해 별도 Preview 변환을 줄입니다. Signed URL은 Spring이 발급합니다. 실제 codec·브라우저 재생과 AI 디코딩 지원은 검증해야 하며 013은 AI 최종 동의 전 Proposed입니다. |
+
+표시 유사도의 내림차순 검사는 raw cosine 정렬을 증명하지 않습니다. 예를 들어 표시값이 모두 100이어도 Spring은 AI 순서를 유지합니다. raw cosine을 추가하면 독립 정렬 검증은 가능하지만 계약이 늘어나므로 이번에는 소비 검증만 수행합니다.
+
+향후 신뢰도순·리스크순 화면 정렬을 도입하더라도 음악 순위와 구분해야 합니다. 현재 `rank`는 음악 순위이며, 별도 정렬의 파라미터·null 처리·리스크 비교 규칙은 이번에 확정하지 않습니다.
+
+업로드 형식 선택은 2026-10-07 그릴링의 원본 재생 결정에서 나왔습니다. 전송 부담과 브라우저 재생 호환성을 고려해 압축 형식으로 제한했으며, WAV 사용자는 변환 후 올려야 하는 편의상 비용을 받아들였습니다. M4A 확장자만으로 codec 지원을 보장하지 않습니다([MDN](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Audio_codecs)). AI 전처리는 기존 처음 56초·7초×8개를 유지하고 별도 Highlight를 자동 선정하지 않습니다.
+
+012의 대체 대상은 항목 평균·Backend Ranker·별도 설명 API입니다. CLAP 음악 의미 분석과 BPM·리듬 측정, 공연 형태 필터는 유지합니다. 012의 Accepted 전환과 기존 문서의 Superseded·006 폐기 처리는 Linear 원문에서 이력을 남깁니다.
+
 
 ```mermaid
 flowchart LR
@@ -561,12 +586,10 @@ flowchart LR
 
     Audio["음원 / 텍스트(Audio / Text)"]
     Audio --> AI["AI·매칭 영역(AI / Matching Domain)"]
-    AI --> Retrieval["retrieval 후보·의미 유사도"]
-    Retrieval --> Ranker["Backend Ranker"]
-    Ranker --> Fit["Matching Score · Top10"]
+    AI --> Ranked["음악 유사도 순 상위 100곡 · 상세 정보"]
 
     Trust --> Recommendation["추천 조합(Recommendation Assembly)"]
-    Fit --> Recommendation
+    Ranked --> Recommendation
 ```
 
 ---
@@ -588,7 +611,7 @@ for (MatchingResult result : matchingResults) {
 권장 구조:
 
 ```text
-Top10 곡 + 신규 노출 1곡의 Artist IDs (중복 제거)
+추천 결과(최대 100곡)의 Artist IDs (중복 제거)
     ↓
 공연 결과 원장 일괄 조회
 Verification 일괄 조회
@@ -630,10 +653,10 @@ recommendation/
 └── application/
     ├── RecommendationQueryService
     ├── RecommendationAssembler
-    └── NewArtistExposurePolicy
+    └── NewArtistPolicy
 ```
 
-Trust를 `matching/` 하위 패키지로 넣지 않습니다. 신규 노출 슬롯은 신뢰 정책이 아니라 추천 노출 정책이므로 `recommendation/`에 둡니다.
+Trust를 `matching/` 하위 패키지로 넣지 않습니다. 신규 아티스트 표시는 신뢰 정책이 아니라 추천 표시 정책이므로 `recommendation/`에 둡니다.
 
 ---
 
@@ -651,4 +674,4 @@ Trust를 `matching/` 하위 패키지로 넣지 않습니다. 신규 노출 슬�
 확신 수준(관측 건수)으로 근거 부족을 표현
 ```
 
-신규 노출 슬롯의 대상 판정(매칭 성사 0건, 활성화 90일 이내)은 Offer와 Artist 데이터로 계산하며 별도 테이블이 필요 없습니다.
+신규 아티스트 판정(매칭 성사 0건, 활성화 90일 이내)은 Offer와 Artist 데이터로 계산하며 별도 테이블이 필요 없습니다.
