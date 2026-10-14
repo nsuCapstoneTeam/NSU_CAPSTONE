@@ -121,9 +121,7 @@ flowchart LR
 
     Eligibility --> Matching["음악 유사도(Music Similarity)"]
 
-    Matching --> Ranker["설명 가능한 랭커(Explainable Ranker)"]
-
-    Ranker --> Result["추천 결과(Recommendation Result)"]
+    Matching --> Result["추천 결과(Recommendation Result)"]
 
     Ledger["공연 결과 원장(Performance Outcome Ledger)"] --> Calculator["Reliability 계산(Reliability Calculator)"]
 
@@ -141,7 +139,6 @@ flowchart LR
 
     subgraph RecommendationSystem["추천 시스템(Recommendation System)"]
         Matching
-        Ranker
         Result
     end
 ```
@@ -875,20 +872,18 @@ Final Score
 따라서 시스템에서는 각 평가 결과를 먼저 독립적으로 유지합니다.
 
 ```text
-Artist A
+Artist A의 곡
 
-Music Fit
- └─ CLAP Similarity
+음악 유사도 (순위 기준)
+ └─ CLAP 음악 유사도
 
-Business Fit
- ├─ Budget
- ├─ Location
- └─ Event Requirements
+필수 조건 (PASS/FAIL, 순위에 쓰지 않음)
+ ├─ 일정
+ ├─ 지역
+ ├─ 예산
+ └─ 공연 형태
 
-Performance Fit
- └─ Performance Conditions
-
-Trust Profile
+Trust Profile (표시 전용, 순위에 쓰지 않음)
  ├─ Verification
  ├─ Artist Reliability
  ├─ 확신 수준
@@ -896,7 +891,7 @@ Trust Profile
  └─ Activity Freshness
 ```
 
-Explainable Ranker는 Music Fit, Business Fit, Performance Fit으로 순위를 정하고, Trust Profile은 순위에 섞지 않고 별도 필드로 함께 보여 줍니다.
+추천 순위는 AI 서버가 음악 유사도로 정하고, Spring은 그 순서를 다시 정렬하지 않습니다(서버 협의 012). 일정·지역·예산·공연 형태는 Eligibility에서 PASS/FAIL로 거르며 순위에는 쓰지 않습니다(SSOT `AI-MATCH-051`). Trust Profile은 순위에 섞지 않고 별도 필드로 함께 보여 줍니다.
 
 ---
 

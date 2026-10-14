@@ -3,7 +3,9 @@
 아티스트 1명의 Trust Profile(Verification, Artist Reliability, 근거 집계, Risk Signal, Activity Freshness)을 조회한다. 추천 결과에 넣을 여러 명의 Trust Profile은 HTTP가 아닌 내부 일괄 조회 계약(§7)으로 조합한다.
 
 - 구현 이슈: NSU-70
-- 요구사항: SSOT v1.4 `TRUST-149`~`TRUST-154`
+- 요구사항: SSOT `TRUST-149`~`TRUST-154` (현재 리비전 v1.14에서 확인)
+  - v1.4(2026-10-04 승인): MVP의 "근거 부족 · 관측 0건" 표시(`TRUST-149`), 위험 신호 정책(`TRUST-150`), 신뢰 정보를 순위에 쓰지 않는 원칙(`TRUST-153`)
+  - v1.9(2026-10-07 승인): 추천 순위 기준이 음악 유사도로 바뀌었다(`TRUST-153`). 신뢰 정보를 순위에 쓰지 않는 원칙은 그대로다
 - 정책: `reliability-v1` — [04 D09·D39·D41·D44](../adr/artist_trust_architecture/04_final_policy_decisions.md), [05 §13](../adr/artist_trust_architecture/05_trust_event_catalog.md), [06 §10·§18](../adr/artist_trust_architecture/06_database_and_implementation_roadmap.md)
 - 공통 규칙: [00_conventions.md](./00_conventions.md)
 
