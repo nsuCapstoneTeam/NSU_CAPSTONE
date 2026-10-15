@@ -2,6 +2,7 @@ package com.nsu.capstone.trust.reliability.domain;
 
 import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.history;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -10,6 +11,7 @@ import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class ReliabilityCalculatorTest {
@@ -117,6 +119,58 @@ class ReliabilityCalculatorTest {
         assertThat(result.observationCount(ObservationCategory.NO_SHOW)).isOne();
         int sumOfCategories = Arrays.stream(ObservationCategory.values()).mapToInt(result::observationCount).sum();
         assertThat(result.observationCount()).isEqualTo(sumOfCategories).isEqualTo(7);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ResponsibleParty.class, names = "ARTIST", mode = EnumSource.Mode.EXCLUDE)
+    void nonArtistCancellationAndNoShowAreExcludedWithoutChangingReliability(ResponsibleParty party) {
+        ReliabilityResult completedOnly = calculator.calculate(history().completed(4).outcomes());
+
+        ReliabilityResult result = calculator.calculate(
+            history().completed(2).cancelledBy(party).noShowBy(party).completed(2).outcomes());
+
+        assertThat(result.observationCount()).isEqualTo(4);
+        assertThat(result.reliability()).isEqualTo(completedOnly.reliability());
+        assertThat(result.excludedOutcomes())
+            .extracting(excluded -> excluded.outcome().outcomeType(), ExcludedOutcome::reason)
+            .containsExactly(
+                tuple(OutcomeType.CANCELLED, ExclusionReason.NON_ARTIST_ATTRIBUTION),
+                tuple(OutcomeType.NO_SHOW, ExclusionReason.NON_ARTIST_ATTRIBUTION));
+    }
+
+    @Test
+    void exclusionCountsAreGroupedByOutcomeTypeAndPartyInContractOrder() {
+        ReliabilityResult result = calculator.calculate(history()
+            .noShowBy(ResponsibleParty.OTHER)
+            .cancelledBy(ResponsibleParty.PLATFORM)
+            .cancelledBy(ResponsibleParty.EVENT_PARTNER)
+            .noShowBy(ResponsibleParty.FORCE_MAJEURE)
+            .completed(1)
+            .cancelledBy(ResponsibleParty.EVENT_PARTNER)
+            .outcomes());
+
+        assertThat(result.exclusionCounts()).containsExactly(
+            new ExclusionCount(OutcomeType.CANCELLED, ResponsibleParty.EVENT_PARTNER, 2),
+            new ExclusionCount(OutcomeType.CANCELLED, ResponsibleParty.PLATFORM, 1),
+            new ExclusionCount(OutcomeType.NO_SHOW, ResponsibleParty.FORCE_MAJEURE, 1),
+            new ExclusionCount(OutcomeType.NO_SHOW, ResponsibleParty.OTHER, 1));
+    }
+
+    @Test
+    void tenEventPartnerCancellationsLeaveReliabilityOfTenCompletedPerformances() {
+        OutcomeHistory history = history();
+        for (int i = 0; i < 10; i++) {
+            history.cancelledBy(ResponsibleParty.EVENT_PARTNER).completed(1);
+        }
+
+        ReliabilityResult result = calculator.calculate(history.outcomes());
+
+        ReliabilityResult completedOnly = calculator.calculate(history().completed(10).outcomes());
+        assertThat(result.reliability()).isEqualTo(completedOnly.reliability());
+        assertThat(result.observationCount()).isEqualTo(10);
+        assertThat(result.ratePercent()).hasValue(94);
+        assertThat(result.exclusionCounts())
+            .containsExactly(new ExclusionCount(OutcomeType.CANCELLED, ResponsibleParty.EVENT_PARTNER, 10));
     }
 
     /** ADR 문서의 수치는 소수 셋째 자리까지 반올림한 값이다. */

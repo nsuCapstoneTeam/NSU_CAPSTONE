@@ -30,13 +30,25 @@ public final class OutcomeHistory {
     }
 
     public OutcomeHistory noShow() {
-        add(OutcomeType.NO_SHOW, ResponsibleParty.ARTIST, nextActionAt, null);
+        return noShowBy(ResponsibleParty.ARTIST);
+    }
+
+    public OutcomeHistory noShowBy(ResponsibleParty responsibleParty) {
+        add(OutcomeType.NO_SHOW, responsibleParty, nextActionAt, null);
         return this;
     }
 
     /** 행동 시각에 취소를 통보하고, 공연 예정 시작은 그로부터 {@code notice} 뒤다. */
     public OutcomeHistory artistCancellation(Duration notice) {
-        add(OutcomeType.CANCELLED, ResponsibleParty.ARTIST, nextActionAt.plus(notice), nextActionAt);
+        return cancellation(ResponsibleParty.ARTIST, notice);
+    }
+
+    public OutcomeHistory cancelledBy(ResponsibleParty responsibleParty) {
+        return cancellation(responsibleParty, Duration.ofDays(7));
+    }
+
+    private OutcomeHistory cancellation(ResponsibleParty responsibleParty, Duration notice) {
+        add(OutcomeType.CANCELLED, responsibleParty, nextActionAt.plus(notice), nextActionAt);
         return this;
     }
 

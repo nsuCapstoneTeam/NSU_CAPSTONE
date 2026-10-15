@@ -1,5 +1,6 @@
 package com.nsu.capstone.trust.reliability.domain;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalInt;
 
@@ -71,6 +72,19 @@ public final class ReliabilityResult {
 
     /** NON_ARTIST_ATTRIBUTION 결과만 결과 유형 × 귀책 조합별로 센다. 순서는 두 enum의 선언 순서다. */
     public List<ExclusionCount> exclusionCounts() {
-        return List.of();
+        List<ExclusionCount> counts = new ArrayList<>();
+        for (OutcomeType outcomeType : OutcomeType.values()) {
+            for (ResponsibleParty responsibleParty : ResponsibleParty.values()) {
+                int count = (int) excludedOutcomes.stream()
+                    .filter(excluded -> excluded.reason() == ExclusionReason.NON_ARTIST_ATTRIBUTION)
+                    .filter(excluded -> excluded.outcome().outcomeType() == outcomeType)
+                    .filter(excluded -> excluded.outcome().responsibleParty() == responsibleParty)
+                    .count();
+                if (count > 0) {
+                    counts.add(new ExclusionCount(outcomeType, responsibleParty, count));
+                }
+            }
+        }
+        return List.copyOf(counts);
     }
 }

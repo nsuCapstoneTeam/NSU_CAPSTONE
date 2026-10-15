@@ -20,8 +20,16 @@ public final class ReliabilityCalculator {
     /** @param outcomes 아티스트 1명의 원장 행 전체(모든 revision). 순서는 상관없다. */
     public ReliabilityResult calculate(Collection<PerformanceOutcome> outcomes) {
         List<Observation> observations = new ArrayList<>();
+        List<ExcludedOutcome> excludedOutcomes = new ArrayList<>();
         for (PerformanceOutcome outcome : outcomes) {
-            observations.add(new Observation(outcome, categoryOf(outcome)));
+            if (outcome.outcomeType() == OutcomeType.VOIDED) {
+                throw new UnsupportedOperationException("NSU-69 구현 중: VOIDED는 아직 계산하지 않는다");
+            }
+            if (isNonArtistAttribution(outcome)) {
+                excludedOutcomes.add(new ExcludedOutcome(outcome, ExclusionReason.NON_ARTIST_ATTRIBUTION));
+            } else {
+                observations.add(new Observation(outcome, categoryOf(outcome)));
+            }
         }
 
         double alpha = policy.priorAlpha();
@@ -31,20 +39,22 @@ public final class ReliabilityCalculator {
             alpha = policy.gamma() * alpha + success;
             beta = policy.gamma() * beta + (1 - success);
         }
-        return new ReliabilityResult(policy, alpha / (alpha + beta), observations, List.of());
+        return new ReliabilityResult(policy, alpha / (alpha + beta), observations, excludedOutcomes);
+    }
+
+    /** 취소·노쇼 중 귀책이 ARTIST가 아닌 결과는 아티스트의 이행을 보여 주지 못해 관측이 아니다. */
+    private static boolean isNonArtistAttribution(PerformanceOutcome outcome) {
+        return outcome.outcomeType() != OutcomeType.COMPLETED && outcome.responsibleParty() != ResponsibleParty.ARTIST;
     }
 
     private ObservationCategory categoryOf(PerformanceOutcome outcome) {
         if (outcome.outcomeType() == OutcomeType.COMPLETED) {
             return ObservationCategory.COMPLETED;
         }
-        if (outcome.outcomeType() == OutcomeType.NO_SHOW && outcome.responsibleParty() == ResponsibleParty.ARTIST) {
+        if (outcome.outcomeType() == OutcomeType.NO_SHOW) {
             return ObservationCategory.NO_SHOW;
         }
-        if (outcome.outcomeType() == OutcomeType.CANCELLED && outcome.responsibleParty() == ResponsibleParty.ARTIST) {
-            return cancellationCategoryOf(outcome);
-        }
-        throw new UnsupportedOperationException("NSU-69 구현 중: 아티스트 귀책이 아닌 결과는 아직 계산하지 않는다");
+        return cancellationCategoryOf(outcome);
     }
 
     /** 공연 시작 뒤에 통보한 취소도 "24시간 미만"으로 분류한다. */
