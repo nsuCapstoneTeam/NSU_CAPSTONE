@@ -336,7 +336,16 @@ flowchart TD
 ```text
 NON_ARTIST_ATTRIBUTION
 SUPERSEDED
+VOIDED
 ```
+
+| 사유 | 뜻 | Trust Profile 표시 |
+|---|---|---|
+| `NON_ARTIST_ATTRIBUTION` | 유효 revision이 아티스트 귀책이 아닌 취소·노쇼 | 조합별 건수로 표시 |
+| `SUPERSEDED` | 더 큰 revision이 있는 이전 revision | 세지 않음(별도 공연이 아님) |
+| `VOIDED` | 유효 revision이 무효화된 기록 | 세지 않음(공연 결과가 아님) |
+
+`VOIDED`는 NSU-69 구현 계획에서 더했습니다(2026-10-14). 모든 입력 행이 "관측"이거나 "제외 사유 하나"로 설명되게 하기 위해서입니다.
 
 예:
 
@@ -391,15 +400,15 @@ flowchart LR
     Policy["ReliabilityPolicy(reliability-v1)"] --> Engine
 ```
 
-계산 전용 입력 모델에는 최소 다음 정보가 들어갑니다.
+계산 전용 입력 모델(`PerformanceOutcome`)에는 계산에 쓰는 다음 정보만 들어갑니다(2026-10-14 NSU-69 구현 계획에서 결정).
 
+- Performance ID
+- revision
 - 결과 유형
 - 귀책(`responsibleParty`)
-- Artist ID
-- Performance ID
-- 순서 기준 시각
-- 취소 통보 시각과 공연 예정 시각 Snapshot(취소인 경우)
-- 확정 출처
-- revision
+- 공연 예정 시작 시각 Snapshot
+- 취소 통보 시각(취소인 경우)
+
+순서 기준 시각은 이 값으로 정합니다. 취소는 통보 시각, 그 밖의 결과는 예정 시작 시각입니다(04 D43). Artist ID로 묶는 일은 호출자가 합니다(`Map<ArtistId, List<PerformanceOutcome>>`, 06 §18). 확정 출처는 원장에 들어올 때 검사(§13.1)에 쓰고, 계산 입력에는 넣지 않습니다.
 
 이 경계 덕분에 JPA 변경이 Reliability 수학 모델까지 직접 전파되는 것을 줄일 수 있습니다.
