@@ -43,12 +43,21 @@ public final class ReliabilityResult {
     }
 
     public ConfidenceLevel confidenceLevel() {
-        return ConfidenceLevel.LOW;
+        if (observationCount() <= policy.maxLowConfidenceObservations()) {
+            return ConfidenceLevel.LOW;
+        }
+        if (observationCount() >= policy.minHighConfidenceObservations()) {
+            return ConfidenceLevel.HIGH;
+        }
+        return ConfidenceLevel.MEDIUM;
     }
 
     /** 확신 수준이 LOW면 비어 있고, 아니면 round(R × 100)이다. 0.5는 올린다. */
     public OptionalInt ratePercent() {
-        return OptionalInt.empty();
+        if (confidenceLevel() == ConfidenceLevel.LOW) {
+            return OptionalInt.empty();
+        }
+        return OptionalInt.of((int) Math.round(reliability * 100));
     }
 
     /** 유효 관측. 행동 시각 오름차순이고, 같으면 performanceId의 부호 없는 순서다. */
