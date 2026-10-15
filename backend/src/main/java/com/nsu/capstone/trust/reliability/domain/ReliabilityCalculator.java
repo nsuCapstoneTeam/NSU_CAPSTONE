@@ -5,8 +5,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -36,12 +38,12 @@ public final class ReliabilityCalculator {
         this.policy = policy;
     }
 
-    /** @param outcomes 아티스트 1명의 원장 행 전체(모든 revision). 순서는 상관없다. */
+    /**
+     * @param outcomes 아티스트 1명의 원장 행 전체(모든 revision). 순서는 상관없다.
+     * @throws IllegalArgumentException 같은 공연의 같은 revision이 두 번 들어온 경우
+     */
     public ReliabilityResult calculate(Collection<PerformanceOutcome> outcomes) {
-        Map<UUID, Integer> latestRevisions = new HashMap<>();
-        for (PerformanceOutcome outcome : outcomes) {
-            latestRevisions.merge(outcome.performanceId(), outcome.revision(), Math::max);
-        }
+        Map<UUID, Integer> latestRevisions = latestRevisions(outcomes);
 
         List<Observation> observations = new ArrayList<>();
         List<ExcludedOutcome> excludedOutcomes = new ArrayList<>();
@@ -67,6 +69,23 @@ public final class ReliabilityCalculator {
             beta = policy.gamma() * beta + (1 - success);
         }
         return new ReliabilityResult(policy, alpha / (alpha + beta), observations, excludedOutcomes);
+    }
+
+    /** 공연별 가장 큰 revision. 같은 공연의 같은 revision이 둘이면 원장 행이 아니므로 거부한다. */
+    private static Map<UUID, Integer> latestRevisions(Collection<PerformanceOutcome> outcomes) {
+        Set<PerformanceRevision> seen = new HashSet<>();
+        Map<UUID, Integer> latestRevisions = new HashMap<>();
+        for (PerformanceOutcome outcome : outcomes) {
+            if (!seen.add(new PerformanceRevision(outcome.performanceId(), outcome.revision()))) {
+                throw new IllegalArgumentException(
+                    "duplicate revision " + outcome.revision() + " of performance " + outcome.performanceId());
+            }
+            latestRevisions.merge(outcome.performanceId(), outcome.revision(), Math::max);
+        }
+        return latestRevisions;
+    }
+
+    private record PerformanceRevision(UUID performanceId, int revision) {
     }
 
     /** 취소·노쇼 중 귀책이 ARTIST가 아닌 결과는 아티스트의 이행을 보여 주지 못해 관측이 아니다. */

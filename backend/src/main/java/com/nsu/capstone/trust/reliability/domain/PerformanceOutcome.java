@@ -19,6 +19,22 @@ public record PerformanceOutcome(
     Instant cancellationRequestedAt
 ) {
 
+    public PerformanceOutcome {
+        if (revision < 1) {
+            throw new IllegalArgumentException("revision must be 1 or greater: " + revision);
+        }
+        boolean withoutFault = outcomeType == OutcomeType.COMPLETED || outcomeType == OutcomeType.VOIDED;
+        if (withoutFault && responsibleParty != null) {
+            throw new IllegalArgumentException("responsibleParty must be null for " + outcomeType);
+        }
+        if (!withoutFault && responsibleParty == null) {
+            throw new IllegalArgumentException("responsibleParty is required for " + outcomeType);
+        }
+        if (outcomeType == OutcomeType.CANCELLED && cancellationRequestedAt == null) {
+            throw new IllegalArgumentException("cancellationRequestedAt is required for CANCELLED");
+        }
+    }
+
     /** 관측 순서 기준 시각(04 D43). CANCELLED는 취소 통보 시각, 그 외는 공연 예정 시작 시각이다. */
     public Instant orderingAt() {
         return outcomeType == OutcomeType.CANCELLED ? cancellationRequestedAt : scheduledStartAt;

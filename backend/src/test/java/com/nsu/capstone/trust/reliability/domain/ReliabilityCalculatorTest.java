@@ -4,7 +4,9 @@ import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.history;
 import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.nextRevision;
 import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.shifted;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.assertj.core.api.Assertions.within;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -311,6 +313,47 @@ class ReliabilityCalculatorTest {
             new ExcludedOutcome(noShow, ExclusionReason.SUPERSEDED),
             new ExcludedOutcome(voided, ExclusionReason.SUPERSEDED),
             new ExcludedOutcome(mutualCancellation, ExclusionReason.NON_ARTIST_ATTRIBUTION));
+    }
+
+    @Test
+    void calculationFollowsTheGivenPolicyValues() {
+        ReliabilityPolicy policy = new ReliabilityPolicy(
+            "custom-test", 0.9, 2, 1, 1, 3, 2, Duration.ofHours(48), Duration.ofDays(14), 3);
+        ReliabilityCalculator customCalculator = new ReliabilityCalculator(policy);
+
+        ReliabilityResult twoCompleted = customCalculator.calculate(history().completed(2).outcomes());
+
+        assertThat(twoCompleted.policy()).isEqualTo(policy);
+        // γ = 0.9, α₀ = 2, β₀ = 1: 관측이 없으면 2/3, 정상 완료 2회면 α = 3.52, β = 0.81
+        assertThat(customCalculator.calculate(List.of()).reliability()).isEqualTo(2.0 / 3);
+        assertThat(twoCompleted.reliability()).isCloseTo(3.52 / (3.52 + 0.81), within(1e-12));
+        // 확신 수준: n ≤ 1이면 낮음, n ≥ 3이면 높음
+        assertThat(customCalculator.calculate(history().completed(1).outcomes()).confidenceLevel())
+            .isEqualTo(ConfidenceLevel.LOW);
+        assertThat(twoCompleted.confidenceLevel()).isEqualTo(ConfidenceLevel.MEDIUM);
+        assertThat(customCalculator.calculate(history().completed(3).outcomes()).confidenceLevel())
+            .isEqualTo(ConfidenceLevel.HIGH);
+        // 통보 구간: 48시간 미만, 48시간 이상 14일 미만, 14일 이상
+        ReliabilityResult cancellations = customCalculator.calculate(history()
+            .artistCancellation(Duration.ofHours(30))
+            .artistCancellation(Duration.ofDays(10))
+            .artistCancellation(Duration.ofDays(14))
+            .outcomes());
+        assertThat(cancellations.observations()).extracting(Observation::category).containsExactly(
+            ObservationCategory.ARTIST_CANCELLATION_NOTICE_UNDER_24_HOURS,
+            ObservationCategory.ARTIST_CANCELLATION_NOTICE_24_HOURS_TO_7_DAYS,
+            ObservationCategory.ARTIST_CANCELLATION_NOTICE_AT_LEAST_7_DAYS);
+    }
+
+    @Test
+    void duplicateRevisionOfTheSamePerformanceIsRejected() {
+        PerformanceOutcome completed = history().completed(1).outcomes().getFirst();
+        PerformanceOutcome sameRevision = new PerformanceOutcome(
+            completed.performanceId(), completed.revision(), OutcomeType.NO_SHOW, ResponsibleParty.ARTIST,
+            completed.scheduledStartAt(), null);
+
+        assertThatThrownBy(() -> calculator.calculate(List.of(completed, sameRevision)))
+            .isInstanceOf(IllegalArgumentException.class);
     }
 
     private static List<PerformanceOutcome> append(List<PerformanceOutcome> ledger, PerformanceOutcome... later) {

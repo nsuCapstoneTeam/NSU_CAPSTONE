@@ -4,6 +4,7 @@ import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.history;
 import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.nextRevision;
 import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.shifted;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.nsu.capstone.trust.reliability.domain.OutcomeHistory;
 import com.nsu.capstone.trust.reliability.domain.OutcomeType;
@@ -132,6 +133,29 @@ class RiskSignalEvaluatorTest {
             new RiskSignal(RiskSignalType.RECENT_NO_SHOW, 1, 8, noShowAt),
             new RiskSignal(RiskSignalType.LATE_ARTIST_CANCELLATION, 2, 8, lastCancellationAt),
             new RiskSignal(RiskSignalType.REPEATED_ARTIST_CANCELLATION, 2, 8, lastCancellationAt));
+    }
+
+    @Test
+    void evaluationFollowsTheGivenPolicyValues() {
+        ReliabilityPolicy policy = new ReliabilityPolicy(
+            "custom-test", 0.95, 1, 1, 3, 10, 3, Duration.ofHours(24), Duration.ofDays(7), 3);
+        ReliabilityCalculator customCalculator = new ReliabilityCalculator(policy);
+
+        // 창 3건: 노쇼 뒤 관측이 3건이면 노쇼는 창 밖이다
+        assertThat(evaluator.evaluate(customCalculator.calculate(history().noShow().completed(3).outcomes())))
+            .isEmpty();
+        assertThat(evaluator.evaluate(customCalculator.calculate(history().noShow().completed(2).outcomes())))
+            .extracting(RiskSignal::type, RiskSignal::count, RiskSignal::windowObservationCount)
+            .containsExactly(tuple(RiskSignalType.RECENT_NO_SHOW, 1, 3));
+        // 반복 기준 3건: 창 안 취소가 2건이면 반복이 아니다
+        OutcomeHistory cancellations = history()
+            .artistCancellation(Duration.ofDays(10))
+            .artistCancellation(Duration.ofDays(10));
+        assertThat(evaluator.evaluate(customCalculator.calculate(cancellations.outcomes()))).isEmpty();
+        assertThat(evaluator.evaluate(customCalculator.calculate(
+                cancellations.artistCancellation(Duration.ofDays(10)).outcomes())))
+            .extracting(RiskSignal::type, RiskSignal::count, RiskSignal::windowObservationCount)
+            .containsExactly(tuple(RiskSignalType.REPEATED_ARTIST_CANCELLATION, 3, 3));
     }
 
     @Test
