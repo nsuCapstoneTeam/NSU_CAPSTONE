@@ -66,6 +66,7 @@ public final class ReliabilityResult {
         return observations;
     }
 
+    /** 계산에서 뺀 원장 행. performanceId의 부호 없는 순서이고, 같으면 revision 오름차순이다. */
     public List<ExcludedOutcome> excludedOutcomes() {
         return excludedOutcomes;
     }

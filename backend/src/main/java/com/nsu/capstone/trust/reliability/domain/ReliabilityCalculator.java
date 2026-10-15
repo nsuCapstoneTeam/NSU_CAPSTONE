@@ -4,7 +4,9 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -23,6 +25,11 @@ public final class ReliabilityCalculator {
         .comparing((Observation observation) -> observation.outcome().orderingAt())
         .thenComparing(observation -> observation.outcome().performanceId(), UNSIGNED_UUID_ORDER);
 
+    /** 같은 공연의 revision 이력이 붙어 있도록 공연 식별자 순서, 같으면 revision 순서. */
+    private static final Comparator<ExcludedOutcome> PERFORMANCE_REVISION_ORDER = Comparator
+        .comparing((ExcludedOutcome excluded) -> excluded.outcome().performanceId(), UNSIGNED_UUID_ORDER)
+        .thenComparingInt(excluded -> excluded.outcome().revision());
+
     private final ReliabilityPolicy policy;
 
     public ReliabilityCalculator(ReliabilityPolicy policy) {
@@ -31,19 +38,26 @@ public final class ReliabilityCalculator {
 
     /** @param outcomes 아티스트 1명의 원장 행 전체(모든 revision). 순서는 상관없다. */
     public ReliabilityResult calculate(Collection<PerformanceOutcome> outcomes) {
+        Map<UUID, Integer> latestRevisions = new HashMap<>();
+        for (PerformanceOutcome outcome : outcomes) {
+            latestRevisions.merge(outcome.performanceId(), outcome.revision(), Math::max);
+        }
+
         List<Observation> observations = new ArrayList<>();
         List<ExcludedOutcome> excludedOutcomes = new ArrayList<>();
         for (PerformanceOutcome outcome : outcomes) {
-            if (outcome.outcomeType() == OutcomeType.VOIDED) {
-                throw new UnsupportedOperationException("NSU-69 구현 중: VOIDED는 아직 계산하지 않는다");
-            }
-            if (isNonArtistAttribution(outcome)) {
+            if (outcome.revision() < latestRevisions.get(outcome.performanceId())) {
+                excludedOutcomes.add(new ExcludedOutcome(outcome, ExclusionReason.SUPERSEDED));
+            } else if (outcome.outcomeType() == OutcomeType.VOIDED) {
+                excludedOutcomes.add(new ExcludedOutcome(outcome, ExclusionReason.VOIDED));
+            } else if (isNonArtistAttribution(outcome)) {
                 excludedOutcomes.add(new ExcludedOutcome(outcome, ExclusionReason.NON_ARTIST_ATTRIBUTION));
             } else {
                 observations.add(new Observation(outcome, categoryOf(outcome)));
             }
         }
         observations.sort(ACTION_TIME_ORDER);
+        excludedOutcomes.sort(PERFORMANCE_REVISION_ORDER);
 
         double alpha = policy.priorAlpha();
         double beta = policy.priorBeta();

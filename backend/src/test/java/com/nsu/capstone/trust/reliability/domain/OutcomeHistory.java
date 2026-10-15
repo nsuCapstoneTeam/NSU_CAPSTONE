@@ -35,6 +35,21 @@ public final class OutcomeHistory {
             .toList();
     }
 
+    /** {@code previous}를 정정한 다음 revision. 공연 예정 시작은 그대로이고, 취소 통보 시각은 취소일 때만 이어받는다. */
+    public static PerformanceOutcome nextRevision(
+        PerformanceOutcome previous,
+        OutcomeType outcomeType,
+        ResponsibleParty responsibleParty
+    ) {
+        return new PerformanceOutcome(
+            previous.performanceId(),
+            previous.revision() + 1,
+            outcomeType,
+            responsibleParty,
+            previous.scheduledStartAt(),
+            outcomeType == OutcomeType.CANCELLED ? previous.cancellationRequestedAt() : null);
+    }
+
     /** 이후에 붙이는 결과 사이의 행동 시각 간격을 바꾼다. */
     public OutcomeHistory every(Duration interval) {
         this.interval = interval;

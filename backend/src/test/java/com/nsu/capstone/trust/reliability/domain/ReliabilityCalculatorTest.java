@@ -1,6 +1,7 @@
 package com.nsu.capstone.trust.reliability.domain;
 
 import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.history;
+import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.nextRevision;
 import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.shifted;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -244,6 +245,78 @@ class ReliabilityCalculatorTest {
 
     private static List<PerformanceOutcome> sameSequence(OutcomeHistory history) {
         return history.completed(10).noShow().completed(3).artistCancellation(Duration.ofHours(5)).outcomes();
+    }
+
+    @Test
+    void noShowCorrectedToCompletedEqualsCompletedFromTheStart() {
+        List<PerformanceOutcome> outcomes = history().completed(10).noShow().outcomes();
+        PerformanceOutcome noShow = outcomes.get(10);
+
+        ReliabilityResult corrected = calculator.calculate(
+            append(outcomes, nextRevision(noShow, OutcomeType.COMPLETED, null)));
+
+        ReliabilityResult completedFromStart = calculator.calculate(history().completed(11).outcomes());
+        assertThat(corrected.reliability()).isEqualTo(completedFromStart.reliability());
+        assertThat(corrected.observationCount()).isEqualTo(11);
+        assertThat(corrected.observationCount(ObservationCategory.NO_SHOW)).isZero();
+        assertThat(corrected.excludedOutcomes()).containsExactly(new ExcludedOutcome(noShow, ExclusionReason.SUPERSEDED));
+        assertThat(corrected.exclusionCounts()).isEmpty();
+    }
+
+    @Test
+    void voidedLatestRevisionLeavesNoEffectiveOutcome() {
+        List<PerformanceOutcome> outcomes = history().completed(4).noShow().outcomes();
+        PerformanceOutcome noShow = outcomes.get(4);
+        PerformanceOutcome voided = nextRevision(noShow, OutcomeType.VOIDED, null);
+
+        ReliabilityResult result = calculator.calculate(append(outcomes, voided));
+
+        ReliabilityResult completedOnly = calculator.calculate(history().completed(4).outcomes());
+        assertThat(result.reliability()).isEqualTo(completedOnly.reliability());
+        assertThat(result.observationCount()).isEqualTo(4);
+        assertThat(result.excludedOutcomes()).containsExactly(
+            new ExcludedOutcome(noShow, ExclusionReason.SUPERSEDED),
+            new ExcludedOutcome(voided, ExclusionReason.VOIDED));
+        assertThat(result.exclusionCounts()).isEmpty();
+    }
+
+    @Test
+    void supersededAndVoidedRowsAreNotCountedAsExclusions() {
+        List<PerformanceOutcome> firstRevisions = history()
+            .cancelledBy(ResponsibleParty.EVENT_PARTNER)
+            .cancelledBy(ResponsibleParty.EVENT_PARTNER)
+            .cancelledBy(ResponsibleParty.MUTUAL)
+            .outcomes();
+
+        ReliabilityResult result = calculator.calculate(append(firstRevisions,
+            nextRevision(firstRevisions.get(0), OutcomeType.VOIDED, null),
+            nextRevision(firstRevisions.get(1), OutcomeType.CANCELLED, ResponsibleParty.ARTIST)));
+
+        assertThat(result.exclusionCounts())
+            .containsExactly(new ExclusionCount(OutcomeType.CANCELLED, ResponsibleParty.MUTUAL, 1));
+    }
+
+    @Test
+    void excludedOutcomesAreOrderedByPerformanceThenRevision() {
+        List<PerformanceOutcome> firstRevisions = history().noShow().cancelledBy(ResponsibleParty.MUTUAL).outcomes();
+        PerformanceOutcome noShow = firstRevisions.get(0);
+        PerformanceOutcome mutualCancellation = firstRevisions.get(1);
+        PerformanceOutcome voided = nextRevision(noShow, OutcomeType.VOIDED, null);
+        PerformanceOutcome rejudgedCompleted = nextRevision(voided, OutcomeType.COMPLETED, null);
+
+        ReliabilityResult result = calculator.calculate(List.of(rejudgedCompleted, mutualCancellation, voided, noShow));
+
+        assertThat(result.observations()).extracting(Observation::outcome).containsExactly(rejudgedCompleted);
+        assertThat(result.excludedOutcomes()).containsExactly(
+            new ExcludedOutcome(noShow, ExclusionReason.SUPERSEDED),
+            new ExcludedOutcome(voided, ExclusionReason.SUPERSEDED),
+            new ExcludedOutcome(mutualCancellation, ExclusionReason.NON_ARTIST_ATTRIBUTION));
+    }
+
+    private static List<PerformanceOutcome> append(List<PerformanceOutcome> ledger, PerformanceOutcome... later) {
+        List<PerformanceOutcome> appended = new ArrayList<>(ledger);
+        appended.addAll(List.of(later));
+        return appended;
     }
 
     private static PerformanceOutcome completedAt(Instant scheduledStartAt, String performanceId) {
