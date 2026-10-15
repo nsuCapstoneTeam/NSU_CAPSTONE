@@ -3,11 +3,14 @@ package com.nsu.capstone.trust.reliability.domain;
 import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.history;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class ReliabilityCalculatorTest {
 
@@ -57,6 +60,63 @@ class ReliabilityCalculatorTest {
 
         assertThat(threeDecimals(result.reliability())).isEqualTo(reliability);
         assertThat(result.ratePercent()).hasValue(ratePercent);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"10, 0.839, 84", "20, 0.903, 90"})
+    void artistNoShowIsOneFailure(int completedBefore, String reliability, int ratePercent) {
+        ReliabilityResult result = calculator.calculate(history().completed(completedBefore).noShow().outcomes());
+
+        assertThat(result.observationCount()).isEqualTo(completedBefore + 1);
+        assertThat(result.observationCount(ObservationCategory.NO_SHOW)).isEqualTo(1);
+        assertThat(threeDecimals(result.reliability())).isEqualTo(reliability);
+        assertThat(result.ratePercent()).hasValue(ratePercent);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"P10D", "P3D", "PT1H"})
+    void artistCancellationIsOneFailureWhateverTheNotice(String notice) {
+        ReliabilityResult cancelled = calculator.calculate(
+            history().completed(10).artistCancellation(Duration.parse(notice)).outcomes());
+        ReliabilityResult noShow = calculator.calculate(history().completed(10).noShow().outcomes());
+
+        assertThat(cancelled.observationCount()).isEqualTo(11);
+        assertThat(cancelled.reliability()).isEqualTo(noShow.reliability());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "P7D, ARTIST_CANCELLATION_NOTICE_AT_LEAST_7_DAYS",
+        "PT167H59M59S, ARTIST_CANCELLATION_NOTICE_24_HOURS_TO_7_DAYS",
+        "PT24H, ARTIST_CANCELLATION_NOTICE_24_HOURS_TO_7_DAYS",
+        "PT23H59M59S, ARTIST_CANCELLATION_NOTICE_UNDER_24_HOURS",
+        "PT0S, ARTIST_CANCELLATION_NOTICE_UNDER_24_HOURS",
+        "PT-1H, ARTIST_CANCELLATION_NOTICE_UNDER_24_HOURS"
+    })
+    void artistCancellationIsClassifiedByNoticePeriod(String notice, ObservationCategory expected) {
+        ReliabilityResult result = calculator.calculate(
+            history().artistCancellation(Duration.parse(notice)).outcomes());
+
+        assertThat(result.observations()).extracting(Observation::category).containsExactly(expected);
+    }
+
+    @Test
+    void observationCountsByCategoryAddUpToObservationCount() {
+        ReliabilityResult result = calculator.calculate(history()
+            .completed(3)
+            .artistCancellation(Duration.ofDays(8))
+            .artistCancellation(Duration.ofDays(2))
+            .artistCancellation(Duration.ofHours(1))
+            .noShow()
+            .outcomes());
+
+        assertThat(result.observationCount(ObservationCategory.COMPLETED)).isEqualTo(3);
+        assertThat(result.observationCount(ObservationCategory.ARTIST_CANCELLATION_NOTICE_AT_LEAST_7_DAYS)).isOne();
+        assertThat(result.observationCount(ObservationCategory.ARTIST_CANCELLATION_NOTICE_24_HOURS_TO_7_DAYS)).isOne();
+        assertThat(result.observationCount(ObservationCategory.ARTIST_CANCELLATION_NOTICE_UNDER_24_HOURS)).isOne();
+        assertThat(result.observationCount(ObservationCategory.NO_SHOW)).isOne();
+        int sumOfCategories = Arrays.stream(ObservationCategory.values()).mapToInt(result::observationCount).sum();
+        assertThat(result.observationCount()).isEqualTo(sumOfCategories).isEqualTo(7);
     }
 
     /** ADR 문서의 수치는 소수 셋째 자리까지 반올림한 값이다. */
