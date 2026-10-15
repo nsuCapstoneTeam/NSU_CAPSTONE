@@ -1,5 +1,6 @@
 package com.nsu.capstone;
 
+import static com.nsu.capstone.TrustProfileExamples.insufficientEvidenceProfile;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -227,37 +228,5 @@ class TrustProfileApiIntegrationTest {
 
     private String bearer(UUID userId, UserRole role) {
         return "Bearer " + accessTokenService.issue(userId, role).value();
-    }
-
-    private static String insufficientEvidenceProfile(UUID artistId) {
-        return """
-            {
-              "artistId": "%s",
-              "policyVersion": "reliability-v1",
-              "verifications": [],
-              "reliability": {
-                "confidenceLevel": "LOW",
-                "observationCount": 0,
-                "ratePercent": null
-              },
-              "evidence": {
-                "observations": {
-                  "completedCount": 0,
-                  "artistCancellations": {
-                    "noticeAtLeast7DaysCount": 0,
-                    "notice24HoursTo7DaysCount": 0,
-                    "noticeUnder24HoursCount": 0
-                  },
-                  "noShowCount": 0
-                },
-                "exclusions": []
-              },
-              "riskSignals": [],
-              "activityFreshness": {
-                "lastPerformedMonth": null,
-                "completedCountLast12Months": 0
-              }
-            }
-            """.formatted(artistId);
     }
 }
