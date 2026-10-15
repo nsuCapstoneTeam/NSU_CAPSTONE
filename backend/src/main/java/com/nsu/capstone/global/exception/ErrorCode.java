@@ -147,6 +147,16 @@ public enum ErrorCode {
         HttpStatus.CONFLICT,
         "취소한 행사는 바꿀 수 없습니다."
     ),
+    INVALID_ARTIST_ID(
+        "INVALID_ARTIST_ID",
+        HttpStatus.BAD_REQUEST,
+        "아티스트 ID 형식이 올바르지 않습니다."
+    ),
+    ARTIST_NOT_FOUND(
+        "ARTIST_NOT_FOUND",
+        HttpStatus.NOT_FOUND,
+        "아티스트를 찾을 수 없습니다."
+    ),
     INTERNAL_SERVER_ERROR(
         "INTERNAL_SERVER_ERROR",
         HttpStatus.INTERNAL_SERVER_ERROR,
