@@ -1,5 +1,7 @@
 package com.nsu.capstone.trust.risk;
 
+import com.nsu.capstone.trust.reliability.domain.Observation;
+import com.nsu.capstone.trust.reliability.domain.ObservationCategory;
 import com.nsu.capstone.trust.reliability.domain.ReliabilityResult;
 import java.util.List;
 
@@ -8,6 +10,17 @@ public final class RiskSignalEvaluator {
 
     /** @return 활성 신호만, {@link RiskSignalType} 선언 순서로 */
     public List<RiskSignal> evaluate(ReliabilityResult reliability) {
-        return List.of();
+        List<Observation> observations = reliability.observations();
+        int windowSize = Math.min(reliability.policy().riskSignalWindowSize(), observations.size());
+        List<Observation> window = observations.subList(observations.size() - windowSize, observations.size());
+
+        List<Observation> noShows = window.stream()
+            .filter(observation -> observation.category() == ObservationCategory.NO_SHOW)
+            .toList();
+        if (noShows.isEmpty()) {
+            return List.of();
+        }
+        return List.of(new RiskSignal(
+            RiskSignalType.RECENT_NO_SHOW, noShows.size(), window.size(), noShows.getLast().outcome().orderingAt()));
     }
 }
