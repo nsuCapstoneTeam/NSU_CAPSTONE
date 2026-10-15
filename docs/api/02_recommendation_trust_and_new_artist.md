@@ -286,7 +286,7 @@ Authorization: Bearer {accessToken}
 
 | 상황 | 응답 |
 |---|---|
-| 로그인하지 않음 | `401 UNAUTHENTICATED` |
+| 로그인하지 않음 | `401 AUTHENTICATION_REQUIRED` |
 | 행사가 없거나 호출자가 볼 수 없는 PRIVATE 행사 | `404 EVENT_NOT_FOUND` |
 | 호출자가 볼 수 있는 행사지만 그 행사를 등록한 EVENT_PARTNER가 아님 | `403 ACCESS_DENIED` |
 | `recommendationId`가 그 행사의 추천 결과가 아님(추천을 한 번도 받지 않은 행사 포함) | `404 RECOMMENDATION_NOT_FOUND` |
@@ -367,12 +367,12 @@ Authorization: Bearer {accessToken}
 | AI 응답 대기 시간 초과(재시도를 포함한 전체 시간 한도 초과 포함) | `504`, `code: RECOMMENDATION_TIMEOUT` (서버 협의 010) |
 | AI 응답이 계약을 어김(§1.2) | `503`, `code: RECOMMENDATION_UNAVAILABLE` |
 | 후보 곡 수가 AI의 최대 후보 곡 수를 넘어 AI가 거부 | `503`, `code: RECOMMENDATION_UNAVAILABLE`. 서버 경보를 남긴다 |
-| Trust Profile 조합 실패 | `500 INTERNAL_ERROR`. Trust Profile은 Spring DB에서 조회하므로 부분 응답을 만들지 않는다 |
+| Trust Profile 조합 실패 | `500 INTERNAL_SERVER_ERROR`. Trust Profile은 Spring DB에서 조회하므로 부분 응답을 만들지 않는다 |
 | 같은 사용자의 추천을 생성하는 중(다른 행사 포함) | `409`, `code: RECOMMENDATION_IN_PROGRESS`. AI를 호출하지 않는다 (§5.1) |
 | 생성 잠금을 걸 수 없음(Redis 접속 불가) | `503`, `code: RECOMMENDATION_UNAVAILABLE`. AI를 호출하지 않고 서버 경보를 남긴다 (§5.1) |
 | 생성 횟수 제한을 넘음(잠금을 얻은 뒤 검사) | `429`, `code: TOO_MANY_REQUESTS`, `Retry-After` 헤더. AI를 호출하지 않는다 (§5.2) |
 | 저장할 때 다시 센 횟수가 제한을 넘음(잠금이 저장 전에 만료된 경우) | `429`, `code: TOO_MANY_REQUESTS`, `Retry-After` 헤더. AI는 이미 호출했고, 결과는 저장하지 않는다 (§5.2) |
-| 로그인하지 않음 | `401`, `code: UNAUTHENTICATED` |
+| 로그인하지 않음 | `401`, `code: AUTHENTICATION_REQUIRED` |
 | 행사가 없거나, 호출자가 볼 수 없는 PRIVATE 행사 (생성·다시 보기) | `404`, `code: EVENT_NOT_FOUND` |
 | 호출자가 볼 수 있는 행사지만 그 행사를 등록한 EVENT_PARTNER가 아님 | `403`, `code: ACCESS_DENIED` |
 | 추천을 한 번도 받지 않은 행사를 다시 보기 | `404`, `code: RECOMMENDATION_NOT_FOUND` |
@@ -394,12 +394,8 @@ Authorization: Bearer {accessToken}
 
 ```json
 {
-  "type": "about:blank",
-  "title": "Conflict",
-  "status": 409,
-  "detail": "추천을 만들고 있습니다. 끝난 뒤 다시 시도해 주세요.",
-  "instance": "/api/v1/events/0192f3a4-7b1c-7d2e-8f00-1a2b3c4d5e6f/recommendations",
-  "code": "RECOMMENDATION_IN_PROGRESS"
+  "code": "RECOMMENDATION_IN_PROGRESS",
+  "message": "추천을 만들고 있습니다. 끝난 뒤 다시 시도해 주세요."
 }
 ```
 

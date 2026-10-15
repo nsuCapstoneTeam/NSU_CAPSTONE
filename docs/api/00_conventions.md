@@ -2,13 +2,11 @@
 
 Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서는 이 문서의 규칙을 따르고, 예외가 있으면 해당 문서에 이유와 함께 적는다.
 
-> 상태: Trust Profile API(NSU-70) 설계에서 처음 정했다. **PR 리뷰 확인 필요** 표시가 붙은 항목은 확인 전에도 이 규칙으로 구현한다. 이 문서가 들어간 PR의 리뷰에서 다른 Spring 담당자(Seokyun Kang)가 확인하면 확정한다(2026-10-05 결정).
+> 상태: Trust Profile API(NSU-70) 설계에서 처음 정했다. §1 경로와 버전, §7 인증과 호출 주체는 이 문서가 들어간 PR #127의 리뷰에서 다른 Spring 담당자(Seokyun Kang)가 확인했다(2026-10-12). §8 에러 형식은 먼저 구현된 ADR-007과 달라 ADR-007에 맞췄다(2026-10-14 결정).
 
 ---
 
 ## 1. 경로와 버전
-
-**PR 리뷰 확인 필요**
 
 ```text
 /api/v1/{자원}
@@ -60,8 +58,6 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 
 ## 7. 인증과 호출 주체
 
-**PR 리뷰 확인 필요**
-
 `users` 테이블, 회원가입, 로그인, 토큰 발급은 Auth/User 도메인이 소유한다. 다른 API는 아래를 전제로 한다.
 
 - `Authorization: Bearer {accessToken}` (JWT)
@@ -70,43 +66,38 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 
 ## 8. 에러 형식
 
-**PR 리뷰 확인 필요**
-
-모든 에러 응답은 RFC 9457 Problem Details(`Content-Type: application/problem+json`)에 확장 필드 `code`를 더한 형식이다.
+모든 에러 응답은 [ADR-007](../adr/ADR-007-spring-backend-global-exception-handling.md)의 `{code, message}` 형식이다(2026-10-14 결정). 이 문서는 처음에 RFC 9457 Problem Details를 정했지만, 먼저 구현되어 프론트가 쓰고 있는 ADR-007에 맞췄다.
 
 ```json
 {
-  "type": "about:blank",
-  "title": "Not Found",
-  "status": 404,
-  "detail": "아티스트를 찾을 수 없습니다.",
-  "instance": "/api/v1/artists/0192f3a4-7b1c-7d2e-8f00-1a2b3c4d5e6f/trust-profile",
-  "code": "ARTIST_NOT_FOUND"
+  "code": "ARTIST_NOT_FOUND",
+  "message": "아티스트를 찾을 수 없습니다."
 }
 ```
 
 | 필드 | 계약 여부 | 설명 |
 |---|---|---|
-| `status` | 계약 | HTTP 상태 코드와 같은 값 |
 | `code` | 계약 | 클라이언트 분기 기준. UPPER_SNAKE_CASE |
-| `title`, `detail` | 계약 아님 | 사람이 읽는 문장. 문구가 바뀔 수 있으므로 파싱하지 않는다 |
-| `type`, `instance` | 계약 아님 | RFC 9457 기본 필드 |
+| `message` | 계약 아님 | 사람이 읽는 문장. 문구가 바뀔 수 있으므로 파싱하지 않는다 |
+
+- HTTP 상태 코드는 응답 상태로만 알린다. 본문에 따로 넣지 않는다.
 
 공통 `code`:
 
 | HTTP | `code` | 상황 |
 |---|---|---|
-| 400 | `INVALID_{대상}` | 경로·쿼리 값의 형식 오류 (예: `INVALID_ARTIST_ID`) |
-| 401 | `UNAUTHENTICATED` | 토큰 없음, 만료, 서명 오류 |
+| 400 | `VALIDATION_ERROR` | 요청 본문·파라미터 검증 실패 (ADR-007) |
+| 400 | `INVALID_{대상}` | 경로 값의 형식 오류 (예: `INVALID_ARTIST_ID`) |
+| 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음, 만료, 서명 오류 |
 | 403 | `ACCESS_DENIED` | 인증은 됐지만 호출 주체에게 허용되지 않은 요청 |
 | 404 | `{대상}_NOT_FOUND` | 대상이 없거나 호출 주체에게 존재를 드러내지 않는 대상 |
-| 429 | `TOO_MANY_REQUESTS` | 요청 제한을 넘음. `Retry-After` 헤더에 다시 시도할 수 있을 때까지 남은 초를 준다 |
-| 500 | `INTERNAL_ERROR` | 서버 오류. 예외 메시지·스택 트레이스 등 내부 정보를 담지 않는다 |
+| 429 | `TOO_MANY_REQUESTS` | 요청 제한을 넘음. `Retry-After` 헤더에 다시 시도할 수 있을 때까지 남은 초를 준다. 이미 있는 기능별 code(예: `VERIFICATION_REQUEST_LIMIT_EXCEEDED`)는 그대로 쓴다 |
+| 500 | `INTERNAL_SERVER_ERROR` | 서버 오류. 예외 메시지·스택 트레이스 등 내부 정보를 담지 않는다 |
 
 구현 메모:
 
-- MVC 계층의 예외는 Spring의 `ProblemDetail` 지원으로 만든다.
-- `401`·`403`은 Spring Security 필터 체인에서 만들어지므로 `AuthenticationEntryPoint`와 `AccessDeniedHandler`도 같은 형식을 내야 한다.
+- 응답은 `global/exception`의 `ErrorCode`·`ErrorResponse`·`GlobalExceptionHandler`가 만든다(ADR-007). 새 `code`는 `ErrorCode`에 추가한다.
+- `401`·`403`은 Spring Security 필터 체인에서 만들어지므로 `JsonAuthenticationEntryPoint`·`JsonAccessDeniedHandler`가 같은 형식을 낸다.
 
 ## 9. 아직 정하지 않은 규칙
 

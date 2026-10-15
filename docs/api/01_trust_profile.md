@@ -41,13 +41,13 @@ Authorization: Bearer {accessToken}
 
 | 상황 | HTTP | `code` |
 |---|---|---|
-| 토큰 없음·만료·서명 오류 | 401 | `UNAUTHENTICATED` |
+| 토큰 없음·만료·서명 오류 | 401 | `AUTHENTICATION_REQUIRED` |
 | `artistId`가 UUID 형식이 아님 | 400 | `INVALID_ARTIST_ID` |
 | `ARTIST`가 자기 것이 아닌 `artistId`를 요청 | 403 | `ACCESS_DENIED` |
 | `EVENT_PARTNER` 호출이고 대상이 다음 중 하나: 존재하지 않음, `role = EVENT_PARTNER`, `status = WITHDRAWN`, `status = SUSPENDED` | 404 | `ARTIST_NOT_FOUND` |
 | `EVENT_PARTNER` 호출이고 대상이 `status = ACTIVE`인 `ARTIST` | 200 | — |
 | `ARTIST` 본인 호출 | 200 | — |
-| 서버 오류 | 500 | `INTERNAL_ERROR` |
+| 서버 오류 | 500 | `INTERNAL_SERVER_ERROR` |
 
 - 정지·탈퇴·역할 차이를 모두 `404`로 응답해, 이 API로 계정 제재 여부나 사용자 역할을 알아낼 수 없게 한다. 계정 제재는 Risk Signal이 아니며 추천에서는 Eligibility로 처리한다(04 D41).
 - 본인이 `SUSPENDED`일 때 로그인할 수 있는지는 Auth/User 도메인이 정한다. 이 API는 토큰이 유효하면 본인 조회를 허용한다.
@@ -296,12 +296,8 @@ Authorization: Bearer {accessToken}
 
 ```json
 {
-  "type": "about:blank",
-  "title": "Not Found",
-  "status": 404,
-  "detail": "아티스트를 찾을 수 없습니다.",
-  "instance": "/api/v1/artists/0192f3a4-7b1c-7d2e-8f00-1a2b3c4d5e6f/trust-profile",
-  "code": "ARTIST_NOT_FOUND"
+  "code": "ARTIST_NOT_FOUND",
+  "message": "아티스트를 찾을 수 없습니다."
 }
 ```
 
@@ -323,7 +319,7 @@ Map<UUID, TrustProfile> findByArtistIds(Collection<UUID> artistIds);
 | 기준 | 근거 |
 |---|---|
 | §3의 상태 코드와 `code`가 표대로 나온다 | 본 문서 |
-| `401`·`403`도 Problem Details 형식이다 | 00_conventions §8 |
+| `401`·`403`도 `{code, message}` 형식이다 | 00_conventions §8, ADR-007 |
 | §4.2 불변식이 모든 응답에서 성립한다 | 본 문서 |
 | 관측 0~3건이면 `ratePercent = null` | `TRUST-149`, NSU-70 AC |
 | 계산 제외 결과가 조합별 건수로 나온다 | `TRUST-149`, NSU-70 AC |
