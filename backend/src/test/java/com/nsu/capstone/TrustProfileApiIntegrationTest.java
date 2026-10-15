@@ -2,6 +2,10 @@ package com.nsu.capstone;
 
 import static com.nsu.capstone.TrustProfileExamples.insufficientEvidenceProfile;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -13,12 +17,17 @@ import com.nsu.capstone.identity.domain.UserStatus;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.security.JwtAccessTokenService;
 import com.nsu.capstone.identity.support.UuidV7Generator;
+import com.nsu.capstone.trust.profile.application.VerificationReader;
+import com.nsu.capstone.trust.profile.domain.VerificationItem;
+import com.nsu.capstone.trust.profile.domain.VerificationProvider;
+import com.nsu.capstone.trust.profile.domain.VerificationType;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import javax.crypto.spec.SecretKeySpec;
@@ -27,6 +36,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.skyscreamer.jsonassert.JSONAssert;
+import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -37,6 +48,7 @@ import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -53,6 +65,7 @@ class TrustProfileApiIntegrationTest {
     @Autowired JwtAccessTokenService accessTokenService;
     @Autowired JdbcTemplate jdbcTemplate;
     @Autowired JwtEncoder jwtEncoder;
+    @MockitoBean VerificationReader verificationReader;
 
     private final List<UUID> createdUserIds = new ArrayList<>();
 
@@ -86,6 +99,52 @@ class TrustProfileApiIntegrationTest {
                 insufficientEvidenceProfile(artistId),
                 JsonCompareMode.STRICT
             ));
+    }
+
+    @Test
+    void showsEachVerifiedItemOnceInContractOrder() throws Exception {
+        UUID artistId = saveArtist();
+        when(verificationReader.findVerifiedByArtistIds(any())).thenReturn(Map.of(artistId, List.of(
+            new VerificationItem(VerificationType.OFFICIAL_ACTIVITY, null),
+            new VerificationItem(VerificationType.EXTERNAL_ACCOUNT, VerificationProvider.YOUTUBE),
+            new VerificationItem(VerificationType.COPYRIGHT, null),
+            new VerificationItem(VerificationType.EXTERNAL_ACCOUNT, VerificationProvider.SOUNDCLOUD),
+            new VerificationItem(VerificationType.EXTERNAL_ACCOUNT, VerificationProvider.YOUTUBE),
+            new VerificationItem(VerificationType.PERFORMANCE_PARTICIPATION, null),
+            new VerificationItem(VerificationType.BUSINESS_REGISTRATION, null),
+            new VerificationItem(VerificationType.COPYRIGHT, null)
+        )));
+
+        String body = mockMvc.perform(get(TRUST_PROFILE_PATH, artistId)
+                .header("Authorization", bearer(uuidV7Generator.generate(), UserRole.EVENT_PARTNER)))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        JSONAssert.assertEquals("""
+            {
+              "verifications": [
+                { "type": "EXTERNAL_ACCOUNT", "provider": "SOUNDCLOUD" },
+                { "type": "EXTERNAL_ACCOUNT", "provider": "YOUTUBE" },
+                { "type": "COPYRIGHT", "provider": null },
+                { "type": "BUSINESS_REGISTRATION", "provider": null },
+                { "type": "PERFORMANCE_PARTICIPATION", "provider": null },
+                { "type": "OFFICIAL_ACTIVITY", "provider": null }
+              ]
+            }
+            """, body, JSONCompareMode.STRICT_ORDER);
+    }
+
+    @Test
+    void answersInternalErrorWithoutExposingSourceFailure() throws Exception {
+        UUID artistId = saveArtist();
+        when(verificationReader.findVerifiedByArtistIds(any()))
+            .thenThrow(new IllegalStateException("verification storage detail"));
+
+        mockMvc.perform(get(TRUST_PROFILE_PATH, artistId)
+                .header("Authorization", bearer(uuidV7Generator.generate(), UserRole.EVENT_PARTNER)))
+            .andExpect(status().isInternalServerError())
+            .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
+            .andExpect(content().string(not(containsString("verification storage detail"))));
     }
 
     @Test

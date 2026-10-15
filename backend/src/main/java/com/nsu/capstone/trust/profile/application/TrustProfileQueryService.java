@@ -7,7 +7,9 @@ import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.domain.UserStatus;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.trust.profile.domain.TrustProfile;
+import com.nsu.capstone.trust.profile.domain.VerificationItem;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -18,13 +20,16 @@ import org.springframework.stereotype.Service;
 public class TrustProfileQueryService {
 
     private final UserRepository userRepository;
+    private final VerificationReader verificationReader;
     private final TrustProfileAssembler assembler;
 
     public TrustProfileQueryService(
         UserRepository userRepository,
+        VerificationReader verificationReader,
         TrustProfileAssembler assembler
     ) {
         this.userRepository = userRepository;
+        this.verificationReader = verificationReader;
         this.assembler = assembler;
     }
 
@@ -38,7 +43,7 @@ public class TrustProfileQueryService {
                 throw new BusinessException(ErrorCode.ARTIST_NOT_FOUND);
             }
         }
-        return assembler.assemble(artistId);
+        return assembleAll(List.of(artistId)).get(artistId);
     }
 
     /**
@@ -48,10 +53,23 @@ public class TrustProfileQueryService {
         if (artistIds.isEmpty()) {
             return Map.of();
         }
-        return userRepository.findAllById(artistIds).stream()
+        List<UUID> foundArtistIds = userRepository.findAllById(artistIds).stream()
             .filter(user -> user.getRole() == UserRole.ARTIST)
             .map(User::getId)
-            .collect(Collectors.toUnmodifiableMap(Function.identity(), assembler::assemble));
+            .toList();
+        return assembleAll(foundArtistIds);
+    }
+
+    private Map<UUID, TrustProfile> assembleAll(List<UUID> artistIds) {
+        Map<UUID, List<VerificationItem>> verifications =
+            verificationReader.findVerifiedByArtistIds(artistIds);
+        return artistIds.stream().collect(Collectors.toUnmodifiableMap(
+            Function.identity(),
+            artistId -> assembler.assemble(
+                artistId,
+                verifications.getOrDefault(artistId, List.of())
+            )
+        ));
     }
 
     private boolean isActiveArtist(UUID userId) {

@@ -2,13 +2,19 @@ package com.nsu.capstone;
 
 import static com.nsu.capstone.TrustProfileExamples.insufficientEvidenceProfile;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserStatus;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.support.UuidV7Generator;
 import com.nsu.capstone.trust.profile.application.TrustProfileQueryService;
+import com.nsu.capstone.trust.profile.application.VerificationReader;
 import com.nsu.capstone.trust.profile.domain.TrustProfile;
+import com.nsu.capstone.trust.profile.domain.VerificationItem;
+import com.nsu.capstone.trust.profile.domain.VerificationProvider;
+import com.nsu.capstone.trust.profile.domain.VerificationType;
 import jakarta.persistence.EntityManagerFactory;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +31,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
@@ -37,6 +44,7 @@ class TrustProfileBatchQueryIntegrationTest {
     @Autowired JdbcTemplate jdbcTemplate;
     @Autowired ObjectMapper objectMapper;
     @Autowired EntityManagerFactory entityManagerFactory;
+    @MockitoSpyBean VerificationReader verificationReader;
 
     private final List<UUID> createdUserIds = new ArrayList<>();
 
@@ -68,6 +76,30 @@ class TrustProfileBatchQueryIntegrationTest {
                 JSONCompareMode.STRICT
             );
         }
+    }
+
+    @Test
+    void verificationsDoNotChangeReliabilityEvidenceOrRiskSignals() {
+        UUID verifiedArtistId = saveArtist(UserStatus.ACTIVE);
+        UUID unverifiedArtistId = saveArtist(UserStatus.ACTIVE);
+        List<VerificationItem> verifications = List.of(
+            new VerificationItem(VerificationType.EXTERNAL_ACCOUNT, VerificationProvider.YOUTUBE),
+            new VerificationItem(VerificationType.COPYRIGHT, null)
+        );
+        doReturn(Map.of(verifiedArtistId, verifications))
+            .when(verificationReader).findVerifiedByArtistIds(any());
+
+        Map<UUID, TrustProfile> profiles = queryService.findByArtistIds(
+            List.of(verifiedArtistId, unverifiedArtistId)
+        );
+
+        TrustProfile verified = profiles.get(verifiedArtistId);
+        TrustProfile unverified = profiles.get(unverifiedArtistId);
+        assertThat(verified.verifications()).isEqualTo(verifications);
+        assertThat(unverified.verifications()).isEmpty();
+        assertThat(verified.reliability()).isEqualTo(unverified.reliability());
+        assertThat(verified.evidence()).isEqualTo(unverified.evidence());
+        assertThat(verified.riskSignals()).isEqualTo(unverified.riskSignals());
     }
 
     @Test
