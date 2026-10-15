@@ -69,6 +69,72 @@ class RiskSignalEvaluatorTest {
     }
 
     @Test
+    void cancellationNotifiedLessThan24HoursAheadRaisesLateArtistCancellation() {
+        List<PerformanceOutcome> outcomes = history().completed(10).artistCancellation(Duration.ofHours(23)).outcomes();
+        PerformanceOutcome cancellation = outcomes.get(10);
+
+        List<RiskSignal> signals = evaluator.evaluate(calculator.calculate(outcomes));
+
+        assertThat(signals).containsExactly(new RiskSignal(
+            RiskSignalType.LATE_ARTIST_CANCELLATION, 1, 11, cancellation.cancellationRequestedAt()));
+    }
+
+    @Test
+    void cancellationNotifiedExactly24HoursAheadRaisesNoSignal() {
+        List<PerformanceOutcome> outcomes = history().completed(10).artistCancellation(Duration.ofHours(24)).outcomes();
+
+        assertThat(evaluator.evaluate(calculator.calculate(outcomes))).isEmpty();
+    }
+
+    @Test
+    void twoArtistCancellationsInTheWindowRaiseRepeatedArtistCancellation() {
+        List<PerformanceOutcome> outcomes = history()
+            .completed(10)
+            .artistCancellation(Duration.ofDays(10))
+            .completed(2)
+            .artistCancellation(Duration.ofDays(3))
+            .outcomes();
+        PerformanceOutcome latestCancellation = outcomes.get(13);
+
+        List<RiskSignal> signals = evaluator.evaluate(calculator.calculate(outcomes));
+
+        assertThat(signals).containsExactly(new RiskSignal(
+            RiskSignalType.REPEATED_ARTIST_CANCELLATION, 2, 14, latestCancellation.cancellationRequestedAt()));
+    }
+
+    @Test
+    void singleArtistCancellationOrOneOutsideTheWindowIsNotRepeated() {
+        List<PerformanceOutcome> single = history().completed(5).artistCancellation(Duration.ofDays(10)).outcomes();
+        List<PerformanceOutcome> oneOutsideTheWindow = history()
+            .artistCancellation(Duration.ofDays(10))
+            .completed(13)
+            .artistCancellation(Duration.ofDays(10))
+            .outcomes();
+
+        assertThat(evaluator.evaluate(calculator.calculate(single))).isEmpty();
+        assertThat(evaluator.evaluate(calculator.calculate(oneOutsideTheWindow))).isEmpty();
+    }
+
+    @Test
+    void activeSignalsFollowRiskSignalTypeDeclarationOrder() {
+        List<PerformanceOutcome> outcomes = history()
+            .completed(5)
+            .artistCancellation(Duration.ofHours(1))
+            .noShow()
+            .artistCancellation(Duration.ofHours(2))
+            .outcomes();
+        Instant noShowAt = outcomes.get(6).scheduledStartAt();
+        Instant lastCancellationAt = outcomes.get(7).cancellationRequestedAt();
+
+        List<RiskSignal> signals = evaluator.evaluate(calculator.calculate(outcomes));
+
+        assertThat(signals).containsExactly(
+            new RiskSignal(RiskSignalType.RECENT_NO_SHOW, 1, 8, noShowAt),
+            new RiskSignal(RiskSignalType.LATE_ARTIST_CANCELLATION, 2, 8, lastCancellationAt),
+            new RiskSignal(RiskSignalType.REPEATED_ARTIST_CANCELLATION, 2, 8, lastCancellationAt));
+    }
+
+    @Test
     void riskSignalDoesNotExpireWithTimeAlone() {
         List<PerformanceOutcome> outcomes = history().completed(20).noShow().outcomes();
         Duration threeYears = Duration.ofDays(3 * 365);
