@@ -21,6 +21,6 @@ public record PerformanceOutcome(
 
     /** 관측 순서 기준 시각(04 D43). CANCELLED는 취소 통보 시각, 그 외는 공연 예정 시작 시각이다. */
     public Instant orderingAt() {
-        throw new UnsupportedOperationException("NSU-69 구현 중: 관측 순서는 아직 계산하지 않는다");
+        return outcomeType == OutcomeType.CANCELLED ? cancellationRequestedAt : scheduledStartAt;
     }
 }

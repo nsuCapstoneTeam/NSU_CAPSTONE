@@ -3,13 +3,25 @@ package com.nsu.capstone.trust.reliability.domain;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 공연 결과 원장으로 Artist Reliability를 계산한다(04 §9, 06 §5).
  * 불변이고 스레드 안전하며, 현재 시각을 입력으로 받지 않는다.
  */
 public final class ReliabilityCalculator {
+
+    /** UUID.compareTo는 부호 있는 비교라 쓰지 않는다. 부호 없는 비교는 UUID 문자열의 사전순과 같다. */
+    private static final Comparator<UUID> UNSIGNED_UUID_ORDER = Comparator
+        .comparing(UUID::getMostSignificantBits, Long::compareUnsigned)
+        .thenComparing(UUID::getLeastSignificantBits, Long::compareUnsigned);
+
+    /** 04 D43: 행동 시각 순서, 같으면 공연 식별자 순서. */
+    private static final Comparator<Observation> ACTION_TIME_ORDER = Comparator
+        .comparing((Observation observation) -> observation.outcome().orderingAt())
+        .thenComparing(observation -> observation.outcome().performanceId(), UNSIGNED_UUID_ORDER);
 
     private final ReliabilityPolicy policy;
 
@@ -31,6 +43,7 @@ public final class ReliabilityCalculator {
                 observations.add(new Observation(outcome, categoryOf(outcome)));
             }
         }
+        observations.sort(ACTION_TIME_ORDER);
 
         double alpha = policy.priorAlpha();
         double beta = policy.priorBeta();

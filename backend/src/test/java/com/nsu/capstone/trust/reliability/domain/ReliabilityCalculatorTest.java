@@ -1,13 +1,19 @@
 package com.nsu.capstone.trust.reliability.domain;
 
 import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.history;
+import static com.nsu.capstone.trust.reliability.domain.OutcomeHistory.shifted;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Random;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -171,6 +177,78 @@ class ReliabilityCalculatorTest {
         assertThat(result.ratePercent()).hasValue(94);
         assertThat(result.exclusionCounts())
             .containsExactly(new ExclusionCount(OutcomeType.CANCELLED, ResponsibleParty.EVENT_PARTNER, 10));
+    }
+
+    @Test
+    void lateConfirmedOrShuffledOutcomesGiveTheSameResultAsActionTimeOrder() {
+        List<PerformanceOutcome> actionTimeOrder = history()
+            .completed(5).noShow().completed(3).artistCancellation(Duration.ofDays(2)).completed(2).outcomes();
+        PerformanceOutcome noShow = actionTimeOrder.get(5);
+        List<PerformanceOutcome> noShowConfirmedLast = new ArrayList<>(actionTimeOrder);
+        noShowConfirmedLast.remove(noShow);
+        noShowConfirmedLast.add(noShow);
+        List<PerformanceOutcome> shuffled = new ArrayList<>(actionTimeOrder);
+        Collections.shuffle(shuffled, new Random(69));
+
+        ReliabilityResult expected = calculator.calculate(actionTimeOrder);
+
+        for (List<PerformanceOutcome> ledger : List.of(noShowConfirmedLast, shuffled)) {
+            ReliabilityResult result = calculator.calculate(ledger);
+            assertThat(result.reliability()).isEqualTo(expected.reliability());
+            assertThat(result.observations()).isEqualTo(expected.observations());
+        }
+        assertThat(expected.observations()).extracting(Observation::outcome).containsExactlyElementsOf(actionTimeOrder);
+    }
+
+    @Test
+    void artistCancellationIsOrderedByNoticeTimeNotByScheduledStart() {
+        // 통보는 정상 완료보다 먼저, 취소된 공연의 예정 시작은 정상 완료보다 나중
+        List<PerformanceOutcome> actionTimeOrder = history()
+            .artistCancellation(Duration.ofDays(60)).completed(1).outcomes();
+
+        ReliabilityResult result = calculator.calculate(List.of(actionTimeOrder.get(1), actionTimeOrder.get(0)));
+
+        assertThat(result.observations()).extracting(Observation::outcome).containsExactlyElementsOf(actionTimeOrder);
+    }
+
+    @Test
+    void outcomesAtTheSameActionTimeAreOrderedByUnsignedPerformanceId() {
+        // Java UUID.compareTo는 부호 있는 비교라 아래 세 ID를 c, b, a 순으로 놓는다
+        Instant sameTime = Instant.parse("2026-03-01T10:00:00Z");
+        PerformanceOutcome a = completedAt(sameTime, "00000000-0000-0000-0000-000000000001");
+        PerformanceOutcome b = completedAt(sameTime, "00000000-0000-0000-8000-000000000000");
+        PerformanceOutcome c = completedAt(sameTime, "80000000-0000-0000-0000-000000000000");
+
+        ReliabilityResult result = calculator.calculate(List.of(c, b, a));
+
+        assertThat(result.observations()).extracting(Observation::outcome).containsExactly(a, b, c);
+    }
+
+    @Test
+    void performanceSpacingAndShiftingAllTimesDoNotChangeTheResult() {
+        ReliabilityResult oncePerYear = calculator.calculate(
+            sameSequence(history().every(Duration.ofDays(365))));
+        ReliabilityResult tenTimesPerYear = calculator.calculate(
+            sameSequence(history().every(Duration.ofHours(876))));
+        ReliabilityResult threeYearsLater = calculator.calculate(
+            shifted(sameSequence(history().every(Duration.ofDays(365))), Duration.ofDays(3 * 365)));
+
+        for (ReliabilityResult result : List.of(tenTimesPerYear, threeYearsLater)) {
+            assertThat(result.reliability()).isEqualTo(oncePerYear.reliability());
+            assertThat(result.confidenceLevel()).isEqualTo(oncePerYear.confidenceLevel());
+            assertThat(result.ratePercent()).isEqualTo(oncePerYear.ratePercent());
+            assertThat(result.observations()).extracting(Observation::category)
+                .isEqualTo(oncePerYear.observations().stream().map(Observation::category).toList());
+        }
+    }
+
+    private static List<PerformanceOutcome> sameSequence(OutcomeHistory history) {
+        return history.completed(10).noShow().completed(3).artistCancellation(Duration.ofHours(5)).outcomes();
+    }
+
+    private static PerformanceOutcome completedAt(Instant scheduledStartAt, String performanceId) {
+        return new PerformanceOutcome(
+            UUID.fromString(performanceId), 1, OutcomeType.COMPLETED, null, scheduledStartAt, null);
     }
 
     /** ADR 문서의 수치는 소수 셋째 자리까지 반올림한 값이다. */

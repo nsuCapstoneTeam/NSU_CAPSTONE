@@ -6,20 +6,39 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/** 테스트용 공연 결과 이력. 결과를 하나 붙일 때마다 행동 시각이 30일씩 늘어난다. */
+/** 테스트용 공연 결과 이력. 결과를 하나 붙일 때마다 행동 시각이 간격(기본 30일)만큼 늘어난다. */
 public final class OutcomeHistory {
 
     private static final Instant START = Instant.parse("2026-01-01T10:00:00Z");
-    private static final Duration INTERVAL = Duration.ofDays(30);
 
     private final List<PerformanceOutcome> outcomes = new ArrayList<>();
     private Instant nextActionAt = START;
+    private Duration interval = Duration.ofDays(30);
 
     private OutcomeHistory() {
     }
 
     public static OutcomeHistory history() {
         return new OutcomeHistory();
+    }
+
+    /** 원장의 모든 시각을 {@code offset}만큼 옮긴다. */
+    public static List<PerformanceOutcome> shifted(List<PerformanceOutcome> outcomes, Duration offset) {
+        return outcomes.stream()
+            .map(outcome -> new PerformanceOutcome(
+                outcome.performanceId(),
+                outcome.revision(),
+                outcome.outcomeType(),
+                outcome.responsibleParty(),
+                outcome.scheduledStartAt().plus(offset),
+                outcome.cancellationRequestedAt() == null ? null : outcome.cancellationRequestedAt().plus(offset)))
+            .toList();
+    }
+
+    /** 이후에 붙이는 결과 사이의 행동 시각 간격을 바꾼다. */
+    public OutcomeHistory every(Duration interval) {
+        this.interval = interval;
+        return this;
     }
 
     public OutcomeHistory completed(int times) {
@@ -65,6 +84,6 @@ public final class OutcomeHistory {
         UUID performanceId = new UUID(0, outcomes.size() + 1);
         outcomes.add(new PerformanceOutcome(
             performanceId, 1, outcomeType, responsibleParty, scheduledStartAt, cancellationRequestedAt));
-        nextActionAt = nextActionAt.plus(INTERVAL);
+        nextActionAt = nextActionAt.plus(interval);
     }
 }
