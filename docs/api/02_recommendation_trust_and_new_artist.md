@@ -5,7 +5,7 @@
 - 구현 이슈: NSU-48·NSU-63 (Spring↔AI 연동), NSU-70 (Trust Profile 조합), NSU-86·87·88·89 (다시 보기·재생·생성 제한·업로드 검사), NSUAI-28 (옛 NSU-16, AI 팀으로 이동)
 - 관련 이슈: NSU-28, NSU-90 (화면), NSU-71 (취소), NSUAI-9, NSUAI-10, NSUAI-12, NSUAI-15, NSUAI-16, NSUAI-25
 - 요구사항: SSOT v1.14(2026-10-11 설계 리뷰 반영, 문서 전체 최종 승인 v1.12) `AI-MATCH-050`·`051`·`052`·`053`·`054`, `AI-031`·`AI-034`, `STORAGE-103`, `SEC-119`, `TRUST-151`·`153`. `AI-MATCH-155`는 v1.9에서 폐지했다
-- 서버 협의(Linear): [012. CLAP 음악 유사도 기반 곡 추천 흐름](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)(Accepted, 2026-10-10), [014. 추천 생성 잠금·재생 동의 확인·행사 snapshot](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)(Proposed), [007. 추천 단위는 곡](https://linear.app/nsu-capstone/document/007-추천-단위는-곡-69137a45b2c6), [010. AI 곡 검색 실패·시간 초과 시 추천 API 응답](https://linear.app/nsu-capstone/document/010-ai-곡-검색-실패시간-초과-시-추천-api-응답-46a63dece138)
+- 서버 협의(Linear): [012. CLAP 음악 유사도 기반 곡 추천 흐름](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)(Accepted, 2026-10-10), [014. 추천 생성 잠금·재생 동의 확인·행사 snapshot](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)(Accepted, 2026-10-15), [007. 추천 단위는 곡](https://linear.app/nsu-capstone/document/007-추천-단위는-곡-69137a45b2c6), [010. AI 곡 검색 실패·시간 초과 시 추천 API 응답](https://linear.app/nsu-capstone/document/010-ai-곡-검색-실패시간-초과-시-추천-api-응답-46a63dece138)
 - 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
 - 공통 규칙: [00_conventions.md](./00_conventions.md), Trust Profile 스키마: [01_trust_profile.md](./01_trust_profile.md)
 
@@ -22,7 +22,7 @@
 | 곡 재생 주소 API와 요청 제한(§2.5) | |
 | 장애·동시 요청 응답(§5) | timeout 값과 재시도를 포함한 전체 시간 한도(서버 협의 010, 측정 뒤 정함), AI가 처리하는 최대 후보 곡 수(AI가 공개) |
 
-> **결정 근거:** 메인 SSOT v1.9·v1.12는 2026-10-07 승인됐다. 2026-10-08 김동엽이 AI 질문 1~8의 답안을 확정했고, 영향받는 요구사항은 v1.13으로 반영했다. [질문 스레드](https://nsu-capstone.slack.com/archives/C0C6ZQCHBV0/p1791363821671779)의 답변에 따라 AI 담당이 2026-10-10 서버 협의 012를 Accepted로 동기화했다. 013은 AI 지원 검증 전이라 Proposed이며, 이 문서가 검증 완료를 대신 선언하지 않는다. 2026-10-07 Codex 설계 리뷰의 지적 3건(동시 요청의 한도 우회, 동의 철회 뒤 재생, 생성 중 행사 변경)은 SSOT v1.14, 서버 협의 014(Proposed), §1·§2.5·§4·§5에 반영했다.
+> **결정 근거:** 메인 SSOT v1.9·v1.12는 2026-10-07 승인됐다. 2026-10-08 김동엽이 AI 질문 1~8의 답안을 확정했고, 영향받는 요구사항은 v1.13으로 반영했다. [질문 스레드](https://nsu-capstone.slack.com/archives/C0C6ZQCHBV0/p1791363821671779)의 답변에 따라 AI 담당이 2026-10-10 서버 협의 012를 Accepted로 동기화했다. 013은 AI 지원 검증 전이라 Proposed이며, 이 문서가 검증 완료를 대신 선언하지 않는다. 2026-10-07 Codex 설계 리뷰의 지적 3건(동시 요청의 한도 우회, 동의 철회 뒤 재생, 생성 중 행사 변경)은 SSOT v1.14, 서버 협의 014(2026-10-15 Accepted), §1·§2.5·§4·§5에 반영했다.
 
 ### 0.1 추천 API
 
@@ -41,7 +41,7 @@
 - 생성이 끝난 뒤의 재요청은 허용한다. 새 결과가 하나 더 저장된다.
 - 이전 결과도 지우지 않고 저장해 둔다. 이전 결과를 보는 목록 API는 화면에 필요해질 때 추가하며, 그때 페이지네이션 규칙(00 §5)을 정한다. 데이터가 남아 있으므로 하위 호환을 깨지 않고 추가할 수 있다.
 - 다시 보기 경로를 `latest` 하위 경로로 둔 이유: 나중에 이력 목록(`GET .../recommendations`)이나 개별 조회(`GET .../recommendations/{id}`)를 추가해도 경로가 충돌하지 않는다.
-- 근거: #ai-recommend AI 협의 7/9에 대한 Seokyun Kang의 답을 2026-10-05 김동엽이 받아들였다. 동시 생성 제한은 서버 협의 012 결정 8.2이며, 잠금 단위와 Redis 장애 처리는 서버 협의 014(Proposed)로 바꿨다.
+- 근거: #ai-recommend AI 협의 7/9에 대한 Seokyun Kang의 답을 2026-10-05 김동엽이 받아들였다. 동시 생성 제한은 서버 협의 012 결정 8.2이며, 잠금 단위와 Redis 장애 처리는 서버 협의 014(2026-10-15 Accepted)로 바꿨다.
 
 ## 1. 추천 결과 만들기
 
