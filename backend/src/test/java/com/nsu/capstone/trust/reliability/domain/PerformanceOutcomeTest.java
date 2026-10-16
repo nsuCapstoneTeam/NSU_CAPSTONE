@@ -45,4 +45,28 @@ class PerformanceOutcomeTest {
             PERFORMANCE_ID, revision, OutcomeType.COMPLETED, null, SCHEDULED_START, null))
             .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void missingPerformanceIdIsRejected() {
+        assertThatThrownBy(() -> new PerformanceOutcome(
+            null, 1, OutcomeType.COMPLETED, null, SCHEDULED_START, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("performanceId");
+    }
+
+    @Test
+    void missingOutcomeTypeIsRejected() {
+        assertThatThrownBy(() -> new PerformanceOutcome(
+            PERFORMANCE_ID, 1, null, null, SCHEDULED_START, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("outcomeType");
+    }
+
+    @Test
+    void missingScheduledStartIsRejected() {
+        assertThatThrownBy(() -> new PerformanceOutcome(
+            PERFORMANCE_ID, 1, OutcomeType.COMPLETED, null, null, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("scheduledStartAt");
+    }
 }

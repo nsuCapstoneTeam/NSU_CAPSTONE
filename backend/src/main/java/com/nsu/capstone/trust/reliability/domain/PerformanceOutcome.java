@@ -5,6 +5,7 @@ import java.util.UUID;
 
 /**
  * 공연 결과 원장 1행 중 Reliability 계산에 쓰는 값. JPA Entity가 아니다.
+ * performanceId, outcomeType, scheduledStartAt은 필수다.
  *
  * @param responsibleParty COMPLETED·VOIDED는 {@code null}, CANCELLED·NO_SHOW는 필수
  * @param scheduledStartAt 공연 예정 시작 시각 snapshot
@@ -20,6 +21,15 @@ public record PerformanceOutcome(
 ) {
 
     public PerformanceOutcome {
+        if (performanceId == null) {
+            throw new IllegalArgumentException("performanceId is required");
+        }
+        if (outcomeType == null) {
+            throw new IllegalArgumentException("outcomeType is required");
+        }
+        if (scheduledStartAt == null) {
+            throw new IllegalArgumentException("scheduledStartAt is required");
+        }
         if (revision < 1) {
             throw new IllegalArgumentException("revision must be 1 or greater: " + revision);
         }
