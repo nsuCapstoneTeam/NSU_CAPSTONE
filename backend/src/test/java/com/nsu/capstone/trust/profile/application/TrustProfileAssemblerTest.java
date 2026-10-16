@@ -1,9 +1,15 @@
 package com.nsu.capstone.trust.profile.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 import com.nsu.capstone.trust.profile.domain.ConfidenceLevel;
+import com.nsu.capstone.trust.profile.domain.ExcludedOutcomeType;
+import com.nsu.capstone.trust.profile.domain.ExcludedResponsibleParty;
 import com.nsu.capstone.trust.profile.domain.TrustProfile;
+import com.nsu.capstone.trust.profile.domain.TrustProfile.ArtistCancellations;
+import com.nsu.capstone.trust.profile.domain.TrustProfile.Exclusion;
+import com.nsu.capstone.trust.profile.domain.TrustProfile.Observations;
 import com.nsu.capstone.trust.profile.domain.TrustProfile.Reliability;
 import com.nsu.capstone.trust.reliability.domain.OutcomeType;
 import com.nsu.capstone.trust.reliability.domain.PerformanceOutcome;
@@ -18,7 +24,9 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class TrustProfileAssemblerTest {
 
@@ -69,6 +77,98 @@ class TrustProfileAssemblerTest {
             .isEqualTo(new Reliability(ConfidenceLevel.HIGH, 11, 84));
     }
 
+    @Test
+    void countsCurrentNonArtistResultsByCombinationInContractOrder() {
+        UUID correctedPerformance = UUID.randomUUID();
+        UUID voidedPerformance = UUID.randomUUID();
+        List<PerformanceOutcome> history = List.of(
+            cancelled(ResponsibleParty.OTHER, "2026-03-01T10:00", "2026-03-07T19:00"),
+            noShow(ResponsibleParty.PLATFORM, "2026-03-14T19:00"),
+            cancelled(ResponsibleParty.EVENT_PARTNER, "2026-03-15T10:00", "2026-03-21T19:00"),
+            cancelled(ResponsibleParty.FORCE_MAJEURE, "2026-03-22T10:00", "2026-03-28T19:00"),
+            noShow(ResponsibleParty.EVENT_PARTNER, "2026-04-04T19:00"),
+            cancelled(ResponsibleParty.EVENT_PARTNER, "2026-04-05T10:00", "2026-04-11T19:00"),
+            cancelled(ResponsibleParty.MUTUAL, "2026-04-12T10:00", "2026-04-18T19:00"),
+            revisionOf(correctedPerformance, 1,
+                cancelled(ResponsibleParty.EVENT_PARTNER, "2026-04-19T10:00", "2026-04-25T19:00")),
+            revisionOf(correctedPerformance, 2, completed("2026-04-25T19:00")),
+            revisionOf(voidedPerformance, 1,
+                cancelled(ResponsibleParty.MUTUAL, "2026-04-26T10:00", "2026-05-02T19:00")),
+            revisionOf(voidedPerformance, 2, voided("2026-05-02T19:00"))
+        );
+
+        TrustProfile profile = assemble(history);
+
+        assertThat(profile.evidence().exclusions()).containsExactly(
+            new Exclusion(ExcludedOutcomeType.CANCELLED, ExcludedResponsibleParty.EVENT_PARTNER, 2),
+            new Exclusion(ExcludedOutcomeType.CANCELLED, ExcludedResponsibleParty.MUTUAL, 1),
+            new Exclusion(ExcludedOutcomeType.CANCELLED, ExcludedResponsibleParty.FORCE_MAJEURE, 1),
+            new Exclusion(ExcludedOutcomeType.CANCELLED, ExcludedResponsibleParty.OTHER, 1),
+            new Exclusion(ExcludedOutcomeType.NO_SHOW, ExcludedResponsibleParty.EVENT_PARTNER, 1),
+            new Exclusion(ExcludedOutcomeType.NO_SHOW, ExcludedResponsibleParty.PLATFORM, 1)
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("singleObservations")
+    void classifiesEachObservationIntoItsEvidenceField(
+        PerformanceOutcome observation,
+        Observations expected
+    ) {
+        TrustProfile profile = assemble(List.of(observation));
+
+        assertThat(profile.evidence().observations()).isEqualTo(expected);
+    }
+
+    static Stream<Arguments> singleObservations() {
+        return Stream.of(
+            arguments(
+                completed("2026-04-10T19:00"),
+                new Observations(1, new ArtistCancellations(0, 0, 0), 0)
+            ),
+            arguments(
+                cancelled(ResponsibleParty.ARTIST, "2026-04-01T19:00", "2026-04-10T19:00"),
+                new Observations(0, new ArtistCancellations(1, 0, 0), 0)
+            ),
+            arguments(
+                cancelled(ResponsibleParty.ARTIST, "2026-04-07T19:00", "2026-04-10T19:00"),
+                new Observations(0, new ArtistCancellations(0, 1, 0), 0)
+            ),
+            arguments(
+                cancelled(ResponsibleParty.ARTIST, "2026-04-10T09:00", "2026-04-10T19:00"),
+                new Observations(0, new ArtistCancellations(0, 0, 1), 0)
+            ),
+            arguments(
+                noShow(ResponsibleParty.ARTIST, "2026-04-10T19:00"),
+                new Observations(0, new ArtistCancellations(0, 0, 0), 1)
+            )
+        );
+    }
+
+    @Test
+    void observationCountIsSumOfEvidenceObservations() {
+        UUID correctedPerformance = UUID.randomUUID();
+        List<PerformanceOutcome> history = List.of(
+            completed("2026-03-07T19:00"),
+            completed("2026-03-14T19:00"),
+            cancelled(ResponsibleParty.ARTIST, "2026-03-05T19:00", "2026-03-21T19:00"),
+            cancelled(ResponsibleParty.ARTIST, "2026-03-25T19:00", "2026-03-28T19:00"),
+            cancelled(ResponsibleParty.ARTIST, "2026-03-28T20:00", "2026-03-29T19:00"),
+            cancelled(ResponsibleParty.ARTIST, "2026-04-04T21:00", "2026-04-04T19:00"),
+            noShow(ResponsibleParty.ARTIST, "2026-04-11T19:00"),
+            cancelled(ResponsibleParty.EVENT_PARTNER, "2026-04-12T10:00", "2026-04-18T19:00"),
+            revisionOf(correctedPerformance, 1, noShow(ResponsibleParty.ARTIST, "2026-04-25T19:00")),
+            revisionOf(correctedPerformance, 2,
+                noShow(ResponsibleParty.EVENT_PARTNER, "2026-04-25T19:00"))
+        );
+
+        TrustProfile profile = assemble(history);
+
+        assertThat(profile.evidence().observations())
+            .isEqualTo(new Observations(2, new ArtistCancellations(1, 1, 2), 1));
+        assertThat(profile.reliability().observationCount()).isEqualTo(2 + 1 + 1 + 2 + 1);
+    }
+
     /**
      * API 01 §6.2: 정상 완료 4회, EVENT_PARTNER 귀책 취소 1건.
      */
@@ -92,7 +192,7 @@ class TrustProfileAssemblerTest {
             )
             .map(date -> completed(date + "T19:00"))
             .toList());
-        history.add(noShow("2026-08-08T19:00"));
+        history.add(noShow(ResponsibleParty.ARTIST, "2026-08-08T19:00"));
         return history;
     }
 
@@ -106,10 +206,30 @@ class TrustProfileAssemblerTest {
         );
     }
 
-    private static PerformanceOutcome noShow(String scheduledStartAt) {
+    private static PerformanceOutcome noShow(
+        ResponsibleParty responsibleParty,
+        String scheduledStartAt
+    ) {
         return new PerformanceOutcome(
-            UUID.randomUUID(), 1, OutcomeType.NO_SHOW, ResponsibleParty.ARTIST,
+            UUID.randomUUID(), 1, OutcomeType.NO_SHOW, responsibleParty,
             seoul(scheduledStartAt), null
+        );
+    }
+
+    private static PerformanceOutcome voided(String scheduledStartAt) {
+        return new PerformanceOutcome(
+            UUID.randomUUID(), 1, OutcomeType.VOIDED, null, seoul(scheduledStartAt), null
+        );
+    }
+
+    private static PerformanceOutcome revisionOf(
+        UUID performanceId,
+        int revision,
+        PerformanceOutcome outcome
+    ) {
+        return new PerformanceOutcome(
+            performanceId, revision, outcome.outcomeType(), outcome.responsibleParty(),
+            outcome.scheduledStartAt(), outcome.cancellationRequestedAt()
         );
     }
 
