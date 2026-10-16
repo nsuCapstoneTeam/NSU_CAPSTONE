@@ -8,6 +8,7 @@ import com.nsu.capstone.trust.reliability.domain.ReliabilityResult;
 import com.nsu.capstone.trust.reliability.domain.ResponsibleParty;
 import com.nsu.capstone.trust.risk.RiskSignal;
 import com.nsu.capstone.trust.risk.RiskSignalEvaluator;
+import com.nsu.capstone.trust.risk.RiskSignalType;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -42,7 +43,8 @@ public final class ReliabilitySimulator {
             section("2. 무결점 20회 이력의 공연 빈도별 값 (09 ADR 부록)", performanceFrequencyTable()),
             section("3. 06 §12 시나리오 (" + ReliabilityPolicy.V1.version() + ")",
                 "DB 제약 시나리오와 원장에 남지 않는 노쇼 신고 기각은 계산 코어의 범위가 아니라 넣지 않았다.",
-                scenarioTable()));
+                scenarioTable()),
+            section("4. 정상 완료 20회 → 노쇼 1회 뒤 정상 완료 k회 추이", recoveryTrendTable()));
     }
 
     private static String section(String title, String... paragraphs) {
@@ -112,6 +114,27 @@ public final class ReliabilitySimulator {
             scenarioRow("정상 완료 10회 + EVENT_PARTNER 귀책 취소 10건", completedBetweenEventPartnerCancellations(10)),
             scenarioRow("노쇼 1회 → 정상 완료 10회", history().noShow().completed(10)),
             scenarioRow("위와 같은 이력, 노쇼가 가장 늦게 확정", history().noShow().completed(10).confirmedLast(0)));
+    }
+
+    /** 노쇼가 최근 관측 창을 벗어나 RECENT_NO_SHOW가 꺼지는 시점까지 보여 준다. */
+    private static String recoveryTrendTable() {
+        List<String> rows = new ArrayList<>(List.of(
+            "| 노쇼 뒤 정상 완료 | 관측 n | Reliability | 표시 | RECENT_NO_SHOW |",
+            "|---:|---:|---:|---:|---|"));
+        History history = history().completed(20).noShow();
+        for (int completedAfter = 0; completedAfter <= ReliabilityPolicy.V1.riskSignalWindowSize(); completedAfter++) {
+            ReliabilityResult result = new ReliabilityCalculator(ReliabilityPolicy.V1).calculate(history.outcomes());
+            boolean recentNoShow = new RiskSignalEvaluator().evaluate(result).stream()
+                .anyMatch(signal -> signal.type() == RiskSignalType.RECENT_NO_SHOW);
+            rows.add(row(List.of(
+                completedAfter + "회",
+                String.valueOf(result.observationCount()),
+                decimal(result.reliability()),
+                display(result),
+                recentNoShow ? "활성" : "해제")));
+            history.completed(1);
+        }
+        return String.join("\n", rows);
     }
 
     private static History completedBetweenEventPartnerCancellations(int times) {

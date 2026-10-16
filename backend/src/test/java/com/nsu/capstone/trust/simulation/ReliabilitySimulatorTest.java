@@ -58,6 +58,28 @@ class ReliabilitySimulatorTest {
             | 위와 같은 이력, 노쇼가 가장 늦게 확정 | 11 | HIGH | 0.880 | 88% | RECENT_NO_SHOW(11건 중 1건) | - |""");
     }
 
+    @Test
+    void fourthTableShowsRecoveryAfterNoShowUntilTheSignalClears() {
+        assertThat(tables(ReliabilitySimulator.report()).get(3)).isEqualTo("""
+            | 노쇼 뒤 정상 완료 | 관측 n | Reliability | 표시 | RECENT_NO_SHOW |
+            |---:|---:|---:|---:|---|
+            | 0회 | 21 | 0.903 | 90% | 활성 |
+            | 1회 | 22 | 0.910 | 91% | 활성 |
+            | 2회 | 23 | 0.916 | 92% | 활성 |
+            | 3회 | 24 | 0.922 | 92% | 활성 |
+            | 4회 | 25 | 0.927 | 93% | 활성 |
+            | 5회 | 26 | 0.932 | 93% | 활성 |
+            | 6회 | 27 | 0.936 | 94% | 활성 |
+            | 7회 | 28 | 0.940 | 94% | 활성 |
+            | 8회 | 29 | 0.944 | 94% | 활성 |
+            | 9회 | 30 | 0.948 | 95% | 활성 |
+            | 10회 | 31 | 0.951 | 95% | 활성 |
+            | 11회 | 32 | 0.954 | 95% | 활성 |
+            | 12회 | 33 | 0.957 | 96% | 활성 |
+            | 13회 | 34 | 0.959 | 96% | 활성 |
+            | 14회 | 35 | 0.962 | 96% | 해제 |""");
+    }
+
     /** Markdown에서 '|'로 시작하는 줄이 이어진 덩어리를 표 하나로 본다. */
     private static List<String> tables(String markdown) {
         List<String> tables = new ArrayList<>();
