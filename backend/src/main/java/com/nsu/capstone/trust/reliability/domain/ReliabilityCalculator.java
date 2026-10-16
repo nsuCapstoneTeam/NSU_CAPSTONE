@@ -60,15 +60,19 @@ public final class ReliabilityCalculator {
         }
         observations.sort(ACTION_TIME_ORDER);
         excludedOutcomes.sort(PERFORMANCE_REVISION_ORDER);
+        return new ReliabilityResult(policy, decayedReliability(observations), observations, excludedOutcomes);
+    }
 
+    /** 관측마다 기존 누적값에 γ를 곱한 뒤 결과(정상 완료 1, 실패 0)를 더하고, 이행 누적값의 비율을 낸다. */
+    private double decayedReliability(List<Observation> observationsInOrder) {
         double alpha = policy.priorAlpha();
         double beta = policy.priorBeta();
-        for (Observation observation : observations) {
+        for (Observation observation : observationsInOrder) {
             double success = observation.category() == ObservationCategory.COMPLETED ? 1 : 0;
             alpha = policy.gamma() * alpha + success;
             beta = policy.gamma() * beta + (1 - success);
         }
-        return new ReliabilityResult(policy, alpha / (alpha + beta), observations, excludedOutcomes);
+        return alpha / (alpha + beta);
     }
 
     /** 공연별 가장 큰 revision. 같은 공연의 같은 revision이 둘이면 원장 행이 아니므로 거부한다. */

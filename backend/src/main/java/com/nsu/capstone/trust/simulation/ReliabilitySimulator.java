@@ -29,6 +29,8 @@ import java.util.stream.Collectors;
 public final class ReliabilitySimulator {
 
     private static final List<Double> GAMMA_CANDIDATES = List.of(0.90, 0.95, 0.98);
+    private static final ReliabilityCalculator V1_CALCULATOR = new ReliabilityCalculator(ReliabilityPolicy.V1);
+    private static final RiskSignalEvaluator RISK_SIGNAL_EVALUATOR = new RiskSignalEvaluator();
 
     private ReliabilitySimulator() {
     }
@@ -123,8 +125,8 @@ public final class ReliabilitySimulator {
             "|---:|---:|---:|---:|---|"));
         History history = history().completed(20).noShow();
         for (int completedAfter = 0; completedAfter <= ReliabilityPolicy.V1.riskSignalWindowSize(); completedAfter++) {
-            ReliabilityResult result = new ReliabilityCalculator(ReliabilityPolicy.V1).calculate(history.outcomes());
-            boolean recentNoShow = new RiskSignalEvaluator().evaluate(result).stream()
+            ReliabilityResult result = V1_CALCULATOR.calculate(history.outcomes());
+            boolean recentNoShow = RISK_SIGNAL_EVALUATOR.evaluate(result).stream()
                 .anyMatch(signal -> signal.type() == RiskSignalType.RECENT_NO_SHOW);
             rows.add(row(List.of(
                 completedAfter + "회",
@@ -146,8 +148,8 @@ public final class ReliabilitySimulator {
     }
 
     private static String scenarioRow(String label, History history) {
-        ReliabilityResult result = new ReliabilityCalculator(ReliabilityPolicy.V1).calculate(history.outcomes());
-        List<RiskSignal> signals = new RiskSignalEvaluator().evaluate(result);
+        ReliabilityResult result = V1_CALCULATOR.calculate(history.outcomes());
+        List<RiskSignal> signals = RISK_SIGNAL_EVALUATOR.evaluate(result);
         return row(List.of(
             label,
             String.valueOf(result.observationCount()),
