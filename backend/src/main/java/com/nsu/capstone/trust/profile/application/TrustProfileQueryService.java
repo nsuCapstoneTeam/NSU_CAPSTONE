@@ -8,6 +8,7 @@ import com.nsu.capstone.identity.domain.UserStatus;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.trust.profile.domain.TrustProfile;
 import com.nsu.capstone.trust.profile.domain.VerificationItem;
+import com.nsu.capstone.trust.reliability.domain.PerformanceOutcome;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -20,15 +21,18 @@ import org.springframework.stereotype.Service;
 public class TrustProfileQueryService {
 
     private final UserRepository userRepository;
+    private final PerformanceOutcomeReader performanceOutcomeReader;
     private final VerificationReader verificationReader;
     private final TrustProfileAssembler assembler;
 
     public TrustProfileQueryService(
         UserRepository userRepository,
+        PerformanceOutcomeReader performanceOutcomeReader,
         VerificationReader verificationReader,
         TrustProfileAssembler assembler
     ) {
         this.userRepository = userRepository;
+        this.performanceOutcomeReader = performanceOutcomeReader;
         this.verificationReader = verificationReader;
         this.assembler = assembler;
     }
@@ -61,12 +65,15 @@ public class TrustProfileQueryService {
     }
 
     private Map<UUID, TrustProfile> assembleAll(List<UUID> artistIds) {
+        Map<UUID, List<PerformanceOutcome>> outcomes =
+            performanceOutcomeReader.findByArtistIds(artistIds);
         Map<UUID, List<VerificationItem>> verifications =
             verificationReader.findVerifiedByArtistIds(artistIds);
         return artistIds.stream().collect(Collectors.toUnmodifiableMap(
             Function.identity(),
             artistId -> assembler.assemble(
                 artistId,
+                outcomes.getOrDefault(artistId, List.of()),
                 verifications.getOrDefault(artistId, List.of())
             )
         ));
