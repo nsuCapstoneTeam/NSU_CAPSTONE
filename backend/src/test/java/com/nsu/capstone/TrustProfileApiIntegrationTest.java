@@ -70,14 +70,12 @@ class TrustProfileApiIntegrationTest {
     private static final String TRUST_PROFILE_PATH = "/api/v1/artists/{artistId}/trust-profile";
 
     /**
-     * API 01 §4.1의 필드와 §4.3·§4.4·§4.5의 배열 원소 필드.
+     * API 01 §4.1의 객체 필드 경로. 배열 원소의 필드는 {@link #CONTRACT_ELEMENT_KEYS}로 검사한다.
      */
     private static final Set<String> CONTRACT_KEY_PATHS = Set.of(
         "artistId",
         "policyVersion",
         "verifications",
-        "verifications[].type",
-        "verifications[].provider",
         "reliability",
         "reliability.confidenceLevel",
         "reliability.observationCount",
@@ -91,17 +89,18 @@ class TrustProfileApiIntegrationTest {
         "evidence.observations.artistCancellations.noticeUnder24HoursCount",
         "evidence.observations.noShowCount",
         "evidence.exclusions",
-        "evidence.exclusions[].outcomeType",
-        "evidence.exclusions[].responsibleParty",
-        "evidence.exclusions[].count",
         "riskSignals",
-        "riskSignals[].type",
-        "riskSignals[].count",
-        "riskSignals[].windowObservationCount",
-        "riskSignals[].lastOccurredMonth",
         "activityFreshness",
         "activityFreshness.lastPerformedMonth",
         "activityFreshness.completedCountLast12Months"
+    );
+    /**
+     * 응답의 배열(JSON Pointer)마다 원소가 가져야 하는 필드. API 01 §4.3·§4.4·§4.5.
+     */
+    private static final Map<String, Set<String>> CONTRACT_ELEMENT_KEYS = Map.of(
+        "/verifications", Set.of("type", "provider"),
+        "/evidence/exclusions", Set.of("outcomeType", "responsibleParty", "count"),
+        "/riskSignals", Set.of("type", "count", "windowObservationCount", "lastOccurredMonth")
     );
     private static final Pattern YEAR_MONTH = Pattern.compile("\\d{4}-\\d{2}");
     private static final Pattern DATE_WITH_DAY = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
@@ -231,6 +230,12 @@ class TrustProfileApiIntegrationTest {
         JsonNode response = objectMapper.readTree(body);
 
         assertThat(keyPathsOf(response)).containsExactlyInAnyOrderElementsOf(CONTRACT_KEY_PATHS);
+        CONTRACT_ELEMENT_KEYS.forEach((arrayPointer, elementKeys) ->
+            assertThat(response.at(arrayPointer).values())
+                .as("%s 원소의 필드", arrayPointer)
+                .isNotEmpty()
+                .allSatisfy(element -> assertThat(element.propertyNames())
+                    .containsExactlyInAnyOrderElementsOf(elementKeys)));
         assertThat(response.at("/activityFreshness/lastPerformedMonth").stringValue())
             .matches(YEAR_MONTH);
         assertThat(response.get("riskSignals").values()).isNotEmpty().allSatisfy(signal ->
@@ -413,7 +418,7 @@ class TrustProfileApiIntegrationTest {
     }
 
     /**
-     * 객체 키의 경로 집합. 배열 원소의 키는 {@code 배열[].키}로 모은다.
+     * 객체 키의 경로 집합. 배열 원소는 원소마다 따로 검사하므로 배열 안으로는 내려가지 않는다.
      */
     private static Set<String> keyPathsOf(JsonNode node) {
         Set<String> paths = new TreeSet<>();
@@ -422,16 +427,13 @@ class TrustProfileApiIntegrationTest {
     }
 
     private static void collectKeyPaths(JsonNode node, String prefix, Set<String> paths) {
-        if (node.isObject()) {
-            for (Map.Entry<String, JsonNode> property : node.properties()) {
-                String path = prefix.isEmpty() ? property.getKey() : prefix + "." + property.getKey();
-                paths.add(path);
-                collectKeyPaths(property.getValue(), path, paths);
-            }
-        } else if (node.isArray()) {
-            for (JsonNode element : node.values()) {
-                collectKeyPaths(element, prefix + "[]", paths);
-            }
+        if (!node.isObject()) {
+            return;
+        }
+        for (Map.Entry<String, JsonNode> property : node.properties()) {
+            String path = prefix.isEmpty() ? property.getKey() : prefix + "." + property.getKey();
+            paths.add(path);
+            collectKeyPaths(property.getValue(), path, paths);
         }
     }
 
