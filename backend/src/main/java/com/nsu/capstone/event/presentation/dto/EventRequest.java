@@ -8,6 +8,7 @@ import com.nsu.capstone.event.domain.Genre;
 import com.nsu.capstone.event.domain.Visibility;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -28,14 +29,14 @@ public record EventRequest(
     String startTime,
     String endDate,
     String endTime,
-    Integer performanceMinutes,
+    BigDecimal performanceMinutes,
     String venue,
     String regionCode,
     String artistType,
     List<String> genres,
-    Long budgetMin,
-    Long budgetMax,
-    Integer expectedAudience,
+    BigDecimal budgetMin,
+    BigDecimal budgetMax,
+    BigDecimal expectedAudience,
     String description,
     String visibility,
     Details details
@@ -71,21 +72,10 @@ public record EventRequest(
             throw invalid();
         }
 
-        int minutes = required(performanceMinutes);
-        if (minutes < 1 || minutes > window.toMinutes()) {
-            throw invalid();
-        }
-
-        long min = required(budgetMin);
-        long max = required(budgetMax);
-        if (min < 0 || max < min || max > MAX_BUDGET) {
-            throw invalid();
-        }
-
-        int audience = required(expectedAudience);
-        if (audience < 1 || audience > MAX_AUDIENCE) {
-            throw invalid();
-        }
+        int minutes = (int) whole(performanceMinutes, 1, window.toMinutes());
+        long min = whole(budgetMin, 0, MAX_BUDGET);
+        long max = whole(budgetMax, min, MAX_BUDGET);
+        int audience = (int) whole(expectedAudience, 1, MAX_AUDIENCE);
 
         String region = required(regionCode);
         if (!REGION_CODE.matcher(region).matches()) {
@@ -123,6 +113,22 @@ public record EventRequest(
             }
         }
         return List.copyOf(selected);
+    }
+
+    /**
+     * 정수 필드는 소수부가 있으면 거절한다. Jackson이 정수 필드에 소수를 받아 버리면(40.9 → 40)
+     * 요청과 다른 값이 저장되기 때문이다.
+     */
+    private static long whole(BigDecimal value, long min, long max) {
+        try {
+            long number = required(value).longValueExact();
+            if (number < min || number > max) {
+                throw invalid();
+            }
+            return number;
+        } catch (ArithmeticException exception) {
+            throw invalid();
+        }
     }
 
     private static LocalDate date(String value) {

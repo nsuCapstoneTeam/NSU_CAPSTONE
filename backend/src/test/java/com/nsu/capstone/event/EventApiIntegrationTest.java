@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -131,6 +132,11 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
             Arguments.of("종료가 시작보다 이름", Map.<String, Object>of("endTime", "17:00")),
             Arguments.of("공연시간이 시간대보다 1분 김", Map.<String, Object>of("performanceMinutes", 61)),
             Arguments.of("공연시간 0", Map.<String, Object>of("performanceMinutes", 0)),
+            Arguments.of("소수 공연시간", Map.<String, Object>of("performanceMinutes", 40.9)),
+            Arguments.of("소수 최대 예산", Map.<String, Object>of("budgetMax", 500000.9)),
+            Arguments.of("소수 최소 예산", Map.<String, Object>of("budgetMin", 0.5)),
+            Arguments.of("소수 관객수", Map.<String, Object>of("expectedAudience", 800.5)),
+            Arguments.of("long 범위를 넘는 예산", Map.<String, Object>of("budgetMax", new BigInteger("99999999999999999999"))),
             Arguments.of("초가 붙은 시각", Map.<String, Object>of("startTime", "22:00:00")),
             Arguments.of("슬래시 날짜", Map.<String, Object>of("startDate", "2026/11/07")),
             Arguments.of("24:00", Map.<String, Object>of("endTime", "24:00")),
