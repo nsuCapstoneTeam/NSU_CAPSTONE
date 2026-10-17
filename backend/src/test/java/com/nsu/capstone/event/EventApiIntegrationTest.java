@@ -2,129 +2,23 @@ package com.nsu.capstone.event;
 
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.nullValue;
-import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.nsu.capstone.TestcontainersConfiguration;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
-import com.nsu.capstone.identity.repository.UserRepository;
-import com.nsu.capstone.identity.security.JwtAccessTokenService;
-import com.nsu.capstone.identity.support.UuidV7Generator;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.ResultActions;
-import tools.jackson.databind.ObjectMapper;
 
-@SpringBootTest
-@AutoConfigureMockMvc
-@Import({TestcontainersConfiguration.class, EventApiIntegrationTest.FixedClockConfig.class})
-class EventApiIntegrationTest {
-
-    /** 테스트의 '지금': 2026-10-18 10:00 (Asia/Seoul) */
-    static final Instant NOW = Instant.parse("2026-10-18T01:00:00Z");
-
-    @TestConfiguration(proxyBeanMethods = false)
-    static class FixedClockConfig {
-        @Bean
-        @Primary
-        Clock fixedClock() {
-            return Clock.fixed(NOW, ZoneId.of("Asia/Seoul"));
-        }
-    }
-
-    @Autowired MockMvc mockMvc;
-    @Autowired ObjectMapper objectMapper;
-    @Autowired UserRepository userRepository;
-    @Autowired UuidV7Generator uuidV7Generator;
-    @Autowired JwtAccessTokenService jwtAccessTokenService;
-    @Autowired JdbcTemplate jdbcTemplate;
-
-    User partner;
-
-    @BeforeEach
-    void setUp() {
-        jdbcTemplate.update("DELETE FROM events");
-        jdbcTemplate.update("DELETE FROM oauth_accounts");
-        userRepository.deleteAll();
-        partner = newUser(UserRole.EVENT_PARTNER, "partner@example.com");
-    }
-
-    User newUser(UserRole role, String email) {
-        UUID id = uuidV7Generator.generate();
-        return userRepository.saveAndFlush(role == UserRole.ARTIST
-            ? User.createArtist(id, email, "hash", "01011112222")
-            : User.createEventPartner(id, email, "hash", "01011112222"));
-    }
-
-    String bearer(User user) {
-        return "Bearer " + jwtAccessTokenService.issue(user.getId(), user.getRole()).value();
-    }
-
-    /** 03 §10.1의 예시 본문. 시작은 지금(10-18 10:00)보다 뒤다. */
-    Map<String, Object> validBody() {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("name", "2026 가을 축제 1일차 밴드 공연");
-        body.put("eventType", "UNIVERSITY_FESTIVAL");
-        body.put("startDate", "2026-11-06");
-        body.put("startTime", "18:00");
-        body.put("endDate", "2026-11-06");
-        body.put("endTime", "19:00");
-        body.put("performanceMinutes", 40);
-        body.put("venue", "대운동장 특설 무대");
-        body.put("regionCode", "11680");
-        body.put("artistType", "BAND");
-        body.put("genres", List.of("ROCK", "POP"));
-        body.put("budgetMin", 300000);
-        body.put("budgetMax", 500000);
-        body.put("expectedAudience", 800);
-        body.put("description", "축제 첫날 저녁 무대를 여는 밴드 공연이에요.");
-        body.put("visibility", "PUBLIC");
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("rehearsal", "공연 2시간 전 30분");
-        details.put("stageSize", "8m × 6m");
-        details.put("paProvided", true);
-        details.put("microphones", "무선 2개, 유선 4개");
-        details.put("instruments", "드럼 세트, 베이스 앰프");
-        details.put("waitingRoomProvided", true);
-        details.put("mealProvided", true);
-        details.put("transportationFeeProvided", false);
-        details.put("accommodationProvided", null);
-        details.put("otherConditions", null);
-        body.put("details", details);
-        return body;
-    }
-
-    ResultActions register(User caller, Map<String, Object> body) throws Exception {
-        return mockMvc.perform(post("/api/v1/events")
-            .header("Authorization", bearer(caller))
-            .contentType(APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(body)));
-    }
+class EventApiIntegrationTest extends EventIntegrationTestBase {
 
     @Test
     void partnerRegistersEventAndGetsItBackInContractShape() throws Exception {
@@ -331,12 +225,6 @@ class EventApiIntegrationTest {
     }
 
     // ---- 상세 조회 (03 §4, §9) ----
-
-    String registeredId(Map<String, Object> body) throws Exception {
-        String json = register(partner, body).andExpect(status().isCreated())
-            .andReturn().getResponse().getContentAsString();
-        return objectMapper.readTree(json).get("id").asString();
-    }
 
     @Test
     void otherLoggedInUsersSeePublicEventButNotPrivateOne() throws Exception {

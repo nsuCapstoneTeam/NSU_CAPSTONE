@@ -13,9 +13,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -48,6 +50,27 @@ public class EventController {
     @GetMapping("/{eventId}")
     public EventResponse get(@AuthenticationPrincipal Jwt jwt, @PathVariable String eventId) {
         return EventResponse.from(eventService.get(eventId(eventId), userId(jwt)));
+    }
+
+    @PutMapping("/{eventId}")
+    public EventResponse update(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable String eventId,
+        @RequestBody EventRequest request
+    ) {
+        UUID id = eventId(eventId);
+        return EventResponse.from(eventService.update(id, userId(jwt), request.toContent()));
+    }
+
+    @PutMapping("/{eventId}/cancellation")
+    public EventResponse cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable String eventId) {
+        return EventResponse.from(eventService.cancel(eventId(eventId), userId(jwt)));
+    }
+
+    @DeleteMapping("/{eventId}")
+    public ResponseEntity<Void> delete(@AuthenticationPrincipal Jwt jwt, @PathVariable String eventId) {
+        eventService.delete(eventId(eventId), userId(jwt));
+        return ResponseEntity.noContent().build();
     }
 
     private static UUID userId(Jwt jwt) {

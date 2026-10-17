@@ -104,6 +104,35 @@ public class Event {
         return event;
     }
 
+    /** 전체 교체다(03 §5.4). 본문에 없는 선택정보는 지운다. */
+    public void replace(EventContent content, Clock clock) {
+        apply(content);
+        this.updatedAt = clock.instant();
+    }
+
+    /** 이미 취소한 행사에는 아무것도 바꾸지 않는다(멱등, 03 §5.5). */
+    public void cancel(Clock clock) {
+        if (status == EventStatus.CANCELLED) {
+            return;
+        }
+        this.status = EventStatus.CANCELLED;
+        this.updatedAt = clock.instant();
+    }
+
+    /** 소프트 삭제(ADR event_management/02). */
+    public void delete(Clock clock) {
+        this.deletedAt = clock.instant();
+    }
+
+    public boolean isCancelled() {
+        return status == EventStatus.CANCELLED;
+    }
+
+    /** 시작 ≤ 지금이면 시작한 행사다(03 §5.2). */
+    public boolean hasStarted(Clock clock) {
+        return !startAt.isAfter(clock.instant());
+    }
+
     private void apply(EventContent content) {
         this.name = content.name();
         this.eventType = content.eventType();

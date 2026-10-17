@@ -55,6 +55,57 @@ public class EventService {
         return event;
     }
 
+    @Transactional
+    public Event update(UUID eventId, UUID userId, EventContent content) {
+        requireKnownRegion(content);
+        Event event = loadManageable(eventId, userId);
+        requireNotCancelled(event);
+        requireNotStarted(event);
+        requireStartAfterNow(content);
+        event.replace(content, clock);
+        return event;
+    }
+
+    @Transactional
+    public Event cancel(UUID eventId, UUID userId) {
+        Event event = loadManageable(eventId, userId);
+        if (!event.isCancelled()) {
+            requireNotStarted(event);
+        }
+        event.cancel(clock);
+        return event;
+    }
+
+    @Transactional
+    public void delete(UUID eventId, UUID userId) {
+        loadManageable(eventId, userId).delete(clock);
+    }
+
+    /** 볼 수 없으면 404, 볼 수 있지만 등록자가 아니면 403이다(03 §4). */
+    private Event loadManageable(UUID eventId, UUID userId) {
+        Event event = eventRepository.findWithLockByIdAndDeletedAtIsNull(eventId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+        if (!accessPolicy.canView(event, userId)) {
+            throw new BusinessException(ErrorCode.EVENT_NOT_FOUND);
+        }
+        if (!accessPolicy.isOwner(event, userId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+        return event;
+    }
+
+    private void requireNotCancelled(Event event) {
+        if (event.isCancelled()) {
+            throw new BusinessException(ErrorCode.EVENT_CANCELLED);
+        }
+    }
+
+    private void requireNotStarted(Event event) {
+        if (event.hasStarted(clock)) {
+            throw new BusinessException(ErrorCode.EVENT_ALREADY_STARTED);
+        }
+    }
+
     private void requireKnownRegion(EventContent content) {
         if (!regionRepository.existsById(content.regionCode())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);

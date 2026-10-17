@@ -137,6 +137,16 @@ public enum ErrorCode {
         HttpStatus.NOT_FOUND,
         "행사를 찾을 수 없습니다."
     ),
+    EVENT_ALREADY_STARTED(
+        "EVENT_ALREADY_STARTED",
+        HttpStatus.CONFLICT,
+        "이미 시작한 행사는 바꿀 수 없습니다."
+    ),
+    EVENT_CANCELLED(
+        "EVENT_CANCELLED",
+        HttpStatus.CONFLICT,
+        "취소한 행사는 바꿀 수 없습니다."
+    ),
     INTERNAL_SERVER_ERROR(
         "INTERNAL_SERVER_ERROR",
         HttpStatus.INTERNAL_SERVER_ERROR,
