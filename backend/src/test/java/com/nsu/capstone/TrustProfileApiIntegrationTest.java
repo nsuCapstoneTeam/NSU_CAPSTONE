@@ -17,19 +17,27 @@ import com.nsu.capstone.identity.domain.UserStatus;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.security.JwtAccessTokenService;
 import com.nsu.capstone.identity.support.UuidV7Generator;
+import com.nsu.capstone.trust.profile.application.PerformanceOutcomeReader;
 import com.nsu.capstone.trust.profile.application.VerificationReader;
 import com.nsu.capstone.trust.profile.domain.VerificationItem;
 import com.nsu.capstone.trust.profile.domain.VerificationProvider;
 import com.nsu.capstone.trust.profile.domain.VerificationType;
+import com.nsu.capstone.trust.reliability.domain.OutcomeType;
+import com.nsu.capstone.trust.reliability.domain.PerformanceOutcome;
+import com.nsu.capstone.trust.reliability.domain.ResponsibleParty;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +59,8 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -59,12 +69,51 @@ class TrustProfileApiIntegrationTest {
 
     private static final String TRUST_PROFILE_PATH = "/api/v1/artists/{artistId}/trust-profile";
 
+    /**
+     * API 01 §4.1의 필드와 §4.3·§4.4·§4.5의 배열 원소 필드.
+     */
+    private static final Set<String> CONTRACT_KEY_PATHS = Set.of(
+        "artistId",
+        "policyVersion",
+        "verifications",
+        "verifications[].type",
+        "verifications[].provider",
+        "reliability",
+        "reliability.confidenceLevel",
+        "reliability.observationCount",
+        "reliability.ratePercent",
+        "evidence",
+        "evidence.observations",
+        "evidence.observations.completedCount",
+        "evidence.observations.artistCancellations",
+        "evidence.observations.artistCancellations.noticeAtLeast7DaysCount",
+        "evidence.observations.artistCancellations.notice24HoursTo7DaysCount",
+        "evidence.observations.artistCancellations.noticeUnder24HoursCount",
+        "evidence.observations.noShowCount",
+        "evidence.exclusions",
+        "evidence.exclusions[].outcomeType",
+        "evidence.exclusions[].responsibleParty",
+        "evidence.exclusions[].count",
+        "riskSignals",
+        "riskSignals[].type",
+        "riskSignals[].count",
+        "riskSignals[].windowObservationCount",
+        "riskSignals[].lastOccurredMonth",
+        "activityFreshness",
+        "activityFreshness.lastPerformedMonth",
+        "activityFreshness.completedCountLast12Months"
+    );
+    private static final Pattern YEAR_MONTH = Pattern.compile("\\d{4}-\\d{2}");
+    private static final Pattern DATE_WITH_DAY = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
+
     @Autowired MockMvc mockMvc;
     @Autowired UserRepository userRepository;
     @Autowired UuidV7Generator uuidV7Generator;
     @Autowired JwtAccessTokenService accessTokenService;
     @Autowired JdbcTemplate jdbcTemplate;
     @Autowired JwtEncoder jwtEncoder;
+    @Autowired ObjectMapper objectMapper;
+    @MockitoBean PerformanceOutcomeReader performanceOutcomeReader;
     @MockitoBean VerificationReader verificationReader;
 
     private final List<UUID> createdUserIds = new ArrayList<>();
@@ -145,6 +194,58 @@ class TrustProfileApiIntegrationTest {
             .andExpect(status().isInternalServerError())
             .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
             .andExpect(content().string(not(containsString("verification storage detail"))));
+    }
+
+    @Test
+    void exposesOnlyContractFieldsWithoutPrivateLedgerDetails() throws Exception {
+        UUID artistId = saveArtist();
+        UUID correctedPerformance = UUID.randomUUID();
+        UUID voidedPerformance = UUID.randomUUID();
+        List<PerformanceOutcome> ledger = List.of(
+            outcome(UUID.randomUUID(), 1, OutcomeType.COMPLETED, null, "2026-05-02T19:00", null),
+            outcome(UUID.randomUUID(), 1, OutcomeType.COMPLETED, null, "2026-05-09T19:00", null),
+            outcome(UUID.randomUUID(), 1, OutcomeType.CANCELLED, ResponsibleParty.ARTIST,
+                "2026-06-01T19:00", "2026-06-01T10:00"),
+            outcome(UUID.randomUUID(), 1, OutcomeType.CANCELLED, ResponsibleParty.ARTIST,
+                "2026-07-01T19:00", "2026-06-10T10:00"),
+            outcome(UUID.randomUUID(), 1, OutcomeType.NO_SHOW, ResponsibleParty.ARTIST,
+                "2026-07-04T19:00", null),
+            outcome(UUID.randomUUID(), 1, OutcomeType.CANCELLED, ResponsibleParty.EVENT_PARTNER,
+                "2026-07-18T19:00", "2026-07-10T10:00"),
+            outcome(correctedPerformance, 1, OutcomeType.NO_SHOW, ResponsibleParty.EVENT_PARTNER,
+                "2026-08-01T19:00", null),
+            outcome(correctedPerformance, 2, OutcomeType.COMPLETED, null, "2026-08-01T19:00", null),
+            outcome(voidedPerformance, 1, OutcomeType.COMPLETED, null, "2026-08-08T19:00", null),
+            outcome(voidedPerformance, 2, OutcomeType.VOIDED, null, "2026-08-08T19:00", null)
+        );
+        when(performanceOutcomeReader.findByArtistIds(any())).thenReturn(Map.of(artistId, ledger));
+        when(verificationReader.findVerifiedByArtistIds(any())).thenReturn(Map.of(artistId, List.of(
+            new VerificationItem(VerificationType.EXTERNAL_ACCOUNT, VerificationProvider.YOUTUBE),
+            new VerificationItem(VerificationType.COPYRIGHT, null)
+        )));
+
+        String body = mockMvc.perform(get(TRUST_PROFILE_PATH, artistId)
+                .header("Authorization", bearer(uuidV7Generator.generate(), UserRole.EVENT_PARTNER)))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        JsonNode response = objectMapper.readTree(body);
+
+        assertThat(keyPathsOf(response)).containsExactlyInAnyOrderElementsOf(CONTRACT_KEY_PATHS);
+        assertThat(response.at("/activityFreshness/lastPerformedMonth").stringValue())
+            .matches(YEAR_MONTH);
+        assertThat(response.get("riskSignals").values()).isNotEmpty().allSatisfy(signal ->
+            assertThat(signal.get("lastOccurredMonth").stringValue()).matches(YEAR_MONTH));
+        List<JsonNode> scalars = scalarsOf(response);
+        assertThat(scalars).filteredOn(JsonNode::isString).extracting(JsonNode::stringValue)
+            .noneMatch(value -> DATE_WITH_DAY.matcher(value).find());
+        assertThat(scalars).filteredOn(JsonNode::isNumber).allMatch(JsonNode::isIntegralNumber);
+        assertThat(body).doesNotContain(ledger.stream()
+            .map(outcome -> outcome.performanceId().toString())
+            .toArray(String[]::new));
+        assertThat(body).doesNotContain(
+            "SUPERSEDED", "VOIDED", "NON_ARTIST_ATTRIBUTION",
+            "REPUTATION_MANIPULATION_SUSPECTED", "ACCOUNT_SANCTION", "ADMIN_DECISION"
+        );
     }
 
     @Test
@@ -287,5 +388,59 @@ class TrustProfileApiIntegrationTest {
 
     private String bearer(UUID userId, UserRole role) {
         return "Bearer " + accessTokenService.issue(userId, role).value();
+    }
+
+    private static PerformanceOutcome outcome(
+        UUID performanceId,
+        int revision,
+        OutcomeType outcomeType,
+        ResponsibleParty responsibleParty,
+        String scheduledStartAt,
+        String cancellationRequestedAt
+    ) {
+        return new PerformanceOutcome(
+            performanceId,
+            revision,
+            outcomeType,
+            responsibleParty,
+            seoul(scheduledStartAt),
+            cancellationRequestedAt == null ? null : seoul(cancellationRequestedAt)
+        );
+    }
+
+    private static Instant seoul(String localDateTime) {
+        return LocalDateTime.parse(localDateTime).atZone(ZoneId.of("Asia/Seoul")).toInstant();
+    }
+
+    /**
+     * 객체 키의 경로 집합. 배열 원소의 키는 {@code 배열[].키}로 모은다.
+     */
+    private static Set<String> keyPathsOf(JsonNode node) {
+        Set<String> paths = new TreeSet<>();
+        collectKeyPaths(node, "", paths);
+        return paths;
+    }
+
+    private static void collectKeyPaths(JsonNode node, String prefix, Set<String> paths) {
+        if (node.isObject()) {
+            for (Map.Entry<String, JsonNode> property : node.properties()) {
+                String path = prefix.isEmpty() ? property.getKey() : prefix + "." + property.getKey();
+                paths.add(path);
+                collectKeyPaths(property.getValue(), path, paths);
+            }
+        } else if (node.isArray()) {
+            for (JsonNode element : node.values()) {
+                collectKeyPaths(element, prefix + "[]", paths);
+            }
+        }
+    }
+
+    private static List<JsonNode> scalarsOf(JsonNode node) {
+        if (!node.isContainer()) {
+            return List.of(node);
+        }
+        return node.values().stream()
+            .flatMap(child -> scalarsOf(child).stream())
+            .toList();
     }
 }

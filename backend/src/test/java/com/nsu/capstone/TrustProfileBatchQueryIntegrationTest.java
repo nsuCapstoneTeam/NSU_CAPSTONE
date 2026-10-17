@@ -3,22 +3,31 @@ package com.nsu.capstone;
 import static com.nsu.capstone.TrustProfileExamples.insufficientEvidenceProfile;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.verify;
 
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserStatus;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.support.UuidV7Generator;
+import com.nsu.capstone.trust.profile.application.PerformanceOutcomeReader;
 import com.nsu.capstone.trust.profile.application.TrustProfileQueryService;
 import com.nsu.capstone.trust.profile.application.VerificationReader;
+import com.nsu.capstone.trust.profile.domain.ConfidenceLevel;
 import com.nsu.capstone.trust.profile.domain.TrustProfile;
+import com.nsu.capstone.trust.profile.domain.TrustProfile.Reliability;
 import com.nsu.capstone.trust.profile.domain.VerificationItem;
 import com.nsu.capstone.trust.profile.domain.VerificationProvider;
 import com.nsu.capstone.trust.profile.domain.VerificationType;
+import com.nsu.capstone.trust.reliability.domain.OutcomeType;
+import com.nsu.capstone.trust.reliability.domain.PerformanceOutcome;
 import jakarta.persistence.EntityManagerFactory;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import org.hibernate.SessionFactory;
@@ -44,6 +53,7 @@ class TrustProfileBatchQueryIntegrationTest {
     @Autowired JdbcTemplate jdbcTemplate;
     @Autowired ObjectMapper objectMapper;
     @Autowired EntityManagerFactory entityManagerFactory;
+    @MockitoSpyBean PerformanceOutcomeReader performanceOutcomeReader;
     @MockitoSpyBean VerificationReader verificationReader;
 
     private final List<UUID> createdUserIds = new ArrayList<>();
@@ -120,6 +130,28 @@ class TrustProfileBatchQueryIntegrationTest {
     }
 
     @Test
+    void computesFromLedgerReadingEachSourceOncePerBatch() {
+        List<UUID> artistIds = IntStream.range(0, 30)
+            .mapToObj(i -> saveArtist(UserStatus.ACTIVE))
+            .toList();
+        UUID artistWithLedger = artistIds.getFirst();
+        doReturn(Map.of(artistWithLedger, fourCompletedPerformances()))
+            .when(performanceOutcomeReader).findByArtistIds(any());
+
+        Map<UUID, TrustProfile> profiles = queryService.findByArtistIds(artistIds);
+
+        assertThat(profiles.get(artistWithLedger).reliability())
+            .isEqualTo(new Reliability(ConfidenceLevel.MEDIUM, 4, 85));
+        assertThat(profiles.get(artistIds.getLast()).reliability())
+            .isEqualTo(new Reliability(ConfidenceLevel.LOW, 0, null));
+        Set<UUID> requested = Set.copyOf(artistIds);
+        verify(performanceOutcomeReader)
+            .findByArtistIds(argThat(ids -> Set.copyOf(ids).equals(requested)));
+        verify(verificationReader)
+            .findVerifiedByArtistIds(argThat(ids -> Set.copyOf(ids).equals(requested)));
+    }
+
+    @Test
     void returnsEmptyMapWithoutQueryingForEmptyInput() {
         long statements = countStatements(
             () -> assertThat(queryService.findByArtistIds(List.of())).isEmpty()
@@ -138,6 +170,15 @@ class TrustProfileBatchQueryIntegrationTest {
         } finally {
             statistics.setStatisticsEnabled(false);
         }
+    }
+
+    private static List<PerformanceOutcome> fourCompletedPerformances() {
+        return IntStream.rangeClosed(1, 4)
+            .mapToObj(day -> new PerformanceOutcome(
+                UUID.randomUUID(), 1, OutcomeType.COMPLETED, null,
+                Instant.parse("2026-09-0%dT10:00:00Z".formatted(day)), null
+            ))
+            .toList();
     }
 
     private UUID saveArtist(UserStatus accountStatus) {

@@ -358,6 +358,30 @@ class TrustProfileAssemblerTest {
             .isEqualTo(new ActivityFreshness(YearMonth.of(2026, 8), 2));
     }
 
+    @Test
+    void verificationsDoNotChangeAnythingComputedFromObservations() {
+        List<PerformanceOutcome> history = new ArrayList<>(example63History());
+        history.add(cancelled(ResponsibleParty.ARTIST, "2026-08-20T10:00", "2026-08-20T19:00"));
+        history.add(cancelled(ResponsibleParty.EVENT_PARTNER, "2026-09-01T10:00", "2026-09-12T19:00"));
+        List<VerificationItem> everyVerification = List.of(
+            new VerificationItem(VerificationType.EXTERNAL_ACCOUNT, VerificationProvider.YOUTUBE),
+            new VerificationItem(VerificationType.EXTERNAL_ACCOUNT, VerificationProvider.SOUNDCLOUD),
+            new VerificationItem(VerificationType.COPYRIGHT, null),
+            new VerificationItem(VerificationType.BUSINESS_REGISTRATION, null),
+            new VerificationItem(VerificationType.PERFORMANCE_PARTICIPATION, null),
+            new VerificationItem(VerificationType.OFFICIAL_ACTIVITY, null)
+        );
+
+        TrustProfile unverified = assembler.assemble(ARTIST_ID, history, List.of(), NOW);
+        TrustProfile verified = assembler.assemble(ARTIST_ID, history, everyVerification, NOW);
+
+        assertThat(verified.verifications()).hasSize(everyVerification.size());
+        assertThat(verified)
+            .usingRecursiveComparison()
+            .ignoringFields("verifications")
+            .isEqualTo(unverified);
+    }
+
     /**
      * API 01 §6.2: 정상 완료 4회, EVENT_PARTNER 귀책 취소 1건.
      */
