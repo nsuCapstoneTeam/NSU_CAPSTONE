@@ -69,7 +69,14 @@ public class TrustProfileQueryService {
         return assembleAll(foundArtistIds);
     }
 
+    /**
+     * 아티스트가 없으면 출처 포트를 부르지 않는다. 어댑터가 빈 입력(SQL {@code IN ()} 등)을
+     * 다루지 않아도 되게 한다.
+     */
     private Map<UUID, TrustProfile> assembleAll(List<UUID> artistIds) {
+        if (artistIds.isEmpty()) {
+            return Map.of();
+        }
         Map<UUID, List<PerformanceOutcome>> outcomes =
             performanceOutcomeReader.findByArtistIds(artistIds);
         Map<UUID, List<VerificationItem>> verifications =

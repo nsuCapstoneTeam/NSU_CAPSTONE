@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserStatus;
@@ -158,6 +159,18 @@ class TrustProfileBatchQueryIntegrationTest {
         );
 
         assertThat(statements).isZero();
+    }
+
+    @Test
+    void skipsSourceReadsWhenNoRequestedIdIsArtist() {
+        UUID eventPartnerId = saveEventPartner();
+        UUID missingUserId = uuidV7Generator.generate();
+
+        Map<UUID, TrustProfile> profiles =
+            queryService.findByArtistIds(List.of(eventPartnerId, missingUserId));
+
+        assertThat(profiles).isEmpty();
+        verifyNoInteractions(performanceOutcomeReader, verificationReader);
     }
 
     private long countStatements(Runnable query) {
