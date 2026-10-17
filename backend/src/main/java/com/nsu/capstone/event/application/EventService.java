@@ -10,9 +10,12 @@ import com.nsu.capstone.identity.support.UuidV7Generator;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -65,9 +68,20 @@ public class EventService {
         Instant now = clock.instant();
         Sort.Direction direction =
             period == EventPeriod.UPCOMING ? Sort.Direction.ASC : Sort.Direction.DESC;
-        PageRequest pageable = PageRequest.of(
-            page, size, Sort.by(direction, "startAt").and(Sort.by(Sort.Direction.ASC, "id"))
-        );
+        Sort sort = Sort.by(direction, "startAt").and(Sort.by(Sort.Direction.ASC, "id"));
+        PageRequest pageable = PageRequest.of(page, size, sort);
+
+        // JPA의 offset은 int라서 넘으면 조회할 수 없다. 이만큼 뒤에는 항상 행이 없으므로
+        // 전체 개수만 구해 마지막 페이지를 넘긴 요청과 같게 빈 페이지로 답한다.
+        if ((long) page * size > Integer.MAX_VALUE) {
+            long total = query(eventPartnerId, period, now, PageRequest.of(0, 1, sort))
+                .getTotalElements();
+            return new PageImpl<>(List.of(), pageable, total);
+        }
+        return query(eventPartnerId, period, now, pageable);
+    }
+
+    private Page<Event> query(UUID eventPartnerId, EventPeriod period, Instant now, Pageable pageable) {
         return period == EventPeriod.UPCOMING
             ? eventRepository.findByEventPartnerIdAndDeletedAtIsNullAndStartAtGreaterThan(
                 eventPartnerId, now, pageable)

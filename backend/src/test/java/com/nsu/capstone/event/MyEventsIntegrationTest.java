@@ -128,6 +128,22 @@ class MyEventsIntegrationTest extends EventIntegrationTestBase {
             .andExpect(jsonPath("$.totalElements").value(5));
     }
 
+    @Test
+    void offsetBeyondTheDatabaseLimitStillReturnsAnEmptyPage() throws Exception {
+        registerStartingOn("2026-11-06", "행사");
+
+        // page * size가 Integer.MAX_VALUE를 넘는 값
+        list(partner, "?page=107374183&size=20")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items", empty()))
+            .andExpect(jsonPath("$.page").value(107374183))
+            .andExpect(jsonPath("$.totalElements").value(1))
+            .andExpect(jsonPath("$.totalPages").value(1));
+        list(partner, "?page=2147483647&size=100")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items", empty()));
+    }
+
     @ParameterizedTest
     @CsvSource({
         "?period=ALL",
