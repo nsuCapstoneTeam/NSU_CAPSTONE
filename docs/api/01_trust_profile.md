@@ -3,7 +3,9 @@
 아티스트 1명의 Trust Profile(Verification, Artist Reliability, 근거 집계, Risk Signal, Activity Freshness)을 조회한다. 추천 결과에 넣을 여러 명의 Trust Profile은 HTTP가 아닌 내부 일괄 조회 계약(§7)으로 조합한다.
 
 - 구현 이슈: NSU-70
-- 요구사항: SSOT v1.4 `TRUST-149`~`TRUST-154`
+- 요구사항: SSOT `TRUST-149`~`TRUST-154` (현재 리비전 v1.14에서 확인)
+  - v1.4(2026-10-04 승인): MVP의 "근거 부족 · 관측 0건" 표시(`TRUST-149`), 위험 신호 정책(`TRUST-150`), 신뢰 정보를 순위에 쓰지 않는 원칙(`TRUST-153`)
+  - v1.9(2026-10-07 승인): 추천 순위 기준이 음악 유사도로 바뀌었다(`TRUST-153`). 신뢰 정보를 순위에 쓰지 않는 원칙은 그대로다
 - 정책: `reliability-v1` — [04 D09·D39·D41·D44](../adr/artist_trust_architecture/04_final_policy_decisions.md), [05 §13](../adr/artist_trust_architecture/05_trust_event_catalog.md), [06 §10·§18](../adr/artist_trust_architecture/06_database_and_implementation_roadmap.md)
 - 공통 규칙: [00_conventions.md](./00_conventions.md)
 
@@ -22,6 +24,9 @@ Authorization: Bearer {accessToken}
 
 요청 본문과 쿼리 파라미터는 없다. 조회 전용이며 페이지네이션하지 않는다.
 
+- `artistId`는 정규형 UUID(8-4-4-4-12자리, 대소문자 구분 없음)만 받는다. `1-2-3-4-5` 같은 축약형은 `400 INVALID_ARTIST_ID`다.
+- 응답의 `artistId`는 소문자로 낸다(00 §6).
+
 ## 2. 호출 주체와 공개 범위
 
 호출 주체와 관계없이 응답 스키마는 하나다. 공개하지 않는 정보는 공개 DTO와 공개 enum에 정의하지 않는다(§5).
@@ -39,16 +44,17 @@ Authorization: Bearer {accessToken}
 
 | 상황 | HTTP | `code` |
 |---|---|---|
-| 토큰 없음·만료·서명 오류 | 401 | `UNAUTHENTICATED` |
+| 토큰 없음·만료·서명 오류 | 401 | `AUTHENTICATION_REQUIRED` |
 | `artistId`가 UUID 형식이 아님 | 400 | `INVALID_ARTIST_ID` |
 | `ARTIST`가 자기 것이 아닌 `artistId`를 요청 | 403 | `ACCESS_DENIED` |
 | `EVENT_PARTNER` 호출이고 대상이 다음 중 하나: 존재하지 않음, `role = EVENT_PARTNER`, `status = WITHDRAWN`, `status = SUSPENDED` | 404 | `ARTIST_NOT_FOUND` |
 | `EVENT_PARTNER` 호출이고 대상이 `status = ACTIVE`인 `ARTIST` | 200 | — |
 | `ARTIST` 본인 호출 | 200 | — |
-| 서버 오류 | 500 | `INTERNAL_ERROR` |
+| 서버 오류 | 500 | `INTERNAL_SERVER_ERROR` |
 
 - 정지·탈퇴·역할 차이를 모두 `404`로 응답해, 이 API로 계정 제재 여부나 사용자 역할을 알아낼 수 없게 한다. 계정 제재는 Risk Signal이 아니며 추천에서는 Eligibility로 처리한다(04 D41).
 - 본인이 `SUSPENDED`일 때 로그인할 수 있는지는 Auth/User 도메인이 정한다. 이 API는 토큰이 유효하면 본인 조회를 허용한다.
+- `ARTIST` 본인 호출은 대상 사용자를 조회하지 않는다. 토큰의 `sub`가 곧 대상이기 때문이다.
 
 ## 4. 응답 본문 (200)
 
@@ -108,6 +114,7 @@ Authorization: Bearer {accessToken}
 - Spotify는 계정 연동은 허용하지만 Verification 항목이 아니다. Artist URL/ID 입력이나 Spotify 사용자 계정 OAuth는 아티스트 프로필 소유를 증명하지 않으므로(07 §7), 아티스트 프로필에 Spotify 링크를 보여 주고 EVENT_PARTNER가 직접 링크로 확인한다. 소유 확인 수단이 생기면 `provider`에 `SPOTIFY`를 추가한다(enum 값 추가는 non-breaking).
 - 로그인용 간편가입(Google, Kakao, Naver)과 가입 필수 인증(이메일, 휴대폰)은 Verification 항목이 아니다.
 - 정렬: 위 표의 순서, `EXTERNAL_ACCOUNT`끼리는 `provider` 사전순.
+- 같은 (`type`, `provider`) 항목은 한 번만 넣는다. 예를 들어 확인된 YouTube 계정이 2개여도 `EXTERNAL_ACCOUNT`·`YOUTUBE`는 1개다.
 - Verification은 표시만 하며 Reliability에 더하지 않는다(`TRUST-152`).
 
 ### 4.4 `evidence.exclusions`
@@ -153,7 +160,7 @@ Authorization: Bearer {accessToken}
 
 - 공연 결과 원장에서 유효 revision이 정상 완료(`COMPLETED`)인 공연만 센다.
 - `lastPerformedMonth`: 가장 최근 정상 완료 공연의 예정 시작 시각, `Asia/Seoul` 기준 `YYYY-MM`. 없으면 `null`.
-- `completedCountLast12Months`: 조회 시각 기준 직전 12개월 안에 예정 시작 시각이 있는 정상 완료 공연 수.
+- `completedCountLast12Months`: 예정 시작 시각이 "조회 시각에서 `Asia/Seoul` 달력으로 12개월 전"보다 뒤이고 조회 시각 이하인 정상 완료 공연 수.
 - 활동 여부를 판정하는 boolean은 두지 않는다. Activity Freshness는 Reliability·Risk Signal과 독립적인 중립 정보이며, 활동이 적다는 상태는 경고가 아니다(04 D44).
 
 ## 5. 공개하지 않는 정보
@@ -294,12 +301,8 @@ Authorization: Bearer {accessToken}
 
 ```json
 {
-  "type": "about:blank",
-  "title": "Not Found",
-  "status": 404,
-  "detail": "아티스트를 찾을 수 없습니다.",
-  "instance": "/api/v1/artists/0192f3a4-7b1c-7d2e-8f00-1a2b3c4d5e6f/trust-profile",
-  "code": "ARTIST_NOT_FOUND"
+  "code": "ARTIST_NOT_FOUND",
+  "message": "아티스트를 찾을 수 없습니다."
 }
 ```
 
@@ -321,7 +324,9 @@ Map<UUID, TrustProfile> findByArtistIds(Collection<UUID> artistIds);
 | 기준 | 근거 |
 |---|---|
 | §3의 상태 코드와 `code`가 표대로 나온다 | 본 문서 |
-| `401`·`403`도 Problem Details 형식이다 | 00_conventions §8 |
+| 축약형 UUID(`1-2-3-4-5`)는 `400 INVALID_ARTIST_ID`이고, 응답의 `artistId`는 소문자다 | §1 |
+| 같은 (`type`, `provider`)의 Verification은 한 번만 나온다 | §4.3 |
+| `401`·`403`도 `{code, message}` 형식이다 | 00_conventions §8, ADR-007 |
 | §4.2 불변식이 모든 응답에서 성립한다 | 본 문서 |
 | 관측 0~3건이면 `ratePercent = null` | `TRUST-149`, NSU-70 AC |
 | 계산 제외 결과가 조합별 건수로 나온다 | `TRUST-149`, NSU-70 AC |
