@@ -405,9 +405,10 @@ Rₜ = αₜ / (αₜ + βₜ)
 
 Activity Freshness는 다음 사실 정보로 구성합니다.
 
-- 마지막 공연 시점(`lastPerformanceAt`)
-- 최근 12개월 공연 횟수
-- 최근 활동 여부
+- 마지막 정상 완료 공연의 월(`lastPerformedMonth`)
+- 직전 12개월 정상 완료 공연 수(`completedCountLast12Months`)
+
+활동 중인지를 판정하는 값(최근 활동 여부 같은 boolean)은 두지 않습니다. 판정 값을 두면 활동이 적다는 상태가 경고처럼 읽힙니다. 응답 형식은 [Trust Profile API §4.6](../../api/01_trust_profile.md#46-activityfreshness)에 있습니다.
 
 **두 정보를 분리하는 이유**
 
