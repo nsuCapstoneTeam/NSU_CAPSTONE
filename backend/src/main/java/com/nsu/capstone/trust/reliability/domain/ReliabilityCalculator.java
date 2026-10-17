@@ -81,8 +81,8 @@ public final class ReliabilityCalculator {
         Map<UUID, Integer> latestRevisions = new HashMap<>();
         for (PerformanceOutcome outcome : outcomes) {
             if (!seen.add(new PerformanceRevision(outcome.performanceId(), outcome.revision()))) {
-                throw new IllegalArgumentException(
-                    "duplicate revision " + outcome.revision() + " of performance " + outcome.performanceId());
+                throw new IllegalArgumentException("같은 공연의 같은 revision이 두 번 들어왔다. performanceId="
+                    + outcome.performanceId() + ", revision=" + outcome.revision());
             }
             latestRevisions.merge(outcome.performanceId(), outcome.revision(), Math::max);
         }

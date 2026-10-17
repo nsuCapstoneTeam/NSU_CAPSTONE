@@ -22,26 +22,26 @@ public record PerformanceOutcome(
 
     public PerformanceOutcome {
         if (performanceId == null) {
-            throw new IllegalArgumentException("performanceId is required");
+            throw new IllegalArgumentException("필수 값이 없다: performanceId");
         }
         if (outcomeType == null) {
-            throw new IllegalArgumentException("outcomeType is required");
+            throw new IllegalArgumentException("필수 값이 없다: outcomeType");
         }
         if (scheduledStartAt == null) {
-            throw new IllegalArgumentException("scheduledStartAt is required");
+            throw new IllegalArgumentException("필수 값이 없다: scheduledStartAt");
         }
         if (revision < 1) {
-            throw new IllegalArgumentException("revision must be 1 or greater: " + revision);
+            throw new IllegalArgumentException("revision은 1 이상이어야 한다. revision=" + revision);
         }
         boolean withoutFault = outcomeType == OutcomeType.COMPLETED || outcomeType == OutcomeType.VOIDED;
         if (withoutFault && responsibleParty != null) {
-            throw new IllegalArgumentException("responsibleParty must be null for " + outcomeType);
+            throw new IllegalArgumentException(outcomeType + " 결과에는 responsibleParty를 둘 수 없다");
         }
         if (!withoutFault && responsibleParty == null) {
-            throw new IllegalArgumentException("responsibleParty is required for " + outcomeType);
+            throw new IllegalArgumentException(outcomeType + " 결과에는 responsibleParty가 있어야 한다");
         }
         if (outcomeType == OutcomeType.CANCELLED && cancellationRequestedAt == null) {
-            throw new IllegalArgumentException("cancellationRequestedAt is required for CANCELLED");
+            throw new IllegalArgumentException("CANCELLED 결과에는 cancellationRequestedAt이 있어야 한다");
         }
     }
 
