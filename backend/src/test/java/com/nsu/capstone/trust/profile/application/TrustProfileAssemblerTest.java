@@ -289,6 +289,27 @@ class TrustProfileAssemblerTest {
 
     @Test
     void judgesRiskSignalsWithinLatestFourteenObservations() {
+        TrustProfile profile = assemble(noShowBeforeLatestFourteenObservations());
+
+        assertThat(profile.riskSignals()).containsExactly(
+            new RiskSignal(RiskSignalType.LATE_ARTIST_CANCELLATION, 1, 14, YearMonth.of(2026, 4))
+        );
+    }
+
+    @Test
+    void countsEvidenceOverWholeHistoryNotRiskSignalWindow() {
+        TrustProfile profile = assemble(noShowBeforeLatestFourteenObservations());
+
+        assertThat(profile.evidence().observations())
+            .isEqualTo(new Observations(14, new ArtistCancellations(0, 0, 1), 1));
+        assertThat(profile.reliability().observationCount()).isEqualTo(16);
+    }
+
+    /**
+     * 관측 16건: 노쇼 1건, 정상 완료 14건, 24시간 미만 통보 아티스트 귀책 취소 1건 순서다.
+     * 노쇼는 최근 관측 14건 창 밖에 있다.
+     */
+    private static List<PerformanceOutcome> noShowBeforeLatestFourteenObservations() {
         List<PerformanceOutcome> history = new ArrayList<>();
         history.add(noShow(ResponsibleParty.ARTIST, "2026-01-03T19:00"));
         LocalDate firstCompletedDate = LocalDate.of(2026, 1, 10);
@@ -296,12 +317,7 @@ class TrustProfileAssemblerTest {
             history.add(completed(firstCompletedDate.plusWeeks(week) + "T19:00"));
         }
         history.add(cancelled(ResponsibleParty.ARTIST, "2026-04-17T10:00", "2026-04-17T19:00"));
-
-        TrustProfile profile = assemble(history);
-
-        assertThat(profile.riskSignals()).containsExactly(
-            new RiskSignal(RiskSignalType.LATE_ARTIST_CANCELLATION, 1, 14, YearMonth.of(2026, 4))
-        );
+        return history;
     }
 
     @Test
