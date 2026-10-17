@@ -156,20 +156,23 @@ ALTER TABLE performance_outcome
 
 ### 취소 통보 시각 제약
 
-공연 시작 이후의 통보는 취소로 받지 않고 노쇼 판정 흐름으로 보냅니다([05 §4](./05_trust_event_catalog.md#4-아티스트-귀책-취소)). 그래서 취소 행은 통보 시각이 있어야 하고, 그 시각이 예정 시작 시각보다 앞서야 합니다.
+취소 행은 통보 시각이 있어야 합니다. 취소의 순서 기준 시각이 통보 시각이기 때문입니다([05 §13.5](./05_trust_event_catalog.md#135-계산-엔진-입력은-jpa-entity가-아니다)).
+
+아티스트 귀책 취소는 통보 시각이 예정 시작 시각보다 앞서야 합니다. 공연 시작 이후 아티스트의 통보는 취소로 받지 않고 노쇼 판정 흐름으로 보내기 때문입니다([05 §4](./05_trust_event_catalog.md#4-아티스트-귀책-취소)). EVENT_PARTNER 귀책이나 정당 사유처럼 아티스트 귀책이 아닌 취소는 공연 시작 이후에도 생길 수 있고, 아티스트 노쇼로 기록할 수도 없으므로([05 §6](./05_trust_event_catalog.md#6-event_partner-귀책-취소)) 시각을 비교하지 않습니다.
 
 ```sql
 ALTER TABLE performance_outcome
-    ADD CONSTRAINT ck_cancellation_before_start CHECK (
+    ADD CONSTRAINT ck_cancellation_notice CHECK (
         outcome_type <> 'CANCELLED'
         OR (cancellation_requested_at IS NOT NULL
-            AND cancellation_requested_at < scheduled_start_at_snapshot)
+            AND (responsible_party <> 'ARTIST'
+                 OR cancellation_requested_at < scheduled_start_at_snapshot))
     );
 ```
 
-예정 시작 시각은 모든 결과의 계산에 씁니다. 취소는 통보 시점을 분류할 때, 그 밖의 결과는 순서 기준 시각으로 씁니다([05 §13.5](./05_trust_event_catalog.md#135-계산-엔진-입력은-jpa-entity가-아니다)). 그래서 열 제약에서 `NOT NULL`로 막고, 위 비교가 NULL로 평가되어 통과하는 경우도 없앱니다.
+예정 시작 시각은 모든 결과의 계산 입력에 들어갑니다. 아티스트 귀책 취소는 통보 시점을 분류할 때, 취소가 아닌 결과는 순서 기준 시각으로 씁니다. 그래서 열 제약에서 `NOT NULL`로 막고, 위 비교가 NULL로 평가되어 통과하는 경우도 없앱니다. 취소의 `responsible_party`가 비어 있으면 위 식이 NULL이 되어 통과하지만, 그런 행은 `ck_responsible_party`가 거부합니다.
 
-이 절의 열 제약과 조건 제약을 모두 적용한 PostgreSQL에서 다음 행이 거부되는 것을 확인했습니다: 자기 참조, 순환, revision 건너뛰기(직전 revision을 비운 경우 포함), 동시 정정 경쟁, 비어 있거나 허용값 밖인 결과 유형·확정 출처, 결과별로 허용되지 않은 확정 출처, 예정 시작 시각이 없는 행, 통보 시각이 없거나 공연 시작 시각 이후(같은 시각 포함)인 취소. 조건 제약만 두면 NULL이 들어간 행이 통과하므로 열 제약을 함께 두어야 합니다.
+이 절의 열 제약과 조건 제약을 모두 적용한 PostgreSQL에서 다음 행이 거부되는 것을 확인했습니다: 자기 참조, 순환, revision 건너뛰기(직전 revision을 비운 경우 포함), 동시 정정 경쟁, 비어 있거나 허용값 밖인 결과 유형·확정 출처, 결과별로 허용되지 않은 확정 출처, 예정 시작 시각이 없는 행, 통보 시각이 없는 취소, 통보가 공연 시작 시각 이후(같은 시각 포함)인 아티스트 귀책 취소. 공연 시작 이후에 통보한 EVENT_PARTNER 귀책·정당 사유 취소는 통과합니다. 조건 제약만 두면 NULL이 들어간 행이 통과하므로 열 제약을 함께 두어야 합니다.
 
 판정 전 단계(신고, 소명, 분쟁)는 Booking/Dispute 도메인의 테이블이 소유하며 Contract 도입 시 설계합니다.
 
