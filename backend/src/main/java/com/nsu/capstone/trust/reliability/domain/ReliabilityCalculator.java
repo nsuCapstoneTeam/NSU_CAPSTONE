@@ -34,11 +34,14 @@ public final class ReliabilityCalculator {
 
     private final ReliabilityPolicy policy;
 
+    /** {@code policy}의 γ, 사전분포, 경계값으로 계산하는 계산기를 만든다. */
     public ReliabilityCalculator(ReliabilityPolicy policy) {
         this.policy = policy;
     }
 
     /**
+     * 원장 행으로 Reliability를 계산하고, 유효 관측과 계산에서 뺀 행을 나눠 담는다.
+     *
      * @param outcomes 아티스트 1명의 원장 행 전체(모든 revision). 순서는 상관없다.
      * @throws IllegalArgumentException 같은 공연의 같은 revision이 두 번 들어온 경우
      */
@@ -89,6 +92,12 @@ public final class ReliabilityCalculator {
         return latestRevisions;
     }
 
+    /**
+     * 같은 revision이 두 번 들어왔는지 확인하는 키.
+     *
+     * @param performanceId 공연 식별자
+     * @param revision 같은 공연의 결과 번호
+     */
     private record PerformanceRevision(UUID performanceId, int revision) {
     }
 
@@ -97,6 +106,10 @@ public final class ReliabilityCalculator {
         return outcome.outcomeType() != OutcomeType.COMPLETED && outcome.responsibleParty() != ResponsibleParty.ARTIST;
     }
 
+    /**
+     * 유효 관측의 근거 분류를 정한다.
+     * 정상 완료와 노쇼는 그대로 두고, 아티스트 귀책 취소는 통보 시점으로 나눈다.
+     */
     private ObservationCategory categoryOf(PerformanceOutcome outcome) {
         if (outcome.outcomeType() == OutcomeType.COMPLETED) {
             return ObservationCategory.COMPLETED;

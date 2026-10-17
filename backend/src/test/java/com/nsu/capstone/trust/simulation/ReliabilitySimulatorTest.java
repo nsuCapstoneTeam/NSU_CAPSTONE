@@ -17,6 +17,7 @@ class ReliabilitySimulatorTest {
     private static final Path GAMMA_ADR =
         Path.of("..", "docs", "adr", "artist_trust_architecture", "09_reliability_decay_gamma.md");
 
+    /** 표 1이 09 ADR 부록의 γ 비교 표와 글자 하나까지 같다. */
     @Test
     void firstTableIsTheGammaComparisonOfAdr09CharacterForCharacter() throws IOException {
         List<String> appendixTables = tables(appendixOf(Files.readString(GAMMA_ADR)));
@@ -24,6 +25,7 @@ class ReliabilitySimulatorTest {
         assertThat(tables(ReliabilitySimulator.report()).get(0)).isEqualTo(appendixTables.get(0));
     }
 
+    /** 표 2가 09 ADR 부록의 공연 빈도별 표 중 사건 순서 열과 같다. */
     @Test
     void secondTableIsTheEventOrderColumnOfTheFrequencyTableOfAdr09() throws IOException {
         List<String> appendixTables = tables(appendixOf(Files.readString(GAMMA_ADR)));
@@ -32,6 +34,7 @@ class ReliabilitySimulatorTest {
         assertThat(tables(ReliabilitySimulator.report()).get(1)).isEqualTo(withoutColumn(appendixTables.get(1), 1));
     }
 
+    /** 표 3이 06 §12 시나리오의 기대값을 보여 준다. */
     @Test
     void thirdTableShowsTheScenariosOf06Section12() {
         assertThat(tables(ReliabilitySimulator.report()).get(2)).isEqualTo("""
@@ -58,6 +61,10 @@ class ReliabilitySimulatorTest {
             | 위와 같은 이력, 노쇼가 가장 늦게 확정 | 11 | HIGH | 0.880 | 88% | RECENT_NO_SHOW(11건 중 1건) | - |""");
     }
 
+    /**
+     * 표 4는 노쇼 뒤 정상 완료가 쌓이며 값이 회복되는 추이를 보여 준다.
+     * 정상 완료 14회째에 RECENT_NO_SHOW가 꺼진다.
+     */
     @Test
     void fourthTableShowsRecoveryAfterNoShowUntilTheSignalClears() {
         assertThat(tables(ReliabilitySimulator.report()).get(3)).isEqualTo("""
@@ -98,6 +105,7 @@ class ReliabilitySimulatorTest {
         return tables;
     }
 
+    /** ADR 본문에서 "## 부록" 이후만 잘라 낸다. */
     private static String appendixOf(String adr) {
         return adr.substring(adr.indexOf("## 부록"));
     }

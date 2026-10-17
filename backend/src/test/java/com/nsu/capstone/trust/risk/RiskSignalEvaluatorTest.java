@@ -24,6 +24,7 @@ class RiskSignalEvaluatorTest {
     private final ReliabilityCalculator calculator = new ReliabilityCalculator(ReliabilityPolicy.V1);
     private final RiskSignalEvaluator evaluator = new RiskSignalEvaluator();
 
+    /** 관측이 없으면 Risk Signal도 없다. */
     @Test
     void artistWithoutObservationsHasNoRiskSignal() {
         ReliabilityResult reliability = calculator.calculate(List.of());
@@ -31,6 +32,7 @@ class RiskSignalEvaluatorTest {
         assertThat(evaluator.evaluate(reliability)).isEmpty();
     }
 
+    /** 정상 완료 10회 뒤 노쇼 1회면 RECENT_NO_SHOW가 켜진다. */
     @Test
     void noShowAfterTenCompletedPerformancesRaisesRecentNoShow() {
         List<PerformanceOutcome> outcomes = history().completed(10).noShow().outcomes();
@@ -42,6 +44,10 @@ class RiskSignalEvaluatorTest {
             new RiskSignal(RiskSignalType.RECENT_NO_SHOW, 1, 11, noShow.scheduledStartAt()));
     }
 
+    /**
+     * 노쇼 뒤 관측이 13건일 때까지는 RECENT_NO_SHOW가 남는다.
+     * 14건째에는 노쇼가 최근 14건 창을 벗어나 꺼진다.
+     */
     @Test
     void recentNoShowStaysForThirteenLaterObservationsAndClearsAtTheFourteenth() {
         OutcomeHistory history = history().completed(20).noShow();
@@ -55,6 +61,7 @@ class RiskSignalEvaluatorTest {
         assertThat(evaluator.evaluate(afterFourteen)).isEmpty();
     }
 
+    /** 계산에서 제외한 결과(EVENT_PARTNER 귀책 취소)는 최근 관측 창의 자리를 차지하지 않는다. */
     @Test
     void outcomesThatAreNotObservationsDoNotTakeWindowSlots() {
         OutcomeHistory history = history().completed(20).noShow();
@@ -69,6 +76,7 @@ class RiskSignalEvaluatorTest {
             new RiskSignal(RiskSignalType.RECENT_NO_SHOW, 1, 14, noShow.scheduledStartAt()));
     }
 
+    /** 공연 24시간 전보다 늦게 통보한 아티스트 귀책 취소는 LATE_ARTIST_CANCELLATION을 켠다. */
     @Test
     void cancellationNotifiedLessThan24HoursAheadRaisesLateArtistCancellation() {
         List<PerformanceOutcome> outcomes = history().completed(10).artistCancellation(Duration.ofHours(23)).outcomes();
@@ -80,6 +88,10 @@ class RiskSignalEvaluatorTest {
             RiskSignalType.LATE_ARTIST_CANCELLATION, 1, 11, cancellation.cancellationRequestedAt()));
     }
 
+    /**
+     * 정확히 24시간 전에 통보한 취소는 늦은 취소가 아니다.
+     * 1건뿐이라 반복 취소도 아니다.
+     */
     @Test
     void cancellationNotifiedExactly24HoursAheadRaisesNoSignal() {
         List<PerformanceOutcome> outcomes = history().completed(10).artistCancellation(Duration.ofHours(24)).outcomes();
@@ -87,6 +99,7 @@ class RiskSignalEvaluatorTest {
         assertThat(evaluator.evaluate(calculator.calculate(outcomes))).isEmpty();
     }
 
+    /** 창 안에 아티스트 귀책 취소가 2건이면 REPEATED_ARTIST_CANCELLATION이 켜진다. */
     @Test
     void twoArtistCancellationsInTheWindowRaiseRepeatedArtistCancellation() {
         List<PerformanceOutcome> outcomes = history()
@@ -103,6 +116,7 @@ class RiskSignalEvaluatorTest {
             RiskSignalType.REPEATED_ARTIST_CANCELLATION, 2, 14, latestCancellation.cancellationRequestedAt()));
     }
 
+    /** 취소가 1건뿐이거나, 2건 중 1건이 창 밖에 있으면 반복 취소가 아니다. */
     @Test
     void singleArtistCancellationOrOneOutsideTheWindowIsNotRepeated() {
         List<PerformanceOutcome> single = history().completed(5).artistCancellation(Duration.ofDays(10)).outcomes();
@@ -116,6 +130,7 @@ class RiskSignalEvaluatorTest {
         assertThat(evaluator.evaluate(calculator.calculate(oneOutsideTheWindow))).isEmpty();
     }
 
+    /** 여러 신호가 함께 켜지면 RiskSignalType 선언 순서로 돌려준다. */
     @Test
     void activeSignalsFollowRiskSignalTypeDeclarationOrder() {
         List<PerformanceOutcome> outcomes = history()
@@ -135,6 +150,7 @@ class RiskSignalEvaluatorTest {
             new RiskSignal(RiskSignalType.REPEATED_ARTIST_CANCELLATION, 2, 8, lastCancellationAt));
     }
 
+    /** V1이 아닌 정책을 주면 그 정책의 창 크기와 반복 취소 기준으로 판단한다. */
     @Test
     void evaluationFollowsTheGivenPolicyValues() {
         ReliabilityPolicy policy = new ReliabilityPolicy(
@@ -158,6 +174,7 @@ class RiskSignalEvaluatorTest {
             .containsExactly(tuple(RiskSignalType.REPEATED_ARTIST_CANCELLATION, 3, 3));
     }
 
+    /** 새 관측 없이 시간만 지나서는 Risk Signal이 꺼지지 않는다. */
     @Test
     void riskSignalDoesNotExpireWithTimeAlone() {
         List<PerformanceOutcome> outcomes = history().completed(20).noShow().outcomes();
@@ -171,6 +188,7 @@ class RiskSignalEvaluatorTest {
             new RiskSignal(RiskSignalType.RECENT_NO_SHOW, 1, 14, noShowAt.minus(threeYears)));
     }
 
+    /** 노쇼를 정상 완료로 정정하면 RECENT_NO_SHOW가 남지 않는다. */
     @Test
     void noShowCorrectedToCompletedLeavesNoRiskSignal() {
         List<PerformanceOutcome> ledger = new ArrayList<>(history().completed(10).noShow().outcomes());

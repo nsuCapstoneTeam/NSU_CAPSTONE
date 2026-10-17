@@ -15,9 +15,11 @@ public final class OutcomeHistory {
     private Instant nextActionAt = START;
     private Duration interval = Duration.ofDays(30);
 
+    /** {@link #history()}로만 만든다. */
     private OutcomeHistory() {
     }
 
+    /** 비어 있는 이력. 첫 행동 시각은 2026-01-01T10:00:00Z다. */
     public static OutcomeHistory history() {
         return new OutcomeHistory();
     }
@@ -56,6 +58,7 @@ public final class OutcomeHistory {
         return this;
     }
 
+    /** 정상 완료를 {@code times}번 붙인다. */
     public OutcomeHistory completed(int times) {
         for (int i = 0; i < times; i++) {
             add(OutcomeType.COMPLETED, null, nextActionAt, null);
@@ -63,10 +66,12 @@ public final class OutcomeHistory {
         return this;
     }
 
+    /** 아티스트 귀책 노쇼를 1번 붙인다. */
     public OutcomeHistory noShow() {
         return noShowBy(ResponsibleParty.ARTIST);
     }
 
+    /** {@code responsibleParty} 귀책 노쇼를 1번 붙인다. */
     public OutcomeHistory noShowBy(ResponsibleParty responsibleParty) {
         add(OutcomeType.NO_SHOW, responsibleParty, nextActionAt, null);
         return this;
@@ -77,19 +82,26 @@ public final class OutcomeHistory {
         return cancellation(ResponsibleParty.ARTIST, notice);
     }
 
+    /** {@code responsibleParty} 귀책 취소를 붙인다. 통보는 공연 예정 시작 7일 전이다. */
     public OutcomeHistory cancelledBy(ResponsibleParty responsibleParty) {
         return cancellation(responsibleParty, Duration.ofDays(7));
     }
 
+    /** 행동 시각에 통보한 취소를 붙인다. 공연 예정 시작은 그로부터 {@code notice} 뒤다. */
     private OutcomeHistory cancellation(ResponsibleParty responsibleParty, Duration notice) {
         add(OutcomeType.CANCELLED, responsibleParty, nextActionAt.plus(notice), nextActionAt);
         return this;
     }
 
+    /** 지금까지 붙인 원장 행의 복사본. */
     public List<PerformanceOutcome> outcomes() {
         return List.copyOf(outcomes);
     }
 
+    /**
+     * 새 공연의 revision 1 결과를 붙이고, 다음 행동 시각을 간격만큼 늦춘다.
+     * 공연 식별자는 원장 행 수로 만들어 겹치지 않는다.
+     */
     private void add(
         OutcomeType outcomeType,
         ResponsibleParty responsibleParty,

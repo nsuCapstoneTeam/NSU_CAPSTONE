@@ -12,6 +12,10 @@ public final class ReliabilityResult {
     private final List<Observation> observations;
     private final List<ExcludedOutcome> excludedOutcomes;
 
+    /**
+     * 계산기만 만든다.
+     * 목록은 복사해 두므로 밖에서 원래 목록을 바꿔도 결과는 변하지 않는다.
+     */
     ReliabilityResult(
         ReliabilityPolicy policy,
         double reliability,
@@ -24,6 +28,7 @@ public final class ReliabilityResult {
         this.excludedOutcomes = List.copyOf(excludedOutcomes);
     }
 
+    /** 이 결과를 계산할 때 쓴 정책. */
     public ReliabilityPolicy policy() {
         return policy;
     }
@@ -33,16 +38,19 @@ public final class ReliabilityResult {
         return reliability;
     }
 
+    /** 계산에 들어간 유효 관측 수 n. */
     public int observationCount() {
         return observations.size();
     }
 
+    /** 유효 관측 중 근거 분류가 {@code category}인 관측 수. */
     public int observationCount(ObservationCategory category) {
         return (int) observations.stream()
             .filter(observation -> observation.category() == category)
             .count();
     }
 
+    /** 관측 수로 정한 확신 수준. V1은 3건 이하 LOW, 4~9건 MEDIUM, 10건 이상 HIGH다. */
     public ConfidenceLevel confidenceLevel() {
         if (observationCount() <= policy.maxLowConfidenceObservations()) {
             return ConfidenceLevel.LOW;

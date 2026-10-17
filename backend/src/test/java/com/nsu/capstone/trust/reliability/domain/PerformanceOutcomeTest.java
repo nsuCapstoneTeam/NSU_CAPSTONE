@@ -15,6 +15,7 @@ class PerformanceOutcomeTest {
     private static final Instant SCHEDULED_START = Instant.parse("2026-05-01T10:00:00Z");
     private static final Instant NOTIFIED = Instant.parse("2026-04-20T10:00:00Z");
 
+    /** 정상 완료·무효 결과에 귀책 주체가 있으면 거부한다. */
     @ParameterizedTest
     @EnumSource(value = OutcomeType.class, names = {"COMPLETED", "VOIDED"})
     void completedOrVoidedWithResponsiblePartyIsRejected(OutcomeType outcomeType) {
@@ -23,6 +24,7 @@ class PerformanceOutcomeTest {
             .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /** 취소·노쇼 결과에 귀책 주체가 없으면 거부한다. */
     @ParameterizedTest
     @EnumSource(value = OutcomeType.class, names = {"CANCELLED", "NO_SHOW"})
     void cancelledOrNoShowWithoutResponsiblePartyIsRejected(OutcomeType outcomeType) {
@@ -31,6 +33,7 @@ class PerformanceOutcomeTest {
             .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /** 취소 결과에 취소 통보 시각이 없으면 거부한다. */
     @Test
     void cancellationWithoutNoticeTimeIsRejected() {
         assertThatThrownBy(() -> new PerformanceOutcome(
@@ -38,6 +41,7 @@ class PerformanceOutcomeTest {
             .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /** revision이 1보다 작으면 거부한다. */
     @ParameterizedTest
     @ValueSource(ints = {0, -1})
     void revisionBelowOneIsRejected(int revision) {
@@ -46,6 +50,7 @@ class PerformanceOutcomeTest {
             .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /** performanceId가 없으면 거부하고, 예외 메시지에 필드 이름을 남긴다. */
     @Test
     void missingPerformanceIdIsRejected() {
         assertThatThrownBy(() -> new PerformanceOutcome(
@@ -54,6 +59,7 @@ class PerformanceOutcomeTest {
             .hasMessageContaining("performanceId");
     }
 
+    /** outcomeType이 없으면 거부하고, 예외 메시지에 필드 이름을 남긴다. */
     @Test
     void missingOutcomeTypeIsRejected() {
         assertThatThrownBy(() -> new PerformanceOutcome(
@@ -62,6 +68,7 @@ class PerformanceOutcomeTest {
             .hasMessageContaining("outcomeType");
     }
 
+    /** scheduledStartAt이 없으면 거부하고, 예외 메시지에 필드 이름을 남긴다. */
     @Test
     void missingScheduledStartIsRejected() {
         assertThatThrownBy(() -> new PerformanceOutcome(

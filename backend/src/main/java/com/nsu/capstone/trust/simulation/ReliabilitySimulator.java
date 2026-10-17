@@ -32,13 +32,19 @@ public final class ReliabilitySimulator {
     private static final ReliabilityCalculator V1_CALCULATOR = new ReliabilityCalculator(ReliabilityPolicy.V1);
     private static final RiskSignalEvaluator RISK_SIGNAL_EVALUATOR = new RiskSignalEvaluator();
 
+    /** 정적 메서드만 쓰므로 인스턴스를 만들지 않는다. */
     private ReliabilitySimulator() {
     }
 
+    /** 시뮬레이터 보고서를 표준 출력에 쓴다. */
     public static void main(String[] args) {
         System.out.print(report());
     }
 
+    /**
+     * 표 4개를 담은 Markdown 보고서.
+     * 테스트는 이 문자열의 표를 ADR 표와 비교한다.
+     */
     static String report() {
         return String.join("\n",
             section("1. γ 후보 비교 (09 ADR 부록)", gammaComparisonTable()),
@@ -49,10 +55,15 @@ public final class ReliabilitySimulator {
             section("4. 정상 완료 20회 → 노쇼 1회 뒤 정상 완료 k회 추이", recoveryTrendTable()));
     }
 
+    /** 제목과 문단으로 Markdown 절 하나를 만든다. */
     private static String section(String title, String... paragraphs) {
         return "## " + title + "\n\n" + String.join("\n\n", paragraphs) + "\n";
     }
 
+    /**
+     * 표 1. γ 후보(0.90, 0.95, 0.98)마다 반감기, 노쇼 뒤 하락·회복, 시험 A·B 결과를 비교한다.
+     * 09 ADR 부록의 표와 글자 단위로 같아야 한다.
+     */
     private static String gammaComparisonTable() {
         List<String> header = new ArrayList<>(List.of("기준"));
         GAMMA_CANDIDATES.forEach(gamma -> header.add(format("γ = %.2f", gamma)));
@@ -89,6 +100,7 @@ public final class ReliabilitySimulator {
                 decimal(reliability(gamma, history().every(Duration.ofHours(876)).completed(20))))));
     }
 
+    /** 표 3. 06 §12 시나리오마다 V1 정책의 계산 결과, Risk Signal, 계산 제외 건수를 보여 준다. */
     private static String scenarioTable() {
         return String.join("\n",
             "| 시나리오 | 관측 n | 확신 수준 | Reliability | 표시 | Risk Signal | 계산 제외 |",
@@ -139,6 +151,7 @@ public final class ReliabilitySimulator {
         return String.join("\n", rows);
     }
 
+    /** EVENT_PARTNER 귀책 취소와 정상 완료를 번갈아 {@code times}번씩 붙인 이력. */
     private static History completedBetweenEventPartnerCancellations(int times) {
         History history = history();
         for (int i = 0; i < times; i++) {
@@ -147,6 +160,7 @@ public final class ReliabilitySimulator {
         return history;
     }
 
+    /** {@code history}를 V1 정책으로 계산해 시나리오 표의 한 행을 만든다. */
     private static String scenarioRow(String label, History history) {
         ReliabilityResult result = V1_CALCULATOR.calculate(history.outcomes());
         List<RiskSignal> signals = RISK_SIGNAL_EVALUATOR.evaluate(result);
@@ -169,6 +183,7 @@ public final class ReliabilitySimulator {
         return result.ratePercent().isPresent() ? result.ratePercent().getAsInt() + "%" : "숨김";
     }
 
+    /** 정상 완료 20회 뒤 노쇼 1회의 값과, 노쇼로 떨어진 폭(%p). */
     private static String noShowDrop(double gamma) {
         double before = reliability(gamma, history().completed(20));
         double after = reliability(gamma, history().completed(20).noShow());
@@ -200,10 +215,12 @@ public final class ReliabilitySimulator {
         return failures;
     }
 
+    /** V1 정책에서 γ만 {@code gamma}로 바꿔 계산한 Reliability. */
     private static double reliability(double gamma, History history) {
         return new ReliabilityCalculator(withGamma(gamma)).calculate(history.outcomes()).reliability();
     }
 
+    /** V1 정책에서 γ만 {@code gamma}로 바꾼 정책. */
     private static ReliabilityPolicy withGamma(double gamma) {
         ReliabilityPolicy v1 = ReliabilityPolicy.V1;
         return new ReliabilityPolicy(
@@ -219,28 +236,34 @@ public final class ReliabilitySimulator {
             v1.repeatedCancellationThreshold());
     }
 
+    /** γ 후보마다 {@code value}를 계산해 표 1의 한 행을 만든다. */
     private static String gammaRow(String label, DoubleFunction<String> value) {
         List<String> cells = new ArrayList<>(List.of(label));
         GAMMA_CANDIDATES.forEach(gamma -> cells.add(value.apply(gamma)));
         return row(cells);
     }
 
+    /** 셀 목록을 Markdown 표의 한 행으로 만든다. */
     private static String row(List<String> cells) {
         return "| " + String.join(" | ", cells) + " |";
     }
 
+    /** 시험 결과를 "통과" 또는 "실패"로 표시한다. */
     private static String passOrFail(boolean passed) {
         return passed ? "통과" : "실패";
     }
 
+    /** 09 ADR 표와 같이 소수 셋째 자리까지 표시한다. */
     private static String decimal(double value) {
         return format("%.3f", value);
     }
 
+    /** 실행 환경의 로캘과 관계없이 소수점을 '.'으로 쓰도록 {@link Locale#ROOT}로 형식화한다. */
     private static String format(String pattern, Object... arguments) {
         return String.format(Locale.ROOT, pattern, arguments);
     }
 
+    /** 비어 있는 이력을 만든다. */
     private static History history() {
         return new History();
     }
@@ -252,11 +275,13 @@ public final class ReliabilitySimulator {
         private Instant nextActionAt = Instant.parse("2026-01-01T10:00:00Z");
         private Duration interval = Duration.ofDays(30);
 
+        /** 이후에 붙이는 결과 사이의 행동 시각 간격을 바꾼다. */
         History every(Duration interval) {
             this.interval = interval;
             return this;
         }
 
+        /** 정상 완료를 {@code times}번 붙인다. */
         History completed(int times) {
             for (int i = 0; i < times; i++) {
                 add(OutcomeType.COMPLETED, null, nextActionAt, null);
@@ -264,11 +289,13 @@ public final class ReliabilitySimulator {
             return this;
         }
 
+        /** 아티스트 귀책 노쇼를 1번 붙인다. */
         History noShow() {
             add(OutcomeType.NO_SHOW, ResponsibleParty.ARTIST, nextActionAt, null);
             return this;
         }
 
+        /** 아티스트 귀책 노쇼를 {@code times}번 연달아 붙인다. */
         History noShows(int times) {
             for (int i = 0; i < times; i++) {
                 noShow();
@@ -282,6 +309,7 @@ public final class ReliabilitySimulator {
             return this;
         }
 
+        /** {@code responsibleParty} 귀책 취소를 붙인다. 통보는 공연 예정 시작 7일 전이다. */
         History cancelledBy(ResponsibleParty responsibleParty) {
             add(OutcomeType.CANCELLED, responsibleParty, nextActionAt.plus(Duration.ofDays(7)), nextActionAt);
             return this;
@@ -314,10 +342,15 @@ public final class ReliabilitySimulator {
             return this;
         }
 
+        /** 지금까지 붙인 원장 행의 복사본. */
         List<PerformanceOutcome> outcomes() {
             return List.copyOf(outcomes);
         }
 
+        /**
+         * 새 공연의 revision 1 결과를 붙이고, 다음 행동 시각을 간격만큼 늦춘다.
+         * 공연 식별자는 원장 행 수로 만들어 겹치지 않는다.
+         */
         private void add(
             OutcomeType outcomeType,
             ResponsibleParty responsibleParty,

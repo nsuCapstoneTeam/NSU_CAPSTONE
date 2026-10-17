@@ -5,6 +5,7 @@ import java.time.Duration;
 /**
  * Reliability 정책 버전과 파라미터. 정책값은 이 record에만 둔다.
  *
+ * @param version 정책 버전 이름. 계산 결과가 어느 정책으로 나왔는지 구분한다
  * @param gamma 관측 1건이 쌓일 때마다 기존 누적값에 곱하는 감쇠 계수(09 ADR)
  * @param priorAlpha 이행 누적값의 사전분포 α₀
  * @param priorBeta 실패 누적값의 사전분포 β₀
@@ -28,6 +29,7 @@ public record ReliabilityPolicy(
     int repeatedCancellationThreshold
 ) {
 
+    /** 현재 적용하는 정책 reliability-v1. */
     public static final ReliabilityPolicy V1 = new ReliabilityPolicy(
         "reliability-v1",
         0.95,
