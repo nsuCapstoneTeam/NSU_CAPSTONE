@@ -8,8 +8,12 @@ import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.support.UuidV7Generator;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +57,22 @@ public class EventService {
             throw new BusinessException(ErrorCode.EVENT_NOT_FOUND);
         }
         return event;
+    }
+
+    /** 내 행사 목록. UPCOMING은 시작이 빠른 순, PAST는 늦은 순이고 시작이 같으면 id 순이다(03 §6). */
+    @Transactional(readOnly = true)
+    public Page<Event> listMine(UUID eventPartnerId, EventPeriod period, int page, int size) {
+        Instant now = clock.instant();
+        Sort.Direction direction =
+            period == EventPeriod.UPCOMING ? Sort.Direction.ASC : Sort.Direction.DESC;
+        PageRequest pageable = PageRequest.of(
+            page, size, Sort.by(direction, "startAt").and(Sort.by(Sort.Direction.ASC, "id"))
+        );
+        return period == EventPeriod.UPCOMING
+            ? eventRepository.findByEventPartnerIdAndDeletedAtIsNullAndStartAtGreaterThan(
+                eventPartnerId, now, pageable)
+            : eventRepository.findByEventPartnerIdAndDeletedAtIsNullAndStartAtLessThanEqual(
+                eventPartnerId, now, pageable);
     }
 
     @Transactional
