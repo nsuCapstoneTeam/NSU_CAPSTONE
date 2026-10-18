@@ -1,0 +1,140 @@
+/* 아티스트 매칭 화면을 홈과 같은 '무대' 모양으로 맞추는 스타일.
+   계산·마크업은 그대로 두고 .match-stage 안에서만 app.css의 기본 모양을 덮어씁니다.
+   무대 색 변수(--stage-*)는 components/common/stage-scope.css에 있습니다.
+   정보 화면이므로 움직임은 누름·마우스 올림 반응만 둡니다. (DESIGN.md 10.2 다이얼: 움직임 2) */
+
+/* 본문 폭: 앱 기본 본문과 같은 1240px */
+.match-stage-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 32px 72px;
+}
+
+/* 입력 폼·제외 이유 패널: 무대 패널 */
+.match-stage .panel {
+  border-color: var(--stage-panel-line);
+  background: var(--stage-panel);
+  box-shadow: var(--stage-panel-shadow);
+  backdrop-filter: blur(14px);
+}
+.match-stage .match-import {
+  border: 1px solid var(--stage-glass-line);
+  background: var(--stage-glass);
+}
+
+/* 안내 줄·빈 화면·결과 카드: 유리 카드 */
+.match-stage .model-note,
+.match-stage .empty-state,
+.match-stage .result-card,
+.match-stage .search-receipt {
+  border: 1px solid var(--stage-glass-line);
+  border-radius: 15px;
+  background: var(--stage-glass);
+  backdrop-filter: blur(16px) saturate(1.2);
+  box-shadow: var(--stage-panel-shadow);
+}
+.match-stage .model-note {
+  align-items: flex-start;
+  padding: 18px 20px;
+}
+.match-stage .model-note p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.match-stage .empty-state {
+  border-style: dashed;
+}
+.match-stage .empty-icon {
+  background: var(--tint);
+}
+
+/* 검색 조건 요약: 작은 유리 띠 */
+.match-stage .search-receipt {
+  margin-bottom: 18px;
+  padding: 16px 20px;
+}
+
+/* 1위 카드: 파란 테두리 한 줄로만 구분 */
+.match-stage .top-result {
+  border-color: var(--blue);
+  box-shadow:
+    inset 0 0 0 1px var(--blue),
+    var(--stage-panel-shadow);
+}
+
+/* 아티스트 사진 자리: 홈 추천 목록처럼 원형 */
+.match-stage .artist-avatar {
+  border-radius: 50%;
+}
+.match-stage .artist-avatar > span {
+  border-color: var(--stage-glass-line);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+/* 조건 적합도: 원형 막대 + 숫자 */
+.match-stage .result-score {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-items: center;
+  text-align: left;
+}
+.match-stage .result-score .stage-ring {
+  grid-row: 1 / 3;
+  width: 52px;
+  height: 52px;
+}
+.match-stage .result-score > small {
+  align-self: end;
+  color: var(--muted);
+}
+.match-stage .result-score > strong {
+  align-self: start;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 항목 막대: 무대 막대 색 */
+.match-stage .meter {
+  border-radius: 999px;
+  background: var(--stage-track);
+}
+.match-stage .meter i {
+  border-radius: inherit;
+  background: var(--blue);
+}
+.match-stage .lead-reason {
+  border-radius: 10px;
+}
+
+/* 펼쳐 보기 줄: 유리 카드 안 구분선 */
+.match-stage .result-card summary {
+  border-top-color: var(--stage-glass-line);
+  background: transparent;
+}
+.match-stage .result-card summary:hover {
+  background: var(--tint);
+}
+
+/* 태블릿·모바일 여백 (app.css 본문 여백과 같은 값) */
+@media (max-width: 1050px) {
+  .match-stage-inner {
+    padding: 0 24px 56px;
+  }
+}
+@media (max-width: 640px) {
+  .match-stage-inner {
+    padding: 0 16px 48px;
+  }
+  /* 좁은 화면에서는 이름 칸이 좁아지지 않도록 원형 막대를 숨기고 숫자만 표시 */
+  .match-stage .result-score {
+    display: block;
+  }
+  .match-stage .result-score .stage-ring {
+    display: none;
+  }
+}
