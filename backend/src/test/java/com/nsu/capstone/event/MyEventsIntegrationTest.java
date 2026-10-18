@@ -13,12 +13,14 @@ import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
 import java.time.Instant;
 import java.util.Map;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.test.web.servlet.ResultActions;
 
 /** 내 행사 목록(03 행사 API §6). */
+@DisplayName("내 행사 목록 API")
 class MyEventsIntegrationTest extends EventIntegrationTestBase {
 
     /** 시작이 date의 18:00(KST)이고 한 시간짜리인 행사를 등록해 id를 돌려준다. */
@@ -36,6 +38,7 @@ class MyEventsIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("ARTIST가 조회하면 403, 토큰이 없으면 401이다")
     void artistCannotListAndMissingTokenIsUnauthorized() throws Exception {
         User artist = newUser(UserRole.ARTIST, "artist@example.com");
 
@@ -48,6 +51,7 @@ class MyEventsIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("기본값은 다가올 행사를 시작이 이른 순으로 첫 페이지 20개다")
     void defaultsToUpcomingFirstPageOfTwentyInStartOrder() throws Exception {
         registerStartingOn("2026-11-20", "셋째");
         registerStartingOn("2026-11-06", "첫째");
@@ -64,6 +68,7 @@ class MyEventsIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("내가 등록한 행사만 보여 주고, 취소한 행사는 넣고 삭제한 행사는 뺀다")
     void listsOnlyOwnNonDeletedEventsIncludingCancelledOnes() throws Exception {
         User other = newUser(UserRole.EVENT_PARTNER, "other@example.com");
         registerStartingOn("2026-11-06", "남는 행사");
@@ -83,6 +88,7 @@ class MyEventsIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("지금 시작하는 행사는 지난 행사이고, 지난 행사는 최근 순이다")
     void eventStartingNowIsPastAndPastIsNewestFirst() throws Exception {
         registerStartingOn("2026-10-19", "내일");
         registerStartingOn("2026-10-20", "모레");
@@ -98,6 +104,7 @@ class MyEventsIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("시작 시각이 같으면 id 순서로 정렬한다")
     void sameStartTimeIsOrderedById() throws Exception {
         String first = registerStartingOn("2026-11-06", "먼저 등록");
         String second = registerStartingOn("2026-11-06", "나중에 등록");
@@ -108,6 +115,7 @@ class MyEventsIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("페이지를 나눠 보여 주고, 마지막 페이지 뒤는 빈 목록이다")
     void pagesThroughResultsAndReturnsEmptyItemsBeyondTheLastPage() throws Exception {
         for (int day = 1; day <= 5; day++) {
             registerStartingOn("2026-11-0" + day, "행사" + day);
@@ -129,6 +137,7 @@ class MyEventsIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("page × size가 DB 한도를 넘어도 빈 페이지를 돌려준다")
     void offsetBeyondTheDatabaseLimitStillReturnsAnEmptyPage() throws Exception {
         registerStartingOn("2026-11-06", "행사");
 
@@ -155,6 +164,7 @@ class MyEventsIntegrationTest extends EventIntegrationTestBase {
         "?size=x",
         "?page=99999999999",
     })
+    @DisplayName("범위를 벗어난 period·page·size는 400 VALIDATION_ERROR로 거부한다")
     void rejectsOutOfRangeParametersWithValidationError(String query) throws Exception {
         list(partner, query)
             .andExpect(status().isBadRequest())

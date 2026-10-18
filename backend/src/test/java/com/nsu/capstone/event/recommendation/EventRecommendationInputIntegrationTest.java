@@ -17,10 +17,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /** 추천을 만들 수 있는 조건과 snapshot(03 행사 API §8.1·§8.2). 추천 API 자체는 NSU-63이다. */
+@DisplayName("추천 입력을 만들 수 있는 조건")
 class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
 
     static final Instant START = Instant.parse("2026-11-06T09:00:00Z");
@@ -43,6 +45,7 @@ class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("등록자는 시작 전 OPEN 행사의 snapshot을 받는다")
     void ownerGetsSnapshotOfAnOpenEventThatHasNotStarted() throws Exception {
         UUID id = idOf(registeredId(validBody()));
 
@@ -55,6 +58,7 @@ class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("권한을 행사 상태보다 먼저 검사한다")
     void permissionIsCheckedBeforeEventState() throws Exception {
         User artist = newUser(UserRole.ARTIST, "artist@example.com");
         String publicId = registeredId(validBody());
@@ -71,6 +75,7 @@ class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("취소와 시작이 겹치면 EVENT_CANCELLED를 먼저 돌려준다")
     void cancelledEventIsRejectedBeforeStartedEvent() throws Exception {
         UUID cancelled = idOf(registeredId(validBody()));
         UUID started = idOf(registeredId(validBody()));
@@ -85,6 +90,7 @@ class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("지금 시작하는 행사는 이미 시작한 행사로 본다")
     void eventStartingExactlyNowIsAlreadyStarted() throws Exception {
         UUID id = idOf(registeredId(validBody()));
         clock.set(START.minusSeconds(1));
@@ -95,6 +101,7 @@ class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("삭제한 행사는 등록자에게도 EVENT_NOT_FOUND다")
     void deletedEventIsNotFoundForTheOwnerToo() throws Exception {
         UUID id = idOf(registeredId(validBody()));
         mockMvc.perform(delete("/api/v1/events/" + id)
@@ -104,6 +111,7 @@ class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("저장한 행사의 지문은 추천 입력이 바뀔 때만 달라진다")
     void fingerprintOfStoredEventChangesOnlyWhenRecommendationInputsChange() throws Exception {
         String id = registeredId(validBody());
         EventFingerprint before =

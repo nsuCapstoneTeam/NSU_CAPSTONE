@@ -9,8 +9,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+@DisplayName("Reliability 시뮬레이터 보고서")
 class ReliabilitySimulatorTest {
 
     /** Gradle은 backend 디렉터리에서 테스트를 실행한다. */
@@ -19,6 +21,7 @@ class ReliabilitySimulatorTest {
 
     /** 표 1이 09 ADR 부록의 γ 비교 표와 글자 하나까지 같다. */
     @Test
+    @DisplayName("표 1은 ADR 09 부록의 γ 비교 표와 글자까지 같다")
     void firstTableIsTheGammaComparisonOfAdr09CharacterForCharacter() throws IOException {
         List<String> appendixTables = tables(appendixOf(Files.readString(GAMMA_ADR)));
 
@@ -27,6 +30,7 @@ class ReliabilitySimulatorTest {
 
     /** 표 2가 09 ADR 부록의 공연 빈도별 표 중 사건 순서 열과 같다. */
     @Test
+    @DisplayName("표 2는 ADR 09 부록 공연 빈도별 표의 사건 순서 열과 같다")
     void secondTableIsTheEventOrderColumnOfTheFrequencyTableOfAdr09() throws IOException {
         List<String> appendixTables = tables(appendixOf(Files.readString(GAMMA_ADR)));
 
@@ -36,6 +40,7 @@ class ReliabilitySimulatorTest {
 
     /** 표 3이 06 §12 시나리오의 기대값을 보여 준다. */
     @Test
+    @DisplayName("표 3은 06 §12 시나리오의 기대값을 보여 준다")
     void thirdTableShowsTheScenariosOf06Section12() {
         assertThat(tables(ReliabilitySimulator.report()).get(2)).isEqualTo("""
             | 시나리오 | 관측 n | 확신 수준 | Reliability | 표시 | Risk Signal | 계산 제외 |
@@ -66,6 +71,7 @@ class ReliabilitySimulatorTest {
      * 정상 완료 14회째에 RECENT_NO_SHOW가 꺼진다.
      */
     @Test
+    @DisplayName("표 4는 노쇼 뒤 회복 추이를 보여 주고, 정상 완료 14회째에 RECENT_NO_SHOW가 꺼진다")
     void fourthTableShowsRecoveryAfterNoShowUntilTheSignalClears() {
         assertThat(tables(ReliabilitySimulator.report()).get(3)).isEqualTo("""
             | 노쇼 뒤 정상 완료 | 관측 n | Reliability | 표시 | RECENT_NO_SHOW |

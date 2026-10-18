@@ -11,6 +11,7 @@ import com.nsu.capstone.TestcontainersConfiguration;
 import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.security.JwtAccessTokenService;
 import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
+@DisplayName("지역 목록 API")
 class RegionApiIntegrationTest {
 
     @Autowired MockMvc mockMvc;
@@ -31,6 +33,7 @@ class RegionApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("토큰이 없으면 401이다")
     void rejectsRequestWithoutToken() throws Exception {
         mockMvc.perform(get("/api/v1/regions"))
             .andExpect(status().isUnauthorized())
@@ -38,6 +41,7 @@ class RegionApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("시·도 16개와 시·군·구 230개를 코드 순서로 돌려준다")
     void listsSixteenProvincesAndTwoHundredThirtyDistrictsInCodeOrder() throws Exception {
         mockMvc.perform(get("/api/v1/regions").header("Authorization", bearer(UserRole.ARTIST)))
             .andExpect(status().isOk())
@@ -53,6 +57,7 @@ class RegionApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("시·군·구 이름 앞에 시·도 이름을 붙이지 않는다")
     void usesDistrictNamesWithoutProvincePrefix() throws Exception {
         mockMvc.perform(get("/api/v1/regions").header("Authorization", bearer(UserRole.EVENT_PARTNER)))
             .andExpect(status().isOk())
@@ -63,6 +68,7 @@ class RegionApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("일반구는 따로 두지 않고 상위 시로 합친다")
     void mergesGeneralDistrictsIntoTheirCity() throws Exception {
         mockMvc.perform(get("/api/v1/regions").header("Authorization", bearer(UserRole.ARTIST)))
             .andExpect(status().isOk())
@@ -73,6 +79,7 @@ class RegionApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("광주·전남 통합과 세종시를 반영한다")
     void reflectsGwangjuJeonnamMergerAndSejong() throws Exception {
         mockMvc.perform(get("/api/v1/regions").header("Authorization", bearer(UserRole.ARTIST)))
             .andExpect(status().isOk())
