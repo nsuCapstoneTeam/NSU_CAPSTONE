@@ -1,0 +1,199 @@
+/* 무대(stage) 공통 스타일: 홈과 아티스트 매칭 화면이 함께 씁니다.
+   .stage-scope를 붙인 영역 안에서 무대 색 변수가 적용됩니다. (라이트 기본, 다크는 html[data-theme='dark'])
+   DESIGN.md 규칙: 색은 앱 변수 + 역할 코랄만, 카드 15px, 버튼 10px, 보라 그라데이션·네온 빛 없음 */
+
+/* 무대 화면일 때는 본문 폭 제한을 풀어 배경을 화면 끝까지 채움 (app.jsx에서 is-stage 추가) */
+.page-container.is-stage {
+  max-width: none;
+  padding: 0;
+}
+
+/* 무대 색 변수: 라이트 기본값 */
+.stage-scope {
+  --stage-bg: var(--soft);
+  --stage-shade: linear-gradient(
+    to bottom,
+    rgb(244 248 254 / 0.55) 0%,
+    rgb(244 248 254 / 0.8) 50%,
+    var(--soft) 96%
+  );
+  --stage-photo-filter: blur(18px) brightness(1.08) saturate(0.7);
+  --stage-photo-opacity: 0.6;
+  --stage-panel: rgb(255 255 255 / 0.94);
+  --stage-panel-line: rgb(20 40 64 / 0.06);
+  --stage-panel-shadow: 0 24px 60px rgb(22 62 122 / 0.12);
+  --stage-glass: linear-gradient(145deg, rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.7));
+  --stage-glass-line: rgb(20 40 64 / 0.08);
+  --stage-track: rgb(20 40 64 / 0.1);
+  --stage-ring-line: rgb(8 102 223 / 0.16);
+  --stage-cd-shadow: 0 34px 70px rgb(22 62 122 / 0.25);
+  --stage-chrome: rgb(255 255 255 / 0.82);
+  --stage-coral: #e8505b;
+  --stage-coral-soft: rgb(232 80 91 / 0.08);
+  position: relative;
+  isolation: isolate;
+  background: var(--stage-bg);
+  color: var(--ink);
+}
+
+/* 다크 모드: 어두운 공연장 */
+:root[data-theme='dark'] .stage-scope {
+  --stage-bg: var(--bg);
+  --stage-shade: linear-gradient(
+    to bottom,
+    rgb(12 21 35 / 0.2) 0%,
+    rgb(12 21 35 / 0.6) 50%,
+    var(--bg) 96%
+  );
+  --stage-photo-filter: blur(14px) brightness(0.6) saturate(1.1);
+  --stage-photo-opacity: 1;
+  --stage-panel: rgb(19 33 55 / 0.9);
+  --stage-panel-line: rgb(255 255 255 / 0.1);
+  --stage-panel-shadow: 0 30px 80px rgb(3 8 20 / 0.45);
+  --stage-glass: linear-gradient(145deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.04));
+  --stage-glass-line: rgb(255 255 255 / 0.14);
+  --stage-track: rgb(255 255 255 / 0.16);
+  --stage-ring-line: rgb(128 186 255 / 0.18);
+  --stage-cd-shadow: 0 40px 80px rgb(0 0 0 / 0.5);
+  --stage-chrome: rgb(19 33 55 / 0.78);
+  --stage-coral: #ff8a5b;
+  --stage-coral-soft: rgb(255 138 91 / 0.12);
+}
+
+/* 화면에 붙어 있는 배경: 흐린 공연 사진 + 그라데이션 */
+.stage-backdrop {
+  position: sticky;
+  top: 0;
+  z-index: -1;
+  height: 100vh;
+  margin-bottom: -100vh;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.stage-photo {
+  position: absolute;
+  inset: -40px;
+  background-position: center 40%;
+  background-size: cover;
+  filter: var(--stage-photo-filter);
+  opacity: 0;
+  transition: opacity 1.6s ease;
+}
+.stage-photo.is-on {
+  opacity: var(--stage-photo-opacity);
+}
+
+.stage-shade {
+  position: absolute;
+  inset: 0;
+  background: var(--stage-shade);
+}
+
+/* 패널·태그 */
+.stage-panel {
+  border: 1px solid var(--stage-panel-line);
+  border-radius: 15px;
+  background: var(--stage-panel);
+  box-shadow: var(--stage-panel-shadow);
+}
+
+.stage-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--stage-coral-soft);
+  color: var(--stage-coral);
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+/* 버튼: 앱 기본 버튼과 같은 10px 모서리 */
+.stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.stage-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+.stage-button:hover {
+  transform: translateY(-2px);
+  border-color: var(--blue);
+}
+.stage-button:active {
+  transform: scale(0.98);
+}
+.stage-button.is-primary,
+.stage-button.is-artist {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: var(--on-blue);
+}
+.stage-button.is-primary:hover,
+.stage-button.is-artist:hover {
+  box-shadow: 0 10px 24px rgb(8 102 223 / 0.25);
+}
+
+.stage-button.is-organizer {
+  border-color: var(--stage-coral);
+  background: var(--stage-coral);
+  color: #fff;
+}
+
+:root[data-theme='dark'] .stage-button.is-organizer {
+  color: #2a0d0a;
+}
+.stage-button.is-organizer:hover {
+  box-shadow: 0 10px 24px rgb(232 80 91 / 0.25);
+}
+
+/* 유리 카드 */
+.stage-glass {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--stage-glass-line);
+  border-radius: 15px;
+  background: var(--stage-glass);
+  backdrop-filter: blur(16px) saturate(1.2);
+  box-shadow: var(--stage-panel-shadow);
+}
+
+/* 원형 점수 막대: style에 --value(0~100)를 넣어 사용 */
+.stage-ring {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: conic-gradient(var(--blue) calc(var(--value) * 1%), var(--stage-track) 0);
+  mask: radial-gradient(circle, transparent 0 58%, #000 59%);
+}
+
+/* 동작 줄이기: 사진 전환·버튼 움직임 멈춤 */
+@media (prefers-reduced-motion: reduce) {
+  .stage-photo,
+  .stage-button {
+    transition: none;
+  }
+}

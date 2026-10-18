@@ -34,7 +34,15 @@ export default function ArtistResult({
             <b>{artist.fee}만 원</b>
           </p>
         </div>
-        <div className="result-score">
+        <div
+          className="result-score"
+          style={{ '--value': artist.score }}
+        >
+          {/* 원형 막대: 점수만큼 채워짐 (무대 공통 .stage-ring) */}
+          <span
+            className="stage-ring"
+            aria-hidden="true"
+          />
           <small>조건 적합도</small>
           <strong>
             {scoreText(artist.score)}

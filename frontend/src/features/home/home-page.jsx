@@ -1,96 +1,86 @@
-import ServiceIntro from './components/service-intro.jsx';
-import Icon from '../../components/common/icon.jsx';
-import ClapHero from './components/clap-hero.jsx';
+import { useEffect, useRef, useState } from 'react';
+import StageBackdrop from './components/stage-backdrop.jsx';
+import TrackHome from './components/track-home.jsx';
+import TrackIntro from './components/track-intro.jsx';
+import TrackMatching from './components/track-matching.jsx';
+import TrackStart from './components/track-start.jsx';
+import NowPlaying from './components/now-playing.jsx';
+import { TRACKS } from './home-tracks.js';
+import './home-stage.css';
 
-// 홈 화면: 서비스 소개 → CLAP 설명 → 이용 순서 → 하단 안내 타일
-export default function Home({ navigate }) {
-  return (
-    <>
-      <ServiceIntro />
-      <ClapHero navigate={navigate} />
-      {/* 이용 순서 3단계 */}
-      <section className="journey">
-        <div>
-          <p className="eyebrow">HOW IT WORKS</p>
-          <h2>
-            찾는 데 쓰던 시간,
-            <br />
-            무대를 만드는 시간으로.
-          </h2>
-        </div>
-        {/* [번호, 제목, 설명] */}
-        {[
-          [
-            '01',
-            '행사의 조건을 알려주세요',
-            '일정, 지역, 예산과 원하는 음악 스타일을 입력해요.',
-          ],
-          [
-            '02',
-            '추천의 이유를 비교하세요',
-            '필수 조건과 항목별 점수로 적합한 후보를 살펴봐요.',
-          ],
-          [
-            '03',
-            '다음 무대를 준비하세요',
-            '관심 아티스트를 저장하고 모집·교류 게시판을 이용해요.',
-          ],
-        ].map(([n, t, d]) => (
-          <article key={n}>
-            <span className="step-number">{n}</span>
-            <h3>{t}</h3>
-            <p>{d}</p>
-          </article>
-        ))}
-      </section>
-      {/* 하단 안내: 검증 정보 · 게시판 */}
-      <section className="home-bottom">
-        <div className="info-tile">
-          <Icon
-            name="shield"
-            size={28}
-          />
-          <h2>잘 맞는 것과 믿을 수 있는 것.</h2>
-          <p>
-            음악 적합도와 검증 정보는 따로 보여드립니다.
-            <br />
-            사업자 여부로 음악 점수가 올라가지 않아요.
-          </p>
-          <button
-            className="text-button"
-            onClick={() => navigate('signup-role')}
-          >
-            가입·검증 살펴보기{' '}
-            <Icon
-              name="arrow"
-              size={17}
-            />
-          </button>
-        </div>
-        <div className="info-tile">
-          <Icon
-            name="board"
-            size={28}
-          />
-          <h2>무대 밖에서도 연결되세요.</h2>
-          <p>
-            함께할 팀원을 찾거나 공연 경험을 나누세요.
-            <br />
-            자유로운 모집과 이야기가 시작됩니다.
-          </p>
-          <button
-            className="text-button"
-            onClick={() => navigate('board')}
-          >
-            자유게시판 둘러보기{' '}
-            <Icon
-              name="arrow"
-              size={17}
-            />
-          </button>
-        </div>
-      </section>
-    </>
-  );
+// 사용자가 '동작 줄이기'를 켜 두었는지 확인
+function prefersReducedMotion() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 }
 
+// 홈 화면: 무대 배경(CD·사진) 위로 네 구간을 차례로 보여 주고, 아래에 재생 바를 둡니다.
+// 지금 보고 있는 구간은 IntersectionObserver로 찾습니다. (스크롤 이벤트는 쓰지 않음, DESIGN.md 10.6)
+export default function Home({ navigate }) {
+  // 지금 화면 가운데에 있는 구간 번호 (0부터)
+  const [active, setActive] = useState(0);
+  // 홈 전체를 감싸는 요소. 구간(section)은 렌더링 중이 아니라 효과·이벤트 안에서 여기서 찾습니다.
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    const sections = [...(rootRef.current?.querySelectorAll('[data-track]') ?? [])];
+    if (!('IntersectionObserver' in window) || sections.length === 0) return undefined;
+    // 화면 세로 가운데 10% 띠에 들어온 구간을 '지금 구간'으로 봅니다.
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setActive(Number(entry.target.dataset.track));
+          }
+        });
+      },
+      { rootMargin: '-45% 0px -45% 0px' },
+    );
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
+
+  // 재생 바의 점이나 '서비스 소개 보기'를 누르면 해당 구간으로 이동
+  function goToTrack(index) {
+    rootRef.current?.querySelector(`[data-track="${index}"]`)?.scrollIntoView({
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  }
+
+  // 각 구간 section에 붙이는 id와 번호
+  function trackProps(index) {
+    return {
+      id: TRACKS[index].id,
+      'data-track': index,
+    };
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      className="stage-scope stage-home"
+      data-active-track={active}
+    >
+      <StageBackdrop active={active} />
+      <TrackHome
+        sectionProps={trackProps(0)}
+        navigate={navigate}
+        onShowIntro={() => goToTrack(1)}
+      />
+      <TrackIntro sectionProps={trackProps(1)} />
+      <TrackMatching
+        sectionProps={trackProps(2)}
+        navigate={navigate}
+      />
+      <TrackStart
+        sectionProps={trackProps(3)}
+        navigate={navigate}
+      />
+      <NowPlaying
+        tracks={TRACKS}
+        active={active}
+        onSelect={goToTrack}
+      />
+    </div>
+  );
+}

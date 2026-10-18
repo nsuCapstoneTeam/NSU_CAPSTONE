@@ -122,7 +122,8 @@ export default function App() {
     setPage(next);
     setNotice('');
     window.scrollTo({ top: 0, behavior: 'instant' });
-    setTimeout(() => mainRef.current?.focus(), 0);
+    // preventScroll: 포커스를 옮겨도 화면이 헤더 아래로 밀려 내려가지 않게 함 (무대 배경 화면에서 발생)
+    setTimeout(() => mainRef.current?.focus({ preventScroll: true }), 0);
   }
   // 매칭 화면에서 '행사 등록하러 가기' → 마이페이지 '내 행사' 탭으로 (NSU-95)
   function openMyEvents() {
@@ -289,7 +290,9 @@ export default function App() {
         id="main-content"
         tabIndex={-1}
         ref={mainRef}
-        className="page-container"
+        className={`page-container${
+          page === 'home' || (page === 'match' && session?.role === 'organizer') ? ' is-stage' : ''
+        }`}
       >
         {page === 'home' && <Home navigate={navigate} />}{' '}
         {/* 아티스트 매칭·출연료 열람은 행사 관계자(EVENT_PARTNER) 기능 (EVT-041, ART-028) */}
