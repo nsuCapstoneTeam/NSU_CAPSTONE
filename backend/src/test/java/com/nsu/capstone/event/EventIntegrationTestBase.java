@@ -35,16 +35,16 @@ import tools.jackson.databind.ObjectMapper;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, EventIntegrationTestBase.MutableClockConfig.class})
-abstract class EventIntegrationTestBase {
+public abstract class EventIntegrationTestBase {
 
     /** 테스트의 '지금' 기본값: 2026-10-18 10:00 (Asia/Seoul) */
-    static final Instant NOW = Instant.parse("2026-10-18T01:00:00Z");
+    protected static final Instant NOW = Instant.parse("2026-10-18T01:00:00Z");
 
     /** 시각을 옮길 수 있는 테스트용 시계. 토큰 발급·검증도 같은 시계를 쓴다. */
-    static class MutableClock extends Clock {
+    public static class MutableClock extends Clock {
         private volatile Instant instant = NOW;
 
-        void set(Instant instant) {
+        public void set(Instant instant) {
             this.instant = instant;
         }
 
@@ -65,24 +65,24 @@ abstract class EventIntegrationTestBase {
     }
 
     @TestConfiguration(proxyBeanMethods = false)
-    static class MutableClockConfig {
+    public static class MutableClockConfig {
         @Bean
         @Primary
-        MutableClock mutableClock() {
+        public MutableClock mutableClock() {
             return new MutableClock();
         }
     }
 
-    @Autowired MutableClock clock;
+    @Autowired protected MutableClock clock;
 
-    @Autowired MockMvc mockMvc;
-    @Autowired ObjectMapper objectMapper;
-    @Autowired UserRepository userRepository;
-    @Autowired UuidV7Generator uuidV7Generator;
-    @Autowired JwtAccessTokenService jwtAccessTokenService;
-    @Autowired JdbcTemplate jdbcTemplate;
+    @Autowired protected MockMvc mockMvc;
+    @Autowired protected ObjectMapper objectMapper;
+    @Autowired protected UserRepository userRepository;
+    @Autowired protected UuidV7Generator uuidV7Generator;
+    @Autowired protected JwtAccessTokenService jwtAccessTokenService;
+    @Autowired protected JdbcTemplate jdbcTemplate;
 
-    User partner;
+    protected User partner;
 
     @BeforeEach
     void setUp() {
@@ -93,14 +93,14 @@ abstract class EventIntegrationTestBase {
         partner = newUser(UserRole.EVENT_PARTNER, "partner@example.com");
     }
 
-    User newUser(UserRole role, String email) {
+    protected User newUser(UserRole role, String email) {
         UUID id = uuidV7Generator.generate();
         return userRepository.saveAndFlush(role == UserRole.ARTIST
             ? User.createArtist(id, email, "hash", "01011112222")
             : User.createEventPartner(id, email, "hash", "01011112222"));
     }
 
-    String bearer(User user) {
+    protected String bearer(User user) {
         return "Bearer " + jwtAccessTokenService.issue(user.getId(), user.getRole()).value();
     }
 
@@ -138,14 +138,14 @@ abstract class EventIntegrationTestBase {
         return body;
     }
 
-    ResultActions register(User caller, Map<String, Object> body) throws Exception {
+    protected ResultActions register(User caller, Map<String, Object> body) throws Exception {
         return mockMvc.perform(post("/api/v1/events")
             .header("Authorization", bearer(caller))
             .contentType(APPLICATION_JSON)
             .content(objectMapper.writeValueAsString(body)));
     }
 
-    String registeredId(Map<String, Object> body) throws Exception {
+    protected String registeredId(Map<String, Object> body) throws Exception {
         String json = register(partner, body).andExpect(status().isCreated())
             .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(json).get("id").asString();
