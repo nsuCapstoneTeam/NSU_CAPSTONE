@@ -161,7 +161,10 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
             Arguments.of("101자 이름", Map.<String, Object>of("name", "가".repeat(101))),
             Arguments.of("빈 장소", Map.<String, Object>of("venue", "")),
             Arguments.of("2001자 설명", Map.<String, Object>of("description", "가".repeat(2001))),
-            Arguments.of("101자 리허설", Map.<String, Object>of("details", Map.of("rehearsal", "가".repeat(101))))
+            Arguments.of("101자 리허설", Map.<String, Object>of("details", Map.of("rehearsal", "가".repeat(101)))),
+            Arguments.of("NUL 문자가 든 이름", Map.<String, Object>of("name", "행사\0")),
+            Arguments.of("NUL 문자만 있는 설명", Map.<String, Object>of("description", "\0")),
+            Arguments.of("NUL 문자가 든 기타 조건", Map.<String, Object>of("details", Map.of("otherConditions", "조건\0")))
         );
     }
 

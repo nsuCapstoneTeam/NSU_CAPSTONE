@@ -160,13 +160,18 @@ public record EventRequest(
         }
     }
 
-    /** 앞뒤 공백을 지운 뒤 1자 이상 maxLength자 이하여야 한다. */
+    /** 앞뒤 공백을 지운 뒤 1자 이상 maxLength자 이하여야 하고 NUL 문자가 없어야 한다. */
     private static String text(String value, int maxLength) {
         String trimmed = required(value).strip();
-        if (trimmed.isEmpty() || trimmed.length() > maxLength) {
+        if (trimmed.isEmpty() || trimmed.length() > maxLength || containsNul(trimmed)) {
             throw invalid();
         }
         return trimmed;
+    }
+
+    /** PostgreSQL text에는 NUL(U+0000)을 저장할 수 없어, 거르지 않으면 커밋 때 500이 된다. */
+    private static boolean containsNul(String value) {
+        return value.indexOf('\0') >= 0;
     }
 
     private static <T> T required(T value) {
@@ -185,7 +190,7 @@ public record EventRequest(
             return null;
         }
         String trimmed = value.strip();
-        if (trimmed.length() > maxLength) {
+        if (trimmed.length() > maxLength || containsNul(trimmed)) {
             throw invalid();
         }
         return trimmed.isEmpty() ? null : trimmed;
