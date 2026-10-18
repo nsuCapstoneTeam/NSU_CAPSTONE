@@ -11,7 +11,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 @TestConfiguration(proxyBeanMethods = false)
-class TestcontainersConfiguration {
+public class TestcontainersConfiguration {
 
     private static final String TEST_JWT_SECRET = Base64.getEncoder().encodeToString(
         "test-only-jwt-secret-at-least-32-bytes".getBytes(StandardCharsets.UTF_8)

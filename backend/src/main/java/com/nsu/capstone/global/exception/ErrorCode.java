@@ -122,6 +122,31 @@ public enum ErrorCode {
         "OAUTH_SIGNUP_IN_PROGRESS", HttpStatus.CONFLICT,
         "OAuth 가입이 처리 중입니다. 잠시 후 다시 시도해 주세요."
     ),
+    INVALID_EVENT_ID(
+        "INVALID_EVENT_ID",
+        HttpStatus.BAD_REQUEST,
+        "행사 식별자 형식이 올바르지 않습니다."
+    ),
+    EVENT_START_IN_PAST(
+        "EVENT_START_IN_PAST",
+        HttpStatus.BAD_REQUEST,
+        "행사 시작 시각은 지금보다 뒤여야 합니다."
+    ),
+    EVENT_NOT_FOUND(
+        "EVENT_NOT_FOUND",
+        HttpStatus.NOT_FOUND,
+        "행사를 찾을 수 없습니다."
+    ),
+    EVENT_ALREADY_STARTED(
+        "EVENT_ALREADY_STARTED",
+        HttpStatus.CONFLICT,
+        "이미 시작한 행사는 바꿀 수 없습니다."
+    ),
+    EVENT_CANCELLED(
+        "EVENT_CANCELLED",
+        HttpStatus.CONFLICT,
+        "취소한 행사는 바꿀 수 없습니다."
+    ),
     INTERNAL_SERVER_ERROR(
         "INTERNAL_SERVER_ERROR",
         HttpStatus.INTERNAL_SERVER_ERROR,
