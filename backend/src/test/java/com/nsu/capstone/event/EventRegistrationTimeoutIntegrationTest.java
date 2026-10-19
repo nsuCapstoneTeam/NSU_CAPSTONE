@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -73,10 +74,24 @@ class EventRegistrationTimeoutIntegrationTest extends EventIntegrationTestBase {
     void otherApiRequestsSucceedWhileAWaitingRegistrationTimesOut() throws Exception {
         String key = UUID.randomUUID().toString();
         try (HeldRegistration held = hold(key)) {
-            register(partner, validBody(), key).andExpect(status().isServiceUnavailable());
+            // 풀 2개 중 하나는 붙잡아 둔 등록이, 다른 하나는 기다리는 등록이 쓴다.
+            CompletableFuture<ResultActions> waiting = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return register(partner, validBody(), key);
+                } catch (Exception exception) {
+                    throw new IllegalStateException(exception);
+                }
+            });
+            Thread.sleep(300);
+            assertThat(waiting.isDone()).as("등록이 아직 기다리는 중이어야 한다").isFalse();
 
+            // 기다리는 등록이 상한(0.5초)으로 연결을 돌려주면 이 요청이 연결을 얻어 끝난다.
             mockMvc.perform(get("/api/v1/regions").header("Authorization", bearer(partner)))
                 .andExpect(status().isOk());
+
+            waiting.orTimeout(10, TimeUnit.SECONDS).join()
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("EVENT_REGISTRATION_UNAVAILABLE"));
         }
     }
 
