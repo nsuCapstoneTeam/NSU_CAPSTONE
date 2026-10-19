@@ -13,7 +13,13 @@ import com.nsu.capstone.event.domain.EventDetails;
 import com.nsu.capstone.event.domain.EventType;
 import com.nsu.capstone.event.domain.Genre;
 import com.nsu.capstone.event.domain.Visibility;
+import com.zaxxer.hikari.HikariDataSource;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.time.LocalDateTime;
+import javax.sql.DataSource;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -39,6 +45,7 @@ class EventRegistrationTimeoutIntegrationTest extends EventIntegrationTestBase {
 
     @Autowired EventRegistrationService registrationService;
     @Autowired PlatformTransactionManager transactionManager;
+    @Autowired DataSource dataSource;
 
     EventContent sampleContent() {
         return new EventContent(
@@ -70,6 +77,31 @@ class EventRegistrationTimeoutIntegrationTest extends EventIntegrationTestBase {
         }
     }
 
+    /**
+     * 기다리는 등록의 INSERT가 DB에서 잠금 대기에 들어간 것을 확인할 때까지 기다린다. 풀 연결이 모두
+     * 쓰이는 중이라 풀 밖의 별도 연결로 pg_stat_activity를 본다.
+     */
+    void awaitRegistrationWaitingOnLock() throws Exception {
+        HikariDataSource pool = dataSource.unwrap(HikariDataSource.class);
+        try (Connection connection = DriverManager.getConnection(
+            pool.getJdbcUrl(), pool.getUsername(), pool.getPassword())) {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (System.nanoTime() < deadline) {
+                try (Statement statement = connection.createStatement();
+                     ResultSet result = statement.executeQuery(
+                         "SELECT count(*) FROM pg_stat_activity "
+                             + "WHERE wait_event_type = 'Lock' AND query ILIKE 'insert into events%'")) {
+                    result.next();
+                    if (result.getInt(1) > 0) {
+                        return;
+                    }
+                }
+                Thread.sleep(20);
+            }
+        }
+        throw new IllegalStateException("등록이 DB 잠금 대기에 들어가지 않았다");
+    }
+
     @Test
     void otherApiRequestsSucceedWhileAWaitingRegistrationTimesOut() throws Exception {
         String key = UUID.randomUUID().toString();
@@ -82,8 +114,7 @@ class EventRegistrationTimeoutIntegrationTest extends EventIntegrationTestBase {
                     throw new IllegalStateException(exception);
                 }
             });
-            Thread.sleep(300);
-            assertThat(waiting.isDone()).as("등록이 아직 기다리는 중이어야 한다").isFalse();
+            awaitRegistrationWaitingOnLock();
 
             // 기다리는 등록이 상한(0.5초)으로 연결을 돌려주면 이 요청이 연결을 얻어 끝난다.
             mockMvc.perform(get("/api/v1/regions").header("Authorization", bearer(partner)))
