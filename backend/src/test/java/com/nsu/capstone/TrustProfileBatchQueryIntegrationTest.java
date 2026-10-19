@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserStatus;
@@ -150,6 +151,8 @@ class TrustProfileBatchQueryIntegrationTest {
             .findByArtistIds(argThat(ids -> Set.copyOf(ids).equals(requested)));
         verify(verificationReader)
             .findVerifiedByArtistIds(argThat(ids -> Set.copyOf(ids).equals(requested)));
+        // 위 verify는 인자가 맞는 호출 1회만 본다. 아티스트별 추가 조회가 없는지 출처마다 정확히 1번 읽었음을 확인한다.
+        verifyNoMoreInteractions(performanceOutcomeReader, verificationReader);
     }
 
     @Test
