@@ -1,5 +1,6 @@
 package com.nsu.capstone.event.presentation;
 
+import com.nsu.capstone.event.application.EventRegistrationService;
 import com.nsu.capstone.event.application.EventService;
 import com.nsu.capstone.event.domain.Event;
 import com.nsu.capstone.event.presentation.dto.EventRequest;
@@ -31,9 +32,11 @@ public class EventController {
         Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 
     private final EventService eventService;
+    private final EventRegistrationService registrationService;
 
-    public EventController(EventService eventService) {
+    public EventController(EventService eventService, EventRegistrationService registrationService) {
         this.eventService = eventService;
+        this.registrationService = registrationService;
     }
 
     @PostMapping
@@ -43,8 +46,8 @@ public class EventController {
         @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
         @RequestBody EventRequest request
     ) {
-        idempotencyKey(idempotencyKey);
-        Event event = eventService.register(userId(jwt), request.toContent());
+        UUID key = idempotencyKey(idempotencyKey);
+        Event event = registrationService.register(userId(jwt), key, request.toContent());
         return ResponseEntity
             .created(URI.create("/api/v1/events/" + event.getId()))
             .body(EventResponse.from(event));

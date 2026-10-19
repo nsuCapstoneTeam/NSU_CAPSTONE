@@ -147,6 +147,16 @@ public enum ErrorCode {
         HttpStatus.CONFLICT,
         "취소한 행사는 바꿀 수 없습니다."
     ),
+    IDEMPOTENCY_KEY_REUSED(
+        "IDEMPOTENCY_KEY_REUSED",
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        "같은 멱등 키로 다른 내용의 등록을 보냈습니다."
+    ),
+    EVENT_REGISTRATION_UNAVAILABLE(
+        "EVENT_REGISTRATION_UNAVAILABLE",
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "행사 등록을 처리할 수 없습니다. 잠시 후 같은 요청을 다시 보내 주세요."
+    ),
     INTERNAL_SERVER_ERROR(
         "INTERNAL_SERVER_ERROR",
         HttpStatus.INTERNAL_SERVER_ERROR,
