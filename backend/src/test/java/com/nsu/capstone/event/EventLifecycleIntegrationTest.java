@@ -66,7 +66,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
             .andExpect(jsonPath("$.endTime").value("20:00"))
             .andExpect(jsonPath("$.genres[0]").value("JAZZ"))
             .andExpect(jsonPath("$.artistType").value(nullValue()))
-            .andExpect(jsonPath("$.details.paProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isPaProvided").value(nullValue()))
             .andExpect(jsonPath("$.createdAt").value("2026-10-18T10:00:00+09:00"))
             .andExpect(jsonPath("$.updatedAt").value("2026-10-18T11:00:00+09:00"));
 

@@ -1,5 +1,6 @@
 package com.nsu.capstone.event;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -10,8 +11,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
 import java.math.BigInteger;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -40,8 +44,8 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
             .andExpect(jsonPath("$.genres[1]").value("ROCK"))
             .andExpect(jsonPath("$.budgetMin").value(300000))
             .andExpect(jsonPath("$.visibility").value("PUBLIC"))
-            .andExpect(jsonPath("$.details.paProvided").value(true))
-            .andExpect(jsonPath("$.details.accommodationProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isPaProvided").value(true))
+            .andExpect(jsonPath("$.details.isAccommodationProvided").value(nullValue()))
             .andExpect(jsonPath("$.createdAt").value(endsWith("+09:00")))
             .andExpect(jsonPath("$.deletedAt").doesNotExist());
     }
@@ -76,7 +80,7 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.artistType").value(nullValue()))
             .andExpect(jsonPath("$.details.rehearsal").value(nullValue()))
-            .andExpect(jsonPath("$.details.paProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isPaProvided").value(nullValue()))
             .andExpect(jsonPath("$.details.otherConditions").value(nullValue()));
     }
 
@@ -271,5 +275,61 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
             .andExpect(jsonPath("$.code").value("EVENT_NOT_FOUND"));
         mockMvc.perform(get("/api/v1/events/" + UUID.randomUUID()))
             .andExpect(status().isUnauthorized());
+    }
+
+    // ---- 선택정보 불리언 이름 (03 §3.4, NSU-99) ----
+
+    @Test
+    void booleanDetailsUseIsPrefixedNamesOnRequestAndResponse() throws Exception {
+        Map<String, Object> body = validBody();
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("isPaProvided", true);
+        details.put("isWaitingRoomProvided", false);
+        details.put("isMealProvided", true);
+        details.put("isTransportationFeeProvided", false);
+        details.put("isAccommodationProvided", true);
+        body.put("details", details);
+
+        register(partner, body)
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.details.isPaProvided").value(true))
+            .andExpect(jsonPath("$.details.isWaitingRoomProvided").value(false))
+            .andExpect(jsonPath("$.details.isMealProvided").value(true))
+            .andExpect(jsonPath("$.details.isTransportationFeeProvided").value(false))
+            .andExpect(jsonPath("$.details.isAccommodationProvided").value(true));
+    }
+
+    @Test
+    void responseDetailsContainExactlyTheTenContractNames() throws Exception {
+        String json = register(partner, validBody()).andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+
+        Set<String> names = new TreeSet<>();
+        objectMapper.readTree(json).get("details").propertyNames().forEach(names::add);
+
+        assertThat(names).containsExactlyInAnyOrder(
+            "rehearsal", "stageSize", "isPaProvided", "microphones", "instruments",
+            "isWaitingRoomProvided", "isMealProvided", "isTransportationFeeProvided",
+            "isAccommodationProvided", "otherConditions");
+    }
+
+    @Test
+    void oldBooleanNamesAreIgnoredAndStoredAsNull() throws Exception {
+        Map<String, Object> body = validBody();
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("paProvided", true);
+        details.put("waitingRoomProvided", true);
+        details.put("mealProvided", true);
+        details.put("transportationFeeProvided", true);
+        details.put("accommodationProvided", true);
+        body.put("details", details);
+
+        register(partner, body)
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.details.isPaProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isWaitingRoomProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isMealProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isTransportationFeeProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isAccommodationProvided").value(nullValue()));
     }
 }

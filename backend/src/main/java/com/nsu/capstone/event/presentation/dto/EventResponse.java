@@ -34,10 +34,40 @@ public record EventResponse(
     int expectedAudience,
     String description,
     Visibility visibility,
-    EventDetails details,
+    Details details,
     String createdAt,
     String updatedAt
 ) {
+
+    /** 선택정보(03 §3.4). 불리언 이름은 is로 시작한다(00 §2). 도메인 이름과 따로 둔다. */
+    public record Details(
+        String rehearsal,
+        String stageSize,
+        Boolean isPaProvided,
+        String microphones,
+        String instruments,
+        Boolean isWaitingRoomProvided,
+        Boolean isMealProvided,
+        Boolean isTransportationFeeProvided,
+        Boolean isAccommodationProvided,
+        String otherConditions
+    ) {
+
+        static Details from(EventDetails details) {
+            return new Details(
+                details.rehearsal(),
+                details.stageSize(),
+                details.paProvided(),
+                details.microphones(),
+                details.instruments(),
+                details.waitingRoomProvided(),
+                details.mealProvided(),
+                details.transportationFeeProvided(),
+                details.accommodationProvided(),
+                details.otherConditions()
+            );
+        }
+    }
 
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
@@ -67,7 +97,7 @@ public record EventResponse(
             event.getExpectedAudience(),
             event.getDescription(),
             event.getVisibility(),
-            event.getDetails(),
+            Details.from(event.getDetails()),
             format(event.getCreatedAt()),
             format(event.getUpdatedAt())
         );
