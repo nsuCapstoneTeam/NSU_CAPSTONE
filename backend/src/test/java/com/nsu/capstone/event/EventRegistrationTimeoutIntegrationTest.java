@@ -16,10 +16,14 @@ import com.nsu.capstone.event.domain.Visibility;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 같은 키의 처리 중인 요청을 기다리는 시간의 상한(03 행사 API §5.3.1). 상한을 0.5초로, DB 연결 풀을
@@ -90,5 +94,34 @@ class EventRegistrationTimeoutIntegrationTest extends EventIntegrationTestBase {
             .andExpect(jsonPath("$.id").value(saved.getId().toString()));
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM events", Integer.class))
             .isEqualTo(1);
+    }
+
+    @Test
+    void lookupBlockedByTableLockAlsoEndsWith503() throws Exception {
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CompletableFuture<Void> holder = CompletableFuture.runAsync(() ->
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                jdbcTemplate.execute("LOCK TABLE events IN ACCESS EXCLUSIVE MODE");
+                locked.countDown();
+                try {
+                    release.await(30, TimeUnit.SECONDS);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+        try {
+            assertThat(locked.await(10, TimeUnit.SECONDS)).isTrue();
+            long startedAt = System.nanoTime();
+
+            register(partner, validBody(), UUID.randomUUID().toString())
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("EVENT_REGISTRATION_UNAVAILABLE"));
+
+            assertThat((System.nanoTime() - startedAt) / 1_000_000).isLessThan(3_000);
+        } finally {
+            release.countDown();
+            holder.orTimeout(10, TimeUnit.SECONDS).join();
+        }
     }
 }

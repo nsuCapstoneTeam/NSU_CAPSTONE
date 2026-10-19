@@ -53,8 +53,14 @@ final class HeldRegistration implements AutoCloseable {
         return result.orTimeout(10, TimeUnit.SECONDS).join();
     }
 
+    /** 커밋(또는 롤백)이 끝날 때까지 기다린다. 다음 테스트의 정리가 미커밋 행을 놓치지 않게 하기 위해서다. */
     @Override
     public void close() {
         release.countDown();
+        try {
+            result.orTimeout(10, TimeUnit.SECONDS).join();
+        } catch (RuntimeException ignored) {
+            // 등록 자체가 실패했어도 트랜잭션은 끝났다.
+        }
     }
 }

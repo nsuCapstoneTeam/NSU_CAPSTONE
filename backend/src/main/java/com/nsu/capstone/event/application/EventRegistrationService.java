@@ -68,6 +68,17 @@ public class EventRegistrationService {
 
     public Event register(UUID eventPartnerId, UUID idempotencyKey, EventContent content) {
         requireKnownRegion(content);
+        try {
+            return registerWithKey(eventPartnerId, idempotencyKey, content);
+        } catch (RuntimeException exception) {
+            if (hasSqlState(exception, TIMEOUT_STATES)) {
+                throw new BusinessException(ErrorCode.EVENT_REGISTRATION_UNAVAILABLE);
+            }
+            throw exception;
+        }
+    }
+
+    private Event registerWithKey(UUID eventPartnerId, UUID idempotencyKey, EventContent content) {
         String hash = EventContentHash.of(content);
 
         Optional<Event> existing = find(eventPartnerId, idempotencyKey);
@@ -78,9 +89,6 @@ public class EventRegistrationService {
             return writeTransaction.execute(status ->
                 create(eventPartnerId, idempotencyKey, content, hash));
         } catch (RuntimeException exception) {
-            if (hasSqlState(exception, TIMEOUT_STATES)) {
-                throw new BusinessException(ErrorCode.EVENT_REGISTRATION_UNAVAILABLE);
-            }
             if (!isKeyConflict(exception)) {
                 throw exception;
             }
@@ -92,8 +100,10 @@ public class EventRegistrationService {
     }
 
     private Optional<Event> find(UUID eventPartnerId, UUID idempotencyKey) {
-        return readTransaction.execute(status ->
-            eventRepository.findByEventPartnerIdAndIdempotencyKey(eventPartnerId, idempotencyKey));
+        return readTransaction.execute(status -> {
+            applyTimeLimit();
+            return eventRepository.findByEventPartnerIdAndIdempotencyKey(eventPartnerId, idempotencyKey);
+        });
     }
 
     /** 삭제했으면 본문을 비교하지 않고 404, 본문이 다르면 422, 같으면 지금의 행사다. */
@@ -122,6 +132,7 @@ public class EventRegistrationService {
 
     /**
      * 이 트랜잭션의 SQL 문장마다 잠금 대기와 실행 시간의 상한을 둔다(트랜잭션이 끝나면 풀린다).
+     * 키 조회도 events의 DDL 잠금 뒤에 줄을 서면 연결을 붙잡으므로 같은 상한을 건다.
      * SET LOCAL은 바인드 변수를 받지 못해 set_config(..., is_local = true)를 쓴다.
      */
     private void applyTimeLimit() {
