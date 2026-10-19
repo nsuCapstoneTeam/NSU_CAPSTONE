@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.domain.UserStatus;
@@ -333,6 +334,27 @@ class TrustProfileApiIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
         }
+    }
+
+    @Test
+    void unauthorizedBodyIsExactlyCodeAndMessage() throws Exception {
+        mockMvc.perform(get(TRUST_PROFILE_PATH, saveArtist()))
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().json(errorBody(ErrorCode.AUTHENTICATION_REQUIRED), JsonCompareMode.STRICT));
+    }
+
+    @Test
+    void forbiddenBodyIsExactlyCodeAndMessage() throws Exception {
+        mockMvc.perform(get(TRUST_PROFILE_PATH, saveArtist())
+                .header("Authorization", bearer(uuidV7Generator.generate(), UserRole.ARTIST)))
+            .andExpect(status().isForbidden())
+            .andExpect(content().json(errorBody(ErrorCode.ACCESS_DENIED), JsonCompareMode.STRICT));
+    }
+
+    /** 01 §8: 오류 본문은 {code, message}뿐이다. */
+    private String errorBody(ErrorCode errorCode) throws Exception {
+        return objectMapper.writeValueAsString(
+            Map.of("code", errorCode.getCode(), "message", errorCode.getMessage()));
     }
 
     @Test
