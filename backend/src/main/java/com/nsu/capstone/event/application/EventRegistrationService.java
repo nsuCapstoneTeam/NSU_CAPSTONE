@@ -67,8 +67,8 @@ public class EventRegistrationService {
     }
 
     public Event register(UUID eventPartnerId, UUID idempotencyKey, EventContent content) {
-        requireKnownRegion(content);
         try {
+            requireKnownRegion(content);
             return registerWithKey(eventPartnerId, idempotencyKey, content);
         } catch (RuntimeException exception) {
             if (hasSqlState(exception, TIMEOUT_STATES)) {
@@ -144,7 +144,11 @@ public class EventRegistrationService {
     }
 
     private void requireKnownRegion(EventContent content) {
-        if (!regionRepository.existsById(content.regionCode())) {
+        boolean known = readTransaction.execute(status -> {
+            applyTimeLimit();
+            return regionRepository.existsById(content.regionCode());
+        });
+        if (!known) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
     }

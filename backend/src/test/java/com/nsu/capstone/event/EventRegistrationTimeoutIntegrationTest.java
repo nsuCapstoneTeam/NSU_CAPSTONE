@@ -142,22 +142,37 @@ class EventRegistrationTimeoutIntegrationTest extends EventIntegrationTestBase {
             .isEqualTo(1);
     }
 
+    /** 다른 트랜잭션이 table에 ACCESS EXCLUSIVE 잠금을 잡고 close()까지 놓지 않는다. */
+    final class TableLock implements AutoCloseable {
+
+        private final CountDownLatch release = new CountDownLatch(1);
+        private final CompletableFuture<Void> holder;
+
+        TableLock(String table) throws InterruptedException {
+            CountDownLatch locked = new CountDownLatch(1);
+            this.holder = CompletableFuture.runAsync(() ->
+                new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                    jdbcTemplate.execute("LOCK TABLE " + table + " IN ACCESS EXCLUSIVE MODE");
+                    locked.countDown();
+                    try {
+                        release.await(30, TimeUnit.SECONDS);
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                    }
+                }));
+            assertThat(locked.await(10, TimeUnit.SECONDS)).isTrue();
+        }
+
+        @Override
+        public void close() {
+            release.countDown();
+            holder.orTimeout(10, TimeUnit.SECONDS).join();
+        }
+    }
+
     @Test
     void lookupBlockedByTableLockAlsoEndsWith503() throws Exception {
-        CountDownLatch locked = new CountDownLatch(1);
-        CountDownLatch release = new CountDownLatch(1);
-        CompletableFuture<Void> holder = CompletableFuture.runAsync(() ->
-            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-                jdbcTemplate.execute("LOCK TABLE events IN ACCESS EXCLUSIVE MODE");
-                locked.countDown();
-                try {
-                    release.await(30, TimeUnit.SECONDS);
-                } catch (InterruptedException exception) {
-                    Thread.currentThread().interrupt();
-                }
-            }));
-        try {
-            assertThat(locked.await(10, TimeUnit.SECONDS)).isTrue();
+        try (TableLock lock = new TableLock("events")) {
             long startedAt = System.nanoTime();
 
             register(partner, validBody(), UUID.randomUUID().toString())
@@ -165,9 +180,20 @@ class EventRegistrationTimeoutIntegrationTest extends EventIntegrationTestBase {
                 .andExpect(jsonPath("$.code").value("EVENT_REGISTRATION_UNAVAILABLE"));
 
             assertThat((System.nanoTime() - startedAt) / 1_000_000).isLessThan(3_000);
-        } finally {
-            release.countDown();
-            holder.orTimeout(10, TimeUnit.SECONDS).join();
         }
+    }
+
+    @Test
+    void regionCheckBlockedByTableLockEndsWith503AndSavesNothing() throws Exception {
+        try (TableLock lock = new TableLock("regions")) {
+            long startedAt = System.nanoTime();
+
+            register(partner, validBody(), UUID.randomUUID().toString())
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("EVENT_REGISTRATION_UNAVAILABLE"));
+
+            assertThat((System.nanoTime() - startedAt) / 1_000_000).isLessThan(3_000);
+        }
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM events", Integer.class)).isZero();
     }
 }
