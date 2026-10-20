@@ -45,13 +45,13 @@ public record EventRequest(
     public record Details(
         String rehearsal,
         String stageSize,
-        Boolean paProvided,
+        Boolean isPaProvided,
         String microphones,
         String instruments,
-        Boolean waitingRoomProvided,
-        Boolean mealProvided,
-        Boolean transportationFeeProvided,
-        Boolean accommodationProvided,
+        Boolean isWaitingRoomProvided,
+        Boolean isMealProvided,
+        Boolean isTransportationFeeProvided,
+        Boolean isAccommodationProvided,
         String otherConditions
     ) {
     }
@@ -200,13 +200,13 @@ public record EventRequest(
         return new EventDetails(
             optionalText(details.rehearsal(), 100),
             optionalText(details.stageSize(), 100),
-            details.paProvided(),
+            details.isPaProvided(),
             optionalText(details.microphones(), 100),
             optionalText(details.instruments(), 100),
-            details.waitingRoomProvided(),
-            details.mealProvided(),
-            details.transportationFeeProvided(),
-            details.accommodationProvided(),
+            details.isWaitingRoomProvided(),
+            details.isMealProvided(),
+            details.isTransportationFeeProvided(),
+            details.isAccommodationProvided(),
             optionalText(details.otherConditions(), 500)
         );
     }
