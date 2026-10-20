@@ -9,16 +9,25 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.TestcontainersConfiguration;
+import com.nsu.capstone.event.application.EventPeriod;
+import com.nsu.capstone.event.domain.ArtistType;
+import com.nsu.capstone.event.domain.EventType;
+import com.nsu.capstone.event.domain.Genre;
+import com.nsu.capstone.event.domain.Visibility;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -48,6 +57,40 @@ class OpenApiDocsIntegrationTest {
             return ref.substring(ref.lastIndexOf('/') + 1);
         }
         return "";
+    }
+
+    private static JsonNode parameter(JsonNode operation, String name) {
+        for (JsonNode parameter : operation.path("parameters")) {
+            if (parameter.path("name").asString("").equals(name)) {
+                return parameter;
+            }
+        }
+        throw new AssertionError("파라미터가 없다: " + name);
+    }
+
+    private JsonNode schema(String name) throws Exception {
+        return apiDocs().path("components").path("schemas").path(name);
+    }
+
+    /** OpenAPI 3.1은 type을 문자열이나 배열로 쓴다. 둘 다 같은 형태로 읽는다. */
+    private static String type(JsonNode schema) {
+        JsonNode type = schema.path("type");
+        return type.isArray() ? type.path(0).asString("") : type.asString("");
+    }
+
+    /** 스키마의 enum 값. $ref면 components에서 찾아 읽는다. */
+    private List<String> enumValues(JsonNode docs, JsonNode schema) {
+        String ref = schema.path("$ref").asString("");
+        JsonNode resolved = ref.isEmpty()
+            ? schema
+            : docs.path("components").path("schemas").path(ref.substring(ref.lastIndexOf('/') + 1));
+        List<String> values = new ArrayList<>();
+        resolved.path("enum").forEach(value -> values.add(value.asString()));
+        return values;
+    }
+
+    private static List<String> names(Class<? extends Enum<?>> type) {
+        return Arrays.stream(type.getEnumConstants()).map(Enum::name).toList();
     }
 
     private JsonNode apiDocs() throws Exception {
@@ -237,5 +280,77 @@ class OpenApiDocsIntegrationTest {
             assertThat(response.path("description").asString("")).as(status).contains(words);
             assertThat(schemaName(response)).as(status).isEqualTo("ErrorResponse");
         });
+    }
+
+    @Test
+    @DisplayName("등록의 Idempotency-Key 헤더를 필수로 적는다")
+    void marksIdempotencyKeyAsRequired() throws Exception {
+        JsonNode key = parameter(operation("post", "/api/v1/events"), "Idempotency-Key");
+
+        assertThat(key.path("in").asString("")).isEqualTo("header");
+        assertThat(key.path("required").asBoolean(false)).isTrue();
+    }
+
+    @Test
+    @DisplayName("행사 등록·수정 본문의 필수 필드를 계약(03 §3.1)대로 적는다")
+    void marksRequiredEventRequestFields() throws Exception {
+        Set<String> required = new TreeSet<>();
+        schema("EventRequest").path("required").forEach(field -> required.add(field.asString()));
+
+        assertThat(required).containsExactlyInAnyOrder(
+            "name", "eventType", "startDate", "startTime", "endDate", "endTime",
+            "performanceMinutes", "venue", "regionCode", "genres",
+            "budgetMin", "budgetMax", "expectedAudience", "description", "visibility"
+        );
+    }
+
+    @ParameterizedTest
+    @CsvSource({"performanceMinutes", "budgetMin", "budgetMax", "expectedAudience"})
+    @DisplayName("행사 본문의 정수 필드를 integer로 적는다")
+    void documentsIntegerEventRequestFields(String field) throws Exception {
+        JsonNode property = schema("EventRequest").path("properties").path(field);
+
+        assertThat(type(property)).as(property.toString()).isEqualTo("integer");
+    }
+
+    static Stream<Arguments> codeFields() {
+        return Stream.of(
+            Arguments.of("eventType", EventType.class),
+            Arguments.of("artistType", ArtistType.class),
+            Arguments.of("visibility", Visibility.class)
+        );
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("codeFields")
+    @DisplayName("행사 본문의 코드값 필드에 허용 값을 적는다")
+    void documentsAllowedValuesOfCodeFields(String field, Class<? extends Enum<?>> type) throws Exception {
+        JsonNode docs = apiDocs();
+        JsonNode property = docs.path("components").path("schemas").path("EventRequest")
+            .path("properties").path(field);
+
+        assertThat(enumValues(docs, property)).as(property.toString()).isEqualTo(names(type));
+    }
+
+    @Test
+    @DisplayName("행사 본문의 장르 배열 원소에 허용 값을 적는다")
+    void documentsAllowedValuesOfGenres() throws Exception {
+        JsonNode docs = apiDocs();
+        JsonNode items = docs.path("components").path("schemas").path("EventRequest")
+            .path("properties").path("genres").path("items");
+
+        assertThat(enumValues(docs, items)).as(items.toString()).isEqualTo(names(Genre.class));
+    }
+
+    @Test
+    @DisplayName("내 행사 목록의 period에 허용 값을, page·size에 정수를 적는다")
+    void documentsMyEventsQueryParameters() throws Exception {
+        JsonNode docs = apiDocs();
+        JsonNode operation = docs.path("paths").path("/api/v1/me/events").path("get");
+        JsonNode period = parameter(operation, "period").path("schema");
+
+        assertThat(enumValues(docs, period)).as(period.toString()).isEqualTo(names(EventPeriod.class));
+        assertThat(type(parameter(operation, "page").path("schema"))).isEqualTo("integer");
+        assertThat(type(parameter(operation, "size").path("schema"))).isEqualTo("integer");
     }
 }

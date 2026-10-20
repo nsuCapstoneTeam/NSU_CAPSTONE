@@ -7,6 +7,7 @@ import com.nsu.capstone.event.presentation.dto.PageResponse;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.global.exception.ErrorResponse;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -39,7 +40,10 @@ public class MyEventController {
         this.eventService = eventService;
     }
 
-    /** 파라미터는 문자열로 받아 직접 검사한다. 타입 변환 실패가 Spring 표준 400이 되지 않게 하기 위해서다. */
+    /**
+     * 파라미터는 문자열로 받아 직접 검사한다. 타입 변환 실패가 Spring 표준 400이 되지 않게 하기 위해서다.
+     * 그래서 API 문서의 허용 값과 정수 타입은 @Parameter로 보정한다(00 공통 규칙 §10.1).
+     */
     @GetMapping
     @PreAuthorize("hasRole('EVENT_PARTNER')")
     @ApiResponse(responseCode = "200")
@@ -55,9 +59,10 @@ public class MyEventController {
     )
     public PageResponse<EventResponse> list(
         @AuthenticationPrincipal Jwt jwt,
+        @Parameter(schema = @Schema(implementation = EventPeriod.class))
         @RequestParam(required = false) String period,
-        @RequestParam(required = false) String page,
-        @RequestParam(required = false) String size
+        @Parameter(schema = @Schema(types = "integer")) @RequestParam(required = false) String page,
+        @Parameter(schema = @Schema(types = "integer")) @RequestParam(required = false) String size
     ) {
         return PageResponse.from(
             eventService.listMine(

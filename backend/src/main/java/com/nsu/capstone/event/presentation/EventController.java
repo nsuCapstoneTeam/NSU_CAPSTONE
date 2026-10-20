@@ -8,6 +8,7 @@ import com.nsu.capstone.event.presentation.dto.EventResponse;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.global.exception.ErrorResponse;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -80,6 +81,7 @@ public class EventController {
     )
     public ResponseEntity<EventResponse> register(
         @AuthenticationPrincipal Jwt jwt,
+        @Parameter(required = true)
         @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
         @RequestBody EventRequest request
     ) {

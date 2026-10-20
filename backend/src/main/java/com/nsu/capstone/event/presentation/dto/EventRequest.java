@@ -1,5 +1,7 @@
 package com.nsu.capstone.event.presentation.dto;
 
+import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
+
 import com.nsu.capstone.event.domain.ArtistType;
 import com.nsu.capstone.event.domain.EventContent;
 import com.nsu.capstone.event.domain.EventDetails;
@@ -8,6 +10,8 @@ import com.nsu.capstone.event.domain.Genre;
 import com.nsu.capstone.event.domain.Visibility;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -21,24 +25,26 @@ import java.util.regex.Pattern;
 /**
  * 등록·수정 본문(03 행사 API §3.1). 날짜·시각·enum은 문자열로 받아 직접 검사한다.
  * JSON 변환 단계에서 실패해 Spring 표준 400이 나가지 않게 하기 위해서다(ADR-007 §4.4).
+ * 그래서 API 문서의 필수 여부, 정수 타입, 허용 값은 @Schema로 보정한다(00 공통 규칙 §10.1).
  */
 public record EventRequest(
-    String name,
-    String eventType,
-    String startDate,
-    String startTime,
-    String endDate,
-    String endTime,
-    BigDecimal performanceMinutes,
-    String venue,
-    String regionCode,
-    String artistType,
+    @Schema(requiredMode = REQUIRED) String name,
+    @Schema(requiredMode = REQUIRED, implementation = EventType.class) String eventType,
+    @Schema(requiredMode = REQUIRED) String startDate,
+    @Schema(requiredMode = REQUIRED) String startTime,
+    @Schema(requiredMode = REQUIRED) String endDate,
+    @Schema(requiredMode = REQUIRED) String endTime,
+    @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal performanceMinutes,
+    @Schema(requiredMode = REQUIRED) String venue,
+    @Schema(requiredMode = REQUIRED) String regionCode,
+    @Schema(implementation = ArtistType.class) String artistType,
+    @ArraySchema(arraySchema = @Schema(requiredMode = REQUIRED), schema = @Schema(implementation = Genre.class))
     List<String> genres,
-    BigDecimal budgetMin,
-    BigDecimal budgetMax,
-    BigDecimal expectedAudience,
-    String description,
-    String visibility,
+    @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal budgetMin,
+    @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal budgetMax,
+    @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal expectedAudience,
+    @Schema(requiredMode = REQUIRED) String description,
+    @Schema(requiredMode = REQUIRED, implementation = Visibility.class) String visibility,
     Details details
 ) {
 
