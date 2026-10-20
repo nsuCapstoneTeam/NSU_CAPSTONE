@@ -72,10 +72,16 @@ class OpenApiDocsIntegrationTest {
         return apiDocs().path("components").path("schemas").path(name);
     }
 
-    /** OpenAPI 3.1은 type을 문자열이나 배열로 쓴다. 둘 다 같은 형태로 읽는다. */
+    /**
+     * OpenAPI 3.1은 type을 문자열이나 배열로 쓴다. 배열은 원소가 하나일 때만 그 값을 돌려준다.
+     * 원래 타입과 보정 타입이 함께 나온 배열(예: ["integer","number"])은 배열 전체를 돌려줘 단일 타입 검사에서 실패하게 한다.
+     */
     private static String type(JsonNode schema) {
         JsonNode type = schema.path("type");
-        return type.isArray() ? type.path(0).asString("") : type.asString("");
+        if (!type.isArray()) {
+            return type.asString("");
+        }
+        return type.size() == 1 ? type.path(0).asString("") : type.toString();
     }
 
     /** 스키마의 enum 값. $ref면 components에서 찾아 읽는다. */
