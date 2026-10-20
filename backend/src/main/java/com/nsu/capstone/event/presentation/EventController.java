@@ -7,6 +7,10 @@ import com.nsu.capstone.event.presentation.dto.EventRequest;
 import com.nsu.capstone.event.presentation.dto.EventResponse;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
+import com.nsu.capstone.global.exception.ErrorResponse;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.net.URI;
 import java.util.UUID;
@@ -26,6 +30,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@ApiResponse(
+    responseCode = "401",
+    description = "AUTHENTICATION_REQUIRED",
+    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+)
 @Tag(name = "행사")
 @RequestMapping("/api/v1/events")
 public class EventController {
@@ -43,6 +52,32 @@ public class EventController {
 
     @PostMapping
     @PreAuthorize("hasRole('EVENT_PARTNER')")
+    @ApiResponse(responseCode = "201")
+    @ApiResponse(
+        responseCode = "400",
+        description = "VALIDATION_ERROR, EVENT_START_IN_PAST. 잘못된 JSON·타입은 code 없는 ProblemDetail",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "ACCESS_DENIED",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "EVENT_NOT_FOUND",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "422",
+        description = "IDEMPOTENCY_KEY_REUSED",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "503",
+        description = "EVENT_REGISTRATION_UNAVAILABLE",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
     public ResponseEntity<EventResponse> register(
         @AuthenticationPrincipal Jwt jwt,
         @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
@@ -56,11 +91,44 @@ public class EventController {
     }
 
     @GetMapping("/{eventId}")
+    @ApiResponse(responseCode = "200")
+    @ApiResponse(
+        responseCode = "400",
+        description = "INVALID_EVENT_ID",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "EVENT_NOT_FOUND",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
     public EventResponse get(@AuthenticationPrincipal Jwt jwt, @PathVariable String eventId) {
         return EventResponse.from(eventService.get(eventId(eventId), userId(jwt)));
     }
 
     @PutMapping("/{eventId}")
+    @ApiResponse(responseCode = "200")
+    @ApiResponse(
+        responseCode = "400",
+        description = "INVALID_EVENT_ID, VALIDATION_ERROR, EVENT_START_IN_PAST. "
+            + "잘못된 JSON·타입은 code 없는 ProblemDetail",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "ACCESS_DENIED",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "EVENT_NOT_FOUND",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "409",
+        description = "EVENT_ALREADY_STARTED, EVENT_CANCELLED",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
     public EventResponse update(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String eventId,
@@ -71,11 +139,48 @@ public class EventController {
     }
 
     @PutMapping("/{eventId}/cancellation")
+    @ApiResponse(responseCode = "200")
+    @ApiResponse(
+        responseCode = "400",
+        description = "INVALID_EVENT_ID",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "ACCESS_DENIED",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "EVENT_NOT_FOUND",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "409",
+        description = "EVENT_ALREADY_STARTED",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
     public EventResponse cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable String eventId) {
         return EventResponse.from(eventService.cancel(eventId(eventId), userId(jwt)));
     }
 
     @DeleteMapping("/{eventId}")
+    @ApiResponse(responseCode = "204")
+    @ApiResponse(
+        responseCode = "400",
+        description = "INVALID_EVENT_ID",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "ACCESS_DENIED",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "404",
+        description = "EVENT_NOT_FOUND",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
     public ResponseEntity<Void> delete(@AuthenticationPrincipal Jwt jwt, @PathVariable String eventId) {
         eventService.delete(eventId(eventId), userId(jwt));
         return ResponseEntity.noContent().build();

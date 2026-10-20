@@ -6,6 +6,10 @@ import com.nsu.capstone.event.presentation.dto.EventResponse;
 import com.nsu.capstone.event.presentation.dto.PageResponse;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
+import com.nsu.capstone.global.exception.ErrorResponse;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,6 +21,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@ApiResponse(
+    responseCode = "401",
+    description = "AUTHENTICATION_REQUIRED",
+    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+)
 @Tag(name = "행사")
 @RequestMapping("/api/v1/me/events")
 public class MyEventController {
@@ -33,6 +42,17 @@ public class MyEventController {
     /** 파라미터는 문자열로 받아 직접 검사한다. 타입 변환 실패가 Spring 표준 400이 되지 않게 하기 위해서다. */
     @GetMapping
     @PreAuthorize("hasRole('EVENT_PARTNER')")
+    @ApiResponse(responseCode = "200")
+    @ApiResponse(
+        responseCode = "400",
+        description = "VALIDATION_ERROR",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    @ApiResponse(
+        responseCode = "403",
+        description = "ACCESS_DENIED",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
     public PageResponse<EventResponse> list(
         @AuthenticationPrincipal Jwt jwt,
         @RequestParam(required = false) String period,

@@ -12,8 +12,13 @@ import com.nsu.capstone.TestcontainersConfiguration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -31,6 +36,19 @@ class OpenApiDocsIntegrationTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
+
+    private JsonNode operation(String method, String path) throws Exception {
+        return apiDocs().path("paths").path(path).path(method);
+    }
+
+    /** 응답의 본문 스키마 이름. 본문이 없으면 빈 문자열이다. */
+    private static String schemaName(JsonNode response) {
+        for (JsonNode mediaType : response.path("content")) {
+            String ref = mediaType.path("schema").path("$ref").asString("");
+            return ref.substring(ref.lastIndexOf('/') + 1);
+        }
+        return "";
+    }
 
     private JsonNode apiDocs() throws Exception {
         String json = mockMvc.perform(get("/v3/api-docs"))
@@ -146,5 +164,78 @@ class OpenApiDocsIntegrationTest {
             return "지역";
         }
         return "행사";
+    }
+
+    @ParameterizedTest(name = "{0} {1} → {2} {3}")
+    @CsvSource(delimiter = '|', textBlock = """
+        post   | /api/v1/events                         | 201 | EventResponse
+        get    | /api/v1/events/{eventId}               | 200 | EventResponse
+        put    | /api/v1/events/{eventId}               | 200 | EventResponse
+        put    | /api/v1/events/{eventId}/cancellation  | 200 | EventResponse
+        delete | /api/v1/events/{eventId}               | 204 | ''
+        get    | /api/v1/me/events                      | 200 | PageResponseEventResponse
+        get    | /api/v1/regions                        | 200 | RegionListResponse
+        """)
+    @DisplayName("행사·지역 API의 성공 상태와 응답 스키마를 적는다")
+    void documentsSuccessStatusAndSchema(String method, String path, String status, String schema)
+        throws Exception {
+        JsonNode responses = operation(method, path).path("responses");
+
+        assertThat(responses.has(status)).as("응답 상태 목록 %s", responses.propertyNames()).isTrue();
+        assertThat(schemaName(responses.path(status))).isEqualTo(schema);
+    }
+
+    @ParameterizedTest(name = "{0} {1}")
+    @CsvSource(delimiter = '|', textBlock = """
+        post   | /api/v1/events
+        get    | /api/v1/events/{eventId}
+        put    | /api/v1/events/{eventId}
+        put    | /api/v1/events/{eventId}/cancellation
+        delete | /api/v1/events/{eventId}
+        get    | /api/v1/me/events
+        get    | /api/v1/regions
+        """)
+    @DisplayName("인증이 필요한 API에 401 AUTHENTICATION_REQUIRED를 적는다")
+    void documentsUnauthorizedResponse(String method, String path) throws Exception {
+        JsonNode unauthorized = operation(method, path).path("responses").path("401");
+
+        assertThat(unauthorized.path("description").asString("")).contains("AUTHENTICATION_REQUIRED");
+        assertThat(schemaName(unauthorized)).isEqualTo("ErrorResponse");
+    }
+
+    /** 기대 오류는 "상태=설명에 들어갈 낱말,…;상태=…" 형식이다. 03 행사 API §9의 표와 검사 순서를 옮겼다. */
+    @ParameterizedTest(name = "{0} {1}")
+    @CsvSource(delimiter = '|', textBlock = """
+        post   | /api/v1/events                        | 400=VALIDATION_ERROR,EVENT_START_IN_PAST,ProblemDetail;403=ACCESS_DENIED;404=EVENT_NOT_FOUND;422=IDEMPOTENCY_KEY_REUSED;503=EVENT_REGISTRATION_UNAVAILABLE
+        get    | /api/v1/events/{eventId}              | 400=INVALID_EVENT_ID;404=EVENT_NOT_FOUND
+        put    | /api/v1/events/{eventId}              | 400=INVALID_EVENT_ID,VALIDATION_ERROR,EVENT_START_IN_PAST,ProblemDetail;403=ACCESS_DENIED;404=EVENT_NOT_FOUND;409=EVENT_ALREADY_STARTED,EVENT_CANCELLED
+        put    | /api/v1/events/{eventId}/cancellation | 400=INVALID_EVENT_ID;403=ACCESS_DENIED;404=EVENT_NOT_FOUND;409=EVENT_ALREADY_STARTED
+        delete | /api/v1/events/{eventId}              | 400=INVALID_EVENT_ID;403=ACCESS_DENIED;404=EVENT_NOT_FOUND
+        get    | /api/v1/me/events                     | 400=VALIDATION_ERROR;403=ACCESS_DENIED
+        get    | /api/v1/regions                       | ''
+        """)
+    @DisplayName("행사·지역 API의 오류 상태와 code를 계약(03 §9)대로 적는다")
+    void documentsErrorResponsesFromContract(String method, String path, String errors) throws Exception {
+        Map<String, List<String>> expected = new TreeMap<>();
+        for (String entry : errors.split(";")) {
+            if (!entry.isBlank()) {
+                String[] statusAndWords = entry.split("=");
+                expected.put(statusAndWords[0], List.of(statusAndWords[1].split(",")));
+            }
+        }
+        JsonNode responses = operation(method, path).path("responses");
+        Set<String> actual = new TreeSet<>();
+        for (String status : responses.propertyNames()) {
+            if (!status.startsWith("2") && !status.equals("401")) {
+                actual.add(status);
+            }
+        }
+
+        assertThat(actual).isEqualTo(expected.keySet());
+        expected.forEach((status, words) -> {
+            JsonNode response = responses.path(status);
+            assertThat(response.path("description").asString("")).as(status).contains(words);
+            assertThat(schemaName(response)).as(status).isEqualTo("ErrorResponse");
+        });
     }
 }
