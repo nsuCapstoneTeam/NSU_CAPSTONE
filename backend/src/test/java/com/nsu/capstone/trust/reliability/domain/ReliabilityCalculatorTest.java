@@ -17,12 +17,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Random;
 import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+@DisplayName("Reliability 계산")
 class ReliabilityCalculatorTest {
 
     private final ReliabilityCalculator calculator = new ReliabilityCalculator(ReliabilityPolicy.V1);
@@ -32,6 +34,7 @@ class ReliabilityCalculatorTest {
      * 확신 수준은 LOW라 이행률을 숨긴다.
      */
     @Test
+    @DisplayName("관측이 없으면 Reliability는 0.5이고, 확신 수준 LOW라 이행률을 숨긴다")
     void artistWithoutObservationsHasLowConfidenceAndHiddenRate() {
         ReliabilityResult result = calculator.calculate(List.of());
 
@@ -50,6 +53,7 @@ class ReliabilityCalculatorTest {
 
     /** 정상 완료 4회면 확신 수준은 MEDIUM이고 이행률은 85%다. */
     @Test
+    @DisplayName("정상 완료 4회면 확신 수준은 MEDIUM, 이행률은 85%다")
     void fourCompletedPerformancesGiveMediumConfidenceAndRateOf85() {
         ReliabilityResult result = calculator.calculate(history().completed(4).outcomes());
 
@@ -63,6 +67,7 @@ class ReliabilityCalculatorTest {
     /** 확신 수준의 경계(3건 이하 LOW, 10건 이상 HIGH)를 확인하고, LOW일 때만 이행률을 숨기는지 본다. */
     @ParameterizedTest
     @CsvSource({"3, LOW", "4, MEDIUM", "9, MEDIUM", "10, HIGH"})
+    @DisplayName("확신 수준은 관측 수로 정하고, LOW일 때만 이행률을 숨긴다")
     void confidenceLevelFollowsObservationCountAndHidesRateWhenLow(int completed, ConfidenceLevel expected) {
         ReliabilityResult result = calculator.calculate(history().completed(completed).outcomes());
 
@@ -73,6 +78,7 @@ class ReliabilityCalculatorTest {
     /** 정상 완료 10회·20회의 값이 06 §12 정책 표와 같다. */
     @ParameterizedTest
     @CsvSource({"10, 0.935, 94", "20, 0.974, 97"})
+    @DisplayName("정상 완료 10회·20회의 값이 06 §12 정책 표와 같다")
     void completedPerformancesRaiseReliabilityAsInPolicyTable(int completed, String reliability, int ratePercent) {
         ReliabilityResult result = calculator.calculate(history().completed(completed).outcomes());
 
@@ -83,6 +89,7 @@ class ReliabilityCalculatorTest {
     /** 아티스트 귀책 노쇼는 실패 1건으로 관측한다. */
     @ParameterizedTest
     @CsvSource({"10, 0.839, 84", "20, 0.903, 90"})
+    @DisplayName("아티스트 귀책 노쇼는 실패 1건으로 관측한다")
     void artistNoShowIsOneFailure(int completedBefore, String reliability, int ratePercent) {
         ReliabilityResult result = calculator.calculate(history().completed(completedBefore).noShow().outcomes());
 
@@ -95,6 +102,7 @@ class ReliabilityCalculatorTest {
     /** 아티스트 귀책 취소는 통보 시점과 관계없이 노쇼와 같은 실패 1건이다. */
     @ParameterizedTest
     @ValueSource(strings = {"P10D", "P3D", "PT1H"})
+    @DisplayName("아티스트 귀책 취소는 통보 시점과 관계없이 노쇼와 같은 실패 1건이다")
     void artistCancellationIsOneFailureWhateverTheNotice(String notice) {
         ReliabilityResult cancelled = calculator.calculate(
             history().completed(10).artistCancellation(Duration.parse(notice)).outcomes());
@@ -117,6 +125,7 @@ class ReliabilityCalculatorTest {
         "PT0S, ARTIST_CANCELLATION_NOTICE_UNDER_24_HOURS",
         "PT-1H, ARTIST_CANCELLATION_NOTICE_UNDER_24_HOURS"
     })
+    @DisplayName("아티스트 귀책 취소를 통보 기간으로 분류하고, 경계값은 긴 쪽 구간에 넣는다")
     void artistCancellationIsClassifiedByNoticePeriod(String notice, ObservationCategory expected) {
         ReliabilityResult result = calculator.calculate(
             history().artistCancellation(Duration.parse(notice)).outcomes());
@@ -126,6 +135,7 @@ class ReliabilityCalculatorTest {
 
     /** 근거 분류별 관측 수를 모두 더하면 전체 관측 수와 같다. */
     @Test
+    @DisplayName("분류별 관측 수를 모두 더하면 전체 관측 수와 같다")
     void observationCountsByCategoryAddUpToObservationCount() {
         ReliabilityResult result = calculator.calculate(history()
             .completed(3)
@@ -150,6 +160,7 @@ class ReliabilityCalculatorTest {
      */
     @ParameterizedTest
     @EnumSource(value = ResponsibleParty.class, names = "ARTIST", mode = EnumSource.Mode.EXCLUDE)
+    @DisplayName("아티스트가 아닌 귀책의 취소·노쇼는 제외하고, Reliability를 바꾸지 않는다")
     void nonArtistCancellationAndNoShowAreExcludedWithoutChangingReliability(ResponsibleParty party) {
         ReliabilityResult completedOnly = calculator.calculate(history().completed(4).outcomes());
 
@@ -167,6 +178,7 @@ class ReliabilityCalculatorTest {
 
     /** 제외 건수는 결과 유형 × 귀책 조합별로 묶고, 두 enum의 선언 순서로 정렬한다. */
     @Test
+    @DisplayName("제외 건수는 결과 유형 × 귀책 주체별로 묶어 enum 선언 순서로 정렬한다")
     void exclusionCountsAreGroupedByOutcomeTypeAndPartyInContractOrder() {
         ReliabilityResult result = calculator.calculate(history()
             .noShowBy(ResponsibleParty.OTHER)
@@ -186,6 +198,7 @@ class ReliabilityCalculatorTest {
 
     /** EVENT_PARTNER 귀책 취소가 10건 섞여도 정상 완료 10회만 있을 때와 값이 같다. */
     @Test
+    @DisplayName("EVENT_PARTNER 귀책 취소가 10건 섞여도 정상 완료 10회만 있을 때와 값이 같다")
     void tenEventPartnerCancellationsLeaveReliabilityOfTenCompletedPerformances() {
         OutcomeHistory history = history();
         for (int i = 0; i < 10; i++) {
@@ -204,6 +217,7 @@ class ReliabilityCalculatorTest {
 
     /** 결과가 늦게 확정되거나 입력 순서가 섞여도, 행동 시각 순서로 넣은 것과 결과가 같다. */
     @Test
+    @DisplayName("결과가 늦게 확정되거나 순서가 섞여도 행동 시각 순서로 넣은 것과 결과가 같다")
     void lateConfirmedOrShuffledOutcomesGiveTheSameResultAsActionTimeOrder() {
         List<PerformanceOutcome> actionTimeOrder = history()
             .completed(5).noShow().completed(3).artistCancellation(Duration.ofDays(2)).completed(2).outcomes();
@@ -226,6 +240,7 @@ class ReliabilityCalculatorTest {
 
     /** 취소는 공연 예정 시작 시각이 아니라 취소 통보 시각으로 순서를 정한다. */
     @Test
+    @DisplayName("취소는 공연 예정 시작 시각이 아니라 취소 통보 시각으로 순서를 정한다")
     void artistCancellationIsOrderedByNoticeTimeNotByScheduledStart() {
         // 통보는 정상 완료보다 먼저, 취소된 공연의 예정 시작은 정상 완료보다 나중
         List<PerformanceOutcome> actionTimeOrder = history()
@@ -238,6 +253,7 @@ class ReliabilityCalculatorTest {
 
     /** 행동 시각이 같으면 performanceId의 부호 없는 순서(UUID 문자열의 사전순)로 정렬한다. */
     @Test
+    @DisplayName("행동 시각이 같으면 performanceId의 부호 없는 순서로 정렬한다")
     void outcomesAtTheSameActionTimeAreOrderedByUnsignedPerformanceId() {
         // Java UUID.compareTo는 부호 있는 비교라 아래 세 ID를 c, b, a 순으로 놓는다
         Instant sameTime = Instant.parse("2026-03-01T10:00:00Z");
@@ -255,6 +271,7 @@ class ReliabilityCalculatorTest {
      * 계산에 시각이 아니라 사건 순서만 쓰기 때문이다.
      */
     @Test
+    @DisplayName("공연 간격이 달라도, 모든 시각을 3년 옮겨도 결과가 같다")
     void performanceSpacingAndShiftingAllTimesDoNotChangeTheResult() {
         ReliabilityResult oncePerYear = calculator.calculate(
             sameSequence(history().every(Duration.ofDays(365))));
@@ -285,6 +302,7 @@ class ReliabilityCalculatorTest {
      * 정정 전 revision은 SUPERSEDED로 제외한다.
      */
     @Test
+    @DisplayName("노쇼를 정상 완료로 정정하면 처음부터 정상 완료였던 것과 같다")
     void noShowCorrectedToCompletedEqualsCompletedFromTheStart() {
         List<PerformanceOutcome> outcomes = history().completed(10).noShow().outcomes();
         PerformanceOutcome noShow = outcomes.get(10);
@@ -302,6 +320,7 @@ class ReliabilityCalculatorTest {
 
     /** 가장 큰 revision이 VOIDED면 그 공연은 유효 결과가 없어 계산에서 빠진다. */
     @Test
+    @DisplayName("가장 큰 revision이 VOIDED면 그 공연은 계산에서 빠진다")
     void voidedLatestRevisionLeavesNoEffectiveOutcome() {
         List<PerformanceOutcome> outcomes = history().completed(4).noShow().outcomes();
         PerformanceOutcome noShow = outcomes.get(4);
@@ -320,6 +339,7 @@ class ReliabilityCalculatorTest {
 
     /** SUPERSEDED·VOIDED로 뺀 행은 제외 건수(exclusionCounts)에 세지 않는다. */
     @Test
+    @DisplayName("SUPERSEDED·VOIDED로 뺀 결과는 제외 건수에 세지 않는다")
     void supersededAndVoidedRowsAreNotCountedAsExclusions() {
         List<PerformanceOutcome> firstRevisions = history()
             .cancelledBy(ResponsibleParty.EVENT_PARTNER)
@@ -337,6 +357,7 @@ class ReliabilityCalculatorTest {
 
     /** 제외 목록은 공연 식별자 순서로 정렬하고, 같은 공연이면 revision 순서로 정렬한다. */
     @Test
+    @DisplayName("제외 목록은 공연 식별자 순서, 같은 공연이면 revision 순서로 정렬한다")
     void excludedOutcomesAreOrderedByPerformanceThenRevision() {
         List<PerformanceOutcome> firstRevisions = history().noShow().cancelledBy(ResponsibleParty.MUTUAL).outcomes();
         PerformanceOutcome noShow = firstRevisions.get(0);
@@ -355,6 +376,7 @@ class ReliabilityCalculatorTest {
 
     /** V1이 아닌 정책을 주면 그 정책의 γ, 사전분포, 확신 수준 경계, 통보 구간 경계로 계산한다. */
     @Test
+    @DisplayName("주어진 정책의 γ, 사전분포, 확신 수준 경계, 통보 구간 경계로 계산한다")
     void calculationFollowsTheGivenPolicyValues() {
         ReliabilityPolicy policy = new ReliabilityPolicy(
             "custom-test", 0.9, 2, 1, 1, 3, 2, Duration.ofHours(48), Duration.ofDays(14), 3);
@@ -386,6 +408,7 @@ class ReliabilityCalculatorTest {
 
     /** 같은 공연의 같은 revision이 두 번 들어오면 거부한다. */
     @Test
+    @DisplayName("같은 공연의 같은 revision이 두 번 들어오면 거부한다")
     void duplicateRevisionOfTheSamePerformanceIsRejected() {
         PerformanceOutcome completed = history().completed(1).outcomes().getFirst();
         PerformanceOutcome sameRevision = new PerformanceOutcome(
