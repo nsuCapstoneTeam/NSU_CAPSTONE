@@ -2,7 +2,7 @@
 
 Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서는 이 문서의 규칙을 따르고, 예외가 있으면 해당 문서에 이유와 함께 적는다.
 
-> 상태: Trust Profile API(NSU-70) 설계에서 처음 정했다. §1 경로와 버전, §7 인증과 호출 주체는 이 문서가 들어간 PR #127의 리뷰에서 다른 Spring 담당자(Seokyun Kang)가 확인했다(2026-10-12). §8 에러 형식은 먼저 구현된 ADR-007과 달라 ADR-007에 맞췄다(2026-10-14 결정).
+> 상태: Trust Profile API(NSU-70) 설계에서 처음 정했다. §1 경로와 버전, §7 인증과 호출 주체는 이 문서가 들어간 PR #127의 리뷰에서 다른 Spring 담당자(Seokyun Kang)가 확인했다(2026-10-12). §8 에러 형식은 먼저 구현된 ADR-007과 달라 ADR-007에 맞췄다(2026-10-14 결정). §10 API 문서화와 프론트 전달은 NSU-102 설계에서 정했고 PR 리뷰에서 확정한다(2026-10-20).
 
 ---
 
@@ -133,3 +133,51 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 | 항목 | 정할 시점 | 기록할 곳 |
 |---|---|---|
 | cursor 방식 페이지네이션(파라미터 이름, 응답 형태) | cursor가 필요한 첫 목록 API(§5) | §5 |
+
+## 10. API 문서화와 프론트 전달
+
+구현된 API는 springdoc-openapi가 코드에서 만든 Scalar 화면으로 프론트에 전달한다(2026-10-20, NSU-102). 결정 근거는 [ADR api_documentation/00](../adr/api_documentation/00_scalar_api_reference.md)에 있다.
+
+| 문서 | 역할 |
+|---|---|
+| `docs/api/*.md` | 구현 전에 쓰는 설계 계약. 불변식, null 조건, 결정 근거, 에러 표를 담는다 |
+| Scalar(`/scalar`) | 구현된 API의 실제 요청·응답 모양과 직접 호출해 보는 화면 |
+
+- Scalar에 보이는 내용이 md와 다르면 계약 위반이다. 구현을 고치거나, 계약을 바꾸는 PR에서 md와 코드를 함께 고친다.
+- 화면은 `/scalar`, OpenAPI JSON은 `/v3/api-docs`다. 하위 경로(`/scalar/**`, `/v3/api-docs/**`)까지 로그인 없이 열린다. 배포 서버가 없는 동안 링크는 `http://localhost:8080/scalar`다.
+
+### 10.1 컨트롤러에 다는 것
+
+API를 새로 만들거나 바꿀 때 아래를 지킨다.
+
+| 항목 | 규칙 |
+|---|---|
+| 인증 표시 | bearer JWT가 전역으로 걸려 있다. `SecurityConfig`에서 `permitAll`인 API의 컨트롤러에만 빈 `@SecurityRequirements`를 단다 |
+| 태그 | 컨트롤러마다 한글 `@Tag(name = "...")`를 단다. 같은 기능의 컨트롤러는 같은 이름을 쓴다 |
+| 에러 응답 | md 에러 표의 상태마다 `@ApiResponse`를 단다. 설명에는 그 상태로 오는 `code`를 쉼표로 나열하고, `content`에 `ErrorResponse` 스키마를 반드시 적는다. `content`를 빠뜨리면 springdoc가 메서드 반환 타입(예: `EventResponse`)을 에러 본문으로 적는다 |
+| `401` | 인증이 필요한 컨트롤러에 클래스 단위로 한 번 단다 |
+| `500` | 달지 않는다. 문서 첫 화면 설명에 "모든 API는 `500 INTERNAL_SERVER_ERROR`가 날 수 있다"고 적혀 있다 |
+| Spring 표준 `400` | 잘못된 JSON처럼 `ProblemDetail`로 끝나는 경우(§8)는 `400` 설명에 한 줄로 적는다 |
+| 성공 응답 | 에러 `@ApiResponse`(클래스 단위 `401` 포함)가 걸린 메서드는 성공 상태도 `@ApiResponse`로 적는다. springdoc는 명시한 응답이 있으면 `@ResponseStatus`가 없는 메서드의 `200`을 만들지 않는다. 성공 `@ApiResponse`에는 `content`를 적지 않는다. 그러면 반환 타입에서 스키마를 만든다 |
+| 입력 보정 | 코드가 계약과 다르게 받는 입력은 문서 어노테이션으로 필수 여부, 정수 타입, 허용 값을 보정한다. 코드의 선언은 그대로 둔다. 예: `required = false`로 받는 필수 헤더에 `@Parameter(required = true)`, 직접 검사하는 필수 필드에 `@Schema(requiredMode = REQUIRED)`, `BigDecimal`로 받는 정수에 `@Schema(type = "integer")`, 문자열로 받는 코드값에 `@Schema(implementation = 도메인Enum.class)`. 허용 값은 enum을 가리키고 문자열로 다시 나열하지 않는다. Bean Validation으로 검사하는 입력은 자동으로 나오므로 보정하지 않는다 |
+| 설명 | `@Operation` 요약과 DTO 필드의 `@Schema` 설명(description)은 달지 않는다. 설명은 md에 둔다. 입력 보정용 `@Schema` 제약은 단다 |
+
+```java
+@ApiResponse(
+    responseCode = "409",
+    description = "EVENT_ALREADY_STARTED, EVENT_CANCELLED",
+    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+)
+```
+
+지금 쓰는 태그 이름: 로그인, OAuth, 아티스트 가입, EVENT_PARTNER 가입, 행사, 지역
+
+- 계약을 바꾸는 PR은 md 에러 표와 `@ApiResponse`를 함께 고친다. 둘이 같은지 검사하는 테스트는 없으므로 PR 리뷰에서 확인한다.
+- 2026-10-20 기준 identity API(가입·로그인·OAuth)는 `@ApiResponse`가 없다. 병합 뒤 identity 담당자에게 handoff로 넘긴다.
+
+### 10.2 프론트 공지
+
+API를 구현하거나 바꾼 PR이 병합되면 Slack `#dev`에서 프론트 담당을 멘션해 알린다. 공지에는 아래 두 가지를 넣는다.
+
+- Scalar 링크와 볼 곳(태그·API 이름)
+- "바뀐 이유"가 적힌 `docs/api` 절의 링크
