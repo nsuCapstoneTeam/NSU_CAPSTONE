@@ -6,6 +6,7 @@ import com.nsu.capstone.event.presentation.dto.EventResponse;
 import com.nsu.capstone.event.presentation.dto.PageResponse;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@Tag(name = "행사")
 @RequestMapping("/api/v1/me/events")
 public class MyEventController {
 

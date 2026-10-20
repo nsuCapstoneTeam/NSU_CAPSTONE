@@ -3,6 +3,8 @@ package com.nsu.capstone.identity.presentation;
 import com.nsu.capstone.identity.application.LoginService;
 import com.nsu.capstone.identity.presentation.dto.LoginRequest;
 import com.nsu.capstone.identity.presentation.dto.LoginResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -10,6 +12,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@Tag(name = "로그인")
+@SecurityRequirements
 @RequestMapping("/api/v1/auth/login")
 public class LoginController {
 

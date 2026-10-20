@@ -5,6 +5,8 @@ import com.nsu.capstone.identity.presentation.dto.ArtistOAuthSignupRequest;
 import com.nsu.capstone.identity.presentation.dto.ArtistSignupResponse;
 import com.nsu.capstone.identity.presentation.dto.CreateArtistOAuthSignupSessionRequest;
 import com.nsu.capstone.identity.presentation.dto.CreateArtistOAuthSignupSessionResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@Tag(name = "아티스트 가입")
+@SecurityRequirements
 @RequestMapping("/api/v1/auth/signup/artist/oauth")
 public class ArtistOAuthSignupController {
     private final ArtistOAuthSignupService service;
