@@ -17,6 +17,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -24,6 +25,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.stream.Stream;
 
 /** 추천 입력 snapshot과 isEventChanged 지문(03 행사 API §8.2·§8.3). */
+@DisplayName("추천 입력 snapshot과 지문")
 class EventSnapshotTest {
 
     static final Clock CLOCK =
@@ -69,6 +71,7 @@ class EventSnapshotTest {
     }
 
     @Test
+    @DisplayName("자격 판단 입력에 시간대·지역·예산·artistType을 담는다")
     void eligibilityInputCarriesTimeWindowRegionBudgetAndArtistType() {
         EligibilityInput input = EventSnapshot.of(event(content())).eligibility();
 
@@ -82,6 +85,7 @@ class EventSnapshotTest {
     }
 
     @Test
+    @DisplayName("artistType이 null이면 '상관없음'으로 보고 null 그대로 둔다")
     void eligibilityInputKeepsNullArtistTypeAsAnyType() {
         EligibilityInput input =
             EventSnapshot.of(event(with(b -> b.artistType = null))).eligibility();
@@ -90,6 +94,7 @@ class EventSnapshotTest {
     }
 
     @Test
+    @DisplayName("AI 입력은 한글 이름을 쓰고, 장르는 요청 순서와 관계없이 표 순서다")
     void aiSourceUsesKoreanNamesInTableOrderRegardlessOfRequestOrder() {
         AiEventSource source = EventSnapshot.of(
             event(with(b -> b.genres = List.of(Genre.TROT, Genre.ROCK, Genre.POP)))
@@ -101,6 +106,7 @@ class EventSnapshotTest {
     }
 
     @Test
+    @DisplayName("모든 eventType과 장르에 계약에 정한 한글 이름이 있다")
     void everyEventTypeAndGenreHasItsContractKoreanName() {
         assertThat(Arrays.stream(EventType.values()).map(EventType::displayName))
             .containsExactly("대학 축제", "동아리·학과 행사", "지역 축제·공공 행사", "기업 행사",
@@ -125,6 +131,7 @@ class EventSnapshotTest {
 
     @ParameterizedTest(name = "{0}을 바꿔도 지문은 같다")
     @MethodSource("fieldsOutsideTheFingerprint")
+    @DisplayName("추천에 쓰지 않는 필드는 바꿔도 지문이 같다")
     void fingerprintIgnoresFieldsThatDoNotFeedRecommendation(String field, Consumer<Builder> change) {
         EventFingerprint before = EventFingerprint.of(event(content()));
 
@@ -151,6 +158,7 @@ class EventSnapshotTest {
 
     @ParameterizedTest(name = "{0}을 바꾸면 지문이 달라진다")
     @MethodSource("fieldsInsideTheFingerprint")
+    @DisplayName("추천에 쓰는 필드를 바꾸면 지문이 달라진다")
     void fingerprintChangesWhenAFieldThatFeedsRecommendationChanges(String field, Consumer<Builder> change) {
         EventFingerprint before = EventFingerprint.of(event(content()));
 
@@ -158,6 +166,7 @@ class EventSnapshotTest {
     }
 
     @Test
+    @DisplayName("지문은 장르 순서를 무시하고, 값을 되돌리면 원래 지문으로 돌아온다")
     void fingerprintIgnoresGenreOrderAndSurvivesRevertingAChange() {
         EventFingerprint original = EventFingerprint.of(event(content()));
 
@@ -169,6 +178,7 @@ class EventSnapshotTest {
     }
 
     @Test
+    @DisplayName("snapshot의 지문은 같은 행사로 만든 지문과 같다")
     void snapshotFingerprintMatchesFingerprintOfSameEvent() {
         Event event = event(content());
 
@@ -176,6 +186,7 @@ class EventSnapshotTest {
     }
 
     @Test
+    @DisplayName("값에 구분자 '|'가 있어도 다른 값과 지문이 겹치지 않는다")
     void fingerprintDoesNotConfuseValuesThatSplitDifferentlyAcrossFields() {
         EventFingerprint a = EventFingerprint.of(event(with(b -> b.description = "가|나")));
         EventFingerprint b2 = EventFingerprint.of(event(with(b -> b.description = "가")));

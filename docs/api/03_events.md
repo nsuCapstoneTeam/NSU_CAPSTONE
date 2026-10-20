@@ -2,14 +2,14 @@
 
 EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 저장된 행사를 추천 요청의 입력으로 쓰는 규칙이다.
 
-- 구현 이슈: NSU-54 (행사 일정·행사 정보 CRUD), NSU-58 (행사 정보와 추천 요청 연동)
-- 요구사항: SSOT v1.15 `EVT-041`~`EVT-044`, `SEC-100`, `DOMAIN-108`, `AI-MATCH-050`·`051`, `ART-028`·`029`. 시작·종료 날짜(§3.2)는 SSOT v1.16 개정이 필요하다(§12)
-- 결정 기록: [00 행사 단위와 시간대](../adr/event_management/00_event_unit_and_time_window.md), [01 지역 코드 표준](../adr/event_management/01_region_code_standard.md), [02 행사 소프트 삭제](../adr/event_management/02_event_soft_delete.md)
+- 구현 이슈: NSU-54 (행사 일정·행사 정보 CRUD), NSU-58 (행사 정보와 추천 요청 연동), NSU-99 (등록 멱등 키, 선택정보 불리언 이름)
+- 요구사항: SSOT v1.16(2026-10-18 문서 전체 최종 승인) `EVT-041`~`EVT-044`, `SEC-100`, `DOMAIN-108`, `AI-MATCH-050`·`051`, `ART-028`·`029`
+- 결정 기록: [00 행사 단위와 시간대](../adr/event_management/00_event_unit_and_time_window.md), [01 지역 코드 표준](../adr/event_management/01_region_code_standard.md), [02 행사 소프트 삭제](../adr/event_management/02_event_soft_delete.md), [03 행사 등록 멱등 키](../adr/event_management/03_event_registration_idempotency_key.md)
 - 관련 계약: [02 추천 응답](./02_recommendation_trust_and_new_artist.md), 서버 협의 [012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)·[014](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)
 - 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
 - 공통 규칙: [00_conventions.md](./00_conventions.md). 에러 형식과 공통 `code`는 [ADR-007](../adr/ADR-007-spring-backend-global-exception-handling.md)을 따른다
 
-> 상태: 2026-10-18 NSU-54·58 설계 세션에서 정했다. 같은 날 Codex 설계 리뷰의 지적 4건(PRIVATE 열람, 동시 수정, 생성 중 행사 변경, 오류 형식)을 반영했다(§4, §5.4, §8.4, §12). PR 리뷰의 지적 2건(취소 검사 순서, 수정·취소 동시 요청)도 반영했다(§5.4, §9).
+> 상태: 2026-10-18 NSU-54·58 설계 세션에서 정했다. 같은 날 Codex 설계 리뷰의 지적 4건(PRIVATE 열람, 동시 수정, 생성 중 행사 변경, 오류 형식)을 반영했다(§4, §5.4, §8.4, §12). PR 리뷰의 지적 2건(취소 검사 순서, 수정·취소 동시 요청)도 반영했다(§5.4, §9). 같은 날 NSU-99 설계 세션에서 이 문서의 검토 지적 4건을 반영해 등록 멱등 키(§5.3.1), 선택정보 불리언 이름(§3.4), 다시 보낸 삭제(§5.6), 지역 목록의 페이지네이션 예외(§7)를 더했다. 이름 변경과 키 필수화는 breaking change다(§12.1).
 
 ---
 
@@ -35,7 +35,7 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 | 내 행사 목록 | `GET /api/v1/me/events` | EVENT_PARTNER | `200` + 페이지(§6) |
 | 지역 목록 | `GET /api/v1/regions` | 로그인 사용자 | `200`(§7) |
 
-- 모든 요청에 `Authorization: Bearer {accessToken}`이 필요하다(00 §7).
+- 모든 요청에 `Authorization: Bearer {accessToken}`이 필요하다(00 §7). 등록에는 `Idempotency-Key` 헤더도 필요하다(§5.3.1).
 - `eventId`는 서버가 만드는 UUIDv7이다. 소문자 하이픈 표기이며, 형식이 아니면 `400 INVALID_EVENT_ID`다.
 - 취소는 동사 경로 대신 단수형 명사의 1:1 하위 자원(`cancellation`)에 `PUT`으로 둔다(00 §2). 같은 요청을 다시 보내도 결과가 같다. 취소는 되돌릴 수 없으므로 `DELETE …/cancellation`은 없다.
 - 이 API는 REST 성숙도 2단계(리소스 + HTTP 메서드·상태 코드)로 설계한다. 응답에 링크(HATEOAS)를 넣지 않는다.
@@ -161,17 +161,18 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 |---|---|---|---|
 | `rehearsal` | 문자열 \| `null` | 100자 이하 | 리허설시간 |
 | `stageSize` | 문자열 \| `null` | 100자 이하 | 무대크기 |
-| `paProvided` | 불리언 \| `null` | | PA |
+| `isPaProvided` | 불리언 \| `null` | | PA |
 | `microphones` | 문자열 \| `null` | 100자 이하 | 마이크 |
 | `instruments` | 문자열 \| `null` | 100자 이하 | 악기 |
-| `waitingRoomProvided` | 불리언 \| `null` | | 대기실 |
-| `mealProvided` | 불리언 \| `null` | | 식사 |
-| `transportationFeeProvided` | 불리언 \| `null` | | 교통비 |
-| `accommodationProvided` | 불리언 \| `null` | | 숙박 |
+| `isWaitingRoomProvided` | 불리언 \| `null` | | 대기실 |
+| `isMealProvided` | 불리언 \| `null` | | 식사 |
+| `isTransportationFeeProvided` | 불리언 \| `null` | | 교통비 |
+| `isAccommodationProvided` | 불리언 \| `null` | | 숙박 |
 | `otherConditions` | 문자열 \| `null` | 500자 이하 | 기타 조건 |
 
 - 선택정보는 화면에 보여 주는 정보다. 지문·추천·Eligibility에 쓰지 않는다(§8).
 - 빈 문자열은 `null`로 저장한다.
+- 불리언 필드 이름은 `is`로 시작한다(00 §2). 2026-10-18에 `paProvided` 등에서 바꿨다. 옛 이름으로 보내면 모르는 필드로 무시되어 `null`로 저장된다. 서버에는 NSU-99 구현 PR이 머지될 때 반영된다(§12.1).
 
 ### 3.5 응답 본문 (행사)
 
@@ -248,7 +249,61 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 ### 5.3 등록
 
 - EVENT_PARTNER만 등록한다. ARTIST는 `403 ACCESS_DENIED`다.
+- 요청마다 멱등 키(`Idempotency-Key` 헤더)를 보낸다(§5.3.1).
 - 응답은 `201 Created`, `Location: /api/v1/events/{eventId}`, 본문은 행사(§3.5)다.
+- 등록 요청 수는 아직 제한하지 않는다(알려진 위험). 로그인한 EVENT_PARTNER가 키를 바꿔 가며 등록을 대량으로 보내면 행사가 그만큼 만들어진다. 쓰기 API의 사용자별 요청 제한은 NSU-100에서 정한다(SSOT `SEC-118`).
+
+#### 5.3.1 멱등 키
+
+> 구현 상태: 이 절과 §3.4의 이름 변경은 NSU-99 구현 PR이 머지될 때 서버에 반영된다. 그 전까지 서버는 이 헤더를 읽지 않고, 선택정보 불리언은 옛 이름을 쓴다(§12.1).
+
+**응답이 끊겨 다시 보낸 등록이 행사를 하나 더 만들지 않도록, 등록 요청마다 멱등 키를 받는다**([ADR 03](../adr/event_management/03_event_registration_idempotency_key.md)). 같은 키로 다시 오면 행사를 새로 만들지 않고, 그 키로 만든 행사를 돌려준다.
+
+```http
+POST /api/v1/events
+Authorization: Bearer {accessToken}
+Idempotency-Key: 8e03978e-40d5-43e8-bc93-6894a57f9324
+Content-Type: application/json
+```
+
+| 항목 | 규칙 |
+|---|---|
+| 필수 | 등록 요청마다 보낸다. 없으면 `400 VALIDATION_ERROR`다 |
+| 값 | 소문자 하이픈 표기 UUID(00 §6)이며 버전은 묻지 않는다. 따옴표로 감싸지 않는다. 형식이 틀리면 `400 VALIDATION_ERROR`다 |
+| 범위 | 키는 등록자마다 따로다. 다른 사용자가 같은 값을 보내도 서로 영향이 없다 |
+| 기록 | 행사를 저장할 때 키와 본문 해시를 함께 기록한다. 행사를 저장하지 못한 요청의 키는 기록하지 않는다 |
+| 기억하는 기간 | 그 키로 만든 행사 행이 있는 동안이다. 행사를 삭제한 뒤에도 기억한다(§5.6) |
+
+- 등록 외의 API는 이 헤더를 읽지 않는다. 수정·취소는 다시 보내도 결과가 같고, 다시 보낸 삭제는 §5.6을 따른다.
+- 상태 코드(키 없음 `400`, 다른 본문 `422`)는 IETF `Idempotency-Key` 헤더 초안(draft-07)을 따른다. 값을 따옴표로 감싸는 초안의 문법과, 처리 중인 요청에 대한 `409`는 따르지 않는다(ADR 03).
+
+**같은 키로 다시 보낸 요청**
+
+| 같은 키로 먼저 보낸 요청 | 다시 보낸 요청의 응답 |
+|---|---|
+| 행사를 저장했고, 그 행사를 삭제했다 | `404 EVENT_NOT_FOUND`(§5.6). 본문은 비교하지 않는다 |
+| 행사를 저장했고, 본문이 같다 | `201`, 처음과 같은 `Location`, **지금의** 행사(§3.5). 그 사이 수정·취소했으면 바뀐 값이다 |
+| 행사를 저장했고, 본문이 다르다 | `422 IDEMPOTENCY_KEY_REUSED`. 행사는 바뀌지 않는다 |
+| 행사를 저장하지 못했다(검증 실패, 서버 오류 등) | 기록된 키가 없으므로 처음 보낸 요청처럼 처리한다 |
+| 아직 처리 중이다 | 먼저 보낸 요청이 끝날 때까지 기다린 뒤 위 행 가운데 하나로 응답한다. 기다림이 상한을 넘으면 `503 EVENT_REGISTRATION_UNAVAILABLE`이다 |
+
+- 같은 키의 요청이 동시에 와도 행사는 하나만 만들어진다. DB가 (등록자, 키)의 중복을 막는다.
+- 등록의 SQL 문장마다 잠금 대기와 실행 시간에 상한(설정값, 기본 3초)이 있다. 같은 키의 처리 중인 요청을 기다리는 INSERT도 여기에 든다. 넘으면 행사를 저장하지 않고 `503 EVENT_REGISTRATION_UNAVAILABLE`이다. 먼저 보낸 요청이 멈춰도 기다리는 요청들이 DB 연결을 붙잡고 있지 않게 하기 위해서다.
+- 상한은 트랜잭션 전체가 아니라 문장마다 걸린다. 등록에서 오래 기다릴 수 있는 문장은 같은 키의 INSERT 하나라서, 실제 대기는 상한 남짓이다.
+- `503`에는 `Retry-After`를 붙이지 않는다. 서버도 언제 풀릴지 모르기 때문이다. 화면은 다른 `5xx`처럼 아래 간격 규칙에 따라 같은 키로 다시 보낸다.
+- 본문은 검증과 정규화(§3.1·§3.3·§3.4)를 마친 값으로 비교한다. 앞뒤 공백, 필드 순서, `genres`의 순서, `artistType`이나 `details`를 뺐는지 `null`로 보냈는지, 선택정보의 빈 문자열과 `null`만 다른 본문은 같은 본문이다. 서버가 무시하는 필드(§3.1)는 비교하지 않는다.
+- 시작 시각 검사(`EVENT_START_IN_PAST`)는 같은 키의 요청을 정리한 뒤, 행사를 새로 만드는 요청에만 한다(§9). 먼저 보낸 요청이 이미 저장했거나 아직 처리 중이면 다시 보낸 요청은 그 결과를 받으므로, 그사이 시작 시각이 지나도 `201`이다.
+- 본문 해시는 §8.3의 `isEventChanged` 지문과 다르다. 지문은 추천 입력 필드만 담고, 본문 해시는 본문 전체를 담는다.
+
+**화면이 할 일**
+
+- 등록 화면을 열 때 키를 하나 만든다(`crypto.randomUUID()`). 그 키의 결과가 확정될 때까지(`201`·`422`·`404`) 같은 키를 쓰고, 확정되면 키를 버린다. 다음 등록에는 새 키를 만든다. `400`·`5xx`·응답 없음은 결과가 확정되지 않았으므로 같은 키를 계속 쓴다.
+- `422`·`404` 뒤에도 키를 남겨 두면, 같은 탭에서 하는 다음 등록이 계속 `422`·`404`가 된다. 보낼 때마다 새 키를 만들면 다시 보낸 요청이 새 행사를 만든다. 새로고침 뒤에도 같은 키를 쓰려면 결과가 확정될 때까지 키를 `sessionStorage`에 둔다.
+- 응답을 받기 전에는 다시 보내지 않는다. [등록] 버튼을 막고, 여러 번 누른 것은 한 번으로 친다.
+- 응답을 받지 못했거나(네트워크 오류, 시간 초과) `5xx`를 받으면 같은 키와 같은 본문으로 다시 보낸다.
+- 자동으로 다시 보낼 때는 간격을 늘려 가며(예: 1초, 2초, 4초) 3번까지만 보내고, 그 뒤에는 사용자가 [다시 시도]를 누르게 한다. 서버가 느려졌을 때 다시 보낸 요청이 한꺼번에 몰리지 않게 하기 위해서다.
+- `400`을 받으면 입력을 고쳐 같은 키로 다시 보내도 된다. 그 키는 기록되지 않았다.
+- `422 IDEMPOTENCY_KEY_REUSED`는 응답을 받지 못한 요청이 이미 행사를 만들었는데, 본문을 바꿔 같은 키로 보낸 경우다. "이미 등록된 행사가 있어요"라고 안내하고 내 행사 목록(§6)으로 보낸다. 바꾼 내용은 그 행사를 수정해 반영한다.
 
 ### 5.4 수정
 
@@ -270,6 +325,8 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 
 - `DELETE`는 `204`이고, 행에 삭제 시각을 남긴다.
 - 삭제한 뒤에는 조회·수정·취소·추천을 누가 하든 `404 EVENT_NOT_FOUND`다. 등록자도 같고, 다시 `DELETE`해도 `404`다.
+- 응답을 받지 못해 다시 보낸 `DELETE`가 `404 EVENT_NOT_FOUND`를 받으면, 앞서 보낸 요청이 이미 지운 것이다. 화면은 삭제 성공으로 처리한다. 서버 동작은 그대로다.
+- 그 행사를 만든 멱등 키로 다시 보낸 등록도 `404`다(§5.3.1).
 - 시작 전후, `OPEN`·`CANCELLED`와 관계없이 지울 수 있다.
 - 추천 결과는 지우지 않는다. 02 §5.2의 생성 횟수(같은 행사 1분 간격, 사용자당 하루 5회)는 저장된 추천 결과로 세므로, 결과를 지우면 "등록 → 추천 5회 → 삭제"를 반복해 제한을 피할 수 있기 때문이다.
 - Offer가 생기면 Offer가 있는 행사는 삭제를 막고 취소만 허용하는 규칙을 더한다.
@@ -344,6 +401,7 @@ Authorization: Bearer {accessToken}
 ```
 
 - 시·도와 시·군·구는 코드 순이다. 이름은 공식 이름이며, 화면은 줄여 표시할 수 있다.
+- 목록은 페이지 없이 한 번에 전부 준다(시·도 16개, 시·군·구 230개). 행정구역이 개편될 때만 바뀌는 작은 목록이고, 화면이 두 단계 선택에 전부를 쓰기 때문이다. 00 §5의 페이지네이션 규칙에 대한 예외다.
 - 최상위를 배열이 아닌 객체로 둔다. 나중에 기준일 같은 필드를 깨지 않고 더하기 위해서다.
 
 | 시·도 코드 | 이름 | 시·도 코드 | 이름 |
@@ -432,20 +490,22 @@ AI 서버의 응답을 기다리는 동안 등록자가 행사를 고치거나 �
 |---|---|---|
 | 토큰 없음·만료·서명 오류 | 401 | `AUTHENTICATION_REQUIRED` |
 | `eventId`가 UUID 형식이 아님 | 400 | `INVALID_EVENT_ID` |
-| 본문·파라미터 검증 실패. 형식·필수·길이·범위, 목록에 없는 코드, 종료 ≤ 시작, 24시간 초과, 공연시간 초과, 예산 최소 > 최대, 장르 0개·4개 이상·중복, 정수 필드의 소수 | 400 | `VALIDATION_ERROR` |
+| 본문·파라미터 검증 실패. 형식·필수·길이·범위, 목록에 없는 코드, 종료 ≤ 시작, 24시간 초과, 공연시간 초과, 예산 최소 > 최대, 장르 0개·4개 이상·중복, 정수 필드의 소수. 등록의 `Idempotency-Key`가 없거나 형식이 틀림(따옴표로 감싼 값 포함) | 400 | `VALIDATION_ERROR` |
 | JSON 문법 오류, 필드 타입으로 바꿀 수 없는 값(정수 필드에 `"abc"` 등)이라 역직렬화가 실패함 | 400 | 없음. Spring 표준 `ProblemDetail`(ADR-007 §4.4) |
 | 등록·수정한 값의 시작이 지금과 같거나 지금보다 앞섬(시작 ≤ 지금) | 400 | `EVENT_START_IN_PAST` |
 | ARTIST의 등록·내 행사 목록. 볼 수 있는 행사를 등록자가 아닌 사람이 수정·취소·삭제 | 403 | `ACCESS_DENIED` |
-| 행사가 없음, 삭제됨, 볼 수 없는 PRIVATE | 404 | `EVENT_NOT_FOUND` |
+| 행사가 없음, 삭제됨, 볼 수 없는 PRIVATE. 같은 멱등 키로 다시 보낸 등록인데 그 키로 만든 행사를 삭제함 | 404 | `EVENT_NOT_FOUND` |
 | 시작한 행사의 수정·취소·추천 생성 | 409 | `EVENT_ALREADY_STARTED` |
 | 취소한 행사의 수정·추천 생성 | 409 | `EVENT_CANCELLED` |
+| 같은 `Idempotency-Key`로 먼저 저장한 등록과 다른 본문을 보냄(§5.3.1) | 422 | `IDEMPOTENCY_KEY_REUSED` |
 | 서버 오류 | 500 | `INTERNAL_SERVER_ERROR` |
+| 등록의 SQL 문장이 잠금 대기·실행 시간 상한을 넘음. 같은 키의 처리 중인 요청을 기다린 경우를 포함한다(§5.3.1). `Retry-After` 없음 | 503 | `EVENT_REGISTRATION_UNAVAILABLE` |
 
 검사 순서는 다음과 같다.
 
 | 요청 | 순서 |
 |---|---|
-| 등록 | `401` → `403`(역할) → `400 VALIDATION_ERROR` → `400 EVENT_START_IN_PAST` → `201` |
+| 등록 | `401` → `403`(역할) → `400 VALIDATION_ERROR`(키·본문) → 같은 키 확인(처리 중이면 기다리고, 상한을 넘으면 `503`). 저장된 행사가 있으면 `404`(삭제됨)·`422`(다른 본문)·`201`(같은 본문) → 새로 만드는 요청만 `400 EVENT_START_IN_PAST` → `201` |
 | 상세 | `401` → `400 INVALID_EVENT_ID` → `404` → `200` |
 | 수정 | `401` → `400`(경로·본문 형식) → `404` → `403` → `409` → `400 EVENT_START_IN_PAST` → `200` |
 | 취소 | `401` → `400 INVALID_EVENT_ID` → `404` → `403` → `200`(이미 취소됨, 시작 여부와 관계없음) → `409 EVENT_ALREADY_STARTED` → `200` |
@@ -453,6 +513,7 @@ AI 서버의 응답을 기다리는 동안 등록자가 행사를 고치거나 �
 | 내 행사 목록 | `401` → `403`(역할) → `400 VALIDATION_ERROR` → `200` |
 
 - 수정에서 본문 형식 검사(`400`)는 행사를 조회하기 전에 한다. `400`은 행사가 있는지 드러내지 않는다.
+- 등록에서 같은 키의 확인은 처리 중인 요청을 기다리는 것까지 포함해 `EVENT_START_IN_PAST`보다 먼저 한다. 먼저 보낸 요청이 행사를 저장한 뒤(커밋 전 포함) 시작 시각이 지나도, 다시 보낸 요청이 `400`을 받아 실패로 보이지 않게 하기 위해서다(§5.3.1).
 
 ```json
 {
@@ -468,6 +529,7 @@ AI 서버의 응답을 기다리는 동안 등록자가 행사를 고치거나 �
 ```http
 POST /api/v1/events
 Authorization: Bearer {accessToken}
+Idempotency-Key: 8e03978e-40d5-43e8-bc93-6894a57f9324
 Content-Type: application/json
 ```
 
@@ -492,13 +554,13 @@ Content-Type: application/json
   "details": {
     "rehearsal": "공연 2시간 전 30분",
     "stageSize": "8m × 6m",
-    "paProvided": true,
+    "isPaProvided": true,
     "microphones": "무선 2개, 유선 4개",
     "instruments": "드럼 세트, 베이스 앰프",
-    "waitingRoomProvided": true,
-    "mealProvided": true,
-    "transportationFeeProvided": false,
-    "accommodationProvided": null,
+    "isWaitingRoomProvided": true,
+    "isMealProvided": true,
+    "isTransportationFeeProvided": false,
+    "isAccommodationProvided": null,
     "otherConditions": null
   }
 }
@@ -533,13 +595,13 @@ Location: /api/v1/events/0192f3a4-7b1c-7d2e-8f00-1a2b3c4d5e6f
   "details": {
     "rehearsal": "공연 2시간 전 30분",
     "stageSize": "8m × 6m",
-    "paProvided": true,
+    "isPaProvided": true,
     "microphones": "무선 2개, 유선 4개",
     "instruments": "드럼 세트, 베이스 앰프",
-    "waitingRoomProvided": true,
-    "mealProvided": true,
-    "transportationFeeProvided": false,
-    "accommodationProvided": null,
+    "isWaitingRoomProvided": true,
+    "isMealProvided": true,
+    "isTransportationFeeProvided": false,
+    "isAccommodationProvided": null,
     "otherConditions": null
   },
   "createdAt": "2026-10-18T14:03:12+09:00",
@@ -556,6 +618,21 @@ Authorization: Bearer {accessToken}
 
 `200 OK`, 본문은 `status = CANCELLED`인 행사다. 같은 요청을 다시 보내도 `200`이고 행사는 바뀌지 않는다.
 
+### 10.3 같은 키로 다시 보낸 등록
+
+§10.1의 응답을 받지 못해 같은 `Idempotency-Key`와 같은 본문으로 다시 보내면, 행사를 새로 만들지 않고 `201`과 같은 `Location`, 같은 `id`의 행사를 돌려준다. 같은 키로 `name`만 바꿔 보내면 다음과 같다.
+
+```http
+HTTP/1.1 422 Unprocessable Content
+```
+
+```json
+{
+  "code": "IDEMPOTENCY_KEY_REUSED",
+  "message": "같은 멱등 키로 다른 내용의 등록을 보냈습니다."
+}
+```
+
 ## 11. 테스트 기준
 
 | 대상 | 경우 |
@@ -571,18 +648,38 @@ Authorization: Bearer {accessToken}
 | 잠금 | 시작한 `OPEN` 행사의 수정·취소·추천은 `409 EVENT_ALREADY_STARTED`. 취소된 행사의 수정·추천은 `EVENT_CANCELLED`, 취소는 `200`. 시작 전에 취소한 행사를 시작 뒤에 다시 취소해도 `200`. 시작한 행사의 시작을 미래로 바꾸는 수정도 `409` |
 | 삭제 | 삭제 뒤 등록자의 조회·수정·취소·추천·삭제가 모두 `404`. 삭제해도 추천 결과는 남고 하루 5회 계산에 들어간다 |
 | 열람 | 다른 사용자의 PUBLIC 조회 `200`, PRIVATE 조회 `404`. 다른 사용자의 PUBLIC 수정 `403`, PRIVATE 수정 `404` |
-| 역할 | ARTIST의 등록·내 행사 목록은 `403` |
+| 역할 | ARTIST의 등록·내 행사 목록은 `403`. ARTIST가 멱등 키 없이 등록해도 `403`(역할을 키보다 먼저 검사) |
 | 목록 | 시작 = 지금인 행사는 `PAST`. `UPCOMING` 오름차순, `PAST` 내림차순. `size = 101`은 `400`, 끝을 넘은 `page`는 `items: []` |
 | 지문 | `name`·`details` 수정은 `isEventChanged = false`, `endDate`·`regionCode` 수정은 `true`. `genres` 순서만 바꾸면 `false` |
 | 생성 중 변경 | AI 응답을 기다리는 동안 행사를 취소하면 결과가 저장되고 `201`. 삭제하면 결과가 저장되고 `404`이며, 그 결과가 하루 5회 계산에 들어간다. `name`만 고치면 생성 응답의 `isEventChanged = false`, `endDate`를 고치면 `true`. 저장 직전 횟수 재확인에서 한도를 넘으면 행사를 지웠어도 `429`이고 저장하지 않는다 |
 | 비공개 | PRIVATE으로 등록할 수 있다. 등록자는 `200`, 다른 사용자는 `404`. 오래된 화면의 PUT으로 PUBLIC으로 되돌아가는 것은 알려진 위험이다(§5.4) |
+| 멱등 키 형식 | 키가 없으면 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다. 따옴표로 감싼 값, 대문자 UUID, UUID가 아닌 값도 `VALIDATION_ERROR`다. UUIDv4와 UUIDv7은 통과 |
+| 다시 보낸 등록 | 같은 키·같은 본문이면 `201`, 같은 `id`와 `Location`이며 행사는 1건이다. 앞뒤 공백·`genres` 순서·`details` 생략만 다른 본문도 같은 본문이다 |
+| 키 재사용 | 같은 키로 `name`만 바꿔 보내면 `422 IDEMPOTENCY_KEY_REUSED`이고 행사는 바뀌지 않는다. 다른 사용자가 같은 키로 등록하면 각자 `201`이다 |
+| 다시 보낸 시점 | 등록 뒤 수정했으면 수정된 행사로 `201`, 취소했으면 `status = CANCELLED`인 행사로 `201`. 삭제했으면 본문이 달라도 `404`. 시작 시각이 지난 뒤 다시 보내도 `201`(시계를 고정해 테스트). `400`으로 실패한 요청의 키로 고친 본문을 보내면 `201` |
+| 동시 등록 | 같은 키·같은 본문의 등록 두 개를 동시에 보내면 행사는 1건이고, 두 응답 모두 `201`과 같은 `id`다. 같은 키에 본문이 다른 등록 두 개를 동시에 보내면 하나는 `201`, 다른 하나는 `422`다. 어느 경우도 `500`이 아니다 |
+| 커밋 전 시작 시각 | 먼저 보낸 요청이 행사를 저장하고 커밋하기 전에 시계를 시작 시각 뒤로 넘긴 뒤 같은 키로 보내면, 먼저 보낸 요청이 커밋한 뒤 `201`과 같은 `id`다(`EVENT_START_IN_PAST` 아님) |
+| 대기 상한 | 먼저 보낸 요청의 트랜잭션을 상한보다 오래 붙잡아 두면, 같은 키로 보낸 요청은 상한 안에 `503 EVENT_REGISTRATION_UNAVAILABLE`로 끝나고 DB 연결을 돌려준다(연결 풀을 작게 둔 테스트에서 다른 API 요청이 성공). 그 뒤 먼저 보낸 요청이 커밋하고 같은 키로 다시 보내면 `201` |
+| 불리언 이름 | 요청의 `isPaProvided` 등 새 이름이 저장되고, 응답 `details`에는 새 이름만 있다(`paProvided` 없음) |
 
 ## 12. 함께 바뀌는 문서
 
 | 문서 | 바뀌는 내용 | 상태 |
 |---|---|---|
-| SSOT v1.16 (minor) | `EVT-042`의 Event Date를 시작·종료 날짜로 나누고, 지역 단위(시·군·구)와 희망 Genre 1~3개를 적는다. `AI-MATCH-051`의 "행사 날짜 공연 가능 여부"를 "행사 시간대 공연 가능 여부"로 바꾼다 | 팀 승인 전 |
+| SSOT v1.16 (minor) | `EVT-042`의 Event Date를 시작·종료 날짜로 나누고, 지역 단위(시·군·구)와 희망 Genre 1~3개를 적는다. `AI-MATCH-051`의 "행사 날짜 공연 가능 여부"를 "행사 시간대 공연 가능 여부"로 바꾼다 | 승인(2026-10-18 Human Confirm) |
 | [02 추천 응답](./02_recommendation_trust_and_new_artist.md) | §0의 미정 항목 2개(요청 본문, 취소·삭제된 행사)를 이 문서 §5.2·§8로 넘기고, §0.1·§1·§4.3·§5·§5.2에 행사 상태, 필드 이름, 검사 순서, 생성 중 변경(§8.4)을 반영한다 | 이 변경에 포함 |
 | [00 공통 규칙](./00_conventions.md) | `/me` 경로, 상태 전이용 1:1 하위 자원, 지역 코드 예외, 날짜·시:분 형식, 페이지네이션 | 이 변경에 포함 |
 | 용어집 (Linear) | 행사, 행사 시간대·공연시간, 행사 취소·행사 삭제, 추천 요청(피할 표현: 매칭 요청) | 설계 리뷰 뒤 반영 |
 | 프런트 | `date`를 시작·종료 날짜로 나누고 예산을 원 단위로 바꾼다. 한국어 값을 코드로, 지역을 두 단계 선택으로 바꾸고 선택정보 칸을 더한다. PRIVATE 안내 문구를 지금의 동작("등록한 사람만 볼 수 있어요")으로 바꾼다. localStorage 대신 API를 쓴다. 매칭 화면의 분위기·템포·리듬 입력은 행사 설명으로 옮긴다 | 프런트 담당과 협의 |
+
+### 12.1 등록 멱등 키와 불리언 이름 (NSU-99, 2026-10-18)
+
+**이미 구현된 행사 API를 바꾸는 breaking change다.** 00 §1은 v1 안에서 기존 클라이언트를 깨는 변경을 하지 않고 `/api/v2`를 열도록 정한다. 지금 이 API를 호출하는 화면이 없어 깨지는 클라이언트가 없으므로, `/api/v2`를 열지 않고 v1을 바꾼다(00 §1의 예외).
+
+- 서버 반영: NSU-99 구현 PR이 머지될 때다. 그 전까지 서버는 `Idempotency-Key`를 읽지 않고, 선택정보 불리언을 옛 이름으로 주고받는다. 화면은 구현 PR이 머지된 뒤에 아래처럼 바꾼다.
+
+| 바뀌는 것 | 전 | 후 | 화면이 할 일 |
+|---|---|---|---|
+| 선택정보 불리언 이름(§3.4) | `paProvided`, `waitingRoomProvided`, `mealProvided`, `transportationFeeProvided`, `accommodationProvided` | `isPaProvided`, `isWaitingRoomProvided`, `isMealProvided`, `isTransportationFeeProvided`, `isAccommodationProvided` | 새 이름으로 보내고 읽는다. 옛 이름으로 보내면 모르는 필드로 무시되어 `null`로 저장된다 |
+| 등록의 멱등 키(§5.3.1) | 없음 | `Idempotency-Key` 필수 | 등록 화면을 열 때 키를 만들고, 응답을 받지 못했을 때 같은 키로 다시 보낸다. 결과가 확정되면(`201`·`422`·`404`) 키를 버린다. `422 IDEMPOTENCY_KEY_REUSED`를 안내한다 |
+| 다시 보낸 삭제(§5.6) | 정하지 않음 | `404`는 삭제 성공으로 처리 | 화면 처리만 바뀐다. 서버 동작은 그대로다 |

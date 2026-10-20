@@ -126,19 +126,34 @@ public abstract class EventIntegrationTestBase {
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("rehearsal", "공연 2시간 전 30분");
         details.put("stageSize", "8m × 6m");
-        details.put("paProvided", true);
+        details.put("isPaProvided", true);
         details.put("microphones", "무선 2개, 유선 4개");
         details.put("instruments", "드럼 세트, 베이스 앰프");
-        details.put("waitingRoomProvided", true);
-        details.put("mealProvided", true);
-        details.put("transportationFeeProvided", false);
-        details.put("accommodationProvided", null);
+        details.put("isWaitingRoomProvided", true);
+        details.put("isMealProvided", true);
+        details.put("isTransportationFeeProvided", false);
+        details.put("isAccommodationProvided", null);
         details.put("otherConditions", null);
         body.put("details", details);
         return body;
     }
 
+    /** 요청마다 새 멱등 키를 붙여 등록한다. */
     protected ResultActions register(User caller, Map<String, Object> body) throws Exception {
+        return register(caller, body, UUID.randomUUID().toString());
+    }
+
+    protected ResultActions register(User caller, Map<String, Object> body, String idempotencyKey)
+        throws Exception {
+        return mockMvc.perform(post("/api/v1/events")
+            .header("Authorization", bearer(caller))
+            .header("Idempotency-Key", idempotencyKey)
+            .contentType(APPLICATION_JSON)
+            .content(objectMapper.writeValueAsString(body)));
+    }
+
+    /** 멱등 키 헤더 없이 등록한다. */
+    protected ResultActions registerWithoutKey(User caller, Map<String, Object> body) throws Exception {
         return mockMvc.perform(post("/api/v1/events")
             .header("Authorization", bearer(caller))
             .contentType(APPLICATION_JSON)

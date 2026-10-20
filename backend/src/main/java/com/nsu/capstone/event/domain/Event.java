@@ -90,7 +90,28 @@ public class Event {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    /** 등록 멱등 키와 처음 본문의 해시(ADR event_management/03). 수정해도 바뀌지 않는다. */
+    @Column(name = "idempotency_key", updatable = false)
+    private UUID idempotencyKey;
+
+    @Column(name = "request_hash", length = 64, updatable = false)
+    private String requestHash;
+
     protected Event() {
+    }
+
+    public static Event register(
+        UUID id,
+        UUID eventPartnerId,
+        EventContent content,
+        Clock clock,
+        UUID idempotencyKey,
+        String requestHash
+    ) {
+        Event event = register(id, eventPartnerId, content, clock);
+        event.idempotencyKey = idempotencyKey;
+        event.requestHash = requestHash;
+        return event;
     }
 
     public static Event register(UUID id, UUID eventPartnerId, EventContent content, Clock clock) {
@@ -234,5 +255,13 @@ public class Event {
 
     public Instant getDeletedAt() {
         return deletedAt;
+    }
+
+    public UUID getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public String getRequestHash() {
+        return requestHash;
     }
 }

@@ -26,10 +26,12 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 | 컬렉션 자원 | 복수형 명사 | `artists` |
 | 1:1 하위 자원 | 단수형 명사 | `trust-profile` |
 | JSON 필드, 쿼리 파라미터 | camelCase | `policyVersion`, `artistId` |
+| 불리언 JSON 필드 | `is`·`has`·`can`으로 시작하는 camelCase | `isNewArtist`, `isPaProvided` |
 | enum 값 | UPPER_SNAKE_CASE 문자열 | `RECENT_NO_SHOW` |
 
 - CRUD로 표현하기 어려운 상태 전이는 동사 경로 대신 단수형 명사의 1:1 하위 자원에 `PUT`으로 둔다(예: `PUT /api/v1/events/{eventId}/cancellation`). 같은 요청을 다시 보내도 결과가 같다.
 - 예외: 지역 코드는 UPPER_SNAKE가 아니라 행정안전부 법정동코드의 숫자 문자열이다(예: `11680`). 공인 코드를 써야 시·도와 시·군·구의 포함 관계를 코드 앞자리로 알 수 있다([03 §7](./03_events.md#7-지역-목록)).
+- 불리언 필드는 무엇이 참인지 이름으로 알 수 있게 접두사를 붙인다. [03 선택정보](./03_events.md#34-선택정보-details)에서 정했다(2026-10-18). 그 전에 구현된 Auth API의 `emailVerified`는 화면이 이미 쓰고 있어 바꾸지 않는다.
 
 ## 3. 응답 형태
 
@@ -54,7 +56,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 
 ## 5. 페이지네이션
 
-크기가 정책으로 고정된 응답(Trust Profile, 추천 결과)은 페이지네이션하지 않는다. 크기가 늘어나는 목록은 offset 방식을 쓴다. [03 내 행사 목록](./03_events.md#6-내-행사-목록)에서 처음 정했다(2026-10-18).
+크기가 정책으로 고정된 응답(Trust Profile, 추천 결과)과 행정구역이 개편될 때만 바뀌는 지역 목록([03 §7](./03_events.md#7-지역-목록), 시·군·구 230개)은 페이지네이션하지 않는다. 크기가 늘어나는 목록은 offset 방식을 쓴다. [03 내 행사 목록](./03_events.md#6-내-행사-목록)에서 처음 정했다(2026-10-18).
 
 | 항목 | 규칙 |
 |---|---|
@@ -112,8 +114,11 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 | 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음, 만료, 서명 오류 |
 | 403 | `ACCESS_DENIED` | 인증은 됐지만 호출 주체에게 허용되지 않은 요청 |
 | 404 | `{대상}_NOT_FOUND` | 대상이 없거나 호출 주체에게 존재를 드러내지 않는 대상 |
+| 422 | `IDEMPOTENCY_KEY_REUSED` | 같은 `Idempotency-Key`로 먼저 처리한 요청과 다른 본문을 보냄 |
 | 429 | `TOO_MANY_REQUESTS` | 요청 제한을 넘음. `Retry-After` 헤더에 다시 시도할 수 있을 때까지 남은 초를 준다. 이미 있는 기능별 code(예: `VERIFICATION_REQUEST_LIMIT_EXCEEDED`)는 그대로 쓴다 |
 | 500 | `INTERNAL_SERVER_ERROR` | 서버 오류. 예외 메시지·스택 트레이스 등 내부 정보를 담지 않는다 |
+
+- 멱등 키(`Idempotency-Key` 헤더)는 [03 행사 등록 §5.3.1](./03_events.md#531-멱등-키)에서 처음 정했다(2026-10-18). 값은 따옴표 없는 소문자 하이픈 표기 UUID이고, 키는 호출자마다 따로다. 다른 생성 API가 멱등 키를 받게 되면 같은 헤더·값 형식과 `400 VALIDATION_ERROR`·`422 IDEMPOTENCY_KEY_REUSED` 규칙을 따른다.
 
 구현 메모:
 

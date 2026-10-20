@@ -1,5 +1,6 @@
 package com.nsu.capstone.event;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -10,18 +11,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
 import java.math.BigInteger;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+@DisplayName("행사 등록·상세 조회 API")
 class EventApiIntegrationTest extends EventIntegrationTestBase {
 
     @Test
+    @DisplayName("EVENT_PARTNER가 행사를 등록하면 201과 계약 형식의 행사를 돌려준다")
     void partnerRegistersEventAndGetsItBackInContractShape() throws Exception {
         register(partner, validBody())
             .andExpect(status().isCreated())
@@ -40,13 +47,14 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
             .andExpect(jsonPath("$.genres[1]").value("ROCK"))
             .andExpect(jsonPath("$.budgetMin").value(300000))
             .andExpect(jsonPath("$.visibility").value("PUBLIC"))
-            .andExpect(jsonPath("$.details.paProvided").value(true))
-            .andExpect(jsonPath("$.details.accommodationProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isPaProvided").value(true))
+            .andExpect(jsonPath("$.details.isAccommodationProvided").value(nullValue()))
             .andExpect(jsonPath("$.createdAt").value(endsWith("+09:00")))
             .andExpect(jsonPath("$.deletedAt").doesNotExist());
     }
 
     @Test
+    @DisplayName("ARTIST는 행사를 등록할 수 없다(403)")
     void artistCannotRegisterEvent() throws Exception {
         User artist = newUser(UserRole.ARTIST, "artist@example.com");
 
@@ -56,6 +64,7 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("장르는 요청 순서와 관계없이 계약에 정한 순서로 돌려준다")
     void responseListsGenresInContractOrderEvenWhenRequestedInAnotherOrder() throws Exception {
         String id = registeredId(validBody());
 
@@ -67,6 +76,7 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("details와 artistType을 빼고 등록하면 null로 저장한다")
     void omittedDetailsAndArtistTypeAreStoredAsNullFields() throws Exception {
         Map<String, Object> body = validBody();
         body.remove("details");
@@ -76,11 +86,12 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.artistType").value(nullValue()))
             .andExpect(jsonPath("$.details.rehearsal").value(nullValue()))
-            .andExpect(jsonPath("$.details.paProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isPaProvided").value(nullValue()))
             .andExpect(jsonPath("$.details.otherConditions").value(nullValue()));
     }
 
     @Test
+    @DisplayName("공백뿐인 details 글은 null로 저장하고, 본문에 넣은 id·status·eventPartnerId는 무시한다")
     void blankDetailTextIsStoredAsNullAndServerFieldsInBodyAreIgnored() throws Exception {
         Map<String, Object> body = validBody();
         @SuppressWarnings("unchecked")
@@ -109,6 +120,7 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("acceptedWindows")
+    @DisplayName("허용 범위 안의 시간대는 등록할 수 있다")
     void acceptsValidTimeWindows(
         String label, String startDate, String startTime, String endDate, String endTime, int minutes
     ) throws Exception {
@@ -170,6 +182,7 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("rejectedBodies")
+    @DisplayName("잘못된 값이 든 본문은 400 VALIDATION_ERROR로 거부한다")
     void rejectsInvalidBodyWithValidationError(String label, Map<String, Object> overrides)
         throws Exception {
         Map<String, Object> body = validBody();
@@ -181,6 +194,7 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("필수 필드가 하나라도 빠지면 400 VALIDATION_ERROR로 거부한다")
     void rejectsMissingRequiredFieldWithValidationError() throws Exception {
         for (String field : List.of(
             "name", "eventType", "startDate", "startTime", "endDate", "endTime",
@@ -197,6 +211,7 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("예산이 0원인 무료 행사도 등록할 수 있다")
     void acceptsFreeOfChargeBudget() throws Exception {
         Map<String, Object> body = validBody();
         body.put("budgetMin", 0);
@@ -206,6 +221,7 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("시작 시각이 지금이면 EVENT_START_IN_PAST로 거부하고, 1분 뒤면 등록한다")
     void rejectsStartEqualToNowButAcceptsOneMinuteLater() throws Exception {
         Map<String, Object> body = validBody();
         body.put("startDate", "2026-10-18");
@@ -222,6 +238,7 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("본문 오류와 지난 시작 시각이 함께 있으면 VALIDATION_ERROR를 먼저 돌려준다")
     void validationErrorComesBeforeStartInPast() throws Exception {
         Map<String, Object> body = validBody();
         body.put("startDate", "2026-10-17");
@@ -236,6 +253,7 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
     // ---- 상세 조회 (03 §4, §9) ----
 
     @Test
+    @DisplayName("다른 사용자는 공개 행사만 볼 수 있고, 비공개 행사는 등록자만 볼 수 있다")
     void otherLoggedInUsersSeePublicEventButNotPrivateOne() throws Exception {
         User artist = newUser(UserRole.ARTIST, "artist@example.com");
         User otherPartner = newUser(UserRole.EVENT_PARTNER, "other@example.com");
@@ -258,6 +276,7 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("상세 조회는 잘못된 id(400), 없는 id(404), 토큰 없음(401)을 거부한다")
     void detailRejectsMalformedIdUnknownIdAndMissingToken() throws Exception {
         mockMvc.perform(get("/api/v1/events/not-a-uuid").header("Authorization", bearer(partner)))
             .andExpect(status().isBadRequest())
@@ -271,5 +290,61 @@ class EventApiIntegrationTest extends EventIntegrationTestBase {
             .andExpect(jsonPath("$.code").value("EVENT_NOT_FOUND"));
         mockMvc.perform(get("/api/v1/events/" + UUID.randomUUID()))
             .andExpect(status().isUnauthorized());
+    }
+
+    // ---- 선택정보 불리언 이름 (03 §3.4, NSU-99) ----
+
+    @Test
+    void booleanDetailsUseIsPrefixedNamesOnRequestAndResponse() throws Exception {
+        Map<String, Object> body = validBody();
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("isPaProvided", true);
+        details.put("isWaitingRoomProvided", false);
+        details.put("isMealProvided", true);
+        details.put("isTransportationFeeProvided", false);
+        details.put("isAccommodationProvided", true);
+        body.put("details", details);
+
+        register(partner, body)
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.details.isPaProvided").value(true))
+            .andExpect(jsonPath("$.details.isWaitingRoomProvided").value(false))
+            .andExpect(jsonPath("$.details.isMealProvided").value(true))
+            .andExpect(jsonPath("$.details.isTransportationFeeProvided").value(false))
+            .andExpect(jsonPath("$.details.isAccommodationProvided").value(true));
+    }
+
+    @Test
+    void responseDetailsContainExactlyTheTenContractNames() throws Exception {
+        String json = register(partner, validBody()).andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+
+        Set<String> names = new TreeSet<>();
+        objectMapper.readTree(json).get("details").propertyNames().forEach(names::add);
+
+        assertThat(names).containsExactlyInAnyOrder(
+            "rehearsal", "stageSize", "isPaProvided", "microphones", "instruments",
+            "isWaitingRoomProvided", "isMealProvided", "isTransportationFeeProvided",
+            "isAccommodationProvided", "otherConditions");
+    }
+
+    @Test
+    void oldBooleanNamesAreIgnoredAndStoredAsNull() throws Exception {
+        Map<String, Object> body = validBody();
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("paProvided", true);
+        details.put("waitingRoomProvided", true);
+        details.put("mealProvided", true);
+        details.put("transportationFeeProvided", true);
+        details.put("accommodationProvided", true);
+        body.put("details", details);
+
+        register(partner, body)
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.details.isPaProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isWaitingRoomProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isMealProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isTransportationFeeProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isAccommodationProvided").value(nullValue()));
     }
 }

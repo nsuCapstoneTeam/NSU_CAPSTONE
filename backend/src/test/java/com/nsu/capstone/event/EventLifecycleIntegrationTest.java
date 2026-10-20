@@ -14,10 +14,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.ResultActions;
 
 /** 수정·취소·삭제와 시작 시각 기준 잠금(03 행사 API §5). 시작은 2026-11-06 18:00(KST)이다. */
+@DisplayName("행사 수정·취소·삭제 API")
 class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
 
     static final Instant START = Instant.parse("2026-11-06T09:00:00Z");
@@ -47,6 +49,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     // ---- 수정 ----
 
     @Test
+    @DisplayName("등록자가 행사를 수정하면 통째로 바뀌고, 빠진 details는 지워진다")
     void ownerReplacesEventAndOmittedDetailsAreCleared() throws Exception {
         String id = registeredId(validBody());
         clock.set(NOW.plusSeconds(3600));
@@ -66,7 +69,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
             .andExpect(jsonPath("$.endTime").value("20:00"))
             .andExpect(jsonPath("$.genres[0]").value("JAZZ"))
             .andExpect(jsonPath("$.artistType").value(nullValue()))
-            .andExpect(jsonPath("$.details.paProvided").value(nullValue()))
+            .andExpect(jsonPath("$.details.isPaProvided").value(nullValue()))
             .andExpect(jsonPath("$.createdAt").value("2026-10-18T10:00:00+09:00"))
             .andExpect(jsonPath("$.updatedAt").value("2026-10-18T11:00:00+09:00"));
 
@@ -76,6 +79,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("수정은 행사를 찾기 전에 본문부터 검사한다")
     void updateChecksBodyBeforeLookingUpTheEvent() throws Exception {
         Map<String, Object> invalid = validBody();
         invalid.put("genres", List.of());
@@ -92,6 +96,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("시작 전 행사의 시작 시각을 과거로 바꾸면 EVENT_START_IN_PAST로 거부한다")
     void updateRejectsStartInPastForOpenEventBeforeItStarts() throws Exception {
         String id = registeredId(validBody());
         Map<String, Object> body = validBody();
@@ -106,6 +111,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("다른 사용자가 수정하면 공개 행사는 403, 비공개 행사는 404다")
     void updateByOtherUserIs403ForPublicAnd404ForPrivate() throws Exception {
         User artist = newUser(UserRole.ARTIST, "artist@example.com");
         String publicId = registeredId(validBody());
@@ -124,6 +130,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     // ---- 시작 시각 기준 잠금 ----
 
     @Test
+    @DisplayName("시작한 행사는 수정도 취소도 할 수 없다(409 EVENT_ALREADY_STARTED)")
     void startedOpenEventCannotBeUpdatedOrCancelledEvenToMoveStartToFuture() throws Exception {
         String id = registeredId(validBody());
         clock.set(START);
@@ -138,6 +145,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("시작 1초 전까지는 수정할 수 있다")
     void eventStartingOneSecondLaterIsStillEditable() throws Exception {
         String id = registeredId(validBody());
         clock.set(START.minusSeconds(1));
@@ -146,6 +154,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("시작한 행사라도 본문 오류가 있으면 VALIDATION_ERROR를 먼저 돌려준다")
     void bodyErrorComesBeforeStartedLock() throws Exception {
         String id = registeredId(validBody());
         clock.set(START);
@@ -160,6 +169,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     // ---- 취소 ----
 
     @Test
+    @DisplayName("등록자가 행사를 취소할 수 있고, 다시 취소해도 결과가 바뀌지 않는다")
     void ownerCancelsEventAndRepeatedCancellationIsUnchanged() throws Exception {
         String id = registeredId(validBody());
         clock.set(NOW.plusSeconds(60));
@@ -177,6 +187,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("취소한 행사는 수정할 수 없고, 시작 시각이 지나도 EVENT_CANCELLED로 응답한다")
     void cancelledEventCannotBeUpdatedAndCancelledStartedEventStillSaysCancelled() throws Exception {
         String id = registeredId(validBody());
         cancel(partner, id).andExpect(status().isOk());
@@ -196,6 +207,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("다른 사용자가 취소하면 공개 행사는 403, 비공개 행사는 404다")
     void cancelByOtherUserIs403ForPublicAnd404ForPrivate() throws Exception {
         User other = newUser(UserRole.EVENT_PARTNER, "other@example.com");
         String publicId = registeredId(validBody());
@@ -217,6 +229,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     // ---- 삭제 ----
 
     @Test
+    @DisplayName("삭제한 행사는 등록자에게도 404다")
     void deletedEventIsNotFoundForEveryoneIncludingOwner() throws Exception {
         String id = registeredId(validBody());
 
@@ -233,6 +246,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("시작했거나 취소한 행사도 삭제할 수 있다")
     void startedAndCancelledEventsCanBeDeleted() throws Exception {
         String started = registeredId(validBody());
         String cancelled = registeredId(validBody());
@@ -244,6 +258,7 @@ class EventLifecycleIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    @DisplayName("다른 사용자가 삭제하면 공개 행사는 403, 비공개 행사는 404다")
     void deleteByOtherUserIs403ForPublicAnd404ForPrivate() throws Exception {
         User other = newUser(UserRole.EVENT_PARTNER, "other@example.com");
         String publicId = registeredId(validBody());

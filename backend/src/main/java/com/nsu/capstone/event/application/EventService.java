@@ -6,7 +6,6 @@ import com.nsu.capstone.event.region.RegionRepository;
 import com.nsu.capstone.event.repository.EventRepository;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
-import com.nsu.capstone.identity.support.UuidV7Generator;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -26,30 +25,18 @@ public class EventService {
     private final EventRepository eventRepository;
     private final RegionRepository regionRepository;
     private final EventAccessPolicy accessPolicy;
-    private final UuidV7Generator idGenerator;
     private final Clock clock;
 
     EventService(
         EventRepository eventRepository,
         RegionRepository regionRepository,
         EventAccessPolicy accessPolicy,
-        UuidV7Generator idGenerator,
         Clock clock
     ) {
         this.eventRepository = eventRepository;
         this.regionRepository = regionRepository;
         this.accessPolicy = accessPolicy;
-        this.idGenerator = idGenerator;
         this.clock = clock;
-    }
-
-    @Transactional
-    public Event register(UUID eventPartnerId, EventContent content) {
-        requireKnownRegion(content);
-        requireStartAfterNow(content);
-        return eventRepository.save(
-            Event.register(idGenerator.generate(), eventPartnerId, content, clock)
-        );
     }
 
     @Transactional(readOnly = true)
