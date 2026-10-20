@@ -20,7 +20,7 @@
   - 에러 `@ApiResponse`(클래스 단위 `401` 포함)가 걸린 메서드는 성공 응답도 `@ApiResponse`로 적는다. springdoc는 명시한 응답이 있으면 `@ResponseStatus`가 없는 메서드의 `200`을 만들지 않는다. `ResponseEntity`로 상태를 정하는 메서드(등록 `201`, 삭제 `204`)는 자동 생성이 `200`으로 적으므로 이 규칙이 아니어도 적어야 한다.
 - 코드가 계약과 다르게 받는 입력은 문서 어노테이션으로 필수 여부, 정수 타입, 허용 값을 보정한다. 코드의 선언(`required = false`, `String`, `BigDecimal`)은 오류 순서(03 §9)를 지키려는 것이라 그대로 둔다.
   - 등록의 `Idempotency-Key`: `@Parameter(required = true)`
-  - 등록·수정 본문 `EventRequest`: 필수 필드는 `@Schema(requiredMode = REQUIRED)`, 정수 필드(`performanceMinutes`, `budgetMin`, `budgetMax`, `expectedAudience`)는 `@Schema(type = "integer")`, 코드값(`eventType`, `artistType`, `visibility`, `genres`)은 도메인 enum을 `@Schema(implementation = ...)`로 가리킨다. 목록을 문자열로 다시 쓰지 않는다.
+  - 등록·수정 본문 `EventRequest`: 필수 필드는 `@Schema(requiredMode = REQUIRED)`, 정수 필드(`performanceMinutes`, `budgetMin`, `budgetMax`, `expectedAudience`)는 `@Schema(types = "integer")`, 코드값(`eventType`, `artistType`, `visibility`)은 도메인 enum을 `@Schema(implementation = ...)`로, `genres` 원소는 `@ArraySchema(schema = @Schema(implementation = Genre.class))`로 가리킨다. springdoc 3은 OpenAPI 3.1로 문서를 만들어 `type` 속성이 반영되지 않으므로 `types`를 쓴다. 목록을 문자열로 다시 쓰지 않는다.
   - 내 행사 목록 쿼리: `period`는 `EventPeriod`, `page`·`size`는 정수로 보정한다.
   - 지역 코드(`regionCode`)는 허용 값을 적지 않는다. DB의 지역 목록이고 `GET /api/v1/regions`로 받는다.
 - 이번 PR은 직접 구현한 행사·지역 API 7개에 `@ApiResponse`를 단다. identity API 20개는 병합 뒤 `#dev`에 identity 담당자용 handoff 문서를 올려 넘긴다. identity 클래스에는 이번 PR에서 `@Tag`와 빈 `@SecurityRequirements` 한 줄씩만 더한다.

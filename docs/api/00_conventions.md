@@ -159,7 +159,7 @@ API를 새로 만들거나 바꿀 때 아래를 지킨다.
 | `500` | 달지 않는다. 문서 첫 화면 설명에 "모든 API는 `500 INTERNAL_SERVER_ERROR`가 날 수 있다"고 적혀 있다 |
 | Spring 표준 `400` | 잘못된 JSON처럼 `ProblemDetail`로 끝나는 경우(§8)는 `400` 설명에 한 줄로 적는다 |
 | 성공 응답 | 에러 `@ApiResponse`(클래스 단위 `401` 포함)가 걸린 메서드는 성공 상태도 `@ApiResponse`로 적는다. springdoc는 명시한 응답이 있으면 `@ResponseStatus`가 없는 메서드의 `200`을 만들지 않는다. 성공 `@ApiResponse`에는 `content`를 적지 않는다. 그러면 반환 타입에서 스키마를 만든다 |
-| 입력 보정 | 코드가 계약과 다르게 받는 입력은 문서 어노테이션으로 필수 여부, 정수 타입, 허용 값을 보정한다. 코드의 선언은 그대로 둔다. 예: `required = false`로 받는 필수 헤더에 `@Parameter(required = true)`, 직접 검사하는 필수 필드에 `@Schema(requiredMode = REQUIRED)`, `BigDecimal`로 받는 정수에 `@Schema(type = "integer")`, 문자열로 받는 코드값에 `@Schema(implementation = 도메인Enum.class)`. 허용 값은 enum을 가리키고 문자열로 다시 나열하지 않는다. Bean Validation으로 검사하는 입력은 자동으로 나오므로 보정하지 않는다 |
+| 입력 보정 | 코드가 계약과 다르게 받는 입력은 문서 어노테이션으로 필수 여부, 정수 타입, 허용 값을 보정한다. 코드의 선언은 그대로 둔다. 예: `required = false`로 받는 필수 헤더에 `@Parameter(required = true)`, 직접 검사하는 필수 필드에 `@Schema(requiredMode = REQUIRED)`, `BigDecimal`로 받는 정수에 `@Schema(types = "integer")`, 문자열로 받는 코드값에 `@Schema(implementation = 도메인Enum.class)`(배열 원소는 `@ArraySchema(schema = @Schema(...))`, 쿼리는 `@Parameter(schema = @Schema(...))`). 문서는 OpenAPI 3.1이라 `type`이 아니라 `types`를 쓴다. `type`을 쓰면 문자열로 나온다. 허용 값은 enum을 가리키고 문자열로 다시 나열하지 않는다. Bean Validation으로 검사하는 입력은 자동으로 나오므로 보정하지 않는다 |
 | 설명 | `@Operation` 요약과 DTO 필드의 `@Schema` 설명(description)은 달지 않는다. 설명은 md에 둔다. 입력 보정용 `@Schema` 제약은 단다 |
 
 ```java
