@@ -290,6 +290,7 @@ Content-Type: multipart/form-data; boundary=...
 - 통과하면 등록증을 S3 비공개 버킷의 `private/rights-evidence/` 아래에, 서버가 요청마다 새로 만든 키로 저장한다(`STORAGE-102`). 덮어쓰지 않는다. `Content-Type`은 판별한 형식(`application/pdf`·`image/jpeg`·`image/png`)으로 서버가 정한다. 그리고 `rights.isRegistrationMatched`를 `true`로 바꾼다. `rights.basis`는 바꾸지 않는다. 등록번호, 대조 시각, 본인확인 출처를 함께 저장한다. 응답은 `200`과 곡(§1.1)이다.
 - 실패하면 곡은 바뀌지 않는다. 등록증도 저장하지 않는다.
 - **등록증 저장도 §2.4와 같은 규칙을 따른다.** 트랜잭션은 OpenAPI 조회가 끝난 뒤 시작한다. 외부 응답을 기다리는 동안 DB 연결을 잡지 않기 위해서다. 이 트랜잭션에도 `transaction_timeout`을 걸고, 등록증은 그 안에서 저장한다. 커밋을 요청하기 전에 실패했거나 DB가 커밋을 거절하면 등록증을 바로 지운다. 결과를 모르면 남기고 정리 작업이 지운다.
+- **등록번호 중복은 저장할 때 DB가 막는다.** 검사 9는 외부 API를 부르기 전에 빨리 거절하려는 사전 검사다. 같은 아티스트가 제목이 같은 두 곡에 같은 등록번호를 동시에 내면 둘 다 검사 9를 통과할 수 있다. 그래서 (아티스트, 등록번호)에 삭제하지 않은 곡만 대상으로 하는 부분 유니크 인덱스를 둔다. 저장할 때 이 제약에 걸리면 `409 COPYRIGHT_REGISTRATION_ALREADY_USED`이고, 롤백이 확실하므로 저장한 등록증을 바로 지운다.
 - 이미 등록정보가 일치한 곡에 다른 등록번호를 내면 새로 대조한다. 통과하면 새 등록 정보로 바꾸고, 커밋이 끝난 뒤 이전 등록증을 지운다. 커밋 전에 지우면 커밋이 실패했을 때 DB가 지워진 등록증을 가리키기 때문이다. 지우지 못하면 정리 작업이 지운다. 대조에 실패하면 이전 등록 정보가 그대로 남는다.
 - NSU-103의 정리 작업은 어떤 곡도 가리키지 않고 정리 유예가 지난 `private/rights-evidence/` 키도 지운다. 등록증에는 실명 같은 개인정보가 있어, 연결이 끊긴 파일을 기한 없이 남기지 않기 위해서다. 유예는 이 트랜잭션의 `transaction_timeout`보다도 길어야 한다.
 - 등록증 파일은 열람 API를 두지 않는다. 권리 분쟁(NSU-104)에 대비해 보관만 한다. 곡을 삭제하면 원본과 같은 주기(7일 이내, `AI-038`)로 지운다(NSU-103).
@@ -352,6 +353,7 @@ Content-Type: multipart/form-data; boundary=...
 | 트랜잭션 수명 | `transaction_timeout`을 짧게 둔 테스트에서, S3 저장 뒤 시간을 넘긴 업로드 트랜잭션은 커밋되지 않고 곡이 생기지 않는다. 업로드 트랜잭션에 `transaction_timeout`이 걸려 있는지 확인한다 |
 | 등록 정보 | 본인확인 전이면 `403 IDENTITY_VERIFICATION_REQUIRED`. 다른 아티스트의 곡은 `404`. 중단된 곡은 `409`. 내 다른 곡이 쓴 등록번호는 `409 COPYRIGHT_REGISTRATION_ALREADY_USED` |
 | 공동 권리자 | 등록부에 함께 오른 공동 저작자 두 명은 같은 등록번호로 각자의 곡에서 통과한다. 먼저 낸 사람이 있어도 다른 아티스트는 `409`가 아니다 |
+| 동시 등록번호 제출 | 같은 아티스트가 제목이 같은 두 곡에 같은 등록번호를 동시에 내면, 하나만 `200`이고 다른 하나는 `409 COPYRIGHT_REGISTRATION_ALREADY_USED`다. 진 요청의 등록증은 남지 않는다. 두 요청 모두 외부 API 대조를 통과한 경우로 확인한다 |
 | 대조 | 번호 없음, 분류가 음악이 아님, 제호 다름, 저작자·권리자에 본인확인 이름이 없음은 각각 `COPYRIGHT_REGISTRATION_MISMATCH`이고 곡은 `isRegistrationMatched = false`로 남는다. 제호의 앞뒤 공백·대소문자만 다르면 통과 |
 | 통과 결과 | 통과하면 `200`이고 `rights.isRegistrationMatched = true`, `rights.basis = DECLARED`다. `VERIFIED`가 되지 않는다 |
 | 외부 API | 시간 초과·`5xx`·필드가 빠진 응답은 `503 COPYRIGHT_REGISTRY_UNAVAILABLE`이고, `message`에 외부 응답 원문이 없다. 등록증은 저장되지 않는다 |
