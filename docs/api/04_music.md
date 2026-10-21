@@ -87,7 +87,7 @@ sequenceDiagram
     participant B as S3 비공개 버킷
     participant D as DB
 
-    A->>S: POST /api/v1/me/music (음원, 제목, 커버곡 여부, 신탁 여부, 권리 보증)
+    A->>S: POST /api/v1/me/music (음원, 제목, 커버곡 여부, 신탁 여부, 권리 보증과 문구 버전)
     S->>S: 인증·역할·계정 상태, 입력 칸 검사
     S->>T: 음원을 임시 파일로 받음 (10MiB 상한, SHA-256 계산)
     S->>D: 같은 파일의 기존 곡·권리 중단 기록 확인, 곡 수 확인 (아티스트 단위 잠금)
@@ -112,15 +112,17 @@ Content-Type: multipart/form-data; boundary=...
 
 | 파트 | 타입 | 필수 | 규칙 |
 |---|---|---|---|
-| `file` | 파일 | O | MP3, 또는 AAC를 담은 M4A(AAC-LC 코어. HE-AAC·HE-AACv2 포함). 10MiB(10,485,760바이트) 이하. 길이는 §2.2 |
+| `file` | 파일 | O | MP3, 또는 AAC를 담은 M4A(AAC-LC 코어, 1024샘플 프레임. HE-AAC·HE-AACv2 포함). 10MiB(10,485,760바이트) 이하. 길이는 §2.2 |
 | `title` | 문자열 | O | 앞뒤 공백을 지운 뒤 1~100자 |
 | `isCover` | 불리언 | O | `true` 또는 `false` |
 | `isCollectivelyManaged` | 불리언 | O | `true` 또는 `false` |
 | `isRightsWarranted` | 불리언 | O | 권리 보증. `true`만 받는다 |
+| `rightsWarrantyVersion` | 문자열 | O | 화면에 보여 준 권리 보증 문구의 버전. 지금 버전이어야 한다 |
 
 - 불리언 파트는 문자열 `true`·`false`로 보낸다. 다른 값과 빠진 파트는 `400 VALIDATION_ERROR`다.
 - 불리언에 기본값을 두지 않는다. 화면이 커버곡 여부와 신탁 여부를 아티스트에게 꼭 묻게 하기 위해서다.
-- 권리 보증은 "이 파일을 플랫폼이 보관·분석하고 EVENT_PARTNER에게 재생할 권리가 있으며, 문제가 생기면 책임진다"는 아티스트의 약속이다(`51255b80` 2-1). 문구는 약관 버전으로 관리한다. 서버는 보증 시각과 그때의 약관 버전을 기록한다.
+- 권리 보증은 "이 파일을 플랫폼이 보관·분석하고 EVENT_PARTNER에게 재생할 권리가 있으며, 문제가 생기면 책임진다"는 아티스트의 약속이다(`51255b80` 2-1). 문구는 가입 약관처럼 서버 설정의 ID·버전(`<문구 ID>:<버전>`)으로 관리한다([artist-oauth-signup](./artist-oauth-signup.md)).
+- 화면은 보여 준 문구의 버전을 `rightsWarrantyVersion`으로 보낸다. 서버는 그 버전이 지금 버전인지 확인하고, 보증 시각과 요청에 담긴 버전을 기록한다. 처리 시점의 버전을 대신 기록하면, 문구가 바뀐 뒤 열어 둔 화면에서 옛 문구에 동의한 사람을 새 문구에 동의한 것으로 남기기 때문이다.
 - 파일 이름과 `Content-Type`은 판정에 쓰지 않는다. 형식은 파일 내용으로 판별한다(§2.2).
 
 ### 2.2 검사
@@ -129,7 +131,7 @@ Content-Type: multipart/form-data; boundary=...
 |---|---|---|
 | 1 | 로그인 | `401 AUTHENTICATION_REQUIRED` |
 | 2 | 역할이 ARTIST이고 계정이 `ACTIVE` | `403 ACCESS_DENIED` |
-| 3 | 파트 검증(§2.1) | `400 VALIDATION_ERROR` |
+| 3 | 파트 검증(§2.1) | `400 VALIDATION_ERROR`. 보증 문구 버전이 지금 버전이 아니면 `400 REQUIRED_TERMS_NOT_AGREED` |
 | 4 | 같은 파일(SHA-256)로 이미 올린 곡이 있음(§2.3) | 같은 입력이면 `201` + 그 곡, 다른 입력이면 `409 MUSIC_ALREADY_UPLOADED` |
 | 5 | 같은 파일(SHA-256)에 권리 중단 기록이 남아 있음(§2.3) | `409 MUSIC_RIGHTS_SUSPENDED` |
 | 6 | 삭제하지 않은 곡이 이미 3개 | `409 MUSIC_LIMIT_EXCEEDED` |
@@ -140,12 +142,13 @@ Content-Type: multipart/form-data; boundary=...
 - **형식**: 파일 앞부분의 바이트로 MP3와 MP4 계열을 가린다. M4A는 오디오 트랙의 코덱이 AAC(`mp4a`)인지 보고, `esds`의 AudioSpecificConfig로 AAC 코어가 AAC-LC(객체 유형 2)인지 본다. HE-AAC(5)·HE-AACv2(29)는 그 안의 코어 객체 유형이 2여야 한다. 다음 파일은 형식 오류로 거절한다.
   - 조각난 MP4(`moof`)
   - 오디오 트랙이 2개 이상인 M4A
-  - AAC-LC 코어가 아닌 AAC(AAC-LD·ELD처럼 프레임이 480·512샘플인 형식 등)
+  - AAC-LC 코어가 아니거나 프레임이 1024샘플이 아닌 AAC(960샘플 구성인 `frameLengthFlag = 1`, 480·512샘플인 AAC-LD·ELD 등)
   - 지원하지 않는 재생 구간 표(edit list, `edts`·`elst`)가 있는 M4A. 구간 반복, 빈 구간(`media_time = -1`), 속도 변경(`media_rate ≠ 1`), 항목 2개 이상이 그렇다
+  - 샘플 표가 가리키지 않는 데이터가 있는 M4A: `mdat`이 2개 이상이거나, `mdat` 본문 크기가 오디오 샘플 크기(`stsz`)의 합과 다르거나, `moov`·`mdat` 밖의 최상위 상자(`free`·`skip` 등)가 합쳐서 64KiB(설정값)를 넘는 파일. 샘플 표만 앞 70초로 줄이고 `mdat`에 3분을 남기면 재생은 70초여도 원본 파일에는 3분이 들어 있기 때문이다
   - 중간에 샘플레이트가 바뀌는 MP3
 - **길이**: 파일 머리말에 적힌 길이를 믿지 않고, 실제 오디오 프레임으로 잰다([music_upload/00](../adr/music_upload/00_music_upload_validation.md)).
   - MP3: 모든 프레임의 길이를 더한다.
-  - M4A: AAC 프레임 수 × 프레임 길이 ÷ 코어 샘플레이트로 잰다. 프레임 길이(1024샘플, `frameLengthFlag`가 1이면 960샘플)와 코어 샘플레이트는 AudioSpecificConfig에서 읽는다. `mp4a` 상자의 샘플레이트 칸은 쓰지 않는다.
+  - M4A: AAC 프레임 수 × 1024 ÷ 코어 샘플레이트로 잰다. 1024샘플 구성(`frameLengthFlag = 0`)만 받고, 코어 샘플레이트는 AudioSpecificConfig에서 읽는다. `mp4a` 상자의 샘플레이트 칸은 쓰지 않는다.
   - M4A의 일관성 검사: 시간 표(`stts` 합 ÷ `mdhd` 시간 단위)로 잰 길이가 프레임으로 잰 길이와 허용 오차(설정값, 기본 1초) 넘게 다르면 형식 오류다. 재생 구간 표가 있으면 항목 1개, 일반 재생만 받고, 그 구간 길이(`segment_duration` ÷ `mvhd` 시간 단위)도 프레임으로 잰 길이와 허용 오차 안이어야 한다. 인코더가 앞쪽 무음 샘플(priming)을 잘라 내려고 넣는 항목이 이 경우다. 플레이어는 재생 구간 표대로 재생해서, 구간을 반복하거나 잘라 내면 프레임 길이와 실제 재생 길이가 달라지기 때문이다.
   - 허용 범위는 설정값이다. 지금은 SSOT `AI-033`의 **60~80초(경계 포함)**다. AI 담당이 동의하면 **56~60초**로 바꾼다(2026-10-20 Slack 제안). 이 문서의 다른 규칙은 바뀌지 않는다.
   - 경계 근처의 허용 오차는 AI 담당의 답(같은 Slack 제안의 질문 2)을 받아 정한다.
@@ -182,6 +185,7 @@ Content-Type: multipart/form-data; boundary=...
 - 응답을 받지 못했거나 `5xx`(`503 MUSIC_UPLOAD_UNAVAILABLE` 포함)를 받으면 같은 파일과 같은 입력으로 다시 보낸다. 간격을 늘려 가며(1초, 2초, 4초) 3번까지만 보낸다.
 - `409 MUSIC_ALREADY_UPLOADED`는 "이미 올린 곡이에요"라고 안내한다.
 - `409 MUSIC_RIGHTS_SUSPENDED`는 "권리 신고로 중단된 파일이라 올릴 수 없어요"라고 안내하고 다시 보내지 않는다.
+- `400 REQUIRED_TERMS_NOT_AGREED`는 최신 권리 보증 문구를 다시 보여 주고, 동의를 받은 뒤 그 버전으로 보낸다.
 
 ### 2.4 저장
 
@@ -198,7 +202,7 @@ Content-Type: multipart/form-data; boundary=...
 - 결과를 모르는 원본과 지우지 못한 원본은 NSU-103의 정리 작업이 지운다. 정리 작업은 어떤 revision도 가리키지 않고, S3에 저장된 지 정리 유예(설정값, 기본 1시간)가 지난 키만 지운다.
 - 정리 유예는 `transaction_timeout`보다 충분히 길어야 한다. 그렇지 않으면 설정 오류로 서버 시작을 막는다(NSU-103). 원본은 트랜잭션이 시작된 뒤에 저장되므로, 유예가 지난 원본을 만든 트랜잭션은 이미 끝났다. 커밋됐으면 revision이 보이고, 커밋되지 않았으면 다시는 커밋될 수 없다. 그래서 정리 작업이 아직 커밋되지 않은 원본을 지우는 일이 없다.
 - 화면은 `500`을 받으면 §2.3대로 같은 파일로 다시 보낸다. 커밋이 됐다면 그 곡(`201`)을 받고, 원본도 남아 있다. 커밋이 안 됐다면 새 곡이 생기고, 앞의 원본은 정리 작업이 지운다.
-- 곡, revision 1(`PROCESSING`), 파일 SHA-256, 측정한 길이, 권리 보증 시각과 약관 버전을 저장한다.
+- 곡, revision 1(`PROCESSING`), 파일 SHA-256, 측정한 길이, 권리 보증 시각과 보증 문구 버전(요청 값)을 저장한다.
 - 응답은 `201 Created`이고 본문은 곡(§1.1)이다.
 
 ## 3. 저작권 등록 정보 제출
@@ -295,7 +299,8 @@ Content-Type: multipart/form-data; boundary=...
 | EVENT_PARTNER가 호출함. 계정이 `ACTIVE`가 아님 | 403 | `ACCESS_DENIED` |
 | `musicId`가 UUID 형식이 아님 | 400 | `INVALID_MUSIC_ID` |
 | 파트가 빠짐, 불리언이 아닌 값, 제목 길이, `isRightsWarranted = false`, 등록번호 길이 | 400 | `VALIDATION_ERROR` |
-| MP3·AAC M4A가 아님. 조각난 MP4, 오디오 트랙 2개 이상, AAC-LC 코어가 아닌 AAC, 지원하지 않는 재생 구간 표(edit list), 샘플레이트가 바뀌는 MP3, 프레임으로 잰 길이와 시간 표·재생 구간이 허용 오차 넘게 다름 | 400 | `UNSUPPORTED_AUDIO_FORMAT` |
+| MP3·AAC M4A가 아님. 조각난 MP4, 오디오 트랙 2개 이상, AAC-LC 코어가 아니거나 1024샘플 프레임이 아닌 AAC, 지원하지 않는 재생 구간 표(edit list), 샘플 표가 가리키지 않는 데이터, 샘플레이트가 바뀌는 MP3, 프레임으로 잰 길이와 시간 표·재생 구간이 허용 오차 넘게 다름 | 400 | `UNSUPPORTED_AUDIO_FORMAT` |
+| 권리 보증 문구 버전이 지금 버전이 아님 | 400 | `REQUIRED_TERMS_NOT_AGREED` |
 | 길이가 허용 범위 밖 | 400 | `AUDIO_DURATION_OUT_OF_RANGE` |
 | 등록증이 PDF·JPEG·PNG가 아님 | 400 | `UNSUPPORTED_CERTIFICATE_FORMAT` |
 | 등록부와 대조 실패(§3.2) | 400 | `COPYRIGHT_REGISTRATION_MISMATCH` |
@@ -322,10 +327,12 @@ Content-Type: multipart/form-data; boundary=...
 |---|---|
 | 역할·상태 | EVENT_PARTNER의 업로드·등록 정보 제출은 `403 ACCESS_DENIED`. `SUSPENDED` 아티스트도 `403` |
 | 파트 | 각 필수 파트를 뺀 요청, 불리언에 `"yes"`, 제목 0자·101자, `isRightsWarranted = false`는 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다 |
+| 보증 문구 버전 | 지금 버전과 다른 `rightsWarrantyVersion`은 `400 REQUIRED_TERMS_NOT_AGREED`이고 곡이 생기지 않는다. 통과한 곡에는 요청에 담긴 버전이 저장된다 |
 | 크기 | 10MiB(10,485,760바이트)는 통과, 1바이트 넘으면 `413`. 등록증 5MiB는 통과, 1바이트 넘으면 `413 CERTIFICATE_TOO_LARGE` |
 | 형식 | 확장자를 `.mp3`로 바꾼 WAV·텍스트 파일은 `UNSUPPORTED_AUDIO_FORMAT`. ALAC를 담은 M4A, 조각난 MP4, 오디오 트랙 2개인 M4A, AAC-LD M4A도 같다 |
 | 길이 | 허용 범위의 하한·상한과 같은 길이는 통과, 범위 밖은 `AUDIO_DURATION_OUT_OF_RANGE`. CBR·VBR MP3와 ID3 태그가 붙은 MP3를 모두 확인한다 |
-| AAC 구성 | 960샘플 프레임 AAC-LC M4A와 HE-AAC·HE-AACv2 M4A도 실제 길이로 잰다. 예: 960샘플 프레임으로 된 76초 파일은 76초다(1024로 계산한 81.1초가 아니다). 960샘플 파일은 AudioSpecificConfig의 `frameLengthFlag`를 고쳐 만들어도 된다 |
+| AAC 구성 | HE-AAC·HE-AACv2 M4A도 실제 길이로 잰다. 1024샘플 파일의 `frameLengthFlag`만 1(960샘플)로 고친 M4A는 `UNSUPPORTED_AUDIO_FORMAT`이고 저장되지 않는다 |
+| 숨긴 데이터 | 샘플 표가 앞 70초만 가리키고 `mdat`에 3분 데이터가 남은 M4A, `mdat`이 2개인 M4A, 최상위 `free` 상자가 64KiB를 넘는 M4A는 `UNSUPPORTED_AUDIO_FORMAT`이고 저장되지 않는다. FFmpeg·Apple 인코더로 만든 정상 M4A는 통과한다 |
 | 재생 구간 표 | 70초 AAC를 두 번 재생하는 edit list(재생 약 140초), 빈 구간이 있는 edit list, 3분 AAC를 70초만 재생하게 자른 edit list, 항목 2개짜리 edit list는 모두 `UNSUPPORTED_AUDIO_FORMAT`이고 저장되지 않는다. 앞쪽 무음 샘플(2112샘플)만 잘라 내는 항목 1개짜리 edit list는 통과한다 |
 | 헤더 위조 | `mvhd` 길이를 58초로 고친 3분짜리 M4A는 `AUDIO_DURATION_OUT_OF_RANGE` 또는 `UNSUPPORTED_AUDIO_FORMAT`이며, 저장되지 않는다. Xing 헤더 길이를 고친 3분짜리 MP3도 저장되지 않는다 |
 | 다시 올림 | 같은 파일·같은 입력은 `201`과 같은 `musicId`이며 곡은 1개다. 같은 파일에 제목만 다르면 `409 MUSIC_ALREADY_UPLOADED`. 곡을 삭제한 뒤 같은 파일은 새 곡으로 `201` |

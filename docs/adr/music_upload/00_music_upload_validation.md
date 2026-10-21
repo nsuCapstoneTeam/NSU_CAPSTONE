@@ -17,11 +17,11 @@
 | 곡 수 | 아티스트당 삭제하지 않은 곡 최대 3개(`51255b80` 질문 5) |
 | 저장소 | S3 비공개 버킷의 `private/ai-samples/`(`51255b80` 질문 7, `STORAGE-103`) |
 | 저장 순서 | 검사 → S3 저장 → DB 커밋(`51255b80` 질문 8). S3 저장은 업로드 트랜잭션 안에서 하고, 트랜잭션 수명은 PostgreSQL `transaction_timeout`(기본 2분)으로 DB가 강제한다. S3 원본은 커밋되지 않은 것이 확실할 때만 바로 지운다. 커밋 결과를 모르면 남기고, NSU-103의 정리 작업이 revision이 가리키지 않고 정리 유예(기본 1시간, 트랜잭션 수명보다 길게)가 지난 것을 확인한 뒤 지운다 |
-| 형식 | MP3, 또는 AAC를 담은 M4A. AAC는 코어가 AAC-LC인 구성만 받는다(HE-AAC·HE-AACv2 포함). 10MiB 이하. 파일 내용으로 판별한다 |
-| 길이 측정 | MP3는 Tika `Mp3Parser`로 프레임 길이를 더한다. M4A는 오디오 트랙의 표를 직접 읽어 AAC 프레임 수 × 프레임 길이(1024 또는 960샘플) ÷ 코어 샘플레이트로 잰다. 프레임 길이와 코어 샘플레이트는 `esds`의 AudioSpecificConfig에서 읽는다 |
+| 형식 | MP3, 또는 AAC를 담은 M4A. AAC는 코어가 AAC-LC이고 프레임이 1024샘플인 구성만 받는다(HE-AAC·HE-AACv2 포함). 샘플 표가 가리키지 않는 데이터가 있으면 거절한다. 10MiB 이하. 파일 내용으로 판별한다 |
+| 길이 측정 | MP3는 Tika `Mp3Parser`로 프레임 길이를 더한다. M4A는 오디오 트랙의 표를 직접 읽어 AAC 프레임 수 × 1024 ÷ 코어 샘플레이트로 잰다. 코어 샘플레이트는 `esds`의 AudioSpecificConfig에서 읽는다 |
 | 길이 범위 | 설정값. 지금은 SSOT `AI-033`의 60~80초(경계 포함). AI 담당이 동의하면 56~60초 |
 | 다시 보낸 업로드 | 같은 아티스트의 같은 파일(SHA-256)이면 새 곡을 만들지 않는다. `Idempotency-Key` 헤더는 받지 않는다. 권리 중단 기록이 남은 파일은 곡을 지운 뒤에도 거절한다([01](./01_music_rights_verification.md)) |
-| 업로드 입력 | 음원, 제목, 커버곡 여부, KOMCA·KOSCAP 신탁 여부(자기 신고), 권리 보증 |
+| 업로드 입력 | 음원, 제목, 커버곡 여부, KOMCA·KOSCAP 신탁 여부(자기 신고), 권리 보증과 화면이 보여 준 보증 문구 버전 |
 
 ```mermaid
 flowchart TD
@@ -29,8 +29,8 @@ flowchart TD
     DET -- "MP3" --> MP3["Tika Mp3Parser: 모든 프레임 길이를 더함<br/>샘플레이트가 바뀌면 거절"]
     DET -- "MP4 계열" --> MP4["moov 안의 오디오 트랙만 읽음 (1MiB 상한)<br/>stsd가 mp4a이고 AudioSpecificConfig의 코어가 AAC-LC인지 확인"]
     DET -- "그 밖" --> REJ1["400 UNSUPPORTED_AUDIO_FORMAT"]
-    MP4 -- "조각난 MP4, 트랙 2개 이상, AAC-LC 코어 아님, 지원하지 않는 edit list" --> REJ1
-    MP4 --> CNT["길이 = stsz 프레임 수 × 프레임 길이(1024·960) ÷ 코어 샘플레이트<br/>stts·edit list로 잰 길이와 1초 넘게 다르면 거절"]
+    MP4 -- "조각난 MP4, 트랙 2개 이상, AAC-LC 1024샘플 아님,<br/>지원하지 않는 edit list, 샘플 표 밖 데이터" --> REJ1
+    MP4 --> CNT["길이 = stsz 프레임 수 × 1024 ÷ 코어 샘플레이트<br/>stts·edit list로 잰 길이와 1초 넘게 다르면 거절"]
     CNT -- "1초 넘게 다름" --> REJ1
     MP3 --> RNG{"허용 범위 안?"}
     CNT --> RNG
@@ -40,7 +40,8 @@ flowchart TD
 
 **직접 읽는 M4A 코드의 안전장치**
 
-- 지원 범위를 좁히고, 그 밖은 모두 거절한다(fail closed). 조각난 MP4(`moof`), 오디오 트랙이 2개 이상인 파일, AAC가 아닌 코덱(ALAC 등), 코어가 AAC-LC가 아닌 AAC(AAC-LD·ELD 등)다.
+- 지원 범위를 좁히고, 그 밖은 모두 거절한다(fail closed). 조각난 MP4(`moof`), 오디오 트랙이 2개 이상인 파일, AAC가 아닌 코덱(ALAC 등), 코어가 AAC-LC가 아니거나 프레임이 1024샘플이 아닌 AAC(960샘플 구성, AAC-LD·ELD 등)다.
+- 샘플 표가 가리키지 않는 데이터를 받지 않는다. `mdat`은 1개이고 본문 크기가 오디오 샘플 크기(`stsz`)의 합과 같아야 한다. `moov`·`mdat` 밖의 최상위 상자는 합쳐서 64KiB(설정값) 이하다.
 - 재생 구간 표(edit list, `edts`·`elst`)는 항목 1개, 일반 재생(`media_time ≥ 0`, `media_rate = 1`)이고 그 구간 길이가 프레임으로 잰 길이와 1초(설정값) 안에서 같을 때만 받는다. 구간 반복, 빈 구간, 속도 변경, 크게 잘라 내기는 거절한다.
 - 상자(box) 크기를 믿지 않는다. 파일 크기를 넘는 크기, 음수·0 크기는 거절한다. `moov`는 1MiB 이하만 읽는다. 60초 AAC의 프레임 표는 약 11KB다.
 - 읽는 상자 수와 처리 시간에 상한을 둔다.
@@ -91,15 +92,20 @@ Tika `MP4Parser`는 길이를 영화 머리말(`mvhd`)의 값으로 읽고, 코�
 
 재생 구간 표는 재생 길이를 바꿀 수 있다. 같은 구간을 두 번 재생하게 하면 70초 프레임이 140초로 재생되고, 3분 프레임을 70초만 재생하게 자를 수도 있다([Apple QuickTime 명세, Playing with edit lists](https://developer.apple.com/documentation/quicktime-file-format/playing_with_edit_lists)). 자르는 경우에도 파일에는 3분이 들어 있어, 재생 주소로 받은 사람은 3분을 들을 수 있다. 그래서 재생 구간 표는 인코더가 앞쪽 무음 샘플(AAC priming, 보통 2112샘플)을 잘라 내려고 넣는 항목 1개만 받는다. 구간 길이는 `segment_duration` ÷ `mvhd` 시간 단위로 잰다. `mvhd`의 길이 값은 믿지 않고 시간 단위만 쓴다.
 
+샘플 표가 가리키지 않는 데이터도 같은 문제다. 샘플 표가 앞 70초만 가리키게 줄이고 `mdat`에 3분을 남기면, 프레임·시간 표·재생 구간이 모두 70초로 맞는다. 하지만 원본 파일에는 3분이 들어 있다([Apple QuickTime 명세, Sample table atoms](https://developer.apple.com/documentation/quicktime-file-format/sample_table_atom)). 그래서 `mdat`은 1개이고 본문 크기가 샘플 크기 합과 같아야 하며, 다른 최상위 상자는 합쳐서 64KiB 이하여야 한다. 오디오 트랙이 하나뿐이라 FFmpeg·Apple이 만든 정상 파일은 이 조건을 지킨다.
+
+`moov` 안의 메타데이터(표지 그림 등)에 데이터를 숨기는 것은 `moov` 1MiB 상한으로만 줄인다. 일반 플레이어로 재생되지 않고, 꺼내려면 별도 도구가 필요하기 때문이다.
+
 AAC 프레임 하나의 샘플 수는 고정값이 아니다. `esds`의 AudioSpecificConfig가 정한다.
 
 | 구성 | 프레임 하나 | 처리 |
 |---|---|---|
-| AAC-LC (객체 유형 2) | 1024샘플. `frameLengthFlag`가 1이면 960샘플 | 받는다 |
-| HE-AAC (5)·HE-AACv2 (29) | AAC-LC 코어 위에 SBR·PS를 얹는다. 코어 프레임은 AAC-LC와 같고 출력 샘플레이트가 코어의 두 배다 | 코어가 AAC-LC면 받는다 |
+| AAC-LC (객체 유형 2) | 1024샘플(`frameLengthFlag = 0`) | 받는다 |
+| AAC-LC 960샘플 구성 (`frameLengthFlag = 1`) | 960샘플 | 거절한다 |
+| HE-AAC (5)·HE-AACv2 (29) | AAC-LC 코어 위에 SBR·PS를 얹는다. 코어 프레임은 AAC-LC와 같고 출력 샘플레이트가 코어의 두 배다 | 코어가 AAC-LC 1024샘플이면 받는다 |
 | AAC-LD (23)·ELD (39) 등 | 480·512샘플 | 거절한다 |
 
-그래서 길이는 "코어 프레임 수 × 코어 프레임 길이 ÷ 코어 샘플레이트"로 잰다. HE-AAC도 이 식으로 실제 길이가 나온다. 960샘플 프레임으로 된 76초 파일을 1024로 계산하면 81.1초가 되어 정상 파일을 거절한다. `mp4a` 상자의 샘플레이트 칸은 코어 샘플레이트와 다를 수 있어(HE-AAC는 출력 샘플레이트를 적는 경우가 많다) 쓰지 않는다.
+그래서 길이는 "코어 프레임 수 × 1024 ÷ 코어 샘플레이트"로 잰다. HE-AAC도 이 식으로 실제 길이가 나온다. 960샘플 구성을 1024로 계산하면 76초 파일이 81.1초가 되므로, 이 구성은 받지 않는다. 소비자용 인코더(Apple, FFmpeg, FDK-AAC 기본값)는 1024샘플로 만들고, 정상 960샘플 M4A는 만들기 어려워 통과 테스트도 할 수 없다. `mp4a` 상자의 샘플레이트 칸은 코어 샘플레이트와 다를 수 있어(HE-AAC는 출력 샘플레이트를 적는 경우가 많다) 쓰지 않는다.
 
 M4A 상자를 읽는 Java 라이브러리 `isoparser`(org.mp4parser)는 마지막 릴리스가 2022-04다. 신뢰할 수 없는 파일을 읽는 코드에 4년 넘게 갱신되지 않은 라이브러리는 쓰지 않는다. 읽을 범위가 `moov` 안의 상자 몇 개(`mvhd`·`trak`·`edts`·`elst`·`mdia`·`mdhd`·`hdlr`·`minf`·`stbl`·`stsd`·`esds`·`stts`·`stsz`)와 AudioSpecificConfig 앞부분뿐이라 직접 읽는다.
 
@@ -143,7 +149,7 @@ DB에 커밋을 요청한 뒤 연결이 끊기면 애플리케이션은 커밋�
 ## Consequences
 
 - 의존성을 추가한다: `org.apache.tika:tika-core`(형식 판별), Tika 오디오 파서 모듈(`Mp3Parser`). 버전은 고정하고, `AutoDetectParser`가 아니라 `Mp3Parser`를 직접 부른다.
-- M4A 읽기 코드와 테스트 파일이 필요하다. CBR·VBR MP3, ID3 태그 MP3, Xing 길이를 고친 MP3, ALAC M4A, 조각난 MP4, 트랙 2개 M4A, `mvhd` 길이를 고친 M4A, HE-AAC·HE-AACv2 M4A, 960샘플 프레임 M4A(AudioSpecificConfig를 고쳐 만들어도 된다), AAC-LD M4A, edit list로 구간 반복·빈 구간·크게 잘라 내기를 넣은 M4A, 앞쪽 무음 샘플만 잘라 낸 M4A다(04 §5).
+- M4A 읽기 코드와 테스트 파일이 필요하다. CBR·VBR MP3, ID3 태그 MP3, Xing 길이를 고친 MP3, ALAC M4A, 조각난 MP4, 트랙 2개 M4A, `mvhd` 길이를 고친 M4A, HE-AAC·HE-AACv2 M4A, `frameLengthFlag`만 960샘플로 고친 M4A(거절 확인), AAC-LD M4A, edit list로 구간 반복·빈 구간·크게 잘라 내기를 넣은 M4A, 앞쪽 무음 샘플만 잘라 낸 M4A, 샘플 표가 가리키지 않는 `mdat` 데이터가 있는 M4A다(04 §5).
 - 업로드 트랜잭션에 `transaction_timeout`(기본 2분)을 건다. 거는 방법(트랜잭션 시작 때 `SET LOCAL`, 업로드 전용 연결 설정 등)은 구현에서 정하되, 걸려 있는지 테스트로 확인한다(04 §5).
 - NSU-103 정리 작업은 어떤 revision도 가리키지 않고 S3에 저장된 지 정리 유예(기본 1시간)가 지난 원본만 지운다. 유예가 `transaction_timeout`보다 충분히 길지 않으면 설정 오류로 서버 시작을 막는다.
 - multipart 설정(위 메모리 규칙 표)을 `application.yml`에 둔다.
@@ -180,3 +186,5 @@ DB에 커밋을 요청한 뒤 연결이 끊기면 애플리케이션은 커밋�
 | 업로드 상태 표로 정리와 확정을 원자적으로 맞추기 | 정확하지만 표·상태·조건부 갱신이 더 든다. 업로드 트랜잭션이 이미 S3 저장을 감싸므로 DB가 수명을 강제하면 같은 보장을 얻는다 |
 | Spring `@Transactional(timeout)`만 두기 | SQL 실행 전에만 시간을 확인해 커밋 시각을 보장하지 못한다 |
 | edit list를 모두 거절 | 인코더가 넣는 앞쪽 무음 잘라 내기(priming)까지 막아 정상 M4A 대부분이 거절된다 |
+| 960샘플 구성도 받아 길이 계산 | 정상 960샘플 M4A를 만들기 어려워 통과 테스트를 할 수 없고, 소비자용 인코더는 1024샘플만 만든다(커밋 리뷰 2026-10-21) |
+| 검증한 샘플만 남기도록 파일을 다시 쓰기 | 샘플 위치(`stco`)를 고쳐 쓰는 코드가 필요하다. 샘플 표 밖 데이터를 거절하면 같은 목적을 더 적은 코드로 이룬다 |
