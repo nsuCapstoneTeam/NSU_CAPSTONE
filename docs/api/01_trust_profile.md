@@ -101,7 +101,7 @@ Authorization: Bearer {accessToken}
 | `type` | `provider` | 넣는 조건 |
 |---|---|---|
 | `EXTERNAL_ACCOUNT` | `YOUTUBE` / `SOUNDCLOUD` | 해당 외부 계정의 **제어권이 확인됨** |
-| `COPYRIGHT` | `null` | Rights Verified Work가 1개 이상 (SSOT `ADMIN-096`의 "저작권 검증 완료" 수준) |
+| `COPYRIGHT` | `null` | 저작권 등록부와 대조를 통과하고(`rights.isRegistrationMatched`) 권리 신고로 중단되지 않은 곡이 1개 이상([04 §1.1](./04_music.md#11-곡-응답-본문)). 뜻은 "본인확인 이름이 한국저작권위원회 등록부의 저작자 이름과 같음"이다. 이름이 같은 다른 사람일 수 있고, 올린 음원이 그 저작물인지도 확인하지 않는다. 권리 보증만 한 곡은 넣지 않는다 |
 | `BUSINESS_REGISTRATION` | `null` | 사업자등록정보 검증 완료 |
 | `PERFORMANCE_PARTICIPATION` | `null` | 실연 참여 증빙 검증 완료 |
 | `OFFICIAL_ACTIVITY` | `null` | 공식 발매 또는 공연 활동 증빙 검증 완료 |
@@ -109,6 +109,9 @@ Authorization: Bearer {accessToken}
 - 확인이 끝난 항목만 넣는다. 진행 중, 반려, 취소된 검증은 넣지 않는다.
 - 외부 계정을 연동했다는 사실만으로는 넣지 않는다. 연동한 계정의 작업 내역 표시는 아티스트 프로필(작업물) API(NSU-79)가 맡는다. YouTube Music 아티스트 채널은 `YOUTUBE`로 표시한다.
 - provider별 제어권 확인 기준은 Verification 도메인(NSU-33)이 정한다.
+- `COPYRIGHT`는 곡의 권리 정보(04, NSU-89)로 계산한다. 2026-10-20 설계에서 권리 검증 단위가 Work에서 곡으로 바뀌었다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)). 시연용 Mock 본인확인으로 받은 등록정보 일치도 들어간다. 운영으로 넘어갈 때 이 일치는 지워져 빠진다(NSU-105).
+- 화면은 `COPYRIGHT`를 "저작권 검증 완료"가 아니라 "등록부 저작자와 실명 일치"로 표시한다. 이름이 같은 다른 사람도 대조를 통과하고, 등록 저작자가 자기 등록번호를 남의 음원에 붙여도 통과하기 때문이다(2026-10-21 설계 리뷰 1·2차). SSOT `ADMIN-096`의 표시 문구는 v1.17에서 고친다.
+- `COPYRIGHT`는 EVENT_PARTNER가 참고할 정보다. PRIVATE 행사 열람·댓글 권한(`VERIFIED_ARTIST`)의 근거가 아니다. 그 권한은 실명 본인확인(NSU-105)으로 정한다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)).
 - 제어권 확인 결과는 연결이 유지되는 동안 유효하다. 자동으로 다시 확인하거나 기간 만료로 빼지 않는다(07 D45).
 - 연결을 해제하면 다음 조회부터 빠지고, 관리자가 검증을 취소하면 즉시 빠진다. 취소 사실과 사유는 내보내지 않는다. 다시 연결하면 OAuth로 다시 확인한 뒤에만 넣는다(07 D45).
 - Spotify는 계정 연동은 허용하지만 Verification 항목이 아니다. Artist URL/ID 입력이나 Spotify 사용자 계정 OAuth는 아티스트 프로필 소유를 증명하지 않으므로(07 §7), 아티스트 프로필에 Spotify 링크를 보여 주고 EVENT_PARTNER가 직접 링크로 확인한다. 소유 확인 수단이 생기면 `provider`에 `SPOTIFY`를 추가한다(enum 값 추가는 non-breaking).
