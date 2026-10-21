@@ -144,7 +144,8 @@ Content-Type: multipart/form-data; boundary=...
   - 오디오 트랙이 2개 이상인 M4A
   - AAC-LC 코어가 아니거나 프레임이 1024샘플이 아닌 AAC(960샘플 구성인 `frameLengthFlag = 1`, 480·512샘플인 AAC-LD·ELD 등)
   - 지원하지 않는 재생 구간 표(edit list, `edts`·`elst`)가 있는 M4A. 구간 반복, 빈 구간(`media_time = -1`), 속도 변경(`media_rate ≠ 1`), 항목 2개 이상이 그렇다
-  - 샘플 표가 가리키지 않는 데이터가 있는 M4A: `mdat`이 2개 이상이거나, `mdat` 본문 크기가 오디오 샘플 크기(`stsz`)의 합과 다르거나, `moov`·`mdat` 밖의 최상위 상자(`free`·`skip` 등)가 합쳐서 64KiB(설정값)를 넘는 파일. 샘플 표만 앞 70초로 줄이고 `mdat`에 3분을 남기면 재생은 70초여도 원본 파일에는 3분이 들어 있기 때문이다
+  - 샘플 표가 가리키지 않는 데이터가 있는 M4A: `mdat`이 2개 이상이거나, 샘플 표(`stsc`·`stco`/`co64`·`stsz`)로 계산한 샘플 범위가 `mdat` 본문을 빈틈·겹침 없이 정확히 채우지 않거나, `moov`·`mdat` 밖의 최상위 상자(`free`·`skip` 등)가 합쳐서 64KiB(설정값)를 넘는 파일. 샘플 표만 앞 70초로 줄이고 `mdat`에 3분을 남기면 재생은 70초여도 원본 파일에는 3분이 들어 있기 때문이다. 크기 합만 비교하면 청크 오프셋을 겹쳐 일부를 비울 수 있어 범위를 직접 계산한다
+  - 이 검사로 막지 못하는 경우가 남는다. 샘플 크기를 실제 프레임보다 크게 적어 샘플 안에 여분 바이트를 넣는 경우, 메타데이터(표지 그림 등)나 MP3의 ID3 태그에 숨기는 경우다. 다시 인코딩해야 막을 수 있어, 상용화 전 미디어 작업 서버에서 다시 인코딩한 파일만 내보낸다([music_upload/00](../adr/music_upload/00_music_upload_validation.md))
   - 중간에 샘플레이트가 바뀌는 MP3
 - **길이**: 파일 머리말에 적힌 길이를 믿지 않고, 실제 오디오 프레임으로 잰다([music_upload/00](../adr/music_upload/00_music_upload_validation.md)).
   - MP3: 모든 프레임의 길이를 더한다.
@@ -332,7 +333,7 @@ Content-Type: multipart/form-data; boundary=...
 | 형식 | 확장자를 `.mp3`로 바꾼 WAV·텍스트 파일은 `UNSUPPORTED_AUDIO_FORMAT`. ALAC를 담은 M4A, 조각난 MP4, 오디오 트랙 2개인 M4A, AAC-LD M4A도 같다 |
 | 길이 | 허용 범위의 하한·상한과 같은 길이는 통과, 범위 밖은 `AUDIO_DURATION_OUT_OF_RANGE`. CBR·VBR MP3와 ID3 태그가 붙은 MP3를 모두 확인한다 |
 | AAC 구성 | HE-AAC·HE-AACv2 M4A도 실제 길이로 잰다. 1024샘플 파일의 `frameLengthFlag`만 1(960샘플)로 고친 M4A는 `UNSUPPORTED_AUDIO_FORMAT`이고 저장되지 않는다 |
-| 숨긴 데이터 | 샘플 표가 앞 70초만 가리키고 `mdat`에 3분 데이터가 남은 M4A, `mdat`이 2개인 M4A, 최상위 `free` 상자가 64KiB를 넘는 M4A는 `UNSUPPORTED_AUDIO_FORMAT`이고 저장되지 않는다. FFmpeg·Apple 인코더로 만든 정상 M4A는 통과한다 |
+| 숨긴 데이터 | 샘플 표가 앞 70초만 가리키고 `mdat`에 3분 데이터가 남은 M4A, 청크 오프셋(`stco`)을 겹치게 고쳐 크기 합은 같지만 `mdat` 일부를 가리키지 않는 M4A, 샘플 범위가 `mdat` 밖으로 나가는 M4A, `mdat`이 2개인 M4A, 최상위 `free` 상자가 64KiB를 넘는 M4A는 `UNSUPPORTED_AUDIO_FORMAT`이고 저장되지 않는다. FFmpeg·Apple 인코더로 만든 정상 M4A는 통과한다 |
 | 재생 구간 표 | 70초 AAC를 두 번 재생하는 edit list(재생 약 140초), 빈 구간이 있는 edit list, 3분 AAC를 70초만 재생하게 자른 edit list, 항목 2개짜리 edit list는 모두 `UNSUPPORTED_AUDIO_FORMAT`이고 저장되지 않는다. 앞쪽 무음 샘플(2112샘플)만 잘라 내는 항목 1개짜리 edit list는 통과한다 |
 | 헤더 위조 | `mvhd` 길이를 58초로 고친 3분짜리 M4A는 `AUDIO_DURATION_OUT_OF_RANGE` 또는 `UNSUPPORTED_AUDIO_FORMAT`이며, 저장되지 않는다. Xing 헤더 길이를 고친 3분짜리 MP3도 저장되지 않는다 |
 | 다시 올림 | 같은 파일·같은 입력은 `201`과 같은 `musicId`이며 곡은 1개다. 같은 파일에 제목만 다르면 `409 MUSIC_ALREADY_UPLOADED`. 곡을 삭제한 뒤 같은 파일은 새 곡으로 `201` |
