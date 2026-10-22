@@ -33,6 +33,7 @@ dependencies {
 	implementation 'com.fasterxml.uuid:java-uuid-generator:5.2.0'
 	implementation 'com.solapi:sdk:1.1.0'
 	implementation 'org.flywaydb:flyway-database-postgresql'
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-scalar:3.1.1'
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	developmentOnly 'org.springframework.boot:spring-boot-docker-compose'

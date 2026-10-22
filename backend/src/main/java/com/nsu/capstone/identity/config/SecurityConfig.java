@@ -48,6 +48,12 @@ public class SecurityConfig {
         OAUTH_RESULT_ENDPOINT
     );
 
+    // shortcut: API 문서 경로를 로그인 없이 연다(배포 서버 없음), 배포 설계(ADR-006) 때 막거나 끈다
+    private static final RequestMatcher API_DOCS_ENDPOINTS = new OrRequestMatcher(
+        PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/v3/api-docs/**"),
+        PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/scalar/**")
+    );
+
     private static final RequestMatcher PRE_LOGIN_SIGNUP_ENDPOINTS = new OrRequestMatcher(
         PathPatternRequestMatcher.pathPattern(
             HttpMethod.POST, "/api/v1/auth/signup/artist/oauth/session"),
@@ -102,7 +108,8 @@ public class SecurityConfig {
                 .requestMatchers(
                     PRE_LOGIN_SIGNUP_ENDPOINTS,
                     LOGIN_ENDPOINT,
-                    OAUTH_PUBLIC_ENDPOINTS
+                    OAUTH_PUBLIC_ENDPOINTS,
+                    API_DOCS_ENDPOINTS
                 ).permitAll()
                 .anyRequest().authenticated()
             )

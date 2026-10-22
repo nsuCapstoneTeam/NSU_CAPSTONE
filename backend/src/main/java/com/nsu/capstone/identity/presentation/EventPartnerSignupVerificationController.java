@@ -6,6 +6,8 @@ import com.nsu.capstone.identity.presentation.dto.AdultConfirmationRequest;
 import com.nsu.capstone.identity.presentation.dto.ConfirmSignupVerificationRequest;
 import com.nsu.capstone.identity.presentation.dto.RequiredTermsAgreementRequest;
 import com.nsu.capstone.identity.presentation.dto.SignupSessionVerificationRequest;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,6 +18,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@Tag(name = "EVENT_PARTNER 가입")
+@SecurityRequirements
 @RequestMapping("/api/v1/auth/signup/event-partner/session")
 public class EventPartnerSignupVerificationController {
 
