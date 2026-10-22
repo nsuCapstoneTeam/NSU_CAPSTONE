@@ -157,6 +157,16 @@ public enum ErrorCode {
         HttpStatus.SERVICE_UNAVAILABLE,
         "행사 등록을 처리할 수 없습니다. 잠시 후 같은 요청을 다시 보내 주세요."
     ),
+    INVALID_ARTIST_ID(
+        "INVALID_ARTIST_ID",
+        HttpStatus.BAD_REQUEST,
+        "아티스트 ID 형식이 올바르지 않습니다."
+    ),
+    ARTIST_NOT_FOUND(
+        "ARTIST_NOT_FOUND",
+        HttpStatus.NOT_FOUND,
+        "아티스트를 찾을 수 없습니다."
+    ),
     INTERNAL_SERVER_ERROR(
         "INTERNAL_SERVER_ERROR",
         HttpStatus.INTERNAL_SERVER_ERROR,
