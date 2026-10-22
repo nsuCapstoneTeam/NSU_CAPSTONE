@@ -94,19 +94,26 @@ export default function CdLoginStage({
 
       {/* 가운데: 동전(라벨 + 네온 링). 역할을 바꿀 때 이 동전이 뒤집힘 */}
       <div className="cd-login-center">
-        <div
-          className={`cd-coin is-${phase}`}
-          onAnimationEnd={finishFlip}
-        >
+        <div className="cd-coin-slot">
+          {/* 동전 뒤 검은 원: 동전이 뒤집히는 동안 CD 가운데가 비어 보이지 않게 (돌거나 뒤집히지 않음) */}
           <span
-            className="cd-ring-glow"
+            className="cd-coin-backing"
             aria-hidden="true"
           />
-          <span
-            className="cd-ring"
-            aria-hidden="true"
-          />
-          <div className={`cd-label login-motion-panel ${shake}`}>{children}</div>
+          <div
+            className={`cd-coin is-${phase}`}
+            onAnimationEnd={finishFlip}
+          >
+            <span
+              className="cd-ring-glow"
+              aria-hidden="true"
+            />
+            <span
+              className="cd-ring"
+              aria-hidden="true"
+            />
+            <div className={`cd-label login-motion-panel ${shake}`}>{children}</div>
+          </div>
         </div>
         <p
           className="cd-login-feedback"

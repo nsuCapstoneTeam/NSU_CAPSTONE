@@ -216,8 +216,20 @@ body.login-full-bleed .site-footer {
 .cd-login-center {
   position: relative;
   width: var(--label-size);
+}
+.cd-coin-slot {
+  position: relative;
   /* 동전이 뒤집힐 때 입체로 보이게 */
   perspective: 1600px;
+}
+/* 동전 뒤 검은 원 (Figma 'Label backing (검은 원)', 배경색 bg #0b1424)
+   평소에는 동전에 가려 보이지 않고, 뒤집히는 동안 CD 가운데를 어둡게 채움 */
+.cd-coin-backing {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #0b1424;
+  box-shadow: inset 0 0 32px rgba(0, 0, 0, 0.55);
 }
 .cd-coin {
   position: relative;
@@ -669,6 +681,7 @@ body.login-full-bleed .site-footer {
     padding: 84px 16px 32px;
   }
   .cd-login-center,
+  .cd-coin-slot,
   .cd-coin {
     width: 100%;
     max-width: 420px;
@@ -684,6 +697,9 @@ body.login-full-bleed .site-footer {
   .cd-coin::after {
     inset: -8px;
     border-radius: 40px;
+  }
+  .cd-coin-backing {
+    border-radius: 32px;
   }
   .cd-ring,
   .cd-ring-glow {
