@@ -5,6 +5,7 @@ const PROVIDERS = [
   ['google', '구글'],
 ];
 
+// 구분선 '간편 로그인' + 원형 버튼 3개. onSelect(표시 이름): 버튼을 누르면 호출 (예: '카카오')
 export default function SocialLoginButtons({ onSelect }) {
   return (
     <>

@@ -6,6 +6,7 @@ const NEXT = {
   organizer: { role: 'artist', label: '아티스트로 로그인' },
 };
 
+// role: 지금 화면의 역할, onSwitch(다음 역할): 누르면 호출, disabled: 뒤집는 중·로그인 중에는 잠금
 export default function RoleSwitch({ role, onSwitch, disabled }) {
   const next = NEXT[role];
   return (

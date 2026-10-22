@@ -39,6 +39,7 @@ export function spinElapsed() {
   return spin.pausedAt ?? performance.now() - spin.start;
 }
 
+// 회전을 멈춰 두었는지 (역할을 바꿔 새로 그려진 화면도 같은 멈춤 상태로 시작)
 export function isSpinPaused() {
   return spin.pausedAt !== null;
 }
@@ -70,6 +71,7 @@ export function useCoinFlip(onChangeRole) {
     return () => window.clearTimeout(timer.current);
   }, []);
 
+  // 역할 전환 버튼을 누르면: 지금 화면을 반쯤 뒤집은 뒤 다른 역할 화면을 엶 (뒤집는 중에 다시 누르면 무시)
   function switchRole(next) {
     if (phase === 'out') return;
     setPhase('out');
