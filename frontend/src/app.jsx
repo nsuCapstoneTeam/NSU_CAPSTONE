@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import brandLogo from './assets/hallaemallae-logo.png';
+import brandMark from './assets/clap-sound-mark.svg';
+import brandMarkDark from './assets/clap-sound-mark-dark.svg';
+import teamLogo from './assets/hallaemallae-logo.png';
 import { ARTISTS } from './features/matching/matching.js';
 import { INITIAL_PROFILE, INITIAL_POSTS } from './data/demo-data.js';
 import useStoredState from './hooks/use-stored-state.js';
@@ -178,14 +180,22 @@ export default function App() {
           {/* 상단 메뉴: 로고 · 주 메뉴 · 테마 전환 · 로그인/계정 */}
           <header className="site-header">
             <div className="header-inner">
+              {/* 서비스 로고: 글자가 레코드판 둘레를 채운 CLAP SOUND 마크
+                  라이트 테마는 남색 원판 + 무지개빛 글자, 다크 테마는 흰 원판 + 검정 글자 (app.css) */}
               <button
                 className="brand"
                 onClick={() => navigate('home')}
-                aria-label="할래말래 홈으로"
+                aria-label="CLAP SOUND 홈으로"
               >
                 <img
-                  src={brandLogo}
-                  alt="할래말래"
+                  className="brand-mark is-light"
+                  src={brandMark}
+                  alt=""
+                />
+                <img
+                  className="brand-mark is-dark"
+                  src={brandMarkDark}
+                  alt=""
                 />
               </button>
               {/* 주 메뉴. 비로그인 상태로 마이페이지를 누르면 로그인 안내로 이동 */}
@@ -423,14 +433,24 @@ export default function App() {
       {/* 공통 푸터 */}
       <footer className="site-footer">
         <div>
-          <strong>할래말래</strong>
+          <strong>CLAP SOUND</strong>
           <p>음악과 무대, 서로에게 맞는 연결.</p>
         </div>
-        <span>
-          졸업 작품 MVP · 결제·정산 미제공
-          <br />
-          데이터는 이 브라우저에만 저장됩니다.
-        </span>
+        <div className="site-footer-meta">
+          {/* 만든 팀: 할래말래 (예전 서비스 로고는 팀 로고로 사용) */}
+          <p className="site-footer-team">
+            만든 팀
+            <img
+              src={teamLogo}
+              alt="할래말래"
+            />
+          </p>
+          <span>
+            졸업 작품 MVP · 결제·정산 미제공
+            <br />
+            데이터는 이 브라우저에만 저장됩니다.
+          </span>
+        </div>
       </footer>
     </>
   );
