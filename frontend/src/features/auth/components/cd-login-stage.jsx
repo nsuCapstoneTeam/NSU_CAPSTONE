@@ -2,9 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Icon from '../../../components/common/icon.jsx';
 import {
   isSpinPaused,
-  prefersReducedMotion,
   spinElapsed,
   toggleSpinPaused,
+  usePrefersReducedMotion,
 } from './cd-login-motion.js';
 import './cd-login.css';
 
@@ -26,7 +26,7 @@ export default function CdLoginStage({
 }) {
   const stageRef = useRef(null);
   // 동작 줄이기 설정이면 회전하지 않으므로 멈춤 버튼도 숨김
-  const [canSpin] = useState(() => !prefersReducedMotion());
+  const canSpin = !usePrefersReducedMotion();
   const [paused, setPaused] = useState(isSpinPaused);
 
   // 역할을 바꿔 화면이 새로 그려져도 CD·링이 보던 각도에서 이어 돌도록 시작 시점을 맞춤

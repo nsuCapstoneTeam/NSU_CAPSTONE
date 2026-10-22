@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 // CD 로그인 화면의 움직임 상태 (아티스트·행사 관계자 공통, DESIGN.md 10.3.1 · 10.6)
 // 두 로그인 화면은 서로 다른 페이지라 역할을 바꾸면 화면이 새로 그려집니다.
@@ -9,9 +9,24 @@ const FLIP_HALF_MS = 300;
 // 동작 줄이기 설정일 때는 회전 대신 짧게 흐려졌다 나타남
 const FADE_OUT_MS = 100;
 
-// 사용자가 '동작 줄이기'를 켜 두었는지 확인
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+// 사용자가 '동작 줄이기'를 켜 두었는지 확인 (지금 이 순간의 값)
 export function prefersReducedMotion() {
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  return window.matchMedia?.(REDUCED_MOTION_QUERY).matches ?? false;
+}
+
+// '동작 줄이기' 설정이 바뀌면 알려 줌 (화면을 연 채로 운영체제 설정을 바꿔도 반영)
+function subscribeReducedMotion(onChange) {
+  const query = window.matchMedia?.(REDUCED_MOTION_QUERY);
+  if (!query) return () => {};
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+
+// '동작 줄이기' 설정을 따라가는 값. 설정이 바뀌면 화면도 다시 그려짐
+export function usePrefersReducedMotion() {
+  return useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
 }
 
 // ---------- CD·네온 링 회전 시계 ----------
