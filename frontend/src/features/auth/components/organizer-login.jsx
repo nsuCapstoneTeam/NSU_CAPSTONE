@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import './organizer-login.css';
 import './login-motion.css';
-import './login-circle.css';
-import './login-backdrop.css';
-import RoleCd from './role-cd.jsx';
-import LoginSlideshow from './login-slideshow.jsx';
+import CdLoginStage from './cd-login-stage.jsx';
+import RoleSwitch from './role-switch.jsx';
+import SocialLoginButtons from './social-login-buttons.jsx';
+import { useCoinFlip } from './cd-login-motion.js';
 import DevQuickLogin from './dev-quick-login.jsx';
 
 // 인증 API 연결 전 UI. 인증 성공이나 로그인 상태를 임의로 만들지 않습니다.
-// 행사 관계자 로그인 화면: 왼쪽 역할 전환 CD + 오른쪽 원형 로그인 창 (휴대폰 번호 → 인증번호)
+// 행사 관계자 로그인 화면: 큰 CD 가운데 라벨 안에 휴대폰 번호 → 인증번호 로그인 (cd-login-stage.jsx)
 export default function OrganizerLogin({ onBack, onSignUp, onChangeRole, onLogin }) {
   // 입력값, 인증번호 요청 여부, 안내·오류 문구
   const [phone, setPhone] = useState('');
@@ -24,6 +23,8 @@ export default function OrganizerLogin({ onBack, onSignUp, onChangeRole, onLogin
   const loginTimer = useRef(null);
   const phoneInput = useRef(null);
   const codeInput = useRef(null);
+  // 역할 전환 버튼을 누르면 라벨이 동전처럼 뒤집힌 뒤 아티스트 화면으로
+  const flip = useCoinFlip(onChangeRole);
   // 인증번호 유효시간 (가입 화면과 같은 60초). 0이 되면 만료 → 재전송 필요
   const [seconds, setSeconds] = useState(0);
   const expired = codeRequested && seconds === 0;
@@ -86,213 +87,154 @@ export default function OrganizerLogin({ onBack, onSignUp, onChangeRole, onLogin
     }, 700);
   }
   return (
-    <section
-      className="organizer-login has-cd"
-      aria-labelledby="organizer-login-title"
+    <CdLoginStage
+      role="organizer"
+      titleId="organizer-login-title"
+      phase={flip.phase}
+      shake={shakeCount ? (shakeCount % 2 ? 'shake-a' : 'shake-b') : ''}
+      onBack={onBack}
+      feedback={
+        expired && !loading
+          ? '인증 시간이 만료되었어요. 인증번호를 다시 요청해 주세요.'
+          : message
+      }
+      note={
+        <p
+          id="organizer-login-note"
+          className="cd-login-note"
+        >
+          로그인 화면 미리보기입니다. 간편 로그인과 문자 인증은 연결 준비 중이며, 휴대폰 번호는
+          저장하거나 전송하지 않습니다.
+        </p>
+      }
     >
-      {/* 배경 사진 슬라이드쇼 */}
-      <LoginSlideshow />
       {/* 개발용 빠른 로그인: npm run dev에서만 보임 */}
       {import.meta.env.DEV && <DevQuickLogin onLogin={onLogin} />}
-      <button
-        className="text-button"
-        onClick={onBack}
+      <h1 id="organizer-login-title">행사 관계자 로그인</h1>
+      {/* 1단계: 휴대폰 번호 입력 · 인증번호 요청 */}
+      <form
+        onSubmit={requestCode}
+        noValidate
       >
-        ← 홈으로 돌아가기
-      </button>
-      <div className="login-layout">
-        <RoleCd role="organizer" onChangeRole={onChangeRole} />
-        {/* 원형 로그인 창. shakeCount가 바뀔 때마다 shake-a / shake-b를 번갈아 붙여 흔들림을 다시 재생 */}
-        <div
-        className={`organizer-login-panel login-motion-panel login-circle ${
-          shakeCount ? (shakeCount % 2 ? 'shake-a' : 'shake-b') : ''
-        }`}
-      >
-        <p className="eyebrow">FOR ORGANIZERS</p>
-        <h1 id="organizer-login-title">행사 관계자 로그인</h1>
-        <p className="organizer-login-intro">
-          편한 방법으로 시작하고,
-          <br />내 행사에 어울리는 아티스트를 만나보세요.
-        </p>
-        {/* 1단계: 휴대폰 번호 입력 · 인증번호 요청 */}
-        <form
-          onSubmit={requestCode}
-          noValidate
+        {/* 떠오르는 라벨: 비어 있으면 칸 안에 라벨, 입력하거나 누르면 테두리 위로 올라감 */}
+        <div className={`login-float ${phone ? 'is-filled' : ''}`}>
+          <label htmlFor="organizer-phone">휴대폰 번호</label>
+          <input
+            ref={phoneInput}
+            id="organizer-phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel-national"
+            placeholder="010-1234-5678"
+            maxLength={13}
+            value={phone}
+            onChange={(e) => {
+              setPhone(e.target.value.replace(/[^0-9-]/g, ''));
+              setError('');
+              setErrorField('');
+              setMessage('');
+              // 번호를 바꾸면 인증 단계를 처음부터 다시 진행
+              setCodeRequested(false);
+              setSeconds(0);
+              setCode('');
+            }}
+            aria-invalid={errorField === 'phone'}
+            aria-describedby={
+              errorField === 'phone'
+                ? 'organizer-phone-error'
+                : 'organizer-login-note'
+            }
+          />
+        </div>
+        {errorField === 'phone' && (
+          <p
+            id="organizer-phone-error"
+            className="error"
+            role="alert"
+          >
+            {error}
+          </p>
+        )}
+        {/* 버튼 문구: 요청 → 남은 시간(잠김) → 재전송 */}
+        <button
+          className="primary full"
+          type="submit"
+          disabled={codeRequested && seconds > 0}
         >
-          {/* 떠오르는 라벨: 비어 있으면 칸 안에 라벨, 입력하거나 누르면 테두리 위로 올라감 */}
-          <div className={`login-float ${phone ? 'is-filled' : ''}`}>
-            <label htmlFor="organizer-phone">휴대폰 번호</label>
+          {codeRequested && seconds > 0
+            ? `${time} 후 재전송`
+            : codeRequested
+              ? '인증번호 재전송'
+              : '인증번호 요청'}
+        </button>
+      </form>
+      {/* 2단계: 인증번호 입력 (요청 후에만 표시) */}
+      {codeRequested && (
+        <form className="organizer-code-form" onSubmit={verifyCode} noValidate>
+          <div className={`login-float ${code ? 'is-filled' : ''}`}>
+            <label htmlFor="organizer-code">인증번호</label>
             <input
-              ref={phoneInput}
-              id="organizer-phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel-national"
-              placeholder="010-1234-5678"
-              maxLength={13}
-              value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value.replace(/[^0-9-]/g, ''));
+              ref={codeInput}
+              id="organizer-code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              disabled={expired}
+              value={code}
+              onChange={(event) => {
+                setCode(event.target.value.replace(/\D/g, ''));
                 setError('');
                 setErrorField('');
-                setMessage('');
-                // 번호를 바꾸면 인증 단계를 처음부터 다시 진행
-                setCodeRequested(false);
-                setSeconds(0);
-                setCode('');
               }}
-              aria-invalid={errorField === 'phone'}
+              placeholder="숫자 6자리"
+              aria-invalid={errorField === 'code'}
               aria-describedby={
-                errorField === 'phone'
-                  ? 'organizer-phone-error'
-                  : 'organizer-login-note'
+                errorField === 'code' ? 'organizer-code-error' : undefined
               }
             />
           </div>
-          {errorField === 'phone' && (
-            <p
-              id="organizer-phone-error"
-              className="error"
-              role="alert"
-            >
+          {errorField === 'code' && (
+            <p id="organizer-code-error" className="error" role="alert">
               {error}
             </p>
           )}
-          {/* 버튼 문구: 요청 → 남은 시간(잠김) → 재전송 */}
           <button
-            className="primary full organizer-phone-submit"
+            className="primary full"
             type="submit"
-            disabled={codeRequested && seconds > 0}
+            disabled={loading}
+            aria-busy={loading}
           >
-            {codeRequested && seconds > 0
-              ? `${time} 후 재전송`
-              : codeRequested
-                ? '인증번호 재전송'
-                : '인증번호 요청'}
+            {loading && <span className="login-spinner" aria-hidden="true" />}
+            {loading ? '로그인 중…' : '인증하고 로그인'}
           </button>
         </form>
-        {/* 2단계: 인증번호 입력 (요청 후에만 표시) */}
-        {codeRequested && (
-          <form className="organizer-code-form" onSubmit={verifyCode} noValidate>
-            <div className={`login-float ${code ? 'is-filled' : ''}`}>
-              <label htmlFor="organizer-code">인증번호</label>
-              <input
-                ref={codeInput}
-                id="organizer-code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                disabled={expired}
-                value={code}
-                onChange={(event) => {
-                  setCode(event.target.value.replace(/\D/g, ''));
-                  setError('');
-                  setErrorField('');
-                }}
-                placeholder="숫자 6자리"
-                aria-invalid={errorField === 'code'}
-                aria-describedby={
-                  errorField === 'code' ? 'organizer-code-error' : undefined
-                }
-              />
-            </div>
-            {errorField === 'code' && (
-              <p id="organizer-code-error" className="error" role="alert">
-                {error}
-              </p>
-            )}
-            <button
-              className="primary full organizer-phone-submit"
-              type="submit"
-              disabled={loading}
-              aria-busy={loading}
-            >
-              {loading && <span className="login-spinner" aria-hidden="true" />}
-              {loading ? '로그인 중…' : '인증하고 로그인'}
-            </button>
-          </form>
-        )}
-        {/* 인증번호 입력 중에는 원 안 공간 확보를 위해 간편 로그인 숨김 */}
-        {!codeRequested && (
-          <>
-            <div className="organizer-login-divider">
-              <span>간편 로그인</span>
-            </div>
-            <div
-              className="organizer-social"
-              aria-label="간편 로그인 방법"
-            >
-              {[
-                ['kakao', '카카오'],
-                ['naver', '네이버'],
-                ['google', '구글'],
-              ].map(([key, name]) => (
-                <button
-                  type="button"
-                  key={key}
-                  className={`organizer-social-button ${key}`}
-                  aria-label={`${name}로 로그인`}
-                  title={`${name}로 로그인`}
-                  onClick={() => {
-                    setError('');
-                    setMessage(
-                      `${name} 로그인은 연결 준비 중입니다. 실제 계정 인증이나 로그인은 진행되지 않았습니다.`,
-                    );
-                  }}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="organizer-provider-mark"
-                  >
-                    {key === 'kakao' ? (
-                      <svg
-                        viewBox="0 0 32 32"
-                        width="30"
-                        height="30"
-                      >
-                        <path
-                          fill="currentColor"
-                          d="M16 5C8.8 5 3 9.3 3 14.6c0 3.4 2.4 6.4 6 8.1L7.6 28l6-3.9c.8.1 1.6.2 2.4.2 7.2 0 13-4.3 13-9.7S23.2 5 16 5Z"
-                        />
-                      </svg>
-                    ) : key === 'naver' ? (
-                      'N'
-                    ) : (
-                      'G'
-                    )}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-        {/* 회원가입 이동 · 안내 문구 */}
-        <p className="organizer-signup">
-          처음이신가요?{' '}
-          <button
-            type="button"
-            onClick={onSignUp}
-          >
-            가입할래!
-          </button>
-        </p>
-        <p
-          className="organizer-login-feedback"
-          role="status"
+      )}
+      {/* 인증번호 입력 중에는 라벨 안 공간 확보를 위해 간편 로그인 숨김 */}
+      {!codeRequested && (
+        <SocialLoginButtons
+          onSelect={(name) => {
+            setError('');
+            setMessage(
+              `${name} 로그인은 연결 준비 중입니다. 실제 계정 인증이나 로그인은 진행되지 않았습니다.`,
+            );
+          }}
+        />
+      )}
+      {/* 아티스트 화면으로 전환 ('가입할래' 위) */}
+      <RoleSwitch
+        role="organizer"
+        onSwitch={flip.switchRole}
+        disabled={flip.phase === 'out' || loading}
+      />
+      <p className="cd-signup">
+        처음이신가요?
+        <button
+          type="button"
+          onClick={onSignUp}
         >
-          {expired && !loading
-            ? '인증 시간이 만료되었어요. 인증번호를 다시 요청해 주세요.'
-            : message}
-        </p>
-        <p
-          id="organizer-login-note"
-          className="organizer-login-note"
-        >
-          로그인 화면 미리보기입니다. 간편 로그인과 문자 인증은 연결 준비
-          중이며, 휴대폰 번호는 저장하거나 전송하지 않습니다.
-        </p>
-      </div>
-      </div>
-    </section>
+          가입할래!
+        </button>
+      </p>
+    </CdLoginStage>
   );
 }
