@@ -1,0 +1,774 @@
+/* CD 로그인 화면 (아티스트·행사 관계자 공통)
+   Figma '할래말래 로그인 · 네온 시안' → CD 로그인 (21:317 아티스트, 21:464 행사 관계자)
+   - 어두운 무대 위 큰 무지개빛 CD, 가운데 어두운 라벨 안에 로그인 폼
+   - 네온은 역할 색만, 번짐 24px·불투명도 0.6 이하, 어두운 배경에서만 (DESIGN.md 10.3.1)
+   - 회전: CD 20초, 네온 링 12초에 한 바퀴, 깜빡임 없음. 동작 줄이기 설정이면 멈춤
+   - 역할 전환: 동전 뒤집기 600ms(나감 300 + 들어옴 300), 동작 줄이기면 짧게 흐려짐 */
+
+/* ---------- 색·크기 ---------- */
+.cd-login {
+  /* 역할 색 (RGB, 진한 색, 밝은 색) */
+  --neon: 61, 155, 255;
+  --neon-hex: #3d9bff;
+  --neon-soft: #a8d4ff;
+  --on-dark: #f2f8ff;
+  --on-dark-muted: rgba(226, 236, 252, 0.7);
+  --label-size: 572px;
+  --disc-size: clamp(900px, 133vh, 1400px);
+  /* 회전 시작 위치 (cd-login-stage.jsx에서 화면이 바뀌어도 이어지게 설정) */
+  --spin-delay: 0ms;
+
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  /* 본문 폭 제한(.page-container)을 벗어나 화면 양끝까지 */
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: 96px 16px 120px;
+  overflow: hidden;
+  background: #050a14;
+  color: var(--on-dark);
+  color-scheme: dark;
+}
+.cd-login--organizer {
+  --neon: 255, 122, 89;
+  --neon-hex: #ff7a59;
+  --neon-soft: #ffc4ab;
+}
+
+/* 로그인·가입 역할 선택 화면: 화면 끝까지 채운 배경이 가로 스크롤을 만들지 않게, 하단 푸터 숨김
+   (signup-role-select.jsx도 같은 클래스를 씀) */
+body.login-full-bleed {
+  overflow-x: clip;
+}
+body.login-full-bleed .site-footer {
+  display: none;
+}
+
+/* ---------- 배경: 무대 + 큰 CD ---------- */
+.cd-login-backdrop {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  /* CD 뒤 역할 색 빛 */
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(var(--neon), 0.22),
+    transparent min(70vw, 900px)
+  );
+}
+.cd-disc {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--disc-size);
+  height: var(--disc-size);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  /* CD 가장자리 네온 */
+  box-shadow:
+    0 0 24px rgba(var(--neon), 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+.cd-disc > span {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+/* 무지개빛 면: 이 층만 돌아서 빛이 흐르듯 보임 */
+.cd-disc-face {
+  background: conic-gradient(
+    #dfe8f3,
+    #9fb6d8,
+    #f1d4e6,
+    #c6eeff,
+    #eef3ff,
+    #a9c0e6,
+    #ffe0cf,
+    #d9f3ec,
+    #dfe8f3
+  );
+  animation: cd-spin 20s linear infinite;
+  animation-delay: var(--spin-delay);
+}
+/* 역할 색이 가장자리로 갈수록 살짝 섞임 */
+.cd-disc-tint {
+  background: radial-gradient(
+    circle closest-side,
+    transparent 45%,
+    rgba(var(--neon), 0.3) 100%
+  );
+  mix-blend-mode: multiply;
+}
+/* 홈(가운데 투명한 부분) · 트랙 경계선 · 바깥 테두리 */
+.cd-disc-grooves {
+  background:
+    radial-gradient(
+      circle closest-side,
+      rgba(255, 255, 255, 0.22) 0 56.4%,
+      rgba(255, 255, 255, 0.7) 56.4% 56.7%,
+      transparent 56.7% 76%,
+      rgba(70, 90, 130, 0.42) 76% 76.25%,
+      transparent 76.25% 91%,
+      rgba(255, 255, 255, 0.6) 91% 91.2%,
+      transparent 91.2% 98.6%,
+      rgba(255, 255, 255, 0.85) 98.6% 100%
+    ),
+    repeating-radial-gradient(
+      circle closest-side,
+      transparent 0 5px,
+      rgba(60, 80, 120, 0.05) 5px 6px
+    );
+}
+/* 빛 반사 (돌지 않음) */
+.cd-disc-sheen {
+  background:
+    linear-gradient(
+      125deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.45) 45%,
+      transparent 58%
+    ),
+    linear-gradient(
+      300deg,
+      transparent 62%,
+      rgba(255, 255, 255, 0.3) 72%,
+      transparent 82%
+    );
+  mix-blend-mode: soft-light;
+}
+/* 작은 별빛 */
+.cd-spark {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+  opacity: 0.6;
+}
+.cd-spark:nth-of-type(1) { top: 20%; left: 88%; }
+.cd-spark:nth-of-type(2) { top: 72%; left: 92%; }
+.cd-spark:nth-of-type(3) { top: 78%; left: 8%; }
+
+@keyframes cd-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------- 위쪽: 홈으로 · 회전 멈춤 ---------- */
+.cd-login-top {
+  position: absolute;
+  z-index: 3;
+  top: 24px;
+  left: clamp(16px, 5vw, 64px);
+  right: clamp(16px, 5vw, 64px);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.cd-login-back {
+  padding: 8px 4px;
+  background: none;
+  color: var(--on-dark);
+  font-size: 13px;
+  font-weight: 600;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+.cd-login-pause {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  background: rgba(5, 10, 20, 0.5);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: var(--on-dark);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 180ms ease;
+}
+.cd-login-pause:hover {
+  background: rgba(5, 10, 20, 0.72);
+}
+.cd-login-top button:focus-visible {
+  outline: 2px solid var(--neon-soft);
+  outline-offset: 3px;
+}
+/* 멈춘 동안 CD·네온 링 정지 */
+.cd-login.is-paused .cd-disc-face,
+.cd-login.is-paused .cd-ring,
+.cd-login.is-paused .cd-ring-glow {
+  animation-play-state: paused;
+}
+
+/* ---------- 가운데: 동전(라벨 + 네온 링) ---------- */
+.cd-login-center {
+  position: relative;
+  width: var(--label-size);
+}
+.cd-coin-slot {
+  position: relative;
+  /* 동전이 뒤집힐 때 입체로 보이게 */
+  perspective: 1600px;
+}
+/* 동전 뒤 검은 원 (Figma 'Label backing (검은 원)', 배경색 bg #0b1424)
+   평소에는 동전에 가려 보이지 않고, 뒤집히는 동안 CD 가운데를 어둡게 채움 */
+.cd-coin-backing {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #0b1424;
+  box-shadow: inset 0 0 32px rgba(0, 0, 0, 0.55);
+}
+.cd-coin {
+  position: relative;
+  width: var(--label-size);
+  height: var(--label-size);
+}
+/* 라벨 둘레의 밝은 테두리 (CD 가운데 투명한 고리) */
+.cd-coin::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  background: linear-gradient(150deg, #eef2f7, #a7b0bd 55%, #d9dee6);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4);
+}
+/* 뒤집히는 동안 라벨에 드리우는 그림자 */
+.cd-coin::after {
+  content: '';
+  position: absolute;
+  z-index: 3;
+  inset: -12px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.55), rgba(255, 255, 255, 0.12));
+  opacity: 0;
+  pointer-events: none;
+}
+/* 네온 링: 일부만 밝은 호가 12초에 한 바퀴 (transform 회전만 사용) */
+.cd-ring,
+.cd-ring-glow {
+  position: absolute;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 200deg,
+    rgba(var(--neon), 0) 0deg,
+    rgba(var(--neon), 0.9) 90deg,
+    var(--neon-soft) 125deg,
+    rgba(var(--neon), 0) 160deg,
+    rgba(var(--neon), 0) 360deg
+  );
+  animation: cd-spin 12s linear infinite;
+  animation-delay: var(--spin-delay);
+  pointer-events: none;
+}
+.cd-ring {
+  z-index: 1;
+  inset: -9px;
+  padding: 4px;
+  /* 가운데를 비워 4px 고리만 남김 */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+.cd-ring-glow {
+  z-index: 0;
+  inset: -22px;
+  filter: blur(18px);
+  opacity: 0.6;
+}
+/* 라벨: 어두운 볼록한 원판 */
+.cd-label {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 40px calc((var(--label-size) - 340px) / 2);
+  border-radius: 50%;
+  background: linear-gradient(165deg, #16243a, #0a1220);
+  box-shadow:
+    inset 0 2px 1px rgba(255, 255, 255, 0.08),
+    inset 0 -14px 36px rgba(0, 0, 0, 0.55),
+    0 0 18px rgba(var(--neon), 0.35);
+  color: var(--on-dark);
+  text-align: center;
+}
+.cd-label h1 {
+  margin: 0 0 22px;
+  color: var(--on-dark);
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  text-shadow: 0 0 14px rgba(var(--neon), 0.6);
+}
+
+/* ---------- 입력칸: 어두운 알약 + 떠오르는 라벨 ---------- */
+.cd-label form {
+  display: grid;
+  gap: 16px;
+}
+.cd-label .login-float {
+  position: relative;
+  display: block;
+}
+.cd-login .cd-label input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 52px;
+  padding: 0 52px;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  background: #08101d;
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.7),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+  color: var(--on-dark);
+  font-size: 14px;
+  text-align: center;
+  transition:
+    border-color 180ms ease,
+    box-shadow 220ms ease;
+}
+.cd-login .cd-label input:focus {
+  border-color: var(--neon-hex);
+  outline: none;
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.7),
+    0 0 16px rgba(var(--neon), 0.45);
+}
+.cd-login .cd-label input[aria-invalid='true'] {
+  border-color: #ff6b7a;
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.7),
+    0 0 14px rgba(255, 107, 122, 0.35);
+}
+.cd-login .cd-label input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* 형식 안내(placeholder)는 칸을 눌렀을 때만 (비어 있을 땐 라벨과 겹치지 않게) */
+.cd-label input::placeholder {
+  color: transparent;
+}
+.cd-label .login-float:focus-within input::placeholder {
+  color: rgba(226, 236, 252, 0.4);
+}
+/* 비어 있으면 칸 가운데, 누르거나 입력하면 테두리 위로 */
+.cd-label .login-float > label {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  margin: 0;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: var(--on-dark-muted);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 180ms ease;
+}
+.cd-label .login-float:focus-within > label,
+.cd-label .login-float.is-filled > label {
+  background: #0d1828;
+  color: var(--neon-soft);
+  font-weight: 700;
+  transform: translate(-50%, calc(-50% - 26px)) scale(0.86);
+}
+.cd-label .login-float:has(input[aria-invalid='true']) > label {
+  color: #ff9aa5;
+}
+/* 비밀번호 보기 버튼 */
+.cd-label .login-password-toggle {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--on-dark-muted);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+.cd-label .login-password-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--on-dark);
+}
+/* 오류 · Caps Lock 안내 */
+.cd-label .error,
+.cd-label .login-capslock {
+  margin: -8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+.cd-label .error {
+  color: #ff9aa5;
+}
+.cd-label .login-capslock {
+  color: #f6c768;
+}
+
+/* ---------- 버튼 ---------- */
+/* 로그인·인증 버튼: 비어 있는 알약 + 역할 색 테두리 빛 */
+.cd-login .cd-label button.primary {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 52px;
+  padding: 0 20px;
+  border: 1.5px solid var(--neon-hex);
+  border-radius: 999px;
+  background: rgba(var(--neon), 0.1);
+  box-shadow:
+    0 0 18px rgba(var(--neon), 0.4),
+    inset 0 0 12px rgba(var(--neon), 0.12);
+  color: var(--neon-soft);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.cd-login .cd-label button.primary:hover:not(:disabled) {
+  background: rgba(var(--neon), 0.18);
+  box-shadow:
+    0 0 22px rgba(var(--neon), 0.5),
+    inset 0 0 12px rgba(var(--neon), 0.16);
+}
+.cd-login .cd-label button.primary:disabled:not([aria-busy='true']) {
+  border-color: rgba(var(--neon), 0.45);
+  background: rgba(var(--neon), 0.05);
+  box-shadow: none;
+  color: var(--on-dark-muted);
+  opacity: 1;
+}
+.cd-label button:focus-visible {
+  outline: 2px solid var(--neon-soft);
+  outline-offset: 3px;
+}
+
+/* 간편 로그인: 가운데 글자 + 양옆 선, 브랜드 색 원형 버튼 */
+.cd-label-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 12px;
+  color: var(--on-dark-muted);
+  font-size: 12px;
+}
+.cd-label-divider::before,
+.cd-label-divider::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: rgba(255, 255, 255, 0.12);
+}
+.cd-social {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+}
+.cd-social-button {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.cd-social-button:hover {
+  transform: translateY(-3px);
+}
+.cd-social-button:active {
+  transform: scale(0.94);
+}
+.cd-social-button svg {
+  width: 22px;
+  height: 22px;
+}
+.cd-social-button.kakao { background: #fee500; color: #191919; }
+.cd-social-button.naver { background: #03c75a; color: #fff; }
+.cd-social-button.google { background: #fff; color: #4285f4; }
+
+/* 역할 전환 버튼: 바뀔 역할의 색 */
+.cd-role-switch {
+  --switch: 255, 122, 89;
+  --switch-soft: #ffc4ab;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  margin-top: 18px;
+  padding: 0 18px;
+  border: 1.5px solid rgb(var(--switch));
+  border-radius: 999px;
+  background: rgba(var(--switch), 0.1);
+  box-shadow: 0 0 12px rgba(var(--switch), 0.35);
+  color: var(--switch-soft);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 180ms ease;
+}
+.cd-role-switch.is-artist {
+  --switch: 61, 155, 255;
+  --switch-soft: #a8d4ff;
+}
+.cd-role-switch:hover:not(:disabled) {
+  background: rgba(var(--switch), 0.2);
+}
+.cd-label .cd-role-switch:focus-visible {
+  outline-color: var(--switch-soft);
+}
+.cd-role-switch:disabled {
+  cursor: progress;
+}
+
+/* '처음이신가요? 가입할래!' */
+.cd-signup {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  color: var(--on-dark-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.cd-signup button {
+  padding: 4px;
+  background: none;
+  color: var(--neon-soft);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+/* ---------- 라벨 밖 안내 문구 ---------- */
+/* 간편 로그인·인증 안내: 라벨 바로 아래 어두운 말풍선 */
+.cd-login-feedback {
+  position: absolute;
+  top: calc(100% + 24px);
+  left: 0;
+  right: 0;
+  width: fit-content;
+  max-width: min(440px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 10px 16px;
+  border: 1px solid rgba(var(--neon), 0.4);
+  border-radius: 14px;
+  background: rgba(5, 10, 20, 0.82);
+  color: #e3eeff;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  word-break: keep-all;
+}
+.cd-login-feedback:empty {
+  display: none;
+}
+/* 미리보기 안내: 왼쪽 아래 */
+.cd-login-note {
+  position: absolute;
+  left: clamp(16px, 5vw, 64px);
+  bottom: 20px;
+  max-width: 340px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(5, 10, 20, 0.62);
+  color: var(--on-dark-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+/* ---------- 움직임 ---------- */
+/* 처음 열릴 때: 동전이 살짝 커지며 나타남 */
+.cd-coin.is-enter {
+  animation: cd-coin-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* 역할 전환: 오른쪽으로 90도까지 뒤집혀 나가고, 새 화면이 -90도에서 이어서 들어옴 */
+.cd-coin.is-out {
+  animation: cd-flip-out 300ms cubic-bezier(0.55, 0, 0.75, 0.45) forwards;
+}
+.cd-coin.is-in {
+  animation: cd-flip-in 300ms cubic-bezier(0.25, 0.55, 0.35, 1) both;
+}
+.cd-coin.is-out::after {
+  animation: cd-shade-out 300ms ease-in forwards;
+}
+.cd-coin.is-in::after {
+  animation: cd-shade-in 300ms ease-out both;
+}
+/* 라벨 자체의 등장 효과(login-motion.css)는 동전이 대신하므로 끔. 오류 흔들림은 유지 */
+.cd-login .cd-label.login-motion-panel:not(.shake-a, .shake-b) {
+  animation: none;
+}
+/* 뒤집혀 들어올 때는 내용이 동전과 함께 보이도록 순차 등장도 끔 */
+.cd-coin.is-in .cd-label > * {
+  animation: none;
+}
+@keyframes cd-coin-enter {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes cd-flip-out {
+  from { transform: rotateY(0deg); }
+  to { transform: rotateY(90deg) scale(0.96); }
+}
+@keyframes cd-flip-in {
+  from { transform: rotateY(-90deg) scale(0.96); }
+  to { transform: none; }
+}
+@keyframes cd-shade-out {
+  to { opacity: 1; }
+}
+@keyframes cd-shade-in {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes cd-fade-out {
+  to { opacity: 0; }
+}
+@keyframes cd-fade-in {
+  from { opacity: 0; }
+}
+
+/* ---------- 좁은 화면 (휴대폰) ---------- */
+/* 원 안에 폼이 들어가지 않으므로 라벨을 둥근 카드로, 네온 링은 회전 없이 테두리로 */
+@media (max-width: 640px) {
+  .cd-login {
+    --disc-size: 860px;
+    align-content: start;
+    padding: 84px 16px 32px;
+  }
+  .cd-login-center,
+  .cd-coin-slot,
+  .cd-coin {
+    width: 100%;
+    max-width: 420px;
+    height: auto;
+  }
+  .cd-label {
+    position: relative;
+    inset: auto;
+    padding: 36px 22px 30px;
+    border-radius: 32px;
+  }
+  .cd-coin::before,
+  .cd-coin::after {
+    inset: -8px;
+    border-radius: 40px;
+  }
+  .cd-coin-backing {
+    border-radius: 32px;
+  }
+  .cd-ring,
+  .cd-ring-glow {
+    border-radius: 36px;
+    animation: none;
+  }
+  .cd-ring {
+    inset: -5px;
+    padding: 3px;
+  }
+  /* 휴대폰에서는 CD가 위쪽까지 덮으므로 '홈으로 돌아가기'도 어두운 알약으로 */
+  .cd-login-back {
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 999px;
+    background: rgba(5, 10, 20, 0.5);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    font-size: 12px;
+  }
+  .cd-login-feedback,
+  .cd-login-note {
+    position: static;
+    max-width: none;
+    margin: 16px auto 0;
+  }
+  .cd-login-note {
+    width: 100%;
+    max-width: 420px;
+    box-sizing: border-box;
+  }
+}
+@media (max-width: 360px) {
+  .cd-label {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .cd-social {
+    gap: 14px;
+  }
+}
+
+/* 동작 줄이기 설정: 회전 없음, 뒤집기 대신 짧게 흐려졌다 나타남 */
+@media (prefers-reduced-motion: reduce) {
+  .cd-disc-face,
+  .cd-ring,
+  .cd-ring-glow,
+  .cd-coin.is-enter,
+  .cd-coin::after {
+    animation: none !important;
+  }
+  .cd-coin.is-out {
+    animation: cd-fade-out 100ms linear forwards;
+  }
+  .cd-coin.is-in {
+    animation: cd-fade-in 200ms linear both;
+  }
+  .cd-label .login-float > label,
+  .cd-social-button {
+    transition: none;
+  }
+}
+
+/* 간편 로그인 아이콘 가운데 정렬 · 인증번호 칸 간격 */
+.cd-social-button > span {
+  display: grid;
+  place-items: center;
+}
+.cd-label .organizer-code-form {
+  margin-top: 16px;
+}

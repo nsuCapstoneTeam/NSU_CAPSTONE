@@ -364,7 +364,7 @@ function RoleCard({ role, onSelect }) {
 
 // onSelect(role): 'artist' | 'organizer', onBack: 뒤로 가기, onLogin: 로그인 화면으로
 export default function SignupRoleSelect({ onSelect, onBack, onLogin }) {
-  // 로그인 화면처럼 배경을 화면 양끝까지 채우고 푸터를 숨김 (login-backdrop.css)
+  // 로그인 화면처럼 배경을 화면 양끝까지 채우고 푸터를 숨김 (cd-login.css)
   useEffect(() => {
     document.body.classList.add('login-full-bleed');
     return () => document.body.classList.remove('login-full-bleed');
