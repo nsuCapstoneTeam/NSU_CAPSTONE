@@ -4,8 +4,10 @@
   --role: var(--blue);
   --role-soft: var(--tint);
   --on-role: var(--on-blue);
+  --rail: 76px; /* 평소 사이드바 폭 (아이콘만) */
+  --rail-open: 252px; /* 마우스를 올렸을 때 폭 */
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
+  grid-template-columns: var(--rail) minmax(0, 1fr);
   gap: 28px;
   align-items: start;
   padding: 36px 0 64px;
@@ -20,10 +22,6 @@
   --role-soft: #3a2420;
   --on-role: #2a0f08;
 }
-.my-page.is-collapsed {
-  grid-template-columns: 76px minmax(0, 1fr);
-}
-
 /* 화면 낭독기에만 읽히는 글자 */
 .my-page .sr-only {
   position: absolute;
@@ -35,24 +33,44 @@
 }
 
 /* ---------- 사이드바 ---------- */
+/* 평소에는 아이콘만 보이는 좁은 막대. 마우스를 올리거나(:hover) 키보드로 들어가면(:focus-within)
+   오른쪽으로 늘어나 이름이 보입니다. 내용 위에 겹쳐 펼쳐지므로 본문 배치는 움직이지 않습니다.
+   아이콘 위치는 그대로 두고 폭만 바뀌어, 늘어날 때 이름이 옆에서 드러나는 방식입니다. */
 .my-sidebar {
   position: sticky;
   top: 24px;
+  z-index: 30;
   display: flex;
   flex-direction: column;
+  width: var(--rail);
   min-height: 560px;
+  overflow: hidden;
   padding: 20px 12px 12px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 15px;
   box-shadow: var(--shadow);
+  transition:
+    width 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.my-sidebar:hover,
+.my-sidebar:focus-within {
+  width: var(--rail-open);
+  box-shadow: 0 18px 50px #0b142424;
+}
+/* 늘어나는 동안 글자가 줄바꿈되며 흔들리지 않도록 펼친 폭 기준으로 배치 */
+.my-sidebar-top,
+.my-nav,
+.my-sidebar-note {
+  width: calc(var(--rail-open) - 26px);
 }
 .my-sidebar-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   margin-bottom: 14px;
-  padding: 0 6px 18px;
+  padding: 0 0 18px 1px;
   border-bottom: 1px solid var(--line);
 }
 /* 프로필 사진 둘레의 레코드판 테두리 */
@@ -73,16 +91,15 @@
 }
 .my-sidebar-name p {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
-  margin: 3px 0 7px;
+  margin: 0 0 6px;
 }
 .my-sidebar-name strong {
-  min-width: 0;
+  overflow: hidden;
   font-size: 16px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  word-break: keep-all;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .my-role-chip {
   display: inline-block;
@@ -92,19 +109,14 @@
   color: var(--role);
   font-size: 11px;
   font-weight: 700;
+  white-space: nowrap;
 }
-.my-sidebar-toggle {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--soft);
-  color: var(--muted);
-}
-.my-sidebar-toggle:hover {
-  color: var(--ink);
+
+/* 사이드바 안의 확인 배지 툴팁은 오른쪽 끝에 맞춰 왼쪽으로 펼침 (사이드바 밖으로 잘리지 않게) */
+.my-sidebar .verified-badge-tip {
+  right: -6px;
+  left: auto;
+  transform: none;
 }
 
 /* 메뉴 */
@@ -116,15 +128,16 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   width: 100%;
-  padding: 11px 14px;
+  padding: 12px 14px;
   border-radius: 10px;
   background: none;
   color: var(--muted);
   font-size: 15px;
   font-weight: 500;
   text-align: left;
+  white-space: nowrap;
 }
 .my-nav button:hover {
   background: var(--soft);
@@ -148,19 +161,33 @@
 }
 .my-nav button:focus-visible {
   outline: 2px solid var(--role);
-  outline-offset: 0;
+  outline-offset: -2px;
+}
+/* 이름은 막대가 늘어날 때 서서히 나타남 (좁을 때도 화면 낭독기에는 읽힘) */
+.my-nav-label,
+.my-sidebar-name,
+.my-sidebar-note p {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.my-sidebar:hover :is(.my-nav-label, .my-sidebar-name, .my-sidebar-note p),
+.my-sidebar:focus-within :is(.my-nav-label, .my-sidebar-name, .my-sidebar-note p) {
+  opacity: 1;
 }
 
 /* 아래쪽 체험 안내 */
 .my-sidebar-note {
-  position: relative;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   margin-top: auto;
-  padding: 12px 14px;
+  padding: 12px 15px;
   border-radius: 10px;
-  background: var(--soft);
   color: var(--muted);
+  transition: background 0.15s ease;
+}
+.my-sidebar:hover .my-sidebar-note,
+.my-sidebar:focus-within .my-sidebar-note {
+  background: var(--soft);
 }
 .my-sidebar-note p {
   display: grid;
@@ -174,64 +201,14 @@
   font-size: 12px;
 }
 
-/* 접힌 사이드바: 아이콘만, 이름은 마우스를 올리거나 포커스하면 툴팁으로 */
-.is-collapsed .my-sidebar {
-  align-items: center;
-  padding: 16px 10px 12px;
-}
-.is-collapsed .my-sidebar-top {
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 0 0 14px;
-}
-.is-collapsed .my-sidebar-name {
-  display: none;
-}
-.is-collapsed .my-nav button {
-  justify-content: center;
-  width: 48px;
-  padding: 12px;
-}
-.is-collapsed .my-nav button[aria-selected='true'] {
-  background: var(--role);
-  color: var(--on-role);
-}
-.is-collapsed .my-nav button::before {
-  display: none;
-}
-.is-collapsed .my-nav-label,
-.is-collapsed .my-sidebar-note p {
-  position: absolute;
-  top: 50%;
-  left: calc(100% + 12px);
-  z-index: 20;
-  padding: 7px 11px;
-  border-radius: 8px;
-  background: #0b1424;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  transform: translateY(-50%);
-  /* visibility: hidden은 메뉴 이름(접근 가능한 이름)까지 숨기므로 투명도로만 숨김 */
-  opacity: 0;
-  pointer-events: none;
-}
-.is-collapsed .my-sidebar-note {
-  justify-content: center;
-  padding: 10px;
-  background: none;
-}
-.is-collapsed .my-sidebar-note strong,
-.is-collapsed .my-sidebar-note span {
-  color: inherit;
-}
-.is-collapsed .my-nav button:hover .my-nav-label,
-.is-collapsed .my-nav button:focus-visible .my-nav-label,
-.is-collapsed .my-sidebar-note:hover p {
-  opacity: 1;
+@media (prefers-reduced-motion: reduce) {
+  .my-sidebar,
+  .my-nav-label,
+  .my-sidebar-name,
+  .my-sidebar-note,
+  .my-sidebar-note p {
+    transition: none;
+  }
 }
 
 /* ---------- 내용 ---------- */
@@ -366,30 +343,30 @@
   font-weight: 700;
 }
 
-/* 좁은 화면: 사이드바를 위쪽 가로 메뉴로 (접기 버튼·안내는 숨김) */
+/* 좁은 화면(마우스가 없을 수도 있음): 사이드바를 위쪽 가로 메뉴로, 이름을 항상 보이게 */
 @media (max-width: 900px) {
-  .my-page,
-  .my-page.is-collapsed {
+  .my-page {
     grid-template-columns: minmax(0, 1fr);
     gap: 18px;
     padding-top: 20px;
   }
   .my-sidebar,
-  .is-collapsed .my-sidebar {
+  .my-sidebar:hover,
+  .my-sidebar:focus-within {
     position: static;
-    align-items: stretch;
+    width: auto;
     min-height: 0;
     padding: 14px;
+    box-shadow: var(--shadow);
   }
-  .is-collapsed .my-sidebar-top {
-    flex-direction: row;
-    align-items: flex-start;
-    padding: 0 6px 14px;
+  .my-sidebar-top,
+  .my-nav {
+    width: auto;
   }
-  .is-collapsed .my-sidebar-name {
-    display: block;
+  .my-nav-label,
+  .my-sidebar-name {
+    opacity: 1;
   }
-  .my-sidebar-toggle,
   .my-sidebar-note {
     display: none;
   }
@@ -398,28 +375,14 @@
     gap: 6px;
     overflow-x: auto;
   }
-  .my-nav button,
-  .is-collapsed .my-nav button {
+  .my-nav button {
     flex: none;
-    justify-content: flex-start;
     width: auto;
+    gap: 10px;
     padding: 10px 14px;
   }
   .my-nav button::before {
     display: none;
-  }
-  .is-collapsed .my-nav button[aria-selected='true'] {
-    background: var(--role-soft);
-    color: var(--role);
-  }
-  .is-collapsed .my-nav-label {
-    position: static;
-    padding: 0;
-    background: none;
-    color: inherit;
-    font-size: inherit;
-    transform: none;
-    opacity: 1;
   }
   .my-content-head h1 {
     font-size: 26px;

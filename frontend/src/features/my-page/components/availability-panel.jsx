@@ -42,7 +42,7 @@ const monthDay = (key) => {
   return `${d.getMonth() + 1}월 ${d.getDate()}일`;
 };
 
-export default function AvailabilityPanel({ active, schedules, setSchedules, notify }) {
+export default function AvailabilityPanel({ schedules, setSchedules, notify }) {
   const todayKey = toDateKey(new Date());
   const [mode, setMode] = useState('week');
   // 주간 보기: 보고 있는 주에 속한 아무 날짜
@@ -322,7 +322,6 @@ export default function AvailabilityPanel({ active, schedules, setSchedules, not
             </div>
 
             <WeekTimetable
-              active={active && mode === 'week'}
               week={week}
               todayKey={todayKey}
               byDate={byDate}

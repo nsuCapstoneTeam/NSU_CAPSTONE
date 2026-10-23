@@ -38,7 +38,8 @@ const DESCRIPTIONS = {
 };
 
 // 마이페이지: 왼쪽 사이드바에서 메뉴를 고르고, 오른쪽에 그 메뉴 내용 하나만 보여 줍니다.
-// 사이드바는 접어서 아이콘만 남길 수 있습니다 (접으면 마우스를 올리거나 포커스할 때 메뉴 이름 표시).
+// 사이드바는 평소에 아이콘만 보이고, 마우스를 올리거나 키보드로 들어가면 옆으로 늘어나 이름이 보입니다.
+// 늘어날 때는 내용 위에 겹쳐서 펼쳐지므로 본문 폭은 바뀌지 않습니다.
 // 메뉴 내용은 숨기기만 하고(hidden) 지우지 않아서, 메뉴를 바꿔도 쓰던 내용·재생 중인 파일이 유지됩니다.
 export default function MyPage({
   profile,
@@ -58,8 +59,6 @@ export default function MyPage({
   const [tab, setTab] = useState(() =>
     tabs.some(([id]) => id === initialTab) ? initialTab : 'profile',
   );
-  // 사이드바 접힘 여부 (좁은 화면에서는 항상 위쪽 가로 메뉴로 보임)
-  const [collapsed, setCollapsed] = useState(false);
   const tabRefs = useRef({});
 
   // 메뉴 목록에서 ↑/↓(←/→), Home/End로 이동 (화면낭독기 탭 패턴, 세로 방향)
@@ -93,7 +92,6 @@ export default function MyPage({
     ),
     schedule: (
       <AvailabilityPanel
-        active={tab === 'schedule'}
         schedules={schedules}
         setSchedules={setSchedules}
         notify={notify}
@@ -126,7 +124,7 @@ export default function MyPage({
   const roleName = role === 'artist' ? '아티스트' : '행사 관계자';
 
   return (
-    <div className={`my-page is-${role}${collapsed ? ' is-collapsed' : ''}`}>
+    <div className={`my-page is-${role}`}>
       <aside
         className="my-sidebar"
         aria-label="마이페이지 메뉴"
@@ -136,7 +134,7 @@ export default function MyPage({
           <span className="my-avatar-ring">
             <Avatar
               profile={profile}
-              size={collapsed ? 30 : 42}
+              size={42}
             />
           </span>
           <div className="my-sidebar-name">
@@ -147,18 +145,6 @@ export default function MyPage({
             </p>
             <span className="my-role-chip">{roleName}</span>
           </div>
-          <button
-            type="button"
-            className="my-sidebar-toggle"
-            aria-label={collapsed ? '사이드바 펼치기' : '사이드바 접기'}
-            aria-expanded={!collapsed}
-            onClick={() => setCollapsed((v) => !v)}
-          >
-            <Icon
-              name="sidebar"
-              size={18}
-            />
-          </button>
         </div>
 
         {/* 메뉴: 선택된 메뉴만 Tab 키로 들어가고, 메뉴 사이는 방향키로 이동 */}

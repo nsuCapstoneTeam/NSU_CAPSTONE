@@ -153,19 +153,6 @@ export default function Icon({ name, size = 20 }) {
         <path d="M14 6v12" strokeDasharray="2 2.5" />
       </>
     ),
-    // 사이드바 접기·펼치기
-    sidebar: (
-      <>
-        <rect
-          x="3"
-          y="4"
-          width="18"
-          height="16"
-          rx="3"
-        />
-        <path d="M9 4v16" />
-      </>
-    ),
     plus: <path d="M12 5v14M5 12h14" />,
     'chevron-left': <path d="m15 6-6 6 6 6" />,
     'chevron-right': <path d="m9 6 6 6-6 6" />,

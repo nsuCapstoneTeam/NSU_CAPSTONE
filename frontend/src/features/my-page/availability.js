@@ -154,3 +154,23 @@ export function buildWeekItems(week, form) {
       ...(title ? { title } : {}),
     }));
 }
+
+// 주간 시간표에 보이는 시간: 오전 8시 ~ 밤 12시 (새벽까지 하는 행사는 드물어 이 범위만 보여 줌)
+export const VIEW_START = '08:00';
+export const VIEW_END = '24:00';
+
+// 일정을 보이는 시간 안으로 자른 [시작 분, 끝 분]. 보이는 시간 밖에만 있으면 null
+export function clipToView(start, end) {
+  const from = Math.max(toMinutes(start), toMinutes(VIEW_START));
+  const to = Math.min(toMinutes(end), toMinutes(VIEW_END));
+  return from < to ? [from, to] : null;
+}
+
+// 시간 선택 목록 (kind: 'start' 08:00~23:30 / 'end' 08:30~24:00)
+// 예전에 넣은 범위 밖 시간을 고치는 중이면 그 값도 넣어 고른 값이 사라지지 않게 함
+export function timeChoices(kind, current) {
+  const list = TIME_OPTIONS.filter((t) =>
+    kind === 'start' ? t >= VIEW_START && t < VIEW_END : t > VIEW_START && t <= VIEW_END,
+  );
+  return list.includes(current) ? list : [current, ...list].sort();
+}

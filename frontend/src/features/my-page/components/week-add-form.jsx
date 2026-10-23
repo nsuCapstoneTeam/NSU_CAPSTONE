@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import Icon from '../../../components/common/icon.jsx';
-import { PICKABLE_STATUSES, TIME_OPTIONS, WEEKDAYS, statusLabel } from '../availability.js';
+import { PICKABLE_STATUSES, WEEKDAYS, statusLabel, timeChoices } from '../availability.js';
 
 // 주간 보기 왼쪽 '시간 추가' 카드 (NSU-110)
 // 요일(여러 개) · 시간대 · All Day · 상태 · 일정이름(선택)을 고르고 추가합니다.
@@ -118,7 +118,7 @@ export default function WeekAddForm({
                 disabled={form.allDay}
                 onChange={(e) => update({ start: e.target.value })}
               >
-                {TIME_OPTIONS.slice(0, -1).map((t) => (
+                {timeChoices('start', form.start).map((t) => (
                   <option key={t}>{t}</option>
                 ))}
               </select>
@@ -131,7 +131,7 @@ export default function WeekAddForm({
                 disabled={form.allDay}
                 onChange={(e) => update({ end: e.target.value })}
               >
-                {TIME_OPTIONS.slice(1).map((t) => (
+                {timeChoices('end', form.end).map((t) => (
                   <option key={t}>{t}</option>
                 ))}
               </select>

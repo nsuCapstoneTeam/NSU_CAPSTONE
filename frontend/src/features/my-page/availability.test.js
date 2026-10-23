@@ -8,6 +8,8 @@ import {
   addDays,
   availableHours,
   buildWeekItems,
+  clipToView,
+  timeChoices,
   dayTitle,
   findOverlap,
   freeRanges,
@@ -182,5 +184,30 @@ describe('buildWeekItems', () => {
       status: 'UNAVAILABLE',
       allDay: true,
     });
+  });
+});
+
+describe('clipToView', () => {
+  it('오전 8시 ~ 밤 12시 안으로 자른다', () => {
+    assert.deepEqual(clipToView('19:00', '22:00'), [1140, 1320]);
+    assert.deepEqual(clipToView('00:00', '24:00'), [480, 1440]);
+    assert.deepEqual(clipToView('06:00', '10:00'), [480, 600]);
+  });
+  it('보이는 시간 밖에만 있으면 null', () => {
+    assert.equal(clipToView('05:00', '08:00'), null);
+  });
+});
+
+describe('timeChoices', () => {
+  it('시작은 08:00~23:30, 끝은 08:30~24:00', () => {
+    const start = timeChoices('start', '19:00');
+    const end = timeChoices('end', '22:00');
+    assert.equal(start[0], '08:00');
+    assert.equal(start.at(-1), '23:30');
+    assert.equal(end[0], '08:30');
+    assert.equal(end.at(-1), '24:00');
+  });
+  it('범위 밖 값을 고치는 중이면 그 값도 넣는다', () => {
+    assert.equal(timeChoices('start', '06:00')[0], '06:00');
   });
 });
