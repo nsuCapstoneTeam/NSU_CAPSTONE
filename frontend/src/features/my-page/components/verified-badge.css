@@ -1,0 +1,83 @@
+/* 아티스트 확인 배지 (NSU-110): 확인됨 파랑 / 미확인 회색, 포커스·호버 시 툴팁 */
+.verified-badge {
+  --badge-off: #b4bfcd;
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  vertical-align: middle;
+  border-radius: 50%;
+  cursor: default;
+}
+:root[data-theme='dark'] .verified-badge {
+  --badge-off: #55677f;
+}
+.verified-badge-seal {
+  fill: var(--badge-off);
+}
+.verified-badge-check {
+  stroke: #fff;
+}
+.verified-badge.is-verified .verified-badge-seal {
+  fill: var(--blue);
+}
+.verified-badge.is-verified .verified-badge-check {
+  stroke: var(--on-blue);
+}
+:root[data-theme='dark'] .verified-badge:not(.is-verified) .verified-badge-check {
+  stroke: var(--bg);
+}
+.verified-badge:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* 툴팁: 배지 아래에 뜸 */
+.verified-badge-tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 20;
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  max-width: 240px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #0b1424;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 8px 24px #0b142433;
+  transform: translateX(-50%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.verified-badge-tip strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+.verified-badge-tip span {
+  color: #cbd5e1;
+}
+:root[data-theme='dark'] .verified-badge-tip {
+  background: #eef3fa;
+  color: #0b1424;
+}
+:root[data-theme='dark'] .verified-badge-tip span {
+  color: #475569;
+}
+.verified-badge:hover .verified-badge-tip,
+.verified-badge:focus-visible .verified-badge-tip {
+  opacity: 1;
+  visibility: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  .verified-badge-tip {
+    transition: none;
+  }
+}

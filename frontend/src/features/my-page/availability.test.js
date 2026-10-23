@@ -2,11 +2,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ALL_DAY,
+  PICKABLE_STATUSES,
+  TIME_OPTIONS,
   addDays,
+  availableHours,
+  buildWeekItems,
   dayTitle,
   findOverlap,
   freeRanges,
   monthCells,
+  shortRange,
   sortSchedules,
   statusOf,
   weekDays,
@@ -101,5 +107,80 @@ describe('weekDays', () => {
 describe('dayTitle', () => {
   it('월·일·요일로 표시한다', () => {
     assert.equal(dayTitle('2026-10-15'), '10월 15일 (목)');
+  });
+});
+
+describe('PICKABLE_STATUSES', () => {
+  it('확정은 직접 고를 수 없다', () => {
+    assert.deepEqual(PICKABLE_STATUSES.map((s) => s.value), ['AVAILABLE', 'HOLD', 'UNAVAILABLE']);
+  });
+});
+
+describe('TIME_OPTIONS', () => {
+  it('00:00부터 24:00까지 30분 간격이다', () => {
+    assert.equal(TIME_OPTIONS.length, 49);
+    assert.equal(TIME_OPTIONS[0], '00:00');
+    assert.equal(TIME_OPTIONS[1], '00:30');
+    assert.equal(TIME_OPTIONS.at(-1), '24:00');
+  });
+});
+
+describe('availableHours', () => {
+  it('가능 상태만 더한다 (상태 없는 예전 일정은 가능)', () => {
+    const hours = availableHours([
+      { start: '14:00', end: '18:00', status: 'AVAILABLE' },
+      { start: '19:00', end: '20:30' },
+      { start: '10:00', end: '12:00', status: 'HOLD' },
+      { start: '17:00', end: '19:00', status: 'BOOKED' },
+    ]);
+    assert.equal(hours, 5.5);
+  });
+  it('일정이 없으면 0', () => {
+    assert.equal(availableHours([]), 0);
+  });
+});
+
+describe('shortRange', () => {
+  it('정시는 시만, 30분은 그대로 표시한다', () => {
+    assert.equal(shortRange('13:00', '18:00'), '13–18시');
+    assert.equal(shortRange('13:30', '18:00'), '13:30–18시');
+  });
+  it('하루 종일은 종일로 표시한다', () => {
+    assert.equal(shortRange(ALL_DAY.start, ALL_DAY.end), '종일');
+  });
+});
+
+describe('buildWeekItems', () => {
+  const week = weekDays('2026-10-18');
+  it('고른 요일마다 같은 시간 일정을 만든다', () => {
+    const items = buildWeekItems(week, {
+      days: [5, 4],
+      start: '19:00',
+      end: '22:00',
+      allDay: false,
+      status: 'AVAILABLE',
+      title: ' 홍대 버스킹 ',
+    });
+    assert.deepEqual(items, [
+      { date: '2026-10-22', start: '19:00', end: '22:00', status: 'AVAILABLE', title: '홍대 버스킹' },
+      { date: '2026-10-23', start: '19:00', end: '22:00', status: 'AVAILABLE', title: '홍대 버스킹' },
+    ]);
+  });
+  it('All Day면 00:00–24:00으로 만들고, 일정이름이 비면 넣지 않는다', () => {
+    const [item] = buildWeekItems(week, {
+      days: [1],
+      start: '19:00',
+      end: '22:00',
+      allDay: true,
+      status: 'UNAVAILABLE',
+      title: '',
+    });
+    assert.deepEqual(item, {
+      date: '2026-10-19',
+      start: '00:00',
+      end: '24:00',
+      status: 'UNAVAILABLE',
+      allDay: true,
+    });
   });
 });

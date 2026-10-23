@@ -62,7 +62,7 @@ export default function ProfileTab({ profile, setProfile, notify }) {
           className="panel stacked-form"
           onSubmit={save}
         >
-          <h2>프로필</h2>
+          <h2>기본 정보</h2>
           <label>
             {profile.role === 'artist' ? '활동명' : '담당자 이름'}
             <input

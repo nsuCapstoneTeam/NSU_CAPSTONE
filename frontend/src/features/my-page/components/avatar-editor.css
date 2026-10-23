@@ -156,8 +156,3 @@
   font-size: 13px;
   color: var(--muted);
 }
-
-/* 마이페이지 위쪽 이름 띠의 사진 */
-.profile-strip .avatar {
-  box-shadow: 0 0 0 3px var(--surface);
-}

@@ -1,39 +1,431 @@
-/* 마이페이지 탭 (프로필 / 공연 일정 / 작업물·섭외 …) */
-.my-tabs {
-  display: flex;
-  gap: 4px;
-  margin: 0 0 22px;
-  border-bottom: 1px solid var(--line);
-  overflow-x: auto;
+/* 마이페이지 (NSU-110): 왼쪽 사이드바 + 오른쪽 메뉴 내용 */
+/* 역할 색: 아티스트 파랑 / 행사 관계자 코랄 (DESIGN.md 역할 색) */
+.my-page {
+  --role: var(--blue);
+  --role-soft: var(--tint);
+  --on-role: var(--on-blue);
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+  padding: 36px 0 64px;
 }
-.my-tabs button {
-  flex: none;
-  margin-bottom: -1px;
-  padding: 12px 18px;
-  border: 0;
-  border-bottom: 3px solid transparent;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
+.my-page.is-organizer {
+  --role: #c4432b;
+  --role-soft: #fdeeea;
+  --on-role: #fff;
 }
-.my-tabs button:hover {
-  color: var(--ink);
+:root[data-theme='dark'] .my-page.is-organizer {
+  --role: #ff9a80;
+  --role-soft: #3a2420;
+  --on-role: #2a0f08;
 }
-.my-tabs button[aria-selected='true'] {
-  border-bottom-color: var(--blue);
-  color: var(--blue);
-}
-.my-tabs button:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: -2px;
-  border-radius: 6px 6px 0 0;
+.my-page.is-collapsed {
+  grid-template-columns: 76px minmax(0, 1fr);
 }
 
-/* 작업물·섭외 탭: 공연 영상(위) + 미리 듣기·우편함(아래) */
-.works-stack {
+/* 화면 낭독기에만 읽히는 글자 */
+.my-page .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- 사이드바 ---------- */
+.my-sidebar {
+  position: sticky;
+  top: 24px;
+  display: flex;
+  flex-direction: column;
+  min-height: 560px;
+  padding: 20px 12px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  box-shadow: var(--shadow);
+}
+.my-sidebar-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 0 6px 18px;
+  border-bottom: 1px solid var(--line);
+}
+/* 프로필 사진 둘레의 레코드판 테두리 */
+.my-avatar-ring {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  padding: 4px;
+  border-radius: 50%;
+  background: #0b1424;
+}
+.my-avatar-ring .avatar {
+  box-shadow: 0 0 0 1.5px var(--role);
+}
+.my-sidebar-name {
+  flex: 1;
+  min-width: 0;
+}
+.my-sidebar-name p {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 3px 0 7px;
+}
+.my-sidebar-name strong {
+  min-width: 0;
+  font-size: 16px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+.my-role-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--role-soft);
+  color: var(--role);
+  font-size: 11px;
+  font-weight: 700;
+}
+.my-sidebar-toggle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--muted);
+}
+.my-sidebar-toggle:hover {
+  color: var(--ink);
+}
+
+/* 메뉴 */
+.my-nav {
+  display: grid;
+  gap: 4px;
+}
+.my-nav button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 10px;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+}
+.my-nav button:hover {
+  background: var(--soft);
+  color: var(--ink);
+}
+.my-nav button[aria-selected='true'] {
+  background: var(--role-soft);
+  color: var(--role);
+  font-weight: 700;
+}
+/* 고른 메뉴 왼쪽 막대 */
+.my-nav button[aria-selected='true']::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: -12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--role);
+}
+.my-nav button:focus-visible {
+  outline: 2px solid var(--role);
+  outline-offset: 0;
+}
+
+/* 아래쪽 체험 안내 */
+.my-sidebar-note {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--muted);
+}
+.my-sidebar-note p {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.my-sidebar-note strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+/* 접힌 사이드바: 아이콘만, 이름은 마우스를 올리거나 포커스하면 툴팁으로 */
+.is-collapsed .my-sidebar {
+  align-items: center;
+  padding: 16px 10px 12px;
+}
+.is-collapsed .my-sidebar-top {
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0 0 14px;
+}
+.is-collapsed .my-sidebar-name {
+  display: none;
+}
+.is-collapsed .my-nav button {
+  justify-content: center;
+  width: 48px;
+  padding: 12px;
+}
+.is-collapsed .my-nav button[aria-selected='true'] {
+  background: var(--role);
+  color: var(--on-role);
+}
+.is-collapsed .my-nav button::before {
+  display: none;
+}
+.is-collapsed .my-nav-label,
+.is-collapsed .my-sidebar-note p {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 12px);
+  z-index: 20;
+  padding: 7px 11px;
+  border-radius: 8px;
+  background: #0b1424;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transform: translateY(-50%);
+  /* visibility: hidden은 메뉴 이름(접근 가능한 이름)까지 숨기므로 투명도로만 숨김 */
+  opacity: 0;
+  pointer-events: none;
+}
+.is-collapsed .my-sidebar-note {
+  justify-content: center;
+  padding: 10px;
+  background: none;
+}
+.is-collapsed .my-sidebar-note strong,
+.is-collapsed .my-sidebar-note span {
+  color: inherit;
+}
+.is-collapsed .my-nav button:hover .my-nav-label,
+.is-collapsed .my-nav button:focus-visible .my-nav-label,
+.is-collapsed .my-sidebar-note:hover p {
+  opacity: 1;
+}
+
+/* ---------- 내용 ---------- */
+.my-content {
+  min-width: 0;
+}
+.my-content-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+  margin-bottom: 24px;
+}
+.my-content-head h1 {
+  margin: 0 0 8px;
+  font-size: 30px;
+  letter-spacing: -1px;
+  line-height: 1.3;
+}
+.my-content-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* 작업물: 공연 영상(위) + 미리 듣기(아래) */
+.works-stack,
+.works-grid {
   display: grid;
   gap: 25px;
+}
+
+/* 섭외 요청·관심 아티스트 빈 상태 */
+.booking-empty,
+.saved-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 36px 20px;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.booking-empty {
+  margin-top: 16px;
+  background: var(--soft);
+}
+.booking-empty strong,
+.saved-empty strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+/* 관심 아티스트 카드 */
+.saved-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.saved-card {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  box-shadow: var(--shadow);
+}
+.saved-card-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.saved-initial {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  font-size: 20px;
+  font-weight: 800;
+}
+.saved-initial.tone-0 {
+  background: #e3efff;
+  color: #0866df;
+}
+.saved-initial.tone-1 {
+  background: #dff5ec;
+  color: #18775e;
+}
+.saved-initial.tone-2 {
+  background: #efe7ff;
+  color: #6b3fd4;
+}
+.saved-initial.tone-3 {
+  background: #ffe9e2;
+  color: #c4432b;
+}
+.saved-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 17px;
+}
+.saved-genres {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.saved-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.saved-meta dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.saved-meta dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* 좁은 화면: 사이드바를 위쪽 가로 메뉴로 (접기 버튼·안내는 숨김) */
+@media (max-width: 900px) {
+  .my-page,
+  .my-page.is-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    padding-top: 20px;
+  }
+  .my-sidebar,
+  .is-collapsed .my-sidebar {
+    position: static;
+    align-items: stretch;
+    min-height: 0;
+    padding: 14px;
+  }
+  .is-collapsed .my-sidebar-top {
+    flex-direction: row;
+    align-items: flex-start;
+    padding: 0 6px 14px;
+  }
+  .is-collapsed .my-sidebar-name {
+    display: block;
+  }
+  .my-sidebar-toggle,
+  .my-sidebar-note {
+    display: none;
+  }
+  .my-nav {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+  }
+  .my-nav button,
+  .is-collapsed .my-nav button {
+    flex: none;
+    justify-content: flex-start;
+    width: auto;
+    padding: 10px 14px;
+  }
+  .my-nav button::before {
+    display: none;
+  }
+  .is-collapsed .my-nav button[aria-selected='true'] {
+    background: var(--role-soft);
+    color: var(--role);
+  }
+  .is-collapsed .my-nav-label {
+    position: static;
+    padding: 0;
+    background: none;
+    color: inherit;
+    font-size: inherit;
+    transform: none;
+    opacity: 1;
+  }
+  .my-content-head h1 {
+    font-size: 26px;
+  }
+}
+:root[data-theme='dark'] .saved-initial {
+  background: var(--tint);
+  color: var(--blue);
 }

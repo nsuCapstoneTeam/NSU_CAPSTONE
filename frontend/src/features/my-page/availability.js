@@ -11,6 +11,9 @@ export const STATUSES = [
 
 export const STATUS_VALUES = STATUSES.map((s) => s.value);
 
+// 직접 고를 수 있는 상태. '확정'은 섭외가 성사되면 자동으로 표시할 예정이라 고르지 않습니다.
+export const PICKABLE_STATUSES = STATUSES.filter((s) => s.value !== 'BOOKED');
+
 // 예전에 저장한 일정에는 상태가 없으므로 '가능'으로 봅니다.
 export const statusOf = (item) =>
   STATUS_VALUES.includes(item?.status) ? item.status : 'AVAILABLE';
@@ -112,4 +115,42 @@ export function freeRanges(dayItems) {
     start: fromMinutes(start),
     end: fromMinutes(end),
   }));
+}
+
+// 시간 선택 목록: 00:00부터 24:00까지 30분 간격 ('24:00'은 그날 끝)
+export const TIME_OPTIONS = Array.from({ length: 49 }, (_, i) => fromMinutes(i * 30));
+
+// 하루 종일(All Day) 일정의 시간
+export const ALL_DAY = { start: '00:00', end: '24:00' };
+
+// 일정 목록 중 '가능' 상태의 시간 합계 (시간 단위, 소수 첫째 자리까지)
+export function availableHours(items) {
+  const minutes = items
+    .filter((s) => statusOf(s) === 'AVAILABLE')
+    .reduce((sum, s) => sum + toMinutes(s.end) - toMinutes(s.start), 0);
+  return Math.round((minutes / 60) * 10) / 10;
+}
+
+// 'HH:MM' 두 개 → 짧은 표시 ('13:00','18:00' → '13–18시', '13:30','18:00' → '13:30–18시')
+export function shortRange(start, end) {
+  if (start === ALL_DAY.start && end === ALL_DAY.end) return '종일';
+  const part = (t) => (t.endsWith(':00') ? String(Number(t.slice(0, 2))) : t);
+  return `${part(start)}–${part(end)}시`;
+}
+
+// 주간 '시간 추가' 폼 값 → 저장할 일정 목록 (아직 id 없음)
+// week: 그 주 7일 'YYYY-MM-DD' 목록, form.days: 고른 요일 번호(0=일요일) 목록
+export function buildWeekItems(week, form) {
+  const { start, end } = form.allDay ? ALL_DAY : form;
+  const title = form.title.trim();
+  return [...form.days]
+    .sort((a, b) => a - b)
+    .map((day) => ({
+      date: week[day],
+      start,
+      end,
+      status: form.status,
+      ...(form.allDay ? { allDay: true } : {}),
+      ...(title ? { title } : {}),
+    }));
 }

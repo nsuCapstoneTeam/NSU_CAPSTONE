@@ -1,402 +1,709 @@
-/* 공연 가능 일정 탭 (월 달력 + 주간 시간표) */
-/* 상태 색: 가능=파랑, 보류=경고 노랑(점선), 확정=초록, 불가=회색 빗금. 글자는 함께 표시 */
+/* 공연 일정 메뉴 (ART-029, NSU-110): 월간 달력 / 주간 시간표 + 시간 추가 폼 */
+/* 상태 색: 가능=파랑, 보류=노랑(점선), 확정=남색, 불가=회색 빗금. 글자를 항상 함께 표시 */
 .availability {
   --hold: #b7791f;
   --hold-soft: rgba(183, 121, 31, 0.14);
-  --booked-soft: rgba(24, 119, 94, 0.14);
+  --booked: #0b1424;
+  --on-booked: #fff;
+  --unavail-soft: #eef1f5;
 }
 :root[data-theme='dark'] .availability {
   --hold: #f6c768;
   --hold-soft: rgba(246, 199, 104, 0.16);
-  --booked-soft: rgba(128, 219, 185, 0.16);
+  --booked: #dbe7f7;
+  --on-booked: #0b1424;
+  --unavail-soft: #1a2940;
+}
+
+/* ---------- 위쪽: 보기 전환 · 일정 추가 ---------- */
+.sched-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.view-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+}
+.view-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+.view-toggle button[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--blue);
+  font-weight: 700;
+  box-shadow: 0 1px 4px #0b142414;
+}
+.sched-add {
+  padding: 12px 20px;
+}
+
+/* ---------- 달·주 이동 줄 ---------- */
+.sched-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.sched-nav h2 {
+  min-width: 0;
+  margin: 0 4px;
+  font-size: 20px;
+}
+.sched-nav-arrow,
+.sched-nav-today {
+  display: inline-grid;
+  place-items: center;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.sched-nav-arrow {
+  width: 36px;
+}
+.sched-nav-today {
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sched-nav-arrow:hover,
+.sched-nav-today:hover {
+  border-color: var(--blue);
 }
 
 /* 상태 설명 */
-.availability-legend {
+.sched-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
-  margin: 4px 0 16px;
+  gap: 6px 14px;
+  margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 13px;
   color: var(--muted);
+  font-size: 13px;
 }
-.availability-legend li {
+.sched-legend li {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
+.month-card .sched-legend {
+  margin-left: auto;
+}
+.month-total {
+  margin: 0;
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 700;
+}
 
-/* 달력 칸·설명에 쓰는 작은 표시: 상태마다 색과 모양이 다름 */
-.cal-mark {
+/* 상태 점 (설명·상태 고르기에 공통) */
+.sched-dot {
   display: inline-block;
-  width: 9px;
-  height: 9px;
   flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
-.cal-mark.AVAILABLE {
+.sched-dot.AVAILABLE {
   background: var(--blue);
-  border-radius: 50%;
 }
-.cal-mark.HOLD {
-  border: 2px solid var(--hold);
-  border-radius: 50%;
+.sched-dot.HOLD {
+  background: var(--hold);
 }
-.cal-mark.BOOKED {
-  background: var(--green);
-  transform: rotate(45deg) scale(0.85);
+.sched-dot.BOOKED {
+  background: var(--booked);
 }
-.cal-mark.UNAVAILABLE {
+.sched-dot.UNAVAILABLE {
   background: var(--muted);
-  border-radius: 2px;
+  opacity: 0.6;
 }
 
-/* 달 이동 */
-.cal-head {
+/* ---------- 월간 달력 ---------- */
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.month-weekday {
+  padding: 6px 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.month-weekday.sunday,
+.month-day.sunday .month-num {
+  color: #d9433b;
+}
+.month-day {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-height: 100px;
+  padding: 10px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--ink);
+  text-align: left;
+}
+.month-day:hover {
+  border-color: var(--blue);
+}
+.month-day.out {
+  background: none;
+  border-color: transparent;
+  opacity: 0.45;
+}
+.month-day.today {
+  border: 2px solid var(--blue);
+  background: var(--surface);
+}
+.month-num {
+  font-size: 14px;
+  font-weight: 600;
+}
+.month-day.today .month-num {
+  display: inline-grid;
+  place-items: center;
+  align-self: flex-start;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: var(--on-blue);
+}
+.month-chip {
+  overflow: hidden;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.month-chip.AVAILABLE {
+  background: var(--tint);
+  color: var(--blue);
+}
+.month-chip.HOLD {
+  background: var(--hold-soft);
+  color: var(--hold);
+}
+.month-chip.BOOKED {
+  background: var(--booked);
+  color: var(--on-booked);
+}
+.month-chip.UNAVAILABLE {
+  background: var(--unavail-soft);
+  color: var(--muted);
+}
+.month-more {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ---------- 주간: 왼쪽 폼 + 오른쪽 시간표 ---------- */
+.week-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+/* 시간 추가 카드 */
+.week-add.panel {
+  padding: 24px;
+}
+.week-add .week-total-title {
+  margin: 0;
+  font-size: 15px;
+}
+.week-total {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 6px 0 4px;
+}
+.week-total strong {
+  font-size: 52px;
+  letter-spacing: -2px;
+  line-height: 1.1;
+}
+.week-total span {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+.week-total-sub {
+  margin: 0 0 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+.week-form {
+  display: grid;
+  gap: 18px;
+}
+.week-form h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.week-form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.week-form legend,
+.week-title-field > span {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.week-title-field em {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+/* 요일 버튼 */
+.week-days > div {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+.week-days button {
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.week-days button.sunday {
+  color: #d9433b;
+}
+.week-days button:hover {
+  border-color: var(--blue);
+}
+.week-days button[aria-pressed='true'] {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: var(--on-blue);
+  font-weight: 800;
+}
+
+/* 시간대 + All Day 스위치 */
+.week-time-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
-.cal-head h3 {
-  margin: 0;
-  font-size: 16px;
+.all-day-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
-.cal-head h3 span {
-  font-size: 13px;
-  font-weight: 500;
+.all-day-switch > span {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background 0.15s;
+}
+.all-day-switch > span::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px #0003;
+  transition: transform 0.15s;
+}
+.all-day-switch[aria-checked='true'] {
+  color: var(--blue);
+  font-weight: 700;
+}
+.all-day-switch[aria-checked='true'] > span {
+  background: var(--blue);
+}
+.all-day-switch[aria-checked='true'] > span::after {
+  transform: translateX(14px);
+}
+.week-time-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
   color: var(--muted);
 }
-.cal-today {
-  display: block;
-  margin: 4px auto 10px;
+.week-time-row label {
+  gap: 0;
+}
+.week-time-row select {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.week-time-row select:disabled {
+  background: var(--soft);
+  opacity: 0.55;
 }
 
-/* 월 달력 */
-.cal-grid {
+/* 상태 고르기 (라디오를 알약 모양으로) */
+.week-status > div {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
-.cal-weekday {
-  font-size: 12px;
-  color: var(--muted);
-  text-align: center;
-  padding: 4px 0;
-}
-.cal-day {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-height: 54px;
-  padding: 6px;
+.week-status label {
+  position: relative;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--surface);
   color: var(--ink);
-  font: inherit;
   font-size: 13px;
-  text-align: left;
+  font-weight: 600;
   cursor: pointer;
 }
-.cal-day:hover {
-  border-color: var(--blue);
+.week-status input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
-.cal-day.out {
-  background: var(--soft);
-  color: var(--muted);
-}
-.cal-day[aria-pressed='true'] {
+.week-status label:has(input:checked) {
+  border: 1.5px solid var(--blue);
   background: var(--tint);
-  border-color: var(--blue);
-  box-shadow: inset 0 0 0 1px var(--blue);
+  color: var(--blue);
+  font-weight: 800;
 }
-.cal-day:focus-visible {
-  outline: 2px solid var(--blue);
+.week-status label.UNAVAILABLE:has(input:checked) {
+  border-color: var(--muted);
+  background: var(--unavail-soft);
+  color: var(--ink);
+}
+.week-status label.HOLD:has(input:checked) {
+  border-color: var(--hold);
+  background: var(--hold-soft);
+  color: var(--ink);
+}
+.week-status label:has(input:focus-visible) {
+  outline: 3px solid var(--blue);
   outline-offset: 2px;
 }
-.cal-day.today .cal-num {
-  display: inline-grid;
-  place-items: center;
-  min-width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--blue);
-  color: var(--on-blue);
-  font-weight: 700;
-}
-.cal-marks {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  margin-top: auto;
-}
-.cal-more {
-  font-size: 12px;
+.week-status small {
+  display: block;
+  margin-top: 8px;
   color: var(--muted);
+  font-size: 11px;
 }
-
-/* 왼쪽(달력·폼) / 오른쪽(주간 시간표·선택한 날) 두 칸 */
-.availability-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-  gap: 32px;
-  align-items: start;
+.week-title-field {
+  gap: 0;
 }
-@media (max-width: 960px) {
-  .availability-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* 선택한 날짜 */
-.day-detail {
-  margin-top: 22px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
-}
-.day-detail h3 {
-  margin: 0 0 12px;
-  font-size: 16px;
-}
-.day-detail h3:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 3px;
-}
-
-.free-time {
-  margin: 8px 0 0;
-  font-size: 13px;
-  color: var(--muted);
-}
-.free-time strong {
-  color: var(--ink);
-  margin-right: 4px;
-}
-
-/* 상태 꼬리표·막대 구간 공통 색 */
-.status-chip {
-  display: inline-block;
-  margin-right: 8px;
-  padding: 2px 9px;
-  border: 1px solid;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--ink);
-}
-.status-chip.AVAILABLE,
-.week-block.AVAILABLE {
-  background-color: var(--tint);
-  border-color: var(--blue);
-  color: var(--blue);
-}
-.status-chip.HOLD,
-.week-block.HOLD {
-  background-color: var(--hold-soft);
-  border-color: var(--hold);
-  border-style: dashed;
-}
-.status-chip.BOOKED,
-.week-block.BOOKED {
-  background-color: var(--booked-soft);
-  border-color: var(--green);
-  color: var(--green);
-}
-.status-chip.UNAVAILABLE,
-.week-block.UNAVAILABLE {
-  background-color: var(--soft);
-  background-image: repeating-linear-gradient(
-    135deg,
-    var(--line) 0 2px,
-    transparent 2px 7px
-  );
-  border-color: var(--muted);
-}
-/* 그날 일정 목록 */
-.availability .schedule-list p {
-  display: flex;
-  align-items: center;
+.week-title-field input {
+  padding: 10px 12px;
+  border-radius: 10px;
   font-size: 14px;
 }
-.availability .schedule-list .is-editing {
-  background: var(--tint);
-  margin: 0 -10px;
-  padding-inline: 10px;
-  border-radius: 8px;
-}
-.availability .schedule-list > div:last-child {
-  border-bottom: 0;
-}
-.schedule-actions {
-  display: flex;
-  gap: 12px;
+.week-submit {
+  width: 100%;
+  gap: 6px;
+  padding: 14px 12px;
+  font-size: 14px;
+  text-wrap: balance;
 }
 
-/* 추가·수정 폼 */
-.availability-form {
-  margin-top: 22px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
+/* 주간 시간표 카드 */
+.week-card.panel {
+  padding: 20px 20px 16px;
 }
-.availability-form h3 {
-  margin: 0;
-  font-size: 16px;
-}
-.availability-buttons {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-/* 좁은 화면: 달력 칸을 조금 낮게 */
-@media (max-width: 520px) {
-  .cal-day {
-    min-height: 46px;
-    padding: 4px;
-  }
-}
-
-/* 주간 시간표 */
-.week-title {
-  margin: 0 0 10px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.week-head,
-.week-body {
-  display: grid;
-  grid-template-columns: 40px repeat(7, minmax(0, 1fr));
+.week {
+  --time-col: 52px;
 }
 .week-head {
-  gap: 0;
-  margin-bottom: 6px;
+  display: grid;
+  grid-template-columns: var(--time-col) repeat(7, minmax(0, 1fr));
+  padding-bottom: 8px;
 }
 .week-day {
   display: grid;
   justify-items: center;
   gap: 2px;
-  padding: 6px 0;
-  border: 0;
-  border-radius: 8px;
-  background: none;
   color: var(--muted);
-  font: inherit;
   font-size: 12px;
-  cursor: pointer;
 }
 .week-day strong {
-  display: inline-grid;
+  display: grid;
   place-items: center;
-  min-width: 26px;
-  height: 26px;
-  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   color: var(--ink);
   font-size: 14px;
 }
-.week-day:hover {
-  background: var(--soft);
-}
-.week-day[aria-pressed='true'] {
-  background: var(--tint);
-  color: var(--blue);
+.week-day.sunday > span {
+  color: #d9433b;
 }
 .week-day.today strong {
   background: var(--blue);
   color: var(--on-blue);
 }
-.week-day:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 2px;
-}
 .week-scroll {
-  max-height: 420px;
+  max-height: 540px;
   overflow-y: auto;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border-top: 1px solid var(--line);
 }
 .week-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--time-col) repeat(7, minmax(0, 1fr));
   height: calc(var(--hour) * 24);
 }
 .week-hours {
   display: grid;
   grid-template-rows: repeat(24, var(--hour));
-  border-right: 1px solid var(--line);
-  background: var(--soft);
 }
 .week-hours span {
-  padding: 2px 4px 0 0;
-  white-space: nowrap;
-  font-size: 12px;
+  padding-right: 8px;
   color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
   text-align: right;
+  transform: translateY(-5px);
 }
-/* 하루 칸: 1시간마다 가로선, 클릭하면 그 시간으로 추가 */
+.week-hours span:first-child {
+  transform: none;
+}
 .week-col {
   position: relative;
-  border-right: 1px solid var(--line);
-  background-image: repeating-linear-gradient(
-    to bottom,
-    var(--line) 0 1px,
-    transparent 1px var(--hour)
-  );
+  border-left: 1px solid var(--line);
+  background-image: linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--line) 45%, transparent) 1px, transparent 1px);
+  background-size:
+    100% var(--hour),
+    100% calc(var(--hour) / 2);
+  background-position:
+    0 0,
+    0 0;
   cursor: copy;
 }
-.week-col:last-child {
-  border-right: 0;
+.week-col.today {
+  background-color: color-mix(in srgb, var(--tint) 55%, transparent);
 }
-.week-col.selected {
-  background-color: var(--tint);
-}
-.week-col:hover {
-  background-color: var(--soft);
-}
-.week-col.selected:hover {
-  background-color: var(--tint);
-}
+
+/* 일정 블록 */
 .week-block {
   position: absolute;
-  left: 2px;
-  right: 2px;
+  right: 4px;
+  left: 4px;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
+  gap: 2px;
   overflow: hidden;
-  padding: 3px 5px;
-  border: 1px solid;
-  border-radius: 6px;
-  font: inherit;
-  font-size: 12px;
+  padding: 6px 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 11px;
   line-height: 1.3;
-  color: var(--ink);
   text-align: left;
   cursor: pointer;
 }
+.week-block strong {
+  font-size: 11px;
+  font-weight: 800;
+}
 .week-block span {
-  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.week-block.is-editing {
-  outline: 2px solid var(--blue);
+.week-block.AVAILABLE {
+  background: linear-gradient(180deg, #3d8bf2, #1f5fd6);
+  color: #fff;
+  box-shadow: 0 4px 10px #1f5fd633;
+}
+.week-block.HOLD {
+  border: 1.5px dashed var(--hold);
+  background: var(--hold-soft);
+  color: var(--ink);
+}
+.week-block.BOOKED {
+  background: var(--booked);
+  color: var(--on-booked);
+}
+.week-block.UNAVAILABLE {
+  border-color: var(--muted);
+  background-color: var(--unavail-soft);
+  background-image: repeating-linear-gradient(135deg, var(--line) 0 2px, transparent 2px 7px);
+  color: var(--ink);
+}
+.week-block.is-selected {
+  outline: 3px solid var(--ink);
   outline-offset: 1px;
 }
-.week-block:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 2px;
-  z-index: 1;
+.week-block.is-editing {
+  opacity: 0.35;
 }
-/* 좁은 칸에서는 블록 안 글자 대신 색·무늬만 (같은 정보가 아래 목록에 있음) */
-@media (max-width: 520px) {
-  .week-head,
-  .week-body {
-    grid-template-columns: 32px repeat(7, minmax(0, 1fr));
+/* 추가 전 미리 보기 (점선, 누를 수 없음) */
+.week-block.is-preview {
+  z-index: 1;
+  border: 1.5px dashed var(--blue);
+  background: color-mix(in srgb, var(--tint) 80%, transparent);
+  color: var(--blue);
+  box-shadow: none;
+  pointer-events: none;
+}
+.week-block.is-preview.UNAVAILABLE,
+.week-block.is-preview.HOLD {
+  border-color: var(--muted);
+  background: color-mix(in srgb, var(--unavail-soft) 85%, transparent);
+  background-image: none;
+  color: var(--ink);
+}
+.week-block.is-preview.HOLD {
+  border-color: var(--hold);
+  background: var(--hold-soft);
+}
+
+/* 고른 일정 줄 (수정·삭제) */
+.week-selected {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--soft);
+  font-size: 13px;
+}
+.week-selected-actions {
+  display: inline-flex;
+  gap: 14px;
+  margin-left: auto;
+}
+.status-chip {
+  display: inline-block;
+  padding: 2px 9px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.status-chip.AVAILABLE {
+  border-color: var(--blue);
+  background: var(--tint);
+  color: var(--blue);
+}
+.status-chip.HOLD {
+  border-color: var(--hold);
+  border-style: dashed;
+  background: var(--hold-soft);
+}
+.status-chip.BOOKED {
+  border-color: var(--booked);
+  background: var(--booked);
+  color: var(--on-booked);
+}
+.status-chip.UNAVAILABLE {
+  border-color: var(--muted);
+  background: var(--unavail-soft);
+}
+
+.week-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 14px;
+}
+.week-foot p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .all-day-switch > span,
+  .all-day-switch > span::after {
+    transition: none;
   }
-  .week-block strong,
-  .week-block span {
-    display: none;
+}
+
+/* 화면 폭에 따라: 폼을 시간표 위로, 달력 칸 낮추기 */
+@media (max-width: 1180px) {
+  .week-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .sched-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .month-day {
+    min-height: 64px;
+    padding: 6px 4px;
+  }
+  .month-chip {
+    padding: 2px 4px;
+    font-size: 10px;
+  }
+  .month-card .sched-legend {
+    margin-left: 0;
+  }
+  .week {
+    --time-col: 40px;
+  }
+  .week-block {
+    right: 2px;
+    left: 2px;
+    padding: 4px;
   }
 }
