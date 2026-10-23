@@ -190,7 +190,7 @@ export default function ArtistLogin({ onBack, onSignUp, onChangeRole, onLogin })
           type="button"
           onClick={onSignUp}
         >
-          가입할래!
+          회원가입
         </button>
       </p>
     </CdLoginStage>

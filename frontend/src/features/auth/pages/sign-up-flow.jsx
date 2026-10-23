@@ -30,13 +30,13 @@ import './sign-up-flow.css';
 const ROLE_TEXT = {
   artist: {
     eyebrow: 'ARTIST SIGN UP',
-    title: '아티스트로 가입할래!',
+    title: '아티스트 회원가입',
     description: '계정을 만든 뒤 마이페이지에서 활동명·장르 같은 프로필을 채울 수 있어요.',
     pageClass: 'signup-page--artist',
   },
   'event-partner': {
     eyebrow: 'ORGANIZER SIGN UP',
-    title: '행사 관계자로 가입할래!',
+    title: '행사 관계자 회원가입',
     description: '계정을 만든 뒤 마이페이지에서 소속과 행사 정보를 채울 수 있어요.',
     pageClass: 'signup-page--organizer',
   },

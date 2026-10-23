@@ -22,7 +22,7 @@ export default function RoleSelection({
       </button>
       {/* 상단 제목 */}
       <header className="role-entry-heading">
-        <p className="eyebrow">{isSignUp ? 'JOIN 할래말래' : 'WELCOME BACK'}</p>
+        <p className="eyebrow">{isSignUp ? 'JOIN CLAP SOUND' : 'WELCOME BACK'}</p>
         <h1 id="role-entry-title">
           {isSignUp ? '어떤 역할로 가입할까요?' : '어떤 역할로 로그인할까요?'}
         </h1>
@@ -130,9 +130,9 @@ export default function RoleSelection({
       {/* 로그인 ↔ 가입 전환 안내 */}
       {onSwitchMode && (
         <p className="role-entry-note">
-          {isSignUp ? '이미 회원이신가요?' : '아직 할래말래 회원이 아니신가요?'}{' '}
+          {isSignUp ? '이미 회원이신가요?' : '아직 회원이 아니신가요?'}{' '}
           <button type="button" onClick={onSwitchMode}>
-            {isSignUp ? '로그인할래!' : '가입할래!'}
+            {isSignUp ? '로그인' : '회원가입'}
           </button>
         </p>
       )}

@@ -394,7 +394,7 @@ export default function SignupRoleSelect({ onSelect, onBack, onLogin }) {
       <p className="role-login">
         이미 회원이신가요?
         <button type="button" onClick={onLogin}>
-          로그인할래!
+          로그인
         </button>
       </p>
     </section>

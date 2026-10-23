@@ -76,7 +76,7 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
       <div className="match-stage-inner">
         <PageHeading
           eyebrow="FIND YOUR MATCH"
-          title="원하는 스타일을 알려주세요!"
+          title="원하는 스타일을 알려 주세요"
           description="필수 조건으로 걸러내고, 항목별 근거로 비교하세요."
         />
         <div className="matching-layout">
@@ -323,7 +323,7 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
                     size={32}
                   />
                 </div>
-                <h2>찾는 스타일을 말해주세요!</h2>
+                <h2>찾는 스타일을 입력해 주세요</h2>
                 <p>
                   왼쪽 조건을 입력하면 추천 결과와
                   <br />왜 어울리는지에 대한 근거를 보여드려요.
