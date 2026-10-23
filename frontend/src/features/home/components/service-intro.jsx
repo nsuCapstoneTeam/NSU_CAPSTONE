@@ -12,15 +12,14 @@ export default function ServiceIntro() {
       <div className="service-intro-copy">
         <p className="eyebrow">무엇을 하는 서비스인가요?</p>
         <h2 id="service-intro-title">
-          할래말래를 통해
+          CLAP SOUND에서
           <br />
-          <span>무명 아티스트</span>와 <span>행사 관계자</span>
+          <span>무명 아티스트</span>와 <span>행사 관계자</span>가
           <br />
-          소통을 간편하게!
+          쉽게 연락해요
         </h2>
-        <p className="service-intro-challenge">무명 아티스트 인지도 up!</p>
-        <p className="service-intro-challenge">행사 관계자 만족도 up!</p>
-        <p className="service-intro-connection">섭외 할래말래?!</p>
+        <p className="service-intro-challenge">아티스트는 무대에 설 기회를 넓히고</p>
+        <p className="service-intro-challenge">행사 관계자는 행사에 맞는 음악을 찾아요</p>
       </div>
       {/* 오른쪽: 아티스트·행사 관계자 연결 일러스트 (첫 화면 이미지라 우선 로드) */}
       <img

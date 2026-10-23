@@ -77,7 +77,7 @@ export default function ClapHero({ navigate }) {
         <h2 id="clap-heading">
           CLAP을 통해 원하는
           <br />
-          <span>분위기와 음원을 찾게 해줄게!</span>
+          <span>분위기와 음원을 찾아 드려요</span>
         </h2>
         <p>
           아티스트가 올린 음원과 행사 관계자의 참고 음악을 비교해,

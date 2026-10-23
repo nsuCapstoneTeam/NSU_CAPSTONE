@@ -17,7 +17,7 @@ export default function AuthRequired({
       <p>{description}</p>
       <div>
         <button className="primary" onClick={() => navigate(loginPage)}>로그인</button>
-        <button className="secondary" onClick={() => navigate('signup-role')}>가입할래!</button>
+        <button className="secondary" onClick={() => navigate('signup-role')}>회원가입</button>
       </div>
     </section>
   );

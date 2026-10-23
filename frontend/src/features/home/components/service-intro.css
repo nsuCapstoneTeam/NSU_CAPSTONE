@@ -52,11 +52,3 @@
   }
 }
 
-/* '섭외 할래말래?!' 강조 문구 */
-.service-intro-connection {
-  color: var(--blue);
-  font-size: clamp(26px, 3vw, 36px);
-  font-weight: 800;
-  line-height: 1.4;
-  margin: 28px 0 0;
-}
