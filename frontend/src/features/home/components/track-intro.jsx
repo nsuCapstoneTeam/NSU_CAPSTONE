@@ -28,7 +28,7 @@ export default function TrackIntro({ sectionProps }) {
         id="home-track-intro-title"
         className="stage-track-title"
       >
-        할래말래에서 할 수 있는 일
+        CLAP SOUND에서 할 수 있는 일
       </h2>
       <div className="stage-intro-grid">
         <article className="stage-panel stage-feature is-main">

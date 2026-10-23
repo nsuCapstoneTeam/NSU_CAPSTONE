@@ -18,7 +18,7 @@ export default function SignUpComplete({ profile, onStart, navigate }) {
       <div className="signup-complete-icon" aria-hidden="true">
         <Icon name="check" size={34} />
       </div>
-      <p className="eyebrow">WELCOME TO 할래말래</p>
+      <p className="eyebrow">WELCOME TO CLAP SOUND</p>
       <h1 id="signup-complete-title">가입이 완료됐어요!</h1>
       <p>
         {roleName} 계정을 만들었어요.
