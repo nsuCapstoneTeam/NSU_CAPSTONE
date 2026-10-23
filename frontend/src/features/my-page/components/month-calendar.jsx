@@ -43,6 +43,7 @@ export default function MonthCalendar({
     gridRef.current?.querySelector(`[data-date="${focusKey}"]`)?.focus();
   }, [focusKey, view]);
 
+  // 방향키로 날짜 이동 (←/→ 하루, ↑/↓ 일주일)
   function dayKeyDown(e, key) {
     const step = KEY_STEPS[e.key];
     if (!step) return;

@@ -28,6 +28,7 @@ export default function WeekAddForm({
   onSubmit,
   onCancelEdit,
 }) {
+  // 폼 값 일부만 바꿈 (예: update({ allDay: true }))
   const update = (patch) => setForm((prev) => ({ ...prev, ...patch }));
   const timeLabelId = useId();
 

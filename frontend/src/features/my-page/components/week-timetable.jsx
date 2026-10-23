@@ -21,10 +21,11 @@ const FIRST_HOUR = toMinutes(VIEW_START) / 60; // 8시
 const HOUR_LABELS = Array.from({ length: 25 - FIRST_HOUR }, (_, i) => FIRST_HOUR + i);
 const EARLY_HEIGHT = 28; // 오전 8시 전에만 있는 일정을 맨 위에 작게 보여 줄 높이(px)
 
-// 일정 → 시간표 안 위치 { top, height }(px). 오전 8시 전에만 있는 일정은 맨 위에 작게
-function blockStyle(start, end) {
+// 일정 → 시간표 안 위치 { top, height }(px)
+// 오전 8시 전에만 있는 일정은 맨 위에 작게, 같은 날 여러 개면 earlyIndex 순서대로 아래로 쌓아 겹치지 않게 함
+function blockStyle(start, end, earlyIndex = 0) {
   const range = clipToView(start, end);
-  if (!range) return { top: 0, height: `${EARLY_HEIGHT}px` };
+  if (!range) return { top: `${earlyIndex * (EARLY_HEIGHT + 3)}px`, height: `${EARLY_HEIGHT}px` };
   const top = ((range[0] - FIRST_HOUR * 60) / 60) * HOUR_HEIGHT;
   const height = ((range[1] - range[0]) / 60) * HOUR_HEIGHT;
   return { top: `${top}px`, height: `${height}px` };
@@ -92,9 +93,13 @@ export default function WeekTimetable({
               className={`week-col${key === todayKey ? ' today' : ''}`}
               onClick={(e) => pick(e, dayIndex)}
             >
-              {(byDate[key] || []).map((it) => {
+              {(byDate[key] || []).map((it, index, items) => {
                 const status = statusOf(it);
-                const style = blockStyle(it.start, it.end);
+                // 이 일정보다 앞에 있는 '8시 전에만 있는 일정' 수 (쌓는 순서)
+                const earlyIndex = items
+                  .slice(0, index)
+                  .filter((other) => !clipToView(other.start, other.end)).length;
+                const style = blockStyle(it.start, it.end, earlyIndex);
                 const height = parseFloat(style.height);
                 const label = statusLabel(status);
                 return (

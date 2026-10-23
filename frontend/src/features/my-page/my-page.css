@@ -112,10 +112,20 @@
   white-space: nowrap;
 }
 
-/* 사이드바 안의 확인 배지 툴팁은 오른쪽 끝에 맞춰 왼쪽으로 펼침 (사이드바 밖으로 잘리지 않게) */
+/* 사이드바 안의 확인 배지 툴팁: 배지 위치(이름 길이)와 상관없이 이름 영역 아래 왼쪽부터 펼침.
+   사이드바는 overflow: hidden이라 배지 기준으로 띄우면 이름이 짧을 때 왼쪽이 잘림 */
+.my-sidebar-top {
+  position: relative;
+}
+.my-sidebar .verified-badge {
+  position: static;
+}
 .my-sidebar .verified-badge-tip {
-  right: -6px;
-  left: auto;
+  top: calc(100% - 10px);
+  right: 0;
+  left: 0;
+  width: auto;
+  max-width: none;
   transform: none;
 }
 

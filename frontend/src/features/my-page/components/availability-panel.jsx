@@ -34,6 +34,7 @@ const EMPTY_FORM = {
   title: '',
 };
 
+// 숫자 → 두 자리 문자열 (8 → '08')
 const pad = (n) => String(n).padStart(2, '0');
 // '2026-10-18' → '10월 18일'
 const monthDay = (key) => {
@@ -85,23 +86,36 @@ export default function AvailabilityPanel({ schedules, setSchedules, notify }) {
     setView({ year: d.getFullYear(), month: d.getMonth() });
   }
 
+  // 이전·다음 달로 이동하고, 그 달 1일에 키보드 초점을 둠
   function changeMonth(delta) {
     const d = new Date(view.year, view.month + delta, 1);
     setView({ year: d.getFullYear(), month: d.getMonth() });
     setFocusKey(toDateKey(d));
   }
 
-  // 월간에서 날짜를 누르면: 그 주의 주간 보기로 가고, 그 요일을 골라 둠
-  function openDay(key) {
-    setWeekKey(key);
-    setSelectedId(null);
-    if (!editingId) setForm((prev) => ({ ...prev, days: [fromDateKey(key).getDay()] }));
-    setMode('week');
-  }
-
+  // 수정 중인 일정을 버리고 폼을 처음 값으로 되돌림
   function resetForm() {
     setEditingId(null);
     setForm(EMPTY_FORM);
+  }
+
+  // 보는 주를 바꿈 (이전·다음 주, 이번 주, 월간에서 날짜 선택)
+  // 수정 중에 주를 옮기면 원래 일정이 다른 주의 같은 요일로 옮겨 저장될 수 있어 수정을 취소하고,
+  // 화면 밖 일정의 수정·삭제 줄도 닫음
+  function goToWeek(key) {
+    setWeekKey(key);
+    setSelectedId(null);
+    if (editingId) resetForm();
+  }
+
+  // 월간에서 날짜를 누르면: 그 주의 주간 보기로 가고, 그 요일을 골라 둠
+  function openDay(key) {
+    goToWeek(key);
+    setForm((prev) => ({
+      ...(editingId ? EMPTY_FORM : prev),
+      days: [fromDateKey(key).getDay()],
+    }));
+    setMode('week');
   }
 
   // 위쪽 '일정 추가' 버튼: 주간 보기의 폼 첫 칸(요일)으로 이동
@@ -125,6 +139,7 @@ export default function AvailabilityPanel({ schedules, setSchedules, notify }) {
     }));
   }
 
+  // 시간표에서 고른 일정을 폼에 불러와 수정 시작 (확정은 직접 고를 수 없어 '가능'으로 둠)
   function startEdit(item) {
     setEditingId(item.id);
     setForm({
@@ -138,6 +153,7 @@ export default function AvailabilityPanel({ schedules, setSchedules, notify }) {
     firstFieldRef.current?.focus();
   }
 
+  // 일정 삭제 후 결과를 알림 (수정 중이던 일정이면 수정도 취소)
   function remove(item) {
     if (editingId === item.id) resetForm();
     setSelectedId(null);
@@ -279,7 +295,7 @@ export default function AvailabilityPanel({ schedules, setSchedules, notify }) {
               <button
                 type="button"
                 className="sched-nav-arrow"
-                onClick={() => setWeekKey(addDays(weekKey, -7))}
+                onClick={() => goToWeek(addDays(weekKey, -7))}
                 aria-label="이전 주"
               >
                 <Icon
@@ -293,7 +309,7 @@ export default function AvailabilityPanel({ schedules, setSchedules, notify }) {
               <button
                 type="button"
                 className="sched-nav-arrow"
-                onClick={() => setWeekKey(addDays(weekKey, 7))}
+                onClick={() => goToWeek(addDays(weekKey, 7))}
                 aria-label="다음 주"
               >
                 <Icon
@@ -304,7 +320,7 @@ export default function AvailabilityPanel({ schedules, setSchedules, notify }) {
               <button
                 type="button"
                 className="sched-nav-today"
-                onClick={() => setWeekKey(todayKey)}
+                onClick={() => goToWeek(todayKey)}
               >
                 이번 주
               </button>

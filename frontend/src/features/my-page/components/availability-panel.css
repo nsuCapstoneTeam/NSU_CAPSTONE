@@ -538,8 +538,11 @@
   cursor: pointer;
 }
 .week-block strong {
+  overflow: hidden;
   font-size: 13px;
   font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .week-block span {
   /* 일정이름은 두 줄까지 보여 주고 넘치면 말줄임 */
