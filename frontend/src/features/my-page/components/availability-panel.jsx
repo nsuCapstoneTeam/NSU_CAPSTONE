@@ -4,7 +4,6 @@ import {
   STATUSES,
   WEEKDAYS,
   addDays,
-  availableHours,
   buildWeekItems,
   dayTitle,
   findOverlap,
@@ -64,15 +63,9 @@ export default function AvailabilityPanel({ schedules, setSchedules, notify }) {
   for (const item of schedules) (byDate[item.date] ||= []).push(item);
 
   const week = weekDays(weekKey);
-  const weekItems = week.flatMap((key) => byDate[key] || []);
   // 시간 추가 폼 값으로 만든 미리 보기 (시간 순서가 맞을 때만)
   const preview =
     form.allDay || form.start < form.end ? buildWeekItems(week, form) : [];
-  const weekHours = availableHours(weekItems);
-  const afterHours = availableHours([
-    ...weekItems.filter((s) => s.id !== editingId),
-    ...preview,
-  ]);
   const selectedItem = schedules.find((s) => s.id === selectedId);
 
   // 보기 전환 (월간으로 가면 보던 주의 달을 보여 줌)
@@ -273,10 +266,6 @@ export default function AvailabilityPanel({ schedules, setSchedules, notify }) {
             form={form}
             setForm={setForm}
             editing={editingId !== null}
-            weekRange={`${monthDay(week[0])} – ${monthDay(week[6])}`}
-            weekHours={weekHours}
-            afterHours={afterHours}
-            bookedCount={weekItems.filter((s) => statusOf(s) === 'BOOKED').length}
             firstFieldRef={firstFieldRef}
             onSubmit={submit}
             onCancelEdit={resetForm}

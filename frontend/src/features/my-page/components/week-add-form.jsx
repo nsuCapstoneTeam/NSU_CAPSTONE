@@ -19,16 +19,11 @@ function submitLabel(form, editing) {
   return `${days} ${range}${status} 추가하기`;
 }
 
-// form: 폼 값, setForm: 폼 값 바꾸기, editing: 수정 중인지
-// weekHours: 이번 주 가능 시간, afterHours: 추가하면 될 가능 시간, bookedCount: 이번 주 확정 공연 수
+// form: 폼 값, setForm: 폼 값 바꾸기, editing: 수정 중인지, firstFieldRef: 첫 칸(일요일 버튼)
 export default function WeekAddForm({
   form,
   setForm,
   editing,
-  weekRange,
-  weekHours,
-  afterHours,
-  bookedCount,
   firstFieldRef,
   onSubmit,
   onCancelEdit,
@@ -47,31 +42,16 @@ export default function WeekAddForm({
     });
   }
 
-  const summary = [
-    weekRange,
-    afterHours !== weekHours ? `추가하면 ${afterHours}시간` : null,
-    `확정 공연 ${bookedCount}건`,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-
   return (
     <section
       className="panel week-add"
       aria-label="공연 가능 시간 추가"
     >
-      <h2 className="week-total-title">이번 주 공연 가능 시간</h2>
-      <p className="week-total">
-        <strong>{weekHours}</strong>
-        <span>시간</span>
-      </p>
-      <p className="week-total-sub">{summary}</p>
-
       <form
         className="week-form"
         onSubmit={onSubmit}
       >
-        <h3>{editing ? '일정 수정' : '시간 추가'}</h3>
+        <h2>{editing ? '일정 수정' : '시간 추가'}</h2>
 
         <fieldset className="week-days">
           <legend>요일 {editing ? '(하나만)' : '(여러 개 고를 수 있어요)'}</legend>

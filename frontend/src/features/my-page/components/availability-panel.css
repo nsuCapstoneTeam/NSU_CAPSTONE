@@ -239,40 +239,13 @@
     top: 20px;
   }
 }
-.week-add .week-total-title {
-  margin: 0;
-  font-size: 15px;
-}
-.week-total {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin: 6px 0 4px;
-}
-.week-total strong {
-  font-size: 52px;
-  letter-spacing: -2px;
-  line-height: 1.1;
-}
-.week-total span {
-  color: var(--muted);
-  font-size: 15px;
-  font-weight: 600;
-}
-.week-total-sub {
-  margin: 0 0 18px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 12px;
-}
 .week-form {
   display: grid;
   gap: 18px;
 }
-.week-form h3 {
+.week-form h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 18px;
 }
 .week-form fieldset {
   min-width: 0;
