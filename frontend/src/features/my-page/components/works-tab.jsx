@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import Icon from '../../../components/common/icon.jsx';
 import VideoLinks from './video-links.jsx';
 
-// 마이페이지 '작업물·섭외' 탭 (아티스트): 공연 영상 링크, 작업물 미리 듣기, 섭외 요청 우편함
+// 마이페이지 '작업물' 메뉴 (아티스트): 공연 영상 링크, 작업물 미리 듣기
+// (섭외 요청 우편함은 '섭외 요청' 메뉴로 분리, NSU-110)
 export default function WorksTab({ active, profile, setProfile, notify }) {
   // 미리 듣기용으로 선택한 오디오 파일 (서버에 올리지 않음)
   const [audioFile, setAudioFile] = useState(null);
@@ -26,7 +27,7 @@ export default function WorksTab({ active, profile, setProfile, notify }) {
         setProfile={setProfile}
         notify={notify}
       />
-      <div className="my-grid">
+      <div className="works-grid">
         {/* 아티스트: 내 음원 미리 듣기 (20MB 이하만 허용) */}
         <section className="panel">
           <h2>작업물 미리 듣기</h2>
@@ -68,12 +69,6 @@ export default function WorksTab({ active, profile, setProfile, notify }) {
               <small>이 화면을 나가면 선택한 파일은 해제됩니다.</small>
             </>
           )}
-        </section>
-        {/* 섭외 요청 우편함 (아직 체험 데이터 없음) */}
-        <section className="panel">
-          <h2>섭외 요청 우편함</h2>
-          <p>새로운 섭외 요청이 도착하면 행사명, 일정, 지역과 요청 상태를 이곳에서 확인합니다.</p>
-          <div className="soft-box">아직 도착한 체험 섭외 요청이 없습니다.</div>
         </section>
       </div>
     </div>

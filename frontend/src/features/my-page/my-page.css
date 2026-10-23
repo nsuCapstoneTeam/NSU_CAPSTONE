@@ -1,39 +1,404 @@
-/* 마이페이지 탭 (프로필 / 공연 일정 / 작업물·섭외 …) */
-.my-tabs {
-  display: flex;
-  gap: 4px;
-  margin: 0 0 22px;
-  border-bottom: 1px solid var(--line);
-  overflow-x: auto;
+/* 마이페이지 (NSU-110): 왼쪽 사이드바 + 오른쪽 메뉴 내용 */
+/* 역할 색: 아티스트 파랑 / 행사 관계자 코랄 (DESIGN.md 역할 색) */
+.my-page {
+  --role: var(--blue);
+  --role-soft: var(--tint);
+  --on-role: var(--on-blue);
+  --rail: 76px; /* 평소 사이드바 폭 (아이콘만) */
+  --rail-open: 252px; /* 마우스를 올렸을 때 폭 */
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+  padding: 36px 0 64px;
 }
-.my-tabs button {
-  flex: none;
-  margin-bottom: -1px;
-  padding: 12px 18px;
-  border: 0;
-  border-bottom: 3px solid transparent;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
+.my-page.is-organizer {
+  --role: #c4432b;
+  --role-soft: #fdeeea;
+  --on-role: #fff;
 }
-.my-tabs button:hover {
-  color: var(--ink);
+:root[data-theme='dark'] .my-page.is-organizer {
+  --role: #ff9a80;
+  --role-soft: #3a2420;
+  --on-role: #2a0f08;
 }
-.my-tabs button[aria-selected='true'] {
-  border-bottom-color: var(--blue);
-  color: var(--blue);
-}
-.my-tabs button:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: -2px;
-  border-radius: 6px 6px 0 0;
+/* 화면 낭독기에만 읽히는 글자 */
+.my-page .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-/* 작업물·섭외 탭: 공연 영상(위) + 미리 듣기·우편함(아래) */
-.works-stack {
+/* ---------- 사이드바 ---------- */
+/* 평소에는 아이콘만 보이는 좁은 막대. 마우스를 올리거나(:hover) 키보드로 들어가면(:focus-within)
+   오른쪽으로 늘어나 이름이 보입니다. 내용 위에 겹쳐 펼쳐지므로 본문 배치는 움직이지 않습니다.
+   아이콘 위치는 그대로 두고 폭만 바뀌어, 늘어날 때 이름이 옆에서 드러나는 방식입니다. */
+.my-sidebar {
+  position: sticky;
+  top: 24px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: var(--rail);
+  min-height: 560px;
+  overflow: hidden;
+  padding: 20px 12px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  box-shadow: var(--shadow);
+  transition:
+    width 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.my-sidebar:hover,
+.my-sidebar:focus-within {
+  width: var(--rail-open);
+  box-shadow: 0 18px 50px #0b142424;
+}
+/* 늘어나는 동안 글자가 줄바꿈되며 흔들리지 않도록 펼친 폭 기준으로 배치 */
+.my-sidebar-top,
+.my-nav,
+.my-sidebar-note {
+  width: calc(var(--rail-open) - 26px);
+}
+.my-sidebar-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 0 0 18px 1px;
+  border-bottom: 1px solid var(--line);
+}
+/* 프로필 사진 둘레의 레코드판 테두리 */
+.my-avatar-ring {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  padding: 4px;
+  border-radius: 50%;
+  background: #0b1424;
+}
+.my-avatar-ring .avatar {
+  box-shadow: 0 0 0 1.5px var(--role);
+}
+.my-sidebar-name {
+  flex: 1;
+  min-width: 0;
+}
+.my-sidebar-name p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.my-sidebar-name strong {
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.my-role-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--role-soft);
+  color: var(--role);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* 사이드바 안의 확인 배지 툴팁: 배지 위치(이름 길이)와 상관없이 이름 영역 아래 왼쪽부터 펼침.
+   사이드바는 overflow: hidden이라 배지 기준으로 띄우면 이름이 짧을 때 왼쪽이 잘림 */
+.my-sidebar-top {
+  position: relative;
+}
+.my-sidebar .verified-badge {
+  position: static;
+}
+.my-sidebar .verified-badge-tip {
+  top: calc(100% - 10px);
+  right: 0;
+  left: 0;
+  width: auto;
+  max-width: none;
+  transform: none;
+}
+
+/* 메뉴 */
+.my-nav {
+  display: grid;
+  gap: 4px;
+}
+.my-nav button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+.my-nav button:hover {
+  background: var(--soft);
+  color: var(--ink);
+}
+.my-nav button[aria-selected='true'] {
+  background: var(--role-soft);
+  color: var(--role);
+  font-weight: 700;
+}
+/* 고른 메뉴 왼쪽 막대 */
+.my-nav button[aria-selected='true']::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: -12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--role);
+}
+.my-nav button:focus-visible {
+  outline: 2px solid var(--role);
+  outline-offset: -2px;
+}
+/* 이름은 막대가 늘어날 때 서서히 나타남 (좁을 때도 화면 낭독기에는 읽힘) */
+.my-nav-label,
+.my-sidebar-name,
+.my-sidebar-note p {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.my-sidebar:hover :is(.my-nav-label, .my-sidebar-name, .my-sidebar-note p),
+.my-sidebar:focus-within :is(.my-nav-label, .my-sidebar-name, .my-sidebar-note p) {
+  opacity: 1;
+}
+
+/* 아래쪽 체험 안내 */
+.my-sidebar-note {
+  display: flex;
+  gap: 12px;
+  margin-top: auto;
+  padding: 12px 15px;
+  border-radius: 10px;
+  color: var(--muted);
+  transition: background 0.15s ease;
+}
+.my-sidebar:hover .my-sidebar-note,
+.my-sidebar:focus-within .my-sidebar-note {
+  background: var(--soft);
+}
+.my-sidebar-note p {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.my-sidebar-note strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .my-sidebar,
+  .my-nav-label,
+  .my-sidebar-name,
+  .my-sidebar-note,
+  .my-sidebar-note p {
+    transition: none;
+  }
+}
+
+/* ---------- 내용 ---------- */
+.my-content {
+  min-width: 0;
+}
+.my-content-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+  margin-bottom: 24px;
+}
+.my-content-head h1 {
+  margin: 0 0 8px;
+  font-size: 30px;
+  letter-spacing: -1px;
+  line-height: 1.3;
+}
+.my-content-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* 작업물: 공연 영상(위) + 미리 듣기(아래) */
+.works-stack,
+.works-grid {
   display: grid;
   gap: 25px;
+}
+
+/* 섭외 요청·관심 아티스트 빈 상태 */
+.booking-empty,
+.saved-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 36px 20px;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.booking-empty {
+  margin-top: 16px;
+  background: var(--soft);
+}
+.booking-empty strong,
+.saved-empty strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+/* 관심 아티스트 카드 */
+.saved-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.saved-card {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  box-shadow: var(--shadow);
+}
+.saved-card-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.saved-initial {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  font-size: 20px;
+  font-weight: 800;
+}
+.saved-initial.tone-0 {
+  background: #e3efff;
+  color: #0866df;
+}
+.saved-initial.tone-1 {
+  background: #dff5ec;
+  color: #18775e;
+}
+.saved-initial.tone-2 {
+  background: #efe7ff;
+  color: #6b3fd4;
+}
+.saved-initial.tone-3 {
+  background: #ffe9e2;
+  color: #c4432b;
+}
+.saved-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 17px;
+}
+.saved-genres {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.saved-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.saved-meta dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.saved-meta dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* 좁은 화면(마우스가 없을 수도 있음): 사이드바를 위쪽 가로 메뉴로, 이름을 항상 보이게 */
+@media (max-width: 900px) {
+  .my-page {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    padding-top: 20px;
+  }
+  .my-sidebar,
+  .my-sidebar:hover,
+  .my-sidebar:focus-within {
+    position: static;
+    width: auto;
+    min-height: 0;
+    padding: 14px;
+    box-shadow: var(--shadow);
+  }
+  .my-sidebar-top,
+  .my-nav {
+    width: auto;
+  }
+  .my-nav-label,
+  .my-sidebar-name {
+    opacity: 1;
+  }
+  .my-sidebar-note {
+    display: none;
+  }
+  .my-nav {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+  }
+  .my-nav button {
+    flex: none;
+    width: auto;
+    gap: 10px;
+    padding: 10px 14px;
+  }
+  .my-nav button::before {
+    display: none;
+  }
+  .my-content-head h1 {
+    font-size: 26px;
+  }
+}
+:root[data-theme='dark'] .saved-initial {
+  background: var(--tint);
+  color: var(--blue);
 }

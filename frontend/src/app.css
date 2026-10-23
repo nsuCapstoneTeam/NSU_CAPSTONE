@@ -1189,17 +1189,6 @@ summary::-webkit-details-marker {
   line-height: 1.8;
   color: var(--muted);
 }
-/* 마이페이지: 프로필 요약 띠 */
-.profile-strip {
-  background: var(--soft);
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  padding: 22px;
-  display: flex;
-  align-items: center;
-  gap: 17px;
-  margin-bottom: 25px;
-}
 .user-avatar {
   width: 56px;
   height: 56px;
@@ -1208,17 +1197,6 @@ summary::-webkit-details-marker {
   color: var(--blue);
   display: grid;
   place-items: center;
-}
-.profile-strip h2 {
-  font-size: 20px;
-  margin: 0 0 5px;
-}
-.profile-strip p {
-  font-size: 11px;
-  margin: 0;
-}
-.profile-strip > .tag {
-  margin-left: auto;
 }
 /* 마이페이지: 2열 배치 */
 .my-grid {
@@ -1780,17 +1758,6 @@ audio {
   }
   .role-choice span {
     font-size: 10px;
-  }
-  .profile-strip {
-    padding: 17px;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-  .profile-strip h2 {
-    font-size: 17px;
-  }
-  .profile-strip > .tag {
-    margin-left: 0;
   }
   .board-toolbar {
     gap: 10px;

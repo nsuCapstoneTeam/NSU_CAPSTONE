@@ -1,30 +1,46 @@
 import { useRef, useState } from 'react';
-import PageHeading from '../../components/common/page-heading.jsx';
-import Tag from '../../components/common/tag.jsx';
+import Icon from '../../components/common/icon.jsx';
 import Avatar from './components/avatar.jsx';
+import VerifiedBadge from './components/verified-badge.jsx';
 import ProfileTab from './components/profile-tab.jsx';
 import AvailabilityPanel from './components/availability-panel.jsx';
 import WorksTab from './components/works-tab.jsx';
+import BookingRequestsTab from './components/booking-requests-tab.jsx';
 import SavedArtistsTab from './components/saved-artists-tab.jsx';
 import EventsTab from './components/events-tab.jsx';
 import './my-page.css';
 
-// 역할별 탭 목록 [id, 탭 이름]
+// 역할별 사이드바 메뉴 [id, 메뉴 이름, 아이콘] (Figma '마이페이지 · 최종', NSU-110)
 const TABS = {
   artist: [
-    ['profile', '프로필'],
-    ['schedule', '공연 일정'],
-    ['works', '작업물·섭외'],
+    ['profile', '프로필', 'user'],
+    ['schedule', '공연 일정', 'calendar'],
+    ['works', '작업물', 'music'],
+    ['requests', '섭외 요청', 'inbox'],
   ],
   organizer: [
-    ['profile', '프로필'],
-    ['events', '내 행사'],
-    ['saved', '관심 아티스트'],
+    ['profile', '프로필', 'user'],
+    ['events', '내 행사', 'ticket'],
+    ['saved', '관심 아티스트', 'bookmark'],
   ],
 };
 
-// 마이페이지: 위쪽 이름 띠는 항상 보이고, 아래는 탭을 눌러 한 가지 내용만 봅니다.
-// 탭 내용은 숨기기만 하고(hidden) 지우지 않아서, 탭을 바꿔도 쓰던 내용·재생 중인 파일이 유지됩니다.
+// 메뉴별 본문 제목 아래 설명 (공연 일정은 보기 전환 버튼과 함께 일정 화면이 직접 그림)
+const DESCRIPTIONS = {
+  profile: {
+    artist: '행사 관계자에게 보이는 기본 정보예요. 저장하면 이 브라우저에 보관돼요.',
+    organizer: '행사 등록과 섭외 제안에 쓰는 기본 정보예요. 저장하면 이 브라우저에 보관돼요.',
+  },
+  works: '공연 영상과 음원을 등록하고 미리 들어 볼 수 있어요.',
+  requests: '행사 관계자가 보낸 섭외 요청을 이곳에서 확인해요.',
+  events: '등록한 행사를 보고, 행사마다 어울리는 아티스트를 추천받아요.',
+  saved: '추천 결과에서 저장한 아티스트예요. 섭외 제안을 보내기 전에 다시 비교해 보세요.',
+};
+
+// 마이페이지: 왼쪽 사이드바에서 메뉴를 고르고, 오른쪽에 그 메뉴 내용 하나만 보여 줍니다.
+// 사이드바는 평소에 아이콘만 보이고, 마우스를 올리거나 키보드로 들어가면 옆으로 늘어나 이름이 보입니다.
+// 늘어날 때는 내용 위에 겹쳐서 펼쳐지므로 본문 폭은 바뀌지 않습니다.
+// 메뉴 내용은 숨기기만 하고(hidden) 지우지 않아서, 메뉴를 바꿔도 쓰던 내용·재생 중인 파일이 유지됩니다.
 export default function MyPage({
   profile,
   setProfile,
@@ -37,30 +53,35 @@ export default function MyPage({
   notify,
   initialTab = 'profile',
 }) {
-  const tabs = TABS[profile.role] || TABS.artist;
-  // 처음 열 탭 (예: 매칭 화면의 '행사 등록하러 가기' → 내 행사). 역할에 없는 탭이면 프로필
+  const role = profile.role === 'organizer' ? 'organizer' : 'artist';
+  const tabs = TABS[role];
+  // 처음 열 메뉴 (예: 매칭 화면의 '행사 등록하러 가기' → 내 행사). 역할에 없는 메뉴면 프로필
   const [tab, setTab] = useState(() =>
     tabs.some(([id]) => id === initialTab) ? initialTab : 'profile',
   );
   const tabRefs = useRef({});
 
-  // 탭 목록에서 ←/→, Home/End로 탭 이동 (화면낭독기 탭 패턴)
+  // 메뉴 목록에서 ↑/↓(←/→), Home/End로 이동 (화면낭독기 탭 패턴, 세로 방향)
   function tabKeyDown(e, index) {
     const last = tabs.length - 1;
-    const next = {
-      ArrowRight: index === last ? 0 : index + 1,
-      ArrowLeft: index === 0 ? last : index - 1,
+    const prev = index === 0 ? last : index - 1;
+    const next = index === last ? 0 : index + 1;
+    const target = {
+      ArrowDown: next,
+      ArrowRight: next,
+      ArrowUp: prev,
+      ArrowLeft: prev,
       Home: 0,
       End: last,
     }[e.key];
-    if (next === undefined) return;
+    if (target === undefined) return;
     e.preventDefault();
-    const id = tabs[next][0];
+    const id = tabs[target][0];
     setTab(id);
     tabRefs.current[id]?.focus();
   }
 
-  // 탭 id → 탭 내용
+  // 메뉴 id → 내용
   const panels = {
     profile: (
       <ProfileTab
@@ -71,7 +92,6 @@ export default function MyPage({
     ),
     schedule: (
       <AvailabilityPanel
-        active={tab === 'schedule'}
         schedules={schedules}
         setSchedules={setSchedules}
         notify={notify}
@@ -85,6 +105,7 @@ export default function MyPage({
         notify={notify}
       />
     ),
+    requests: <BookingRequestsTab />,
     events: (
       <EventsTab
         events={events}
@@ -100,70 +121,100 @@ export default function MyPage({
     ),
   };
 
-  return (
-    <>
-      <PageHeading
-        eyebrow={profile.role === 'artist' ? 'ARTIST MY STAGE' : 'ORGANIZER DESK'}
-        title={`${profile.name}님의 ${profile.role === 'artist' ? '아티스트' : '행사 관계자'} 마이페이지`}
-        description={
-          profile.role === 'artist'
-            ? '프로필과 음원, 공연 가능 일정과 섭외 준비 상태를 관리하세요.'
-            : '행사 정보와 관심 아티스트, 매칭 결과를 한곳에서 관리하세요.'
-        }
-      />
-      {/* 이름·역할·검증 상태 요약 (모든 탭에서 보임) */}
-      <div className="profile-strip">
-        <Avatar
-          profile={profile}
-          size={56}
-        />
-        <div>
-          <h2>{profile.name}</h2>
-          <p>
-            {profile.role === 'artist' ? '아티스트' : '행사 관계자'} · 이
-            브라우저의 체험 프로필
-          </p>
-        </div>
-        <Tag>{profile.verification}</Tag>
-      </div>
+  const roleName = role === 'artist' ? '아티스트' : '행사 관계자';
 
-      {/* 탭 버튼: 선택된 탭만 Tab 키로 들어가고, 탭 사이는 방향키로 이동 */}
-      <div
-        className="my-tabs"
-        role="tablist"
+  return (
+    <div className={`my-page is-${role}`}>
+      <aside
+        className="my-sidebar"
         aria-label="마이페이지 메뉴"
       >
-        {tabs.map(([id, label], index) => (
-          <button
-            key={id}
-            ref={(el) => {
-              tabRefs.current[id] = el;
-            }}
-            id={`my-tab-${id}`}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            aria-controls={`my-panel-${id}`}
-            tabIndex={tab === id ? 0 : -1}
-            onClick={() => setTab(id)}
-            onKeyDown={(e) => tabKeyDown(e, index)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tabs.map(([id]) => (
-        <div
-          key={id}
-          id={`my-panel-${id}`}
-          role="tabpanel"
-          aria-labelledby={`my-tab-${id}`}
-          hidden={tab !== id}
-        >
-          {panels[id]}
+        {/* 이름·역할 (아티스트는 이름 옆에 확인 배지) */}
+        <div className="my-sidebar-top">
+          <span className="my-avatar-ring">
+            <Avatar
+              profile={profile}
+              size={42}
+            />
+          </span>
+          <div className="my-sidebar-name">
+            <p>
+              <strong>{profile.name}</strong>
+              {/* 본인 인증·검토가 아직 연결 전이라 확인된 항목이 없음 (회색) */}
+              {role === 'artist' && <VerifiedBadge size={16} />}
+            </p>
+            <span className="my-role-chip">{roleName}</span>
+          </div>
         </div>
-      ))}
-    </>
+
+        {/* 메뉴: 선택된 메뉴만 Tab 키로 들어가고, 메뉴 사이는 방향키로 이동 */}
+        <div
+          className="my-nav"
+          role="tablist"
+          aria-orientation="vertical"
+          aria-label={`${roleName} 마이페이지 메뉴`}
+        >
+          {tabs.map(([id, label, icon], index) => (
+            <button
+              key={id}
+              ref={(el) => {
+                tabRefs.current[id] = el;
+              }}
+              id={`my-tab-${id}`}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              aria-controls={`my-panel-${id}`}
+              tabIndex={tab === id ? 0 : -1}
+              onClick={() => setTab(id)}
+              onKeyDown={(e) => tabKeyDown(e, index)}
+            >
+              <Icon
+                name={icon}
+                size={20}
+              />
+              <span className="my-nav-label">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="my-sidebar-note">
+          <Icon
+            name="info"
+            size={18}
+          />
+          <p>
+            <strong>체험 프로필이에요</strong>
+            <span>입력한 내용은 이 브라우저에만 저장돼요.</span>
+          </p>
+        </div>
+      </aside>
+
+      <div className="my-content">
+        {tabs.map(([id, label]) => {
+          const description = DESCRIPTIONS[id]?.[role] ?? DESCRIPTIONS[id];
+          return (
+            <div
+              key={id}
+              id={`my-panel-${id}`}
+              role="tabpanel"
+              aria-labelledby={`my-tab-${id}`}
+              hidden={tab !== id}
+            >
+              {/* 공연 일정은 보기 전환 버튼이 있어 일정 화면이 제목을 직접 그림 */}
+              {id !== 'schedule' && (
+                <header className="my-content-head">
+                  <div>
+                    <h1>{label}</h1>
+                    <p>{description}</p>
+                  </div>
+                </header>
+              )}
+              {panels[id]}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

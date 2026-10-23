@@ -79,6 +79,94 @@ export default function Icon({ name, size = 20 }) {
         <path d="M8 9h8M8 13h8M8 17h4" />
       </>
     ),
+    // 달력 (마이페이지 공연 일정)
+    calendar: (
+      <>
+        <rect
+          x="3"
+          y="5"
+          width="18"
+          height="16"
+          rx="2.5"
+        />
+        <path d="M3 10h18M8 3v4M16 3v4" />
+      </>
+    ),
+    // 숫자 달력: 월간 보기(31) / 주간 보기(7)
+    'calendar-month': (
+      <>
+        <rect
+          x="2.5"
+          y="4.5"
+          width="19"
+          height="17.5"
+          rx="2.5"
+        />
+        <path d="M2.5 8.6h19M7 2.6v3.6M10.3 2.6v3.6M13.7 2.6v3.6M17 2.6v3.6" />
+        <text
+          x="12"
+          y="19.6"
+          textAnchor="middle"
+          fontSize="11"
+          fontWeight="600"
+          fill="currentColor"
+          stroke="none"
+        >
+          31
+        </text>
+      </>
+    ),
+    'calendar-week': (
+      <>
+        <rect
+          x="2.5"
+          y="4.5"
+          width="19"
+          height="17.5"
+          rx="2.5"
+        />
+        <path d="M2.5 8.6h19M7 2.6v3.6M10.3 2.6v3.6M13.7 2.6v3.6M17 2.6v3.6" />
+        <text
+          x="12"
+          y="19.6"
+          textAnchor="middle"
+          fontSize="11"
+          fontWeight="600"
+          fill="currentColor"
+          stroke="none"
+        >
+          7
+        </text>
+      </>
+    ),
+    // 받은 편지함 (섭외 요청)
+    inbox: (
+      <>
+        <path d="M3 13h5l1.5 3h5L16 13h5" />
+        <path d="M5.5 5h13L21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6z" />
+      </>
+    ),
+    // 티켓 (내 행사)
+    ticket: (
+      <>
+        <path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4z" />
+        <path d="M14 6v12" strokeDasharray="2 2.5" />
+      </>
+    ),
+    plus: <path d="M12 5v14M5 12h14" />,
+    'chevron-left': <path d="m15 6-6 6 6 6" />,
+    'chevron-right': <path d="m9 6 6 6-6 6" />,
+    'chevron-down': <path d="m6 9 6 6 6-6" />,
+    info: (
+      <>
+        <circle
+          cx="12"
+          cy="12"
+          r="9"
+        />
+        <path d="M12 11v5M12 8h.01" />
+      </>
+    ),
     user: (
       <>
         <circle
