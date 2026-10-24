@@ -250,10 +250,11 @@ function RhythmSlide({ item, basis, player }) {
     },
     { key: `beats-song-${item.music.id}`, label: '이 곡 박자만 듣기', duration: seconds, bpm, beats },
   ].filter(Boolean);
-  // 재생 위치 선: 이 곡·참고 곡·박자만 듣기 중 하나가 재생 중일 때 두 마디 안에서 움직임
-  const mine = [item.music.id, 'reference', ...beatTracks.map((t) => t.key)];
-  const active = player && mine.includes(player.key);
-  const loop = (60 / bpm / 4) * 16 * BARS || 1;
+  // 재생 위치 선: 이 곡이나 박자만 듣기가 재생 중일 때, 재생 중인 박자의 BPM으로 두 마디 안에서 움직임
+  // 올린 참고 곡 파일('reference')은 실제 템포를 알 수 없어 위치 선을 그리지 않음
+  const playing = [{ key: item.music.id, bpm }, ...beatTracks].find((t) => player?.key === t.key);
+  const active = Boolean(playing);
+  const loop = (60 / (playing?.bpm || bpm) / 4) * 16 * BARS || 1;
   const playhead = active ? (player.position % loop) / loop : null;
 
   const traces = bySong
@@ -276,7 +277,15 @@ function RhythmSlide({ item, basis, player }) {
         playhead={playhead}
       />
       <div className="beat-graph-actions">
-        {active && <span className="beat-graph-time">{formatDuration(player.position)}</span>}
+        {/* 시각 정보라 화면 낭독기에서는 숨김 (슬라이드 영역이 aria-live라 매초 읽히지 않게) */}
+        {active && (
+          <span
+            className="beat-graph-time"
+            aria-hidden="true"
+          >
+            {formatDuration(player.position)}
+          </span>
+        )}
         {player &&
           beatTracks.map((t) => {
             const on = player.key === t.key && player.playing;
