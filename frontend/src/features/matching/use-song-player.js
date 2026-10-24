@@ -102,7 +102,13 @@ export default function useSongPlayer() {
         const audio = audioRef.current;
         if (audio.src !== track.url) audio.src = track.url;
         audio.currentTime = position;
-        audio.play().catch(() => setState((s) => ({ ...s, playing: false })));
+        // 재생이 거부되면 멈춤으로 표시. 다른 곡으로 바꾸면서 끊긴 경우(AbortError)나
+        // 이미 다른 곡을 재생 중이면 지금 상태를 덮어쓰지 않음
+        audio.play().catch((err) => {
+          if (err?.name === 'AbortError' || trackRef.current !== track) return;
+          silence();
+          setState((s) => ({ ...s, playing: false }));
+        });
       } else if (!startBeats(track, position)) {
         setState((s) => ({ ...s, playing: false }));
         return;

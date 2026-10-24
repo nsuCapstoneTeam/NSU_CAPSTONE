@@ -13,13 +13,27 @@ import {
 // 파일은 서버로 보내지 않고 브라우저 안에서만 재생합니다.
 // value: { name, size, url, duration, status: 'checking' | 'ready' | 'error', error }, onChange(value | null)
 
-// 파일 길이(초)를 읽음. 읽지 못하면 NaN
+// 길이를 읽을 때 기다리는 최대 시간. 브라우저가 정보를 주지 않아도 '확인 중'에 멈춰 있지 않게 함
+const READ_TIMEOUT_MS = 10 * 1000;
+
+// 파일 길이(초)를 읽음. 읽지 못하거나 시간이 지나면 NaN (→ '재생할 수 없는 파일' 안내)
 function readDuration(url) {
   return new Promise((resolve) => {
     const audio = new Audio();
+    let timer = null;
+    // 결과를 한 번만 넘기고, 길이를 읽으려고 만든 audio 요소를 정리함
+    const finish = (seconds) => {
+      clearTimeout(timer);
+      audio.onloadedmetadata = null;
+      audio.onerror = null;
+      audio.removeAttribute('src');
+      audio.load();
+      resolve(seconds);
+    };
+    timer = setTimeout(() => finish(NaN), READ_TIMEOUT_MS);
     audio.preload = 'metadata';
-    audio.onloadedmetadata = () => resolve(audio.duration);
-    audio.onerror = () => resolve(NaN);
+    audio.onloadedmetadata = () => finish(audio.duration);
+    audio.onerror = () => finish(NaN);
     audio.src = url;
   });
 }
@@ -29,7 +43,7 @@ export default function ReferenceUpload({ value, onChange }) {
   const [dragging, setDragging] = useState(false);
   const noticeId = useId();
   // 마지막으로 고른 파일 (늦게 끝난 길이 확인이 새 파일 결과를 덮어쓰지 않게)
-  // 파일 주소는 결과 화면에서도 재생하므로 여기서 정리하지 않고, 다른 파일로 바꿀 때만 정리합니다.
+  // 파일 주소는 결과 화면에서도 재생하므로 여기서 정리하지 않습니다. 정리는 SongSearch가 함 (바꿀 때·화면을 떠날 때)
   const latestRef = useRef(null);
 
   async function pick(file) {

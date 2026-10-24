@@ -38,9 +38,17 @@ export default function SongSearch({ hidden, modeSwitch, form, setForm, onResult
 
   const change = (name, value) => setForm((prev) => ({ ...prev, [name]: value }));
 
-  // 참고 곡을 바꾸면 이전 파일 주소를 정리하고 재생을 멈춤
+  // 참고 곡 파일 주소 정리: 다른 파일로 바뀌거나 매칭 화면을 떠나면 이전 주소를 해제
+  const referenceUrl = reference?.url;
+  useEffect(
+    () => () => {
+      if (referenceUrl) URL.revokeObjectURL(referenceUrl);
+    },
+    [referenceUrl],
+  );
+
+  // 참고 곡을 바꾸면 재생을 멈춤
   function setReference(next) {
-    if (reference?.url && reference.url !== next?.url) URL.revokeObjectURL(reference.url);
     stop();
     setReferenceState(next);
   }

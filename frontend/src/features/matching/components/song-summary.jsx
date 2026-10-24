@@ -3,6 +3,7 @@ import Icon from '../../../components/common/icon.jsx';
 import EventFields from './event-fields.jsx';
 import { formatDuration } from '../reference-song.js';
 import { referenceTrack } from '../song-results.js';
+import { validateEvent } from '../matching.js';
 
 // 참고 곡으로 찾기 결과 화면 왼쪽 카드 (NSU-111)
 // 올린 참고 곡(듣기·다른 곡으로 찾기) + 행사 조건(바뀐 항목 표시·조건 바꾸기)
@@ -19,15 +20,25 @@ const WAVE = [6, 10, 16, 12, 20, 26, 18, 14, 22, 28, 20, 12, 16, 24, 18, 10, 14,
 
 // event: 지금 행사 조건, snapshot: 추천을 받을 때의 행사 조건, onSaveEvent(새 조건), onNewSong: 다른 곡으로 찾기
 export default function SongSummary({ modeSwitch, reference, player, event, snapshot, onSaveEvent, onNewSong }) {
+  // draft: 고치는 중인 조건 (null이면 요약 보기), draftError: 저장 전 입력 확인 결과
   const [draft, setDraft] = useState(null);
+  const [draftError, setDraftError] = useState('');
   const track = referenceTrack(reference);
   const playing = player.key === track.key && player.playing;
   const changed = (keys) => keys.some((k) => String(event[k]) !== String(snapshot[k]));
 
+  // 처음 찾을 때와 같은 입력 확인을 거친 뒤에만 저장
   function save(e) {
     e.preventDefault();
+    const message = validateEvent(draft);
+    setDraftError(message);
+    if (message) return;
     onSaveEvent(draft);
     setDraft(null);
+  }
+  function openEdit() {
+    setDraftError('');
+    setDraft({ ...event });
   }
 
   return (
@@ -83,6 +94,14 @@ export default function SongSummary({ modeSwitch, reference, player, event, snap
             form={draft}
             change={(name, value) => setDraft((prev) => ({ ...prev, [name]: value }))}
           />
+          {draftError && (
+            <p
+              role="alert"
+              className="error"
+            >
+              {draftError}
+            </p>
+          )}
           <div className="song-edit-actions">
             <button
               type="button"
@@ -117,7 +136,7 @@ export default function SongSummary({ modeSwitch, reference, player, event, snap
           <button
             type="button"
             className="secondary full"
-            onClick={() => setDraft({ ...event })}
+            onClick={openEdit}
           >
             조건 바꾸기
           </button>
