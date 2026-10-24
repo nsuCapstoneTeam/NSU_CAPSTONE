@@ -1,0 +1,1146 @@
+/* 참고 곡으로 찾기 (NSU-111): Figma '추천 결과 · 참고 곡으로 찾기' · '참고 곡 올리기' 시안
+   눈에 띄는 것은 남색 '곡 듣기' CD 카드 하나만 두고, 나머지는 밝은 카드와 선으로 조용히 둡니다. */
+.match-stage {
+  --warn-bg: #fff7e8;
+  --warn-line: #f3d9a4;
+  --warn-ink: #7a4b00;
+  --warn-soft: #9a7a3a;
+  --error-bg: #fff6f5;
+  --error-line: #f0b4ab;
+  --error-ink: #8f1d14;
+  --navy: #0b1424;
+}
+:root[data-theme='dark'] .match-stage {
+  --warn-bg: #2e2412;
+  --warn-line: #5c4720;
+  --warn-ink: #ffd88a;
+  --warn-soft: #d8b878;
+  --error-bg: #3a1d1a;
+  --error-line: #7a3a33;
+  --error-ink: #ffb4a8;
+}
+.match-stage [hidden] {
+  display: none !important;
+}
+.match-stage .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- 찾는 방법 전환 ---------- */
+.search-mode {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.search-mode > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.search-mode > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+}
+.search-mode button {
+  padding: 8px 6px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.search-mode button[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--blue);
+  font-weight: 700;
+  box-shadow: 0 1px 4px #163e7a1f;
+}
+
+/* ---------- 참고 곡 올리기 ---------- */
+.song-form-title {
+  margin: 0 0 12px;
+  font-size: 16px !important;
+}
+.ref-upload {
+  display: grid;
+  gap: 12px;
+}
+.ref-drop {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 26px 16px;
+  border: 1.5px dashed #9fbbe6;
+  border-radius: 12px;
+  background: var(--soft);
+  text-align: center;
+  transition: background 0.15s ease;
+}
+.ref-drop.is-dragging {
+  background: var(--tint);
+  border-color: var(--blue);
+}
+.ref-drop p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+.ref-drop .primary {
+  padding: 10px 18px;
+  font-size: 13px;
+}
+.ref-drop-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--tint);
+  color: var(--blue);
+}
+.ref-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #9fbbe6;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.ref-file p {
+  display: grid;
+  flex: 1 1 170px;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+}
+.ref-file strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ref-file span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.ref-file.is-ready span {
+  color: var(--green);
+}
+.ref-file .text-button {
+  flex: none;
+  margin-left: 50px;
+  padding: 0;
+  font-size: 12px;
+}
+.ref-file-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--tint);
+  color: var(--blue);
+}
+.ref-file.is-error {
+  border-color: var(--error-line);
+  background: var(--error-bg);
+}
+.ref-file.is-error strong {
+  color: var(--error-ink);
+  white-space: normal;
+}
+.ref-file.is-error span {
+  color: var(--error-ink);
+  opacity: 0.85;
+}
+.ref-file.is-error .ref-file-icon {
+  border-radius: 50%;
+  background: transparent;
+  color: var(--error-ink);
+}
+/* 경고문 (임시 규칙) */
+.ref-notice {
+  padding: 14px 16px;
+  border: 1px solid var(--warn-line);
+  border-radius: 12px;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+.ref-notice strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.ref-notice ul {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.ref-notice li::marker {
+  color: var(--warn-soft);
+}
+.song-form .primary:disabled {
+  background: #c9d6ea;
+  border-color: #c9d6ea;
+  cursor: not-allowed;
+  filter: none;
+}
+:root[data-theme='dark'] .song-form .primary:disabled {
+  background: #2a3a52;
+  border-color: #2a3a52;
+  color: #8b9bb2;
+}
+.song-form > .primary {
+  margin-top: 6px;
+}
+.song-form > .field-note:last-child {
+  margin: 10px 0 0;
+}
+
+/* ---------- 결과 왼쪽 카드 ---------- */
+.song-summary .secondary {
+  padding: 11px 16px;
+  font-size: 13px;
+}
+.song-ref {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--soft);
+}
+.song-ref-head {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.song-ref strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.song-ref-play {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.song-ref-play button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #c5d6f0;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--blue);
+}
+.song-ref-wave {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+.song-ref-wave i {
+  width: 3px;
+  border-radius: 2px;
+  background: #b4c8e6;
+}
+.song-event-label {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.song-event-name {
+  margin: 0 0 14px;
+  font-size: 17px !important;
+}
+.song-event {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 18px;
+}
+.song-event div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.song-event dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.song-event dd {
+  margin: 0;
+  text-align: right;
+}
+.song-event dd.is-changed {
+  color: var(--warn-ink);
+  font-weight: 700;
+}
+.song-changed {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  color: var(--warn-ink);
+  font-size: 10px;
+  font-weight: 700;
+}
+.song-summary > .field-note:last-child {
+  margin: 12px 0 0;
+}
+.song-edit > label,
+.song-edit > .form-pair {
+  margin-bottom: 14px;
+}
+.song-edit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.song-edit-actions .primary {
+  padding: 11px 16px;
+}
+
+/* ---------- 결과 목록 ---------- */
+.song-results.has-bar {
+  padding-bottom: 96px;
+}
+.song-results-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 22px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.song-results-head p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+}
+.song-results-head strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+.song-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 13px;
+}
+.song-notice.is-changed {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  border: 1px solid var(--warn-line);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+.song-notice.is-changed p {
+  display: flex;
+  flex: 1 1 320px;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+.song-notice-action {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+.song-notice-action button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid #e3c27a;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--warn-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.song-notice-action small {
+  color: var(--warn-soft);
+  font-size: 11px;
+}
+.song-notice.is-retry {
+  border: 1px solid var(--warn-line);
+  color: var(--warn-ink);
+}
+.song-list {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  border: 1px solid var(--stage-glass-line, var(--line));
+  border-radius: 15px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.song-row + .song-row {
+  border-top: 1px solid var(--line);
+}
+.song-row.is-open {
+  background: var(--soft);
+}
+.song-row-head {
+  display: grid;
+  grid-template-columns: 26px 40px 36px minmax(0, 1fr) auto 36px 36px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+}
+.song-rank {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.song-row:first-child .song-rank {
+  color: var(--blue);
+}
+.song-play {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #c5d6f0;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--blue);
+}
+.song-play.is-playing {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--on-blue);
+}
+/* 재생 중 표시 (펼친 곡: 조작은 CD 카드에서) */
+.song-playing {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  width: 40px;
+  height: 40px;
+  padding-bottom: 13px;
+  border-radius: 50%;
+  background: var(--tint);
+}
+.song-playing i {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--blue);
+  transform-origin: bottom;
+  animation: song-eq 0.9s ease-in-out infinite alternate;
+}
+.song-playing i:nth-child(2) {
+  animation-delay: -0.3s;
+}
+.song-playing i:nth-child(3) {
+  animation-delay: -0.6s;
+}
+@keyframes song-eq {
+  from {
+    transform: scaleY(0.4);
+  }
+}
+.song-avatar {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+}
+.song-avatar.tone-0 {
+  background: #0866df;
+}
+.song-avatar.tone-1 {
+  background: #18775e;
+}
+.song-avatar.tone-2 {
+  background: #6b3fd4;
+}
+.song-avatar.tone-3 {
+  background: #c4432b;
+}
+.song-name {
+  min-width: 0;
+}
+.song-name p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.song-name strong {
+  font-size: 15px;
+}
+.song-title {
+  color: var(--muted);
+  font-size: 13px;
+}
+.song-new {
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: #fde8ee;
+  color: #c2185b;
+  font-size: 11px;
+  font-weight: 700;
+}
+:root[data-theme='dark'] .song-new {
+  background: #3a1d2a;
+  color: #ff9cc0;
+}
+.song-revised {
+  display: block;
+  margin-top: 4px;
+  color: var(--warn-ink);
+  font-size: 12px;
+}
+.song-score {
+  display: grid;
+  justify-items: center;
+  margin: 0;
+}
+.song-score strong {
+  font-size: 22px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.song-row:first-child .song-score strong {
+  color: var(--blue);
+}
+.song-score span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.song-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+}
+.song-icon:hover {
+  background: var(--tint);
+  color: var(--ink);
+}
+.song-icon[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.song-save.is-on {
+  color: #c4432b;
+}
+.song-save.is-on svg {
+  fill: currentColor;
+}
+
+/* 펼친 곡 */
+.song-panel {
+  padding: 0 18px 16px;
+}
+.song-panel-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 14px;
+}
+.song-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin: 14px 0 0;
+  padding-left: 4px;
+  font-size: 12px;
+}
+.song-trust div {
+  display: flex;
+  gap: 12px;
+}
+.song-trust dt {
+  color: var(--muted);
+}
+.song-trust dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+/* 추천 이유 슬라이드 */
+.reason-slider {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--surface);
+}
+.reason-slider:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+.reason-arrow {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+}
+.reason-arrow:disabled {
+  background: var(--soft);
+  color: var(--line);
+  cursor: default;
+}
+.reason-slide {
+  display: grid;
+  gap: 12px;
+  min-height: 210px;
+  align-content: start;
+}
+.reason-slide h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.reason-content {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+.reason-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.reason-similarity {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+}
+.reason-ring {
+  width: 84px;
+  height: 84px;
+}
+.reason-similarity strong {
+  position: absolute;
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+.reason-body {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  font-size: 12px;
+}
+.reason-body.is-wide {
+  flex: 1;
+}
+.reason-body p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.reason-body h4 {
+  margin: 0;
+  font-size: 17px;
+}
+.reason-body b {
+  color: var(--ink);
+}
+.reason-hint {
+  font-size: 11px;
+}
+.reason-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.reason-flow li {
+  position: relative;
+  display: grid;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.reason-flow li + li::before {
+  content: '→';
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  color: var(--muted);
+  font-weight: 400;
+  transform: translateY(-50%);
+}
+.reason-flow small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+.reason-flow li.is-ai {
+  background: var(--blue);
+  color: var(--on-blue);
+}
+.reason-flow li.is-ai small {
+  color: inherit;
+  opacity: 0.8;
+}
+.reason-why {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: var(--tint);
+  font-size: 12px;
+}
+.reason-why span {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: var(--blue);
+  color: var(--on-blue);
+  font-size: 11px;
+  font-weight: 700;
+}
+.reason-foot {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.reason-dots {
+  display: flex;
+  gap: 6px;
+}
+.reason-dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+}
+.reason-dots i.is-on {
+  width: 20px;
+  background: var(--blue);
+}
+.reason-next {
+  color: var(--blue);
+  font-weight: 700;
+}
+/* 템포 막대 */
+.tempo-scale {
+  position: relative;
+  height: 8px;
+  margin: 26px 0 0;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--tint), #9fc4f7);
+}
+.tempo-mark {
+  position: absolute;
+  bottom: 12px;
+  left: var(--pos);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+.tempo-mark::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 2px);
+  width: 2px;
+  height: 14px;
+  background: currentColor;
+  transform: translateX(-50%);
+}
+.tempo-mark.is-reference {
+  background: var(--soft);
+  color: var(--muted);
+}
+.tempo-mark.is-song {
+  bottom: auto;
+  top: 22px;
+  background: var(--blue);
+  color: var(--on-blue);
+}
+.tempo-mark.is-song::after {
+  top: auto;
+  bottom: calc(100% + 2px);
+  background: var(--blue);
+}
+.tempo-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 28px;
+  color: var(--muted);
+  font-size: 10px;
+}
+/* 박자 비교 */
+.beat-compare {
+  display: grid;
+  gap: 6px;
+}
+.beat-row {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.beat-row ol {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.beat-row li {
+  height: 18px;
+  border-radius: 3px;
+  background: var(--soft);
+}
+.beat-row li:nth-child(4n + 1) {
+  box-shadow: inset 2px 0 0 var(--line);
+}
+.beat-row li.is-on {
+  background: #b4c8e6;
+}
+.beat-row li.is-same {
+  background: var(--blue);
+}
+.reason-conditions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.reason-conditions li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--tint);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ---------- 곡 듣기 CD 카드 (이 화면에서 유일하게 눈에 띄는 것) ---------- */
+.listen-card {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 12px 14px 16px;
+  border-radius: 15px;
+  background: var(--navy);
+  color: #fff;
+}
+:root[data-theme='dark'] .listen-card {
+  border: 1px solid #ffffff1f;
+}
+.listen-card-top {
+  display: flex;
+  justify-self: stretch;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.listen-switch {
+  display: flex;
+  padding: 3px;
+  border-radius: 14px;
+  background: #ffffff1a;
+}
+.listen-switch button {
+  padding: 4px 12px;
+  border-radius: 11px;
+  background: transparent;
+  color: #c3d1e6;
+  font-size: 12px;
+  font-weight: 500;
+}
+.listen-switch button[aria-pressed='true'] {
+  background: #fff;
+  color: var(--navy);
+  font-weight: 700;
+}
+.listen-switch button:focus-visible,
+.listen-play:focus-visible {
+  outline: 2px solid #80baff;
+  outline-offset: 2px;
+}
+.listen-time {
+  color: #9fb0c8;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.listen-cd {
+  position: relative;
+  width: 136px;
+  margin: 4px 0 2px;
+}
+.listen-cd .stage-cd {
+  box-shadow: 0 16px 34px rgb(0 0 0 / 0.45);
+}
+.listen-cd .stage-cd-name {
+  font-size: 5px;
+}
+/* 재생 중에만 돌고, 멈추면 그 자리에 섬 */
+.listen-cd .stage-cd-spin {
+  animation-duration: 8s;
+  animation-play-state: paused;
+}
+.listen-card.is-playing .stage-cd-spin {
+  animation-play-state: running;
+}
+.listen-title {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  max-width: 100%;
+  margin: 0;
+  text-align: center;
+}
+.listen-title strong {
+  max-width: 100%;
+  color: #fff;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.listen-title span {
+  color: #9fb0c8;
+  font-size: 11px;
+}
+.listen-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 14px;
+  background: #0866df;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.listen-play.is-playing {
+  background: #fff;
+  color: var(--navy);
+}
+
+/* ---------- 더보기 · 재생 막대 ---------- */
+.song-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.song-more[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.player-bar {
+  position: fixed;
+  right: 24px;
+  bottom: 20px;
+  left: 50%;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 220px) auto minmax(80px, 1fr) auto 40px 32px;
+  align-items: center;
+  gap: 12px;
+  width: min(920px, calc(100% - 32px));
+  padding: 12px 16px;
+  border-radius: 15px;
+  background: var(--navy);
+  color: #fff;
+  box-shadow: 0 18px 50px #0b142440;
+  transform: translateX(-50%);
+}
+.player-bar-disc {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #ff8a5b 0 18%, #0b1424 19% 24%, transparent 25%),
+    repeating-radial-gradient(circle, #24314a 0 2px, #1a2539 2px 4px);
+}
+.player-bar-disc.is-playing {
+  animation: stage-spin 6s linear infinite;
+}
+.player-bar-title {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+}
+.player-bar-title strong,
+.player-bar-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player-bar-title strong {
+  color: #fff;
+  font-size: 14px;
+}
+.player-bar-title span,
+.player-bar-time {
+  color: #9fb0c8;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.player-bar-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #2a3a56;
+}
+.player-bar-track i {
+  display: block;
+  height: 100%;
+  background: #5aa2ff;
+}
+.player-bar-play,
+.player-bar-close {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+.player-bar-play {
+  width: 40px;
+  height: 40px;
+  background: #fff;
+  color: var(--navy);
+}
+.player-bar-close {
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  color: #c3d1e6;
+}
+.player-bar button:focus-visible {
+  outline: 2px solid #80baff;
+  outline-offset: 2px;
+}
+
+/* ---------- 좁은 화면 ---------- */
+@media (max-width: 1180px) {
+  .song-panel-main {
+    grid-template-columns: 1fr;
+  }
+  .listen-card {
+    grid-template-columns: auto 1fr;
+    justify-items: start;
+  }
+  .listen-card-top {
+    grid-column: 1 / -1;
+  }
+  .listen-cd {
+    grid-row: span 2;
+    width: 104px;
+  }
+}
+@media (max-width: 640px) {
+  .song-row-head {
+    grid-template-columns: 22px 40px minmax(0, 1fr) auto 32px;
+    gap: 10px;
+    padding: 12px;
+  }
+  .song-avatar,
+  .song-save {
+    display: none;
+  }
+  .player-bar {
+    grid-template-columns: minmax(0, 1fr) 40px 32px;
+  }
+  .player-bar-disc,
+  .player-bar-time,
+  .player-bar-track {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .listen-card.is-playing .stage-cd-spin,
+  .player-bar-disc.is-playing,
+  .song-playing i {
+    animation: none;
+  }
+  .ref-drop {
+    transition: none;
+  }
+}
