@@ -4,11 +4,13 @@ import assert from 'node:assert/strict';
 import {
   FIRST_PAGE,
   REFERENCE_SAMPLE,
+  beatTracePath,
   bpmPosition,
   buildSongResults,
   compareBeats,
   compareTempo,
   compareWantedTempo,
+  conditionDetail,
   findResultArtist,
   formatCreatedAt,
   referenceTrack,
@@ -112,5 +114,22 @@ describe('관심 저장용 아티스트 id', () => {
     const top = buildSongResults().items[0];
     assert.equal(findResultArtist(top.artist.id).songTitle, '새벽의 정원');
     assert.equal(findResultArtist('없는-id'), null);
+  });
+});
+
+describe('리듬 그래프와 필수 조건 문구', () => {
+  it('박이 있는 칸마다 선이 솟고, 마디 수만큼 반복한다', () => {
+    const path = beatTracePath([1, 0, 0, 0], { cellWidth: 10, bars: 2, baseline: 50, amp: 20 });
+    assert.equal((path.match(/ 30/g) || []).length, 2); // 50 - 20 = 30 (솟은 점)
+    assert(path.startsWith('M 0 50'));
+    assert(path.endsWith('L 80 50'));
+  });
+  it('필수 조건 둘째 줄을 행사 조건으로 채운다', () => {
+    const event = { date: '2026-10-31', region: '서울', budget: 80 };
+    assert.equal(conditionDetail('SCHEDULE', event), '10월 31일 (토) 공연 가능');
+    assert.equal(conditionDetail('REGION', event), '서울 활동');
+    assert.equal(conditionDetail('BUDGET', event), '최대 80만 원 안');
+    assert.equal(conditionDetail('COPYRIGHT'), '작업물 권리 확인');
+    assert.equal(conditionDetail('SCHEDULE'), '');
   });
 });

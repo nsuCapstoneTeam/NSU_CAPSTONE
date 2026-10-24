@@ -1,21 +1,31 @@
 import { useState } from 'react';
 import Icon from '../../../components/common/icon.jsx';
+import { formatDuration } from '../reference-song.js';
 import {
   CONDITION_LABELS,
   REFERENCE_SAMPLE,
-  RHYTHM_PATTERNS,
+  beatTracePath,
   bpmPosition,
   compareBeats,
   compareTempo,
   compareWantedTempo,
+  conditionDetail,
 } from '../song-results.js';
 
-// 추천 이유 슬라이드 4장 (NSU-111): 음악 유사도 → 템포 → 리듬 → 필수 조건 (계약의 reasons[].item 순서)
+// 추천 이유 슬라이드 4장 (NSU-111·112): 음악 유사도 → 템포 → 리듬 → 필수 조건 (계약의 reasons[].item 순서)
+// Figma '추천 이유 슬라이드' 시안. 장마다 아래에 '추천 이유' 한 줄이 붙습니다.
 // ‹ › 버튼이나 ←/→ 키로 넘깁니다. 순위는 음악 유사도로만 정하고, 템포·리듬은 참고 정보입니다.
 // basis: 무엇과 비교하는지
-//   { kind: 'song', name }  참고 곡으로 찾기 (올린 참고 곡과 비교)
-//   { kind: 'event', tempo, rhythm }  행사 설명으로 찾기 (행사 조건에서 고른 템포·리듬과 비교)
+//   { kind: 'song', name, event }  참고 곡으로 찾기 (올린 참고 곡과 비교)
+//   { kind: 'event', tempo, event }  행사 설명으로 찾기 (템포는 고른 템포와 비교, 리듬은 이 곡 박자만)
+//   event: 추천을 받을 때의 행사 조건 (필수 조건 둘째 줄에 씀)
+// player: useSongPlayer 결과 (리듬 그래프의 재생 위치 선과 '박자만 듣기')
 const SLIDES = ['음악 유사도', '템포', '리듬', '필수 조건'];
+
+// 리듬 그래프 크기 (SVG 좌표). 두 마디(32칸)를 보여 줌
+const BARS = 2;
+const CELL = 20;
+const GRAPH_WIDTH = 16 * BARS * CELL;
 
 // 1장: 음악 유사도
 function SimilaritySlide({ item, basis }) {
@@ -42,8 +52,8 @@ function SimilaritySlide({ item, basis }) {
         aria-label="비교 순서"
       >
         <li>
-          <small>{bySong ? '참고 곡' : '행사'}</small>
-          {bySong ? basis.name : '행사 설명'}
+          <small>{bySong ? '참고 곡' : '행사 설명'}</small>
+          {bySong ? basis.name : basis.event?.title || '행사 설명'}
         </li>
         <li className="is-ai">
           <small>비교</small>
@@ -61,163 +71,312 @@ function SimilaritySlide({ item, basis }) {
   );
 }
 
-// 템포 막대 (marks: [{ label, bpm, kind: 'reference' | 'song' }], band: 원하는 구간)
-function TempoScale({ marks, band }) {
-  return (
-    <>
-      <div
-        className="tempo-scale"
-        aria-hidden="true"
-      >
-        {band && (
-          <span
-            className="tempo-band"
-            style={{ '--from': `${bpmPosition(band.from)}%`, '--to': `${bpmPosition(band.to)}%` }}
-          />
-        )}
-        {marks.map((m) => (
-          <span
-            key={m.kind}
-            className={`tempo-mark is-${m.kind}`}
-            style={{ '--pos': `${bpmPosition(m.bpm)}%` }}
-          >
-            {m.label}
-          </span>
-        ))}
-      </div>
-      <div
-        className="tempo-ends"
-        aria-hidden="true"
-      >
-        <span>느림 60</span>
-        <span>빠름 160</span>
-      </div>
-    </>
-  );
-}
-
-// 2장: 템포 (참고 곡 BPM 또는 원하는 템포 구간과 비교)
+// 2장: 템포
+// - 참고 곡으로: 막대 위에 이 곡(파란 점)과 참고 곡(점선 원)
+// - 행사 설명으로: 이 곡(점)과 고른 템포 구간(점선 띠), 아래에 값 세 칸
 function TempoSlide({ item, basis }) {
   const { bpm } = item.music;
-  const hint = 'BPM은 1분에 박자가 몇 번 나오는지예요. 템포는 순위에 쓰지 않는 참고 정보예요.';
   if (basis.kind === 'song') {
     const ref = REFERENCE_SAMPLE.bpm;
     const tempo = compareTempo(ref, bpm);
     return (
       <div className="reason-body is-wide">
-        <h4>{tempo.title}</h4>
+        <h4 className="reason-headline">{tempo.title}</h4>
         <p>
-          참고 곡 <b>{ref}</b> → 이 곡 <b>{bpm}</b> · 차이 {tempo.diff}
+          참고 곡 {ref} → 이 곡 {bpm} · 차이 {tempo.diff}
         </p>
-        <TempoScale
-          marks={[
-            { label: '참고 곡', bpm: ref, kind: 'reference' },
-            { label: '이 곡', bpm, kind: 'song' },
-          ]}
-        />
-        <p className="reason-hint">{hint}</p>
+        <div
+          className="tempo-track"
+          aria-hidden="true"
+        >
+          <span
+            className="tempo-label is-song"
+            style={{ '--pos': `${bpmPosition(bpm)}%` }}
+          >
+            이 곡 {bpm}
+          </span>
+          <span
+            className="tempo-label is-reference"
+            style={{ '--pos': `${bpmPosition(ref)}%` }}
+          >
+            참고 곡 {ref}
+          </span>
+          <span
+            className="tempo-gap"
+            style={{
+              '--from': `${bpmPosition(Math.min(bpm, ref))}%`,
+              '--to': `${bpmPosition(Math.max(bpm, ref))}%`,
+            }}
+          />
+          <span
+            className="tempo-dot is-reference"
+            style={{ '--pos': `${bpmPosition(ref)}%` }}
+          />
+          <span
+            className="tempo-dot is-song"
+            style={{ '--pos': `${bpmPosition(bpm)}%` }}
+          />
+        </div>
+        <div
+          className="tempo-ticks"
+          aria-hidden="true"
+        >
+          <span>느림 60</span>
+          <span>100</span>
+          <span>빠름 160</span>
+        </div>
+        <p className="reason-hint">숫자는 1분에 박이 몇 번 오는지예요 (BPM).</p>
       </div>
     );
   }
   const tempo = compareWantedTempo(basis.tempo, bpm);
   return (
     <div className="reason-body is-wide">
-      <h4>{tempo ? tempo.title : '원하는 템포를 고르지 않았어요'}</h4>
-      <p>
+      <h4 className="reason-headline is-big">BPM {bpm}</h4>
+      <div
+        className="tempo-track"
+        aria-hidden="true"
+      >
         {tempo && (
-          <>
-            원하는 템포 <b>{tempo.wanted.label}</b> ({tempo.wanted.from}~{tempo.wanted.to}) ·{' '}
-          </>
-        )}
-        이 곡 <b>{bpm}</b>
-      </p>
-      <TempoScale
-        marks={[{ label: '이 곡', bpm, kind: 'song' }]}
-        band={tempo?.wanted}
-      />
-      <p className="reason-hint">{hint}</p>
-    </div>
-  );
-}
-
-// 3장: 리듬 (한 마디 16칸에서 박이 같은 자리에 오는지)
-function RhythmSlide({ item, basis }) {
-  const bySong = basis.kind === 'song';
-  const pattern = bySong ? REFERENCE_SAMPLE.beats : RHYTHM_PATTERNS[basis.rhythm];
-  // 원하는 리듬을 고르지 않았으면 이 곡의 박자만 보여 줌
-  const { total, same, cells } = compareBeats(pattern || item.music.beats.map(() => 0), item.music.beats);
-  const name = bySong ? '참고 곡' : '원하는 리듬';
-  const row = (label, who) => (
-    <div className="beat-row">
-      <span>{label}</span>
-      <ol aria-hidden="true">
-        {cells.map((cell, i) => (
-          <li
-            key={i}
-            className={`${cell === 'both' || cell === who ? 'is-on' : ''}${cell === 'both' ? ' is-same' : ''}`}
+          <span
+            className="tempo-band"
+            style={{ '--from': `${bpmPosition(tempo.wanted.from)}%`, '--to': `${bpmPosition(tempo.wanted.to)}%` }}
           />
-        ))}
-      </ol>
-    </div>
-  );
-  return (
-    <div className="reason-body is-wide">
-      <h4>{pattern ? `박자가 ${total}번 중 ${same}번 겹쳐요` : '원하는 리듬을 고르지 않았어요'}</h4>
-      <p>
-        {pattern
-          ? `${bySong ? '참고 곡' : `원하는 리듬(${basis.rhythm})`}에서 박이 나오는 자리에 이 곡도 박이 나오는지 한 마디로 비교했어요.`
-          : '이 곡의 한 마디 박자만 보여 줘요.'}
-      </p>
-      <div className="beat-compare">
-        {pattern && row(name, 'reference')}
-        {row('이 곡', 'song')}
+        )}
+        <span
+          className="tempo-dot is-plain"
+          style={{ '--pos': `${bpmPosition(bpm)}%` }}
+        />
       </div>
-      <p className="reason-hint">
-        {pattern ? '진하게 표시한 칸이 함께 박이 나오는 자리예요. ' : ''}리듬도 참고 정보예요.
-      </p>
+      <div
+        className="tempo-ticks"
+        aria-hidden="true"
+      >
+        <span>느림</span>
+        <span>보통</span>
+        <span>빠름</span>
+      </div>
+      <dl className="reason-facts">
+        <div>
+          <dt>이 곡 BPM</dt>
+          <dd>{bpm}</dd>
+        </div>
+        <div>
+          <dt>원하는 템포</dt>
+          <dd>{tempo ? `${tempo.wanted.label} (${tempo.wanted.from}~${tempo.wanted.to})` : '무관'}</dd>
+        </div>
+        <div>
+          <dt>점수</dt>
+          <dd>없음, 참고 정보</dd>
+        </div>
+      </dl>
     </div>
   );
 }
 
-// 4장: 통과한 필수 조건
-function ConditionSlide({ item }) {
+// 리듬 그래프 한 장 (심전도 모양 선 + 그래프 종이 + 재생 위치 선)
+// traces: [{ label, bpm, beats, kind: 'reference' | 'song' }], same: 두 선이 함께 박이 오는 칸 표시용 cells
+function BeatGraph({ traces, cells, playhead }) {
+  const height = traces.length > 1 ? 120 : 76;
+  const baselines = traces.length > 1 ? [44, 100] : [52];
+  return (
+    <div className="beat-graph">
+      <ul className="beat-graph-labels">
+        {traces.map((t) => (
+          <li
+            key={t.kind}
+            className={`is-${t.kind}`}
+          >
+            <strong>{t.label}</strong>
+            <span>BPM {t.bpm}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="beat-graph-paper">
+        <svg
+          viewBox={`0 0 ${GRAPH_WIDTH} ${height}`}
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          {cells &&
+            Array.from({ length: BARS }).flatMap((_, bar) =>
+              cells.map((cell, i) =>
+                cell === 'both' ? (
+                  <rect
+                    key={`${bar}-${i}`}
+                    className="beat-graph-same"
+                    x={(bar * cells.length + i) * CELL}
+                    y={0}
+                    width={CELL}
+                    height={height}
+                  />
+                ) : null,
+              ),
+            )}
+          {traces.map((t, i) => (
+            <path
+              key={t.kind}
+              className={`beat-graph-line is-${t.kind}`}
+              d={beatTracePath(t.beats, { cellWidth: CELL, bars: BARS, baseline: baselines[i], amp: 30 })}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+        </svg>
+        {playhead !== null && (
+          <span
+            className="beat-graph-playhead"
+            style={{ left: `${playhead * 100}%` }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 3장: 리듬
+// - 참고 곡으로: 참고 곡과 이 곡의 선을 위아래로, 함께 박이 오는 칸을 칠함
+// - 행사 설명으로: 비교할 곡이 없으므로 이 곡의 선만
+function RhythmSlide({ item, basis, player }) {
+  const { beats, bpm, seconds } = item.music;
+  const bySong = basis.kind === 'song';
+  // '박자만 듣기'에 쓰는 재생 정보 (서버 연결 전이라 박자 소리로 재생)
+  const beatTracks = [
+    bySong && {
+      key: `beats-reference-${item.music.id}`,
+      label: '참고 곡 박자만 듣기',
+      duration: seconds,
+      bpm: REFERENCE_SAMPLE.bpm,
+      beats: REFERENCE_SAMPLE.beats,
+    },
+    { key: `beats-song-${item.music.id}`, label: '이 곡 박자만 듣기', duration: seconds, bpm, beats },
+  ].filter(Boolean);
+  // 재생 위치 선: 이 곡이나 박자만 듣기가 재생 중일 때, 재생 중인 박자의 BPM으로 두 마디 안에서 움직임
+  // 올린 참고 곡 파일('reference')은 실제 템포를 알 수 없어 위치 선을 그리지 않음
+  const playing = [{ key: item.music.id, bpm }, ...beatTracks].find((t) => player?.key === t.key);
+  const active = Boolean(playing);
+  const loop = (60 / (playing?.bpm || bpm) / 4) * 16 * BARS || 1;
+  const playhead = active ? (player.position % loop) / loop : null;
+
+  const traces = bySong
+    ? [
+        { label: '참고 곡', bpm: REFERENCE_SAMPLE.bpm, beats: REFERENCE_SAMPLE.beats, kind: 'reference' },
+        { label: '이 곡', bpm, beats, kind: 'song' },
+      ]
+    : [{ label: '이 곡', bpm, beats, kind: 'song' }];
+  const compared = bySong ? compareBeats(REFERENCE_SAMPLE.beats, beats) : null;
+  const beatCount = beats.filter(Boolean).length;
+
   return (
     <div className="reason-body is-wide">
-      <h4>필수 조건을 모두 통과했어요</h4>
+      <p className="reason-headline is-right">
+        {compared ? `박자가 ${compared.total}번 중 ${compared.same}번 겹쳐요` : `한 마디에 박이 ${beatCount}번 나와요`}
+      </p>
+      <BeatGraph
+        traces={traces}
+        cells={compared?.cells}
+        playhead={playhead}
+      />
+      <div className="beat-graph-actions">
+        {/* 시각 정보라 화면 낭독기에서는 숨김 (슬라이드 영역이 aria-live라 매초 읽히지 않게) */}
+        {active && (
+          <span
+            className="beat-graph-time"
+            aria-hidden="true"
+          >
+            {formatDuration(player.position)}
+          </span>
+        )}
+        {player &&
+          beatTracks.map((t) => {
+            const on = player.key === t.key && player.playing;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                className={`beat-listen${on ? ' is-on' : ''}${t.key.startsWith('beats-song') ? ' is-song' : ''}`}
+                aria-pressed={on}
+                onClick={() => player.toggle(t)}
+              >
+                <Icon
+                  name={on ? 'pause' : 'play'}
+                  size={13}
+                />
+                {t.label}
+              </button>
+            );
+          })}
+      </div>
+    </div>
+  );
+}
+
+// 4장: 통과한 필수 조건 (둘째 줄은 행사 조건으로 채움)
+function ConditionSlide({ item, basis }) {
+  return (
+    <div className="reason-body is-wide">
+      <p>추천 목록의 곡은 모두 아래 조건을 통과했어요.</p>
       <ul className="reason-conditions">
         {item.passedConditions.map((c) => (
           <li key={c}>
             <Icon
               name="check"
-              size={14}
+              size={15}
             />
-            {CONDITION_LABELS[c]}
+            <span>
+              <strong>{CONDITION_LABELS[c]}</strong>
+              {conditionDetail(c, basis.event) && <small>{conditionDetail(c, basis.event)}</small>}
+            </span>
           </li>
         ))}
       </ul>
-      <p className="reason-hint">목록의 곡은 모두 일정·지역·예산 같은 필수 조건을 통과한 곡이에요.</p>
     </div>
   );
 }
 
-// item: 결과 한 줄, basis: 비교 기준 (위 설명)
-export default function ReasonSlider({ item, basis }) {
+// 장마다 아래에 붙는 '추천 이유' 한 줄
+function slideReason(index, item, basis) {
+  const bySong = basis.kind === 'song';
+  const { bpm, beats } = item.music;
+  if (index === 0) {
+    const target = bySong ? '올린 참고 곡과' : '요청한 분위기와';
+    return item.rank === 1
+      ? `${target} 음악적으로 가장 가까운 곡이에요.`
+      : `${target} ${item.rank}번째로 가까운 곡이에요.`;
+  }
+  if (index === 1) {
+    if (bySong) {
+      const ref = REFERENCE_SAMPLE.bpm;
+      const { title } = compareTempo(ref, bpm);
+      return title.includes('거의 같아요')
+        ? `참고 곡(BPM ${ref})과 빠르기가 거의 같은 곡이에요.`
+        : `참고 곡(BPM ${ref})${title.replace('참고 곡', '')}.`;
+    }
+    const tempo = compareWantedTempo(basis.tempo, bpm);
+    return tempo ? `이 곡은 ${tempo.title}.` : '원하는 템포를 고르지 않아 이 곡의 BPM만 보여 줘요.';
+  }
+  if (index === 2) {
+    if (!bySong) return '이 곡의 박자예요. 리듬은 순위에 쓰지 않는 참고 정보예요.';
+    const { total, same } = compareBeats(REFERENCE_SAMPLE.beats, beats);
+    return same === total
+      ? `참고 곡의 박 ${total}개가 모두 이 곡에서도 같은 자리에 와요.`
+      : `참고 곡의 박 ${total}개 중 ${same}개가 이 곡에서도 같은 자리에 와요.`;
+  }
+  return '일정·지역·예산 조건을 모두 통과했어요.';
+}
+
+// item: 결과 한 줄, basis: 비교 기준 (위 설명), player: 재생기
+export default function ReasonSlider({ item, basis, player }) {
   const [index, setIndex] = useState(0);
   const last = SLIDES.length - 1;
   const go = (next) => setIndex(Math.min(last, Math.max(0, next)));
 
   function keyDown(e) {
+    if (e.target !== e.currentTarget) return;
     if (e.key === 'ArrowRight') go(index + 1);
     else if (e.key === 'ArrowLeft') go(index - 1);
     else return;
     e.preventDefault();
   }
-
-  const target = basis.kind === 'song' ? '올린 참고 곡' : '행사 설명';
-  const reason =
-    item.rank === 1
-      ? `${target}과 음악적으로 가장 가까운 곡이에요.`
-      : `${target}과 ${item.rank}번째로 가까운 곡이에요.`;
 
   return (
     <section
@@ -262,16 +421,20 @@ export default function ReasonSlider({ item, basis }) {
             <RhythmSlide
               item={item}
               basis={basis}
+              player={player}
             />
           )}
-          {index === 3 && <ConditionSlide item={item} />}
+          {index === 3 && (
+            <ConditionSlide
+              item={item}
+              basis={basis}
+            />
+          )}
         </div>
-        {index === 0 && (
-          <p className="reason-why">
-            <span>추천 이유</span>
-            {reason}
-          </p>
-        )}
+        <p className="reason-why">
+          <span>추천 이유</span>
+          {slideReason(index, item, basis)}
+        </p>
       </div>
 
       <button

@@ -103,6 +103,7 @@ export default function SongRow({ item, expanded, onToggle, player, basis, refer
               key={item.music.id}
               item={item}
               basis={basis}
+              player={player}
             />
             <ListenCard
               key={item.music.id}

@@ -227,12 +227,6 @@ export function compareWantedTempo(tempo, bpm) {
   return { title: `원하는 빠르기(${wanted.label})와 맞아요`, wanted };
 }
 
-// 행사 조건의 리듬 선택 → 비교에 쓰는 한 마디 16칸 박자 (체험용 예시 패턴, '무관'이면 없음)
-export const RHYTHM_PATTERNS = {
-  '강한 비트': [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-  '부드러운 그루브': [1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0],
-};
-
 // BPM을 60~160 막대 위 위치(%)로
 export function bpmPosition(bpm) {
   return Math.min(100, Math.max(0, bpm - 60));
@@ -250,3 +244,42 @@ export const referenceTrack = (reference) => ({
   duration: reference.duration,
   url: reference.url,
 });
+
+// 리듬 그래프(심전도 모양)의 선 하나를 SVG path로 만듦
+// beats: 한 마디 16칸, cellWidth: 칸 너비, bars: 보여 줄 마디 수, baseline: 선의 기준 높이, amp: 박이 솟는 높이
+export function beatTracePath(beats, { cellWidth = 20, bars = 2, baseline = 60, amp = 26 } = {}) {
+  const cells = beats.length * bars;
+  const parts = [`M 0 ${baseline}`];
+  for (let i = 0; i < cells; i += 1) {
+    if (!beats[i % beats.length]) continue;
+    const x = i * cellWidth + cellWidth * 0.3;
+    // 작은 내려감 → 높이 솟음 → 아래로 꺾임 → 기준선 → 작은 언덕
+    parts.push(
+      `L ${x} ${baseline}`,
+      `L ${x + 1.5} ${baseline + 3}`,
+      `L ${x + 3} ${baseline - amp}`,
+      `L ${x + 5} ${baseline + amp * 0.35}`,
+      `L ${x + 7} ${baseline}`,
+      `L ${x + 11} ${baseline - amp * 0.15}`,
+      `L ${x + 14} ${baseline}`,
+    );
+  }
+  parts.push(`L ${cells * cellWidth} ${baseline}`);
+  return parts.join(' ');
+}
+
+// 필수 조건 칩의 둘째 줄 (행사 조건으로 채움). event가 없으면 빈 문자열
+const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+export function conditionDetail(condition, event) {
+  if (condition === 'ARTIST_VERIFIED') return '확인된 아티스트';
+  if (condition === 'COPYRIGHT') return '작업물 권리 확인';
+  if (!event) return '';
+  if (condition === 'SCHEDULE') {
+    const [y, m, d] = String(event.date).split('-').map(Number);
+    if (!y || !m || !d) return '';
+    return `${m}월 ${d}일 (${WEEK[new Date(y, m - 1, d).getDay()]}) 공연 가능`;
+  }
+  if (condition === 'REGION') return `${event.region} 활동`;
+  if (condition === 'BUDGET') return `최대 ${event.budget}만 원 안`;
+  return '';
+}
