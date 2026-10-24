@@ -381,22 +381,17 @@
   color: var(--muted);
   font-size: 11px;
 }
-/* 리듬: 16칸 박 표시 */
-.stage-beats {
-  display: grid;
-  grid-template-columns: repeat(16, minmax(0, 1fr));
-  align-items: end;
-  gap: 3px;
+/* 리듬: 이 곡의 한 마디 박자 (심전도 모양 선) */
+.stage-beat-line {
+  display: block;
+  width: 100%;
   height: 34px;
 }
-.stage-beats span {
-  height: 40%;
-  border-radius: 3px;
-  background: var(--stage-track);
-}
-.stage-beats span.is-on {
-  height: 100%;
-  background: var(--muted);
+.stage-beat-line path {
+  fill: none;
+  stroke: var(--blue);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
 }
 /* 필수 조건 */
 .stage-required {
@@ -1027,64 +1022,6 @@ button.stage-glass:active {
   color: var(--muted);
   font-size: 14px;
   font-weight: 600;
-}
-/* 리듬: 16칸 두 줄 비교. 같은 자리는 채움, 다른 자리는 점선 */
-.stage-detail-beats {
-  display: grid;
-  gap: 8px;
-}
-.stage-detail-beat-row > span {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.stage-detail-beat-row > div,
-.stage-detail-bars {
-  display: grid;
-  grid-template-columns: repeat(16, minmax(0, 1fr));
-  gap: 4px;
-}
-.stage-detail-beat-row i {
-  height: 22px;
-  border-radius: 4px;
-  background: var(--stage-track);
-}
-.stage-detail-beat-row i.is-on {
-  background: var(--blue);
-}
-.stage-detail-beat-row i.is-diff {
-  outline: 1.5px dashed var(--muted);
-  outline-offset: -1.5px;
-  opacity: 0.55;
-}
-.stage-detail-bars span {
-  grid-column: span 4;
-  color: var(--muted);
-  font-size: 11px;
-}
-.stage-detail-legend {
-  display: flex;
-  gap: 16px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-.stage-detail-legend span::before {
-  content: '';
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  margin-right: 6px;
-  border-radius: 3px;
-  vertical-align: -1px;
-}
-.stage-detail-legend .is-same::before {
-  background: var(--blue);
-}
-.stage-detail-legend .is-diff::before {
-  outline: 1.5px dashed var(--muted);
-  outline-offset: -1.5px;
 }
 /* 추천 이유 한 줄 */
 .stage-reason {

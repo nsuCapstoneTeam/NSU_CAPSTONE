@@ -12,16 +12,12 @@ export const MATCHING_SAMPLE = {
   bpm: 98,
   // AI가 행사 정보에서 해석한 원하는 템포와 그 BPM 구간
   wantedTempo: { label: '빠름', from: 120, to: 160 },
-  // 한 마디 16칸 (1 = 박 있음). request: 행사에 어울리는 리듬, song: 이 곡의 리듬
-  beats: {
-    request: [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0],
-    song: [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1],
-  },
-  rhythmName: '4/4박 업비트',
+  // 이 곡의 한 마디 16칸 (1 = 박 있음). 행사 설명으로 찾을 때는 비교할 곡이 없어 이 곡의 박자만 보여 줌 (NSU-113)
+  beats: [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1],
   reasons: {
     similarity: '요청한 분위기와 음악적으로 가장 가까운 곡이에요.',
     tempo: 'BPM 98로 요청한 빠른 템포보다 느려요.',
-    rhythm: '4/4박 업비트로 행사 분위기와 잘 어울리는 리듬이에요.',
+    rhythm: '이 곡의 박자예요. 리듬은 순위에 쓰지 않는 참고 정보예요.',
   },
   required: ['아티스트 인증', '저작권', '일정', '지역', '예산'],
   songs: [
@@ -31,9 +27,9 @@ export const MATCHING_SAMPLE = {
   ],
 };
 
-// 두 리듬에서 같은 자리에 같은 박(있음/없음)이 오는 칸 수
-export function sameBeatCount({ request, song }) {
-  return song.filter((on, index) => on === request[index]).length;
+// 한 마디에서 박이 나오는 수
+export function beatCount(beats) {
+  return beats.filter(Boolean).length;
 }
 
 // BPM을 느림(0)~빠름(100) 막대 위 위치(%)로 바꿈. 60~160 BPM 범위로 봅니다.

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import Icon from '../../../components/common/icon.jsx';
-import { MATCHING_SAMPLE as SAMPLE, sameBeatCount, tempoPosition } from '../matching-sample.js';
+import BeatGraph from '../../matching/components/beat-graph.jsx';
+import { MATCHING_SAMPLE as SAMPLE, beatCount, tempoPosition } from '../matching-sample.js';
 
 // 상세 화면 제목과 설명 (원래 시안 문구)
 const DETAIL_TEXT = {
@@ -13,8 +14,8 @@ const DETAIL_TEXT = {
     lead: 'AI가 곡의 BPM을 재고, 행사 정보에서 원하는 템포를 해석해 비교해요. 템포는 순위에 쓰지 않는 참고 정보예요.',
   },
   rhythm: {
-    title: '리듬이 얼마나 비슷할까요?',
-    lead: '한 마디(16박)를 나란히 놓고, 강한 박과 약한 박이 같은 자리에 오는지 비교해요.',
+    title: '리듬은 어떤가요?',
+    lead: '곡의 박이 한 마디(16칸) 안에서 어디에 오는지 보여 줘요. 행사 설명으로 찾을 때는 비교할 곡이 없어 이 곡의 박자만 보여 줘요.',
   },
 };
 
@@ -112,56 +113,22 @@ function TempoBody() {
   );
 }
 
-// 리듬: 행사 리듬과 곡 리듬 16칸을 위아래로 놓고 같은 자리를 표시
+// 리듬: 이 곡의 박자를 심전도 모양 선으로 (추천 이유 슬라이드의 리듬 그래프와 같은 모양, NSU-113)
 function RhythmBody() {
-  const { request, song } = SAMPLE.beats;
-  const same = sameBeatCount(SAMPLE.beats);
   return (
     <>
-      <div className="stage-detail-beats">
-        {[
-          ['행사에 어울리는 리듬', request],
-          ['이 곡의 리듬', song],
-        ].map(([label, row]) => (
-          <div
-            key={label}
-            className="stage-detail-beat-row"
-          >
-            <span>{label}</span>
-            <div aria-hidden="true">
-              {row.map((on, index) => (
-                <i
-                  key={index}
-                  className={`${on ? 'is-on' : ''}${on === (row === song ? request : song)[index] ? '' : ' is-diff'}`}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
-        <div
-          className="stage-detail-bars"
-          aria-hidden="true"
-        >
-          <span>1</span>
-          <span>2</span>
-          <span>3</span>
-          <span>4</span>
-        </div>
-        <p className="stage-detail-legend">
-          <span className="is-same">같은 자리의 박</span>
-          <span className="is-diff">다른 자리의 박</span>
-        </p>
-      </div>
+      <BeatGraph
+        traces={[{ label: '이 곡', bpm: SAMPLE.bpm, beats: SAMPLE.beats, kind: 'song' }]}
+        bars={1}
+      />
       <dl className="stage-detail-facts">
         <div>
-          <dt>리듬 (예시)</dt>
-          <dd>{SAMPLE.rhythmName}</dd>
+          <dt>한 마디의 박</dt>
+          <dd>{beatCount(SAMPLE.beats)}번</dd>
         </div>
         <div>
-          <dt>같은 자리의 박</dt>
-          <dd>
-            {same}/{song.length}
-          </dd>
+          <dt>점수</dt>
+          <dd className="is-muted">없음, 참고 정보</dd>
         </div>
       </dl>
     </>
