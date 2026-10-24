@@ -2,7 +2,8 @@ import { useState } from 'react';
 import Icon from '../../../components/common/icon.jsx';
 import StageCd from './stage-cd.jsx';
 import TrackMatchingDetail from './track-matching-detail.jsx';
-import { MATCHING_SAMPLE as SAMPLE, sameBeatCount, tempoPosition } from '../matching-sample.js';
+import { MATCHING_SAMPLE as SAMPLE, beatCount, tempoPosition } from '../matching-sample.js';
+import { beatTracePath } from '../../matching/song-results.js';
 
 // 원형 그래프의 세 조각. 카드·상세 화면과 같은 key로 연결됩니다. (모양·위치는 home-stage.css의 .stage-pie-piece.is-*)
 const PIECES = [
@@ -112,25 +113,24 @@ export default function TrackMatching({ sectionProps, navigate }) {
               <span className="stage-glass-note">점수 없음, 참고 정보</span>
             </button>
 
-            <button {...cardProps('rhythm', `리듬 ${SAMPLE.rhythmName}`)}>
+            <button {...cardProps('rhythm', `리듬, 한 마디에 박 ${beatCount(SAMPLE.beats)}번`)}>
               <span className="stage-glass-label">
                 리듬<span className="stage-glass-more">자세히 보기</span>
               </span>
-              <span
-                className="stage-beats"
+              {/* 이 곡의 한 마디 박자를 심전도 모양 선으로 (추천 이유 슬라이드의 리듬 그래프와 같은 모양) */}
+              <svg
+                className="stage-beat-line"
+                viewBox="0 0 320 60"
+                preserveAspectRatio="none"
                 aria-hidden="true"
               >
-                {SAMPLE.beats.song.map((on, index) => (
-                  <span
-                    key={index}
-                    className={on ? 'is-on' : ''}
-                  />
-                ))}
-              </span>
-              <strong className="stage-glass-value is-small">{SAMPLE.rhythmName}</strong>
-              <span className="stage-glass-note">
-                같은 자리의 박 {sameBeatCount(SAMPLE.beats)}/{SAMPLE.beats.song.length}, 참고 정보
-              </span>
+                <path
+                  d={beatTracePath(SAMPLE.beats, { cellWidth: 20, bars: 1, baseline: 38, amp: 26 })}
+                  vectorEffect="non-scaling-stroke"
+                />
+              </svg>
+              <strong className="stage-glass-value is-small">한 마디에 박 {beatCount(SAMPLE.beats)}번</strong>
+              <span className="stage-glass-note">이 곡의 박자, 참고 정보</span>
             </button>
 
             <article className="stage-glass">

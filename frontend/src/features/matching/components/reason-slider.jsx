@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import Icon from '../../../components/common/icon.jsx';
+import BeatGraph from './beat-graph.jsx';
 import { formatDuration } from '../reference-song.js';
 import {
   CONDITION_LABELS,
   REFERENCE_SAMPLE,
-  beatTracePath,
   bpmPosition,
   compareBeats,
   compareTempo,
@@ -22,10 +22,8 @@ import {
 // player: useSongPlayer 결과 (리듬 그래프의 재생 위치 선과 '박자만 듣기')
 const SLIDES = ['음악 유사도', '템포', '리듬', '필수 조건'];
 
-// 리듬 그래프 크기 (SVG 좌표). 두 마디(32칸)를 보여 줌
+// 리듬 그래프에 보여 줄 마디 수 (재생 위치 선 계산에도 씀)
 const BARS = 2;
-const CELL = 20;
-const GRAPH_WIDTH = 16 * BARS * CELL;
 
 // 1장: 음악 유사도
 function SimilaritySlide({ item, basis }) {
@@ -174,65 +172,6 @@ function TempoSlide({ item, basis }) {
   );
 }
 
-// 리듬 그래프 한 장 (심전도 모양 선 + 그래프 종이 + 재생 위치 선)
-// traces: [{ label, bpm, beats, kind: 'reference' | 'song' }], same: 두 선이 함께 박이 오는 칸 표시용 cells
-function BeatGraph({ traces, cells, playhead }) {
-  const height = traces.length > 1 ? 120 : 76;
-  const baselines = traces.length > 1 ? [44, 100] : [52];
-  return (
-    <div className="beat-graph">
-      <ul className="beat-graph-labels">
-        {traces.map((t) => (
-          <li
-            key={t.kind}
-            className={`is-${t.kind}`}
-          >
-            <strong>{t.label}</strong>
-            <span>BPM {t.bpm}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="beat-graph-paper">
-        <svg
-          viewBox={`0 0 ${GRAPH_WIDTH} ${height}`}
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          {cells &&
-            Array.from({ length: BARS }).flatMap((_, bar) =>
-              cells.map((cell, i) =>
-                cell === 'both' ? (
-                  <rect
-                    key={`${bar}-${i}`}
-                    className="beat-graph-same"
-                    x={(bar * cells.length + i) * CELL}
-                    y={0}
-                    width={CELL}
-                    height={height}
-                  />
-                ) : null,
-              ),
-            )}
-          {traces.map((t, i) => (
-            <path
-              key={t.kind}
-              className={`beat-graph-line is-${t.kind}`}
-              d={beatTracePath(t.beats, { cellWidth: CELL, bars: BARS, baseline: baselines[i], amp: 30 })}
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
-        </svg>
-        {playhead !== null && (
-          <span
-            className="beat-graph-playhead"
-            style={{ left: `${playhead * 100}%` }}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
 // 3장: 리듬
 // - 참고 곡으로: 참고 곡과 이 곡의 선을 위아래로, 함께 박이 오는 칸을 칠함
 // - 행사 설명으로: 비교할 곡이 없으므로 이 곡의 선만
@@ -275,6 +214,7 @@ function RhythmSlide({ item, basis, player }) {
         traces={traces}
         cells={compared?.cells}
         playhead={playhead}
+        bars={BARS}
       />
       <div className="beat-graph-actions">
         {/* 시각 정보라 화면 낭독기에서는 숨김 (슬라이드 영역이 aria-live라 매초 읽히지 않게) */}
