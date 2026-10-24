@@ -4,16 +4,25 @@ import SongRow from './song-row.jsx';
 import PlayerBar from './player-bar.jsx';
 import { FIRST_PAGE, formatCreatedAt, referenceTrack, songTrack } from '../song-results.js';
 
-// 참고 곡으로 찾기 결과 목록 (NSU-111)
+// 추천 결과 목록 (NSU-111): 행사 설명으로 찾기 · 참고 곡으로 찾기 공통
 // 안내(조건 바뀜·뺀 곡) → 상위 10곡 → 더보기(서버를 다시 부르지 않음) → 아래 재생 막대
 // results: buildSongResults 결과, onRetry: 바뀐 조건으로 다시 추천받기, retryNote: 다시 받기 안내 문구
-export default function SongResultList({ results, reference, player, onRetry, retryNote }) {
+// basis: 추천 이유 비교 기준, reference: 올린 참고 곡 (행사 설명으로 찾기에서는 없음)
+// saved·toggleSaved: 앱 전체 관심 아티스트 (마이페이지 '관심 아티스트'와 같은 목록, 아티스트 id 기준)
+export default function SongResultList({
+  results,
+  basis,
+  reference,
+  player,
+  onRetry,
+  retryNote,
+  saved = [],
+  toggleSaved,
+}) {
   const { items } = results;
   const [showAll, setShowAll] = useState(false);
   // 펼친 곡 (처음에는 1위를 펼쳐 둠, 한 번에 하나)
   const [openId, setOpenId] = useState(items[0]?.music.id ?? null);
-  // 관심 저장: 체험용 곡이라 이 화면 안에서만 기억 (서버 연결 때 관심 아티스트와 연결)
-  const [saved, setSaved] = useState([]);
   // 펼친 곡의 '곡 듣기' 카드가 화면에 보이는지
   const [cardEl, setCardEl] = useState(null);
   const [seen, setSeen] = useState(false);
@@ -34,9 +43,9 @@ export default function SongResultList({ results, reference, player, onRetry, re
   const playingItem = items.find((i) => i.music.id === player.key);
   // 재생 막대: 곡을 골랐고, 그 곡을 맡은 카드가 화면에 보이지 않을 때만
   const cardHandles = cardVisible && openItem && (player.key === openItem.music.id || player.key === 'reference');
-  const showBar = Boolean(player.key) && !cardHandles;
-
-  const toggleSave = (id) => setSaved((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  // 막대에 보여 줄 곡 (목록의 곡 또는 참고 곡)
+  const barTrack = playingItem ? songTrack(playingItem) : reference && player.key ? referenceTrack(reference) : null;
+  const showBar = Boolean(barTrack) && !cardHandles;
 
   return (
     <div className={`song-results${showBar ? ' has-bar' : ''}`}>
@@ -57,7 +66,7 @@ export default function SongResultList({ results, reference, player, onRetry, re
               name="info"
               size={18}
             />
-            추천 이후 행사 조건이 바뀌었어요. 다시 추천받으면 바뀐 일정·지역·예산이 반영돼요.
+            추천 이후 행사 조건이 바뀌었어요. 다시 추천받으면 바뀐 조건이 반영돼요.
           </p>
           <div className="song-notice-action">
             <button
@@ -103,9 +112,10 @@ export default function SongResultList({ results, reference, player, onRetry, re
             expanded={openId === item.music.id}
             onToggle={() => setOpenId(openId === item.music.id ? null : item.music.id)}
             player={player}
+            basis={basis}
             reference={reference}
-            saved={saved.includes(item.music.id)}
-            onSave={() => toggleSave(item.music.id)}
+            saved={saved.includes(item.artist.id)}
+            onSave={() => toggleSaved(item.artist.id)}
             cardRef={setCardEl}
           />
         ))}
@@ -128,13 +138,13 @@ export default function SongResultList({ results, reference, player, onRetry, re
       {showBar && (
         <PlayerBar
           player={player}
-          title={playingItem ? playingItem.music.title : reference.name}
+          title={playingItem ? playingItem.music.title : reference?.name}
           subtitle={
             playingItem
               ? `${playingItem.artist.name} · ${playingItem.rank}위 · 음악 유사도 ${playingItem.musicSimilarity}`
               : '내가 올린 참고 곡'
           }
-          track={playingItem ? songTrack(playingItem) : referenceTrack(reference)}
+          track={barTrack}
         />
       )}
     </div>

@@ -11,13 +11,14 @@ import '../song-search.css';
 // 참고 곡으로 찾기 (NSU-111): 왼쪽 입력/요약 카드 + 오른쪽 결과
 // 참고 곡 찾기는 아직 SSOT·API 계약에 없어 체험용으로만 동작합니다. 파일은 서버로 보내지 않습니다.
 // form·setForm: 행사 설명으로 찾기와 함께 쓰는 행사 조건, hidden: 다른 방법을 고른 동안 숨김
+// saved·toggleSaved: 앱 전체 관심 아티스트
 
 // 같은 행사는 1분에 한 번만 다시 추천받을 수 있음 (계약의 429 규칙과 같은 간격)
 const RETRY_GAP_MS = 60 * 1000;
 // 행사 조건 중 바뀌면 '조건 바뀜' 안내를 띄우는 칸
 const EVENT_KEYS = ['title', 'date', 'start', 'region', 'budget', 'minutes'];
 
-export default function SongSearch({ hidden, modeSwitch, form, setForm, onResultsChange }) {
+export default function SongSearch({ hidden, modeSwitch, form, setForm, onResultsChange, saved, toggleSaved }) {
   const [reference, setReferenceState] = useState(null);
   // results: buildSongResults 결과 + event(추천을 받을 때의 행사 조건)
   const [results, setResults] = useState(null);
@@ -142,10 +143,13 @@ export default function SongSearch({ hidden, modeSwitch, form, setForm, onResult
           <SongResultList
             key={results.recommendationId}
             results={results}
+            basis={{ kind: 'song', name: reference.name }}
             reference={reference}
             player={player}
             onRetry={retry}
             retryNote={retryNote}
+            saved={saved}
+            toggleSaved={toggleSaved}
           />
         ) : (
           <div className="empty-state match-empty">

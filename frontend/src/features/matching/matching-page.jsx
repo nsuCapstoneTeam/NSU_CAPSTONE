@@ -1,6 +1,5 @@
-import { useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
-  ARTISTS,
   DEFAULT_EVENT,
   GENRES,
   MOODS,
@@ -8,14 +7,11 @@ import {
   TYPES,
   TEMPOS,
   RHYTHMS,
-  matchArtists,
   validateEvent,
 } from './matching.js';
 import Icon from '../../components/common/icon.jsx';
 import PageHeading from '../../components/common/page-heading.jsx';
 import Select from '../../components/common/select.jsx';
-import Tag from '../../components/common/tag.jsx';
-import ArtistResult from './components/artist-result.jsx';
 import StagePhotos from '../../components/common/stage-photos.jsx';
 import './matching-stage.css';
 import { eventOptionLabel, eventToSearch } from './event-to-search.js';
@@ -23,9 +19,18 @@ import { sortEvents } from '../my-page/organizer-events.js';
 import { toDateKey } from '../my-page/availability.js';
 import SearchModeSwitch from './components/search-mode-switch.jsx';
 import SongSearch from './components/song-search.jsx';
+import SongResultList from './components/song-result-list.jsx';
+import useSongPlayer from './use-song-player.js';
+import { buildSongResults } from './song-results.js';
+
+// 같은 행사는 1분에 한 번만 다시 추천받을 수 있음 (계약의 429 규칙과 같은 간격)
+const RETRY_GAP_MS = 60 * 1000;
+// 추천을 받은 뒤 바뀌면 '조건 바뀜' 안내를 띄우는 칸
+const EVENT_KEYS = ['description', 'title', 'date', 'start', 'region', 'type', 'budget', 'minutes', 'genre', 'mood', 'tempo', 'rhythm'];
 
 // 행사 관계자용 매칭 화면: 왼쪽 행사 조건 입력, 오른쪽 추천 결과
-// search: 마지막으로 검색한 조건 (App이 보관하므로 다른 화면에 다녀와도 결과 유지)
+// search: 마지막으로 추천받은 조건 + searchedAt(받은 시각)·eventKey(어느 행사인지) (App이 보관하므로 다른 화면에 다녀와도 결과 유지)
+// saved·toggleSaved: 관심 아티스트 (마이페이지 '관심 아티스트'와 같은 목록)
 // events: 마이페이지 '내 행사'에 등록한 행사 목록, onGoToEvents: 내 행사 탭으로 이동 (NSU-95)
 export default function Matching({ saved, toggleSaved, search, setSearch, events = [], onGoToEvents }) {
   // form: 입력 중인 조건 (검색 버튼을 눌러야 search에 반영)
@@ -67,24 +72,48 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
       onChange={setMode}
     />
   );
-  // 저장된 검색 조건이 있을 때만 추천 계산
-  const report = search ? matchArtists(search) : null;
+  // 행사 설명으로 찾기 결과 (NSU-111): 참고 곡으로 찾기와 같은 목록 형식의 체험용 결과
+  // 받은 시각이 같으면 같은 결과를 보여 줌. 조건을 바꾸면 '조건 바뀜' 안내
+  const searchedAt = search?.searchedAt;
+  const results = useMemo(() => (searchedAt ? buildSongResults(new Date(searchedAt)) : null), [searchedAt]);
+  const eventChanged = Boolean(search) && EVENT_KEYS.some((k) => String(form[k]) !== String(search[k]));
+  const [retryNote, setRetryNote] = useState('');
+  // 행사별로 마지막에 추천받은 시각 (같은 행사만 1분 간격, 다른 행사는 바로 받을 수 있음)
+  const lastByEventRef = useRef({});
+  const player = useSongPlayer();
+  const { stop } = player;
+  // 참고 곡으로 찾기로 바꾸면 이쪽 소리를 끔
+  useEffect(() => {
+    if (mode !== 'event') stop();
+  }, [mode, stop]);
   // 입력칸 하나의 값을 바꿈
   const change = (name, value) =>
     setForm((prev) => ({ ...prev, [name]: value }));
-  // 검색: 입력 확인 → 오류 없으면 조건 저장 후 결과 영역으로 포커스 이동
+  // 추천받기: 입력 확인 → 같은 행사는 1분 간격 → 조건과 받은 시각 저장 후 결과 영역으로 포커스 이동
   function submit(e) {
-    e.preventDefault();
+    e?.preventDefault();
     const message = validateEvent(form);
     setError(message);
     if (message) return;
-    setSearch({ ...form });
+    // 어느 행사인지: '내 행사'에서 불러왔으면 그 행사, 직접 입력했으면 행사명으로 구분
+    const eventKey = importId ? `event:${importId}` : `title:${form.title.trim()}`;
+    const lastAt = lastByEventRef.current[eventKey] ?? (search?.eventKey === eventKey ? search.searchedAt : 0);
+    const wait = lastAt ? RETRY_GAP_MS - (Date.now() - lastAt) : 0;
+    if (wait > 0) {
+      setRetryNote(`같은 행사는 1분에 한 번만 다시 받을 수 있어요. ${Math.ceil(wait / 1000)}초 뒤에 다시 눌러 주세요.`);
+      return;
+    }
+    stop();
+    setRetryNote('');
+    const now = Date.now();
+    lastByEventRef.current[eventKey] = now;
+    setSearch({ ...form, searchedAt: now, eventKey });
     setTimeout(() => resultsRef.current?.focus(), 0);
   }
   // 홈과 같은 무대 배경 위에 화면을 올림. 검색 전에는 파란 무대, 결과가 나오면 공연 사진으로 바뀜
   return (
     <div className="stage-scope match-stage">
-      <StagePhotos active={(mode === 'song' ? songDone : report) ? 2 : 1} />
+      <StagePhotos active={(mode === 'song' ? songDone : results) ? 2 : 1} />
       <div className="match-stage-inner">
         <PageHeading
           eyebrow="FIND YOUR MATCH"
@@ -183,8 +212,7 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
                 />
               </label>
               <p className="field-note">
-                현재 음악 설명은 저장만 합니다. 추천에는 아래 선택 조건이
-                반영됩니다.
+                실제 추천에서는 AI가 이 설명을 해석해 곡을 찾아요. 체험판 결과는 예시 값이에요.
               </p>
               <label>
                 행사명
@@ -216,9 +244,6 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
                   />
                 </label>
               </div>
-              <p className="field-note">
-                샘플 가능일: 2026.10.15, 10.22 (12:00-23:00)
-              </p>
               {/* 지역 · 행사 종류 */}
               <div className="form-pair">
                 <Select
@@ -258,7 +283,7 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
                   />
                 </label>
               </div>
-              {/* 구분선 아래: 점수 계산에 쓰는 음악 스타일 조건 */}
+              {/* 구분선 아래: 음악 스타일 조건 (템포·리듬은 추천 이유 슬라이드에서 비교) */}
               <div className="form-divider" />
               <div className="form-pair">
                 <Select
@@ -307,7 +332,7 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
                   name="search"
                   size={18}
                 />{' '}
-                조건으로 TOP 5 찾기
+                이 조건으로 추천받기
               </button>
             </form>
           </aside>
@@ -324,14 +349,14 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
                 size={19}
               />
               <p>
-                <strong>지금은 체험용 조건 매칭이에요.</strong>
+                <strong>지금은 행사 설명으로 찾기 체험판이에요.</strong>
                 <br />
-                CLAP 음악 유사도 추천은 연결 전이에요. 지금 점수는 가상 프로필의 태그와 샘플 BPM으로 계산한
-                조건 적합도이며, 성공 확률이 아니에요.
+                CLAP 음악 유사도 추천은 연결 전이라 결과는 예시 값이에요. 추천 곡은 실제 음원 대신 그 곡의 BPM과
+                박자를 소리로 들려줘요.
               </p>
             </div>
-            {/* 아직 검색 전: 안내 화면 */}
-            {!report ? (
+            {/* 아직 추천 전: 안내 화면 */}
+            {!results ? (
               <div className="empty-state match-empty">
                 <div className="empty-icon">
                   <Icon
@@ -341,87 +366,21 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
                 </div>
                 <h2>찾는 스타일을 입력해 주세요</h2>
                 <p>
-                  왼쪽 조건을 입력하면 추천 결과와
+                  왼쪽 조건을 입력하면 어울리는 곡과
                   <br />왜 어울리는지에 대한 근거를 보여드려요.
                 </p>
-                <div className="tags">
-                  <Tag>예산</Tag>
-                  <Tag>지역</Tag>
-                  <Tag>음악 스타일</Tag>
-                  <Tag>템포</Tag>
-                </div>
               </div>
             ) : (
-              <>
-                {/* 검색 후: 조건 요약 → 추천 카드 목록 → 제외 이유 */}
-                <div className="results-heading">
-                  <div>
-                    <h2>
-                      맞춤 아티스트 <em>{report.results.length}</em>
-                    </h2>
-                  </div>
-                  <Tag>동일 가중치 · 단순 평균</Tag>
-                </div>
-                <div className="search-receipt">
-                  <strong>{search.title}</strong>
-                  <p>
-                    {search.date} {search.start} · {search.region} ·{' '}
-                    {search.minutes}분 · 최대 {search.budget}만 원
-                  </p>
-                  <small>
-                    전체 {ARTISTS.length}명 → 필수 조건 통과 {report.passed}명 →
-                    최대 5명 추천
-                  </small>
-                </div>
-                <div className="results-list">
-                  {report.results.map((a, i) => (
-                    <ArtistResult
-                      key={a.id}
-                      artist={a}
-                      index={i}
-                      next={report.results[i + 1]}
-                      saved={saved.includes(a.id)}
-                      toggleSaved={toggleSaved}
-                    />
-                  ))}
-                </div>
-                {/* 추천 후보가 하나도 없을 때 */}
-                {!report.results.length && (
-                  <div className="empty-state">
-                    <h3>조건을 충족한 추천 후보가 없어요.</h3>
-                    <p>
-                      날짜·예산·지역을 조정하거나 아래 제외 이유를 확인해 주세요.
-                    </p>
-                  </div>
-                )}
-                {/* 필수 조건 미충족으로 제외된 후보와 그 이유 */}
-                <details className="panel excluded">
-                  <summary>
-                    추천에서 제외된 이유 확인{' '}
-                    <span>{report.excluded.length}명</span>
-                  </summary>
-                  {report.excluded.map((a) => (
-                    <p key={a.id}>
-                      <b>{a.name}</b>
-                      <br />
-                      {a.checks
-                        .filter((c) => !c.pass)
-                        .map((c) => c.label)
-                        .join(' · ')}{' '}
-                      조건 미충족
-                    </p>
-                  ))}
-                  {report.zeroCount > 0 && (
-                    <p>
-                      필수 조건을 통과했지만 적합도 0점인 후보 {report.zeroCount}
-                      명은 추천에서 제외했습니다.
-                    </p>
-                  )}
-                  {!report.excluded.length && (
-                    <p>필수 조건에서 제외된 후보가 없습니다.</p>
-                  )}
-                </details>
-              </>
+              <SongResultList
+                key={results.recommendationId}
+                results={{ ...results, isEventChanged: eventChanged }}
+                basis={{ kind: 'event', tempo: search.tempo, rhythm: search.rhythm }}
+                player={player}
+                onRetry={() => submit()}
+                retryNote={retryNote}
+                saved={saved}
+                toggleSaved={toggleSaved}
+              />
             )}
           </section>
         </div>
@@ -432,6 +391,8 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
           form={form}
           setForm={setForm}
           onResultsChange={setSongDone}
+          saved={saved}
+          toggleSaved={toggleSaved}
         />
       </div>
     </div>

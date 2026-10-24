@@ -8,10 +8,13 @@ import {
   buildSongResults,
   compareBeats,
   compareTempo,
+  compareWantedTempo,
+  findResultArtist,
   formatCreatedAt,
   referenceTrack,
   songTrack,
 } from './song-results.js';
+import { ARTISTS } from './matching.js';
 
 describe('체험용 결과 (계약 모양)', () => {
   const results = buildSongResults(new Date(2026, 9, 24, 15, 20));
@@ -83,5 +86,31 @@ describe('재생기에 넘길 곡 정보', () => {
       duration: 72,
       url: 'blob:x',
     });
+  });
+});
+
+describe('행사 설명으로 찾기: 원하는 템포와 비교', () => {
+  it('원하는 구간보다 느림 / 빠름 / 맞음', () => {
+    assert.equal(compareWantedTempo('FAST', 98).title, '원하는 빠르기(빠름)보다 느려요');
+    assert.equal(compareWantedTempo('SLOW', 98).title, '원하는 빠르기(느림)보다 빨라요');
+    assert.equal(compareWantedTempo('MEDIUM', 98).title, '원하는 빠르기(보통)와 맞아요');
+    assert.equal(compareWantedTempo('MEDIUM', 119).title, '원하는 빠르기(보통)와 맞아요');
+  });
+  it('무관이면 비교하지 않는다', () => {
+    assert.equal(compareWantedTempo('무관', 98), null);
+  });
+});
+
+describe('관심 저장용 아티스트 id', () => {
+  it('매칭 샘플과 이름이 같은 아티스트는 같은 id를 쓴다', () => {
+    const items = buildSongResults().items;
+    const rhythm = items.find((i) => i.artist.name === '리듬크루');
+    assert.equal(rhythm.artist.id, ARTISTS.find((a) => a.name === '리듬크루').id);
+    assert.equal(new Set(items.map((i) => i.artist.id)).size, items.length);
+  });
+  it('저장한 id로 체험용 아티스트와 대표 곡을 찾는다', () => {
+    const top = buildSongResults().items[0];
+    assert.equal(findResultArtist(top.artist.id).songTitle, '새벽의 정원');
+    assert.equal(findResultArtist('없는-id'), null);
   });
 });
