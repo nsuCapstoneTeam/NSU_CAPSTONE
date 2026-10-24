@@ -374,7 +374,7 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
               <SongResultList
                 key={results.recommendationId}
                 results={{ ...results, isEventChanged: eventChanged }}
-                basis={{ kind: 'event', tempo: search.tempo, rhythm: search.rhythm }}
+                basis={{ kind: 'event', tempo: search.tempo, event: search }}
                 player={player}
                 onRetry={() => submit()}
                 retryNote={retryNote}

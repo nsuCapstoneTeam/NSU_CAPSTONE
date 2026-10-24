@@ -707,6 +707,8 @@
 }
 .reason-flow li {
   position: relative;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   display: grid;
   gap: 1px;
   padding: 6px 10px;
@@ -784,120 +786,282 @@
   color: var(--blue);
   font-weight: 700;
 }
-/* 템포 막대 */
-.tempo-scale {
+/* 슬라이드 머리글 문장 */
+.reason-body .reason-headline {
+  margin: 0;
+  color: var(--ink) !important;
+  font-size: 18px;
+  font-weight: 700;
+}
+.reason-body .reason-headline.is-big {
+  font-size: 26px;
+}
+.reason-body .reason-headline.is-right {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 15px;
+}
+.reason-slide {
   position: relative;
-  height: 8px;
-  margin: 26px 0 0;
-  border-radius: 4px;
-  background: linear-gradient(90deg, var(--tint), #9fc4f7);
 }
-.tempo-band {
-  position: absolute;
-  top: -4px;
-  bottom: -4px;
-  left: var(--from);
-  width: calc(var(--to) - var(--from));
-  border: 1.5px dashed var(--blue);
-  border-radius: 6px;
-  background: rgb(8 102 223 / 0.12);
+.reason-top-text {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
 }
-.tempo-mark {
+
+/* 템포 막대: 점(이 곡) · 점선 원(참고 곡) · 점선 띠(원하는 템포) */
+.tempo-track {
+  position: relative;
+  height: 6px;
+  margin: 30px 0 0;
+  border-radius: 3px;
+  background: var(--line);
+}
+.tempo-label {
   position: absolute;
-  bottom: 12px;
+  bottom: 14px;
   left: var(--pos);
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-size: 10px;
+  color: var(--muted);
+  font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
   transform: translateX(-50%);
 }
-.tempo-mark::after {
-  content: '';
+.tempo-label.is-song {
+  color: var(--blue);
+}
+/* 두 라벨이 가까우면 겹치지 않게 이 곡은 왼쪽, 참고 곡은 오른쪽으로 밀어 둠 */
+.tempo-label.is-song {
+  transform: translateX(-100%);
+}
+.tempo-label.is-reference {
+  transform: translateX(0);
+}
+.tempo-gap {
   position: absolute;
-  left: 50%;
-  top: calc(100% + 2px);
-  width: 2px;
+  top: 0;
+  bottom: 0;
+  left: var(--from);
+  width: calc(var(--to) - var(--from));
+  background: #9fc4f7;
+}
+.tempo-dot {
+  position: absolute;
+  top: 50%;
+  left: var(--pos);
+  width: 14px;
   height: 14px;
-  background: currentColor;
-  transform: translateX(-50%);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
 }
-.tempo-mark.is-reference {
-  background: var(--soft);
-  color: var(--muted);
-}
-.tempo-mark.is-song {
-  bottom: auto;
-  top: 22px;
+.tempo-dot.is-song {
   background: var(--blue);
-  color: var(--on-blue);
+  box-shadow: 0 0 0 3px var(--surface);
 }
-.tempo-mark.is-song::after {
-  top: auto;
-  bottom: calc(100% + 2px);
-  background: var(--blue);
+.tempo-dot.is-plain {
+  background: var(--muted);
+  box-shadow: 0 0 0 3px var(--surface);
 }
-.tempo-ends {
+.tempo-dot.is-reference {
+  border: 1.5px dashed var(--muted);
+  background: var(--surface);
+}
+.tempo-band {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: var(--from);
+  width: calc(var(--to) - var(--from));
+  border: 1.5px dashed var(--blue);
+  border-radius: 9px;
+  background: rgb(8 102 223 / 0.08);
+}
+.tempo-ticks {
   display: flex;
   justify-content: space-between;
-  margin-top: 28px;
+  margin-top: 8px;
   color: var(--muted);
   font-size: 10px;
 }
-/* 박자 비교 */
-.beat-compare {
+.reason-facts {
   display: grid;
-  gap: 6px;
-}
-.beat-row {
-  display: grid;
-  grid-template-columns: 64px 1fr;
-  align-items: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  color: var(--muted);
-  font-size: 11px;
+  margin: 6px 0 0;
 }
-.beat-row ol {
+.reason-facts div {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--soft);
+}
+.reason-facts dt {
+  color: var(--muted);
+  font-size: 10px;
+}
+.reason-facts dd {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 리듬 그래프: 그래프 종이 위 심전도 모양 선 */
+.beat-graph {
   display: grid;
-  grid-template-columns: repeat(16, 1fr);
-  gap: 3px;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+  margin-top: 6px;
+}
+.beat-graph-labels {
+  display: grid;
+  align-content: space-around;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.beat-row li {
-  height: 18px;
-  border-radius: 3px;
-  background: var(--soft);
+.beat-graph-labels li {
+  display: grid;
 }
-.beat-row li:nth-child(4n + 1) {
-  box-shadow: inset 2px 0 0 var(--line);
+.beat-graph-labels strong {
+  font-size: 12px;
 }
-.beat-row li.is-on {
-  background: #b4c8e6;
+.beat-graph-labels .is-reference strong {
+  color: var(--muted);
 }
-.beat-row li.is-same {
-  background: var(--blue);
+.beat-graph-labels .is-song strong {
+  color: var(--blue);
 }
-.reason-conditions {
+.beat-graph-labels span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.beat-graph-paper {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(to right, rgb(8 102 223 / 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(8 102 223 / 0.12) 1px, transparent 1px),
+    linear-gradient(to right, rgb(8 102 223 / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(8 102 223 / 0.05) 1px, transparent 1px);
+  background-size:
+    calc(100% / 8) 100%,
+    100% 30px,
+    calc(100% / 32) 100%,
+    100% 6px;
+}
+.beat-graph-paper svg {
+  display: block;
+  width: 100%;
+  height: 120px;
+}
+.beat-graph-same {
+  fill: rgb(8 102 223 / 0.1);
+}
+.beat-graph-line {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+.beat-graph-line.is-reference {
+  stroke: #8a96a8;
+}
+.beat-graph-line.is-song {
+  stroke: var(--blue);
+  stroke-width: 2;
+}
+.beat-graph-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--ink);
+  transform: translateX(-1px);
+}
+.beat-graph-playhead::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+.beat-graph-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.beat-graph-time {
+  margin-right: auto;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.beat-listen {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #c5d6f0;
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+}
+.beat-listen.is-song,
+.beat-listen.is-on {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: var(--on-blue);
+}
+.beat-listen.is-song.is-on {
+  filter: brightness(0.9);
+}
+
+/* 필수 조건: 두 줄 칩 */
+.reason-conditions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 .reason-conditions li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
   border-radius: 8px;
   background: var(--tint);
   color: var(--blue);
+}
+.reason-conditions li svg {
+  flex: none;
+  margin-top: 2px;
+}
+.reason-conditions span {
+  display: grid;
+}
+.reason-conditions strong {
   font-size: 12px;
-  font-weight: 700;
+}
+.reason-conditions small {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 /* ---------- 곡 듣기 CD 카드 (이 화면에서 유일하게 눈에 띄는 것) ---------- */
