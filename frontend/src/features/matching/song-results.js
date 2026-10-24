@@ -1,4 +1,4 @@
-// 참고 곡으로 찾기 결과 (NSU-111) 체험용 데이터와 비교 계산
+// 추천 결과 (NSU-111) 체험용 데이터와 비교 계산. 행사 설명으로 찾기와 참고 곡으로 찾기가 함께 씁니다.
 // 결과 모양은 추천 API 계약(docs/api/02)의 목록 응답을 따릅니다.
 // recommendationId · createdAt · isEventChanged · excludedCount · items[] (rank, musicSimilarity, isNewArtist, availability ...)
 // 실제 추천이 아니라 Figma 시안과 같은 예시 값입니다. 서버 연결 전까지 이 파일이 결과를 만듭니다.
@@ -196,6 +196,29 @@ export function compareBeats(reference, song) {
     cells,
   };
 }
+
+// 행사 설명으로 찾기: 행사 조건의 템포 선택 → BPM 구간 (화면 기존 안내: SLOW 89 이하, MEDIUM 90-119, FAST 120 이상)
+export const WANTED_TEMPOS = {
+  SLOW: { label: '느림', from: 60, to: 89 },
+  MEDIUM: { label: '보통', from: 90, to: 119 },
+  FAST: { label: '빠름', from: 120, to: 160 },
+};
+
+// 원하는 템포와 비교한 문구. tempo가 '무관'이면 null
+// 반환: { title: '원하는 빠르기(빠름)보다 느려요', wanted: { label, from, to } }
+export function compareWantedTempo(tempo, bpm) {
+  const wanted = WANTED_TEMPOS[tempo];
+  if (!wanted) return null;
+  if (bpm < wanted.from) return { title: `원하는 빠르기(${wanted.label})보다 느려요`, wanted };
+  if (bpm > wanted.to) return { title: `원하는 빠르기(${wanted.label})보다 빨라요`, wanted };
+  return { title: `원하는 빠르기(${wanted.label})와 맞아요`, wanted };
+}
+
+// 행사 조건의 리듬 선택 → 비교에 쓰는 한 마디 16칸 박자 (체험용 예시 패턴, '무관'이면 없음)
+export const RHYTHM_PATTERNS = {
+  '강한 비트': [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+  '부드러운 그루브': [1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0],
+};
 
 // BPM을 60~160 막대 위 위치(%)로
 export function bpmPosition(bpm) {

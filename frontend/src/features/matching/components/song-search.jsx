@@ -142,6 +142,7 @@ export default function SongSearch({ hidden, modeSwitch, form, setForm, onResult
           <SongResultList
             key={results.recommendationId}
             results={results}
+            basis={{ kind: 'song', name: reference.name }}
             reference={reference}
             player={player}
             onRetry={retry}

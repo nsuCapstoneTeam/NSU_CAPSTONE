@@ -8,6 +8,7 @@ import {
   buildSongResults,
   compareBeats,
   compareTempo,
+  compareWantedTempo,
   formatCreatedAt,
   referenceTrack,
   songTrack,
@@ -83,5 +84,17 @@ describe('재생기에 넘길 곡 정보', () => {
       duration: 72,
       url: 'blob:x',
     });
+  });
+});
+
+describe('행사 설명으로 찾기: 원하는 템포와 비교', () => {
+  it('원하는 구간보다 느림 / 빠름 / 맞음', () => {
+    assert.equal(compareWantedTempo('FAST', 98).title, '원하는 빠르기(빠름)보다 느려요');
+    assert.equal(compareWantedTempo('SLOW', 98).title, '원하는 빠르기(느림)보다 빨라요');
+    assert.equal(compareWantedTempo('MEDIUM', 98).title, '원하는 빠르기(보통)와 맞아요');
+    assert.equal(compareWantedTempo('MEDIUM', 119).title, '원하는 빠르기(보통)와 맞아요');
+  });
+  it('무관이면 비교하지 않는다', () => {
+    assert.equal(compareWantedTempo('무관', 98), null);
   });
 });
