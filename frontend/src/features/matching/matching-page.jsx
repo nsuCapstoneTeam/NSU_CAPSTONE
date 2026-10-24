@@ -29,9 +29,10 @@ const RETRY_GAP_MS = 60 * 1000;
 const EVENT_KEYS = ['description', 'title', 'date', 'start', 'region', 'type', 'budget', 'minutes', 'genre', 'mood', 'tempo', 'rhythm'];
 
 // 행사 관계자용 매칭 화면: 왼쪽 행사 조건 입력, 오른쪽 추천 결과
-// search: 마지막으로 추천받은 조건 + searchedAt(받은 시각) (App이 보관하므로 다른 화면에 다녀와도 결과 유지)
+// search: 마지막으로 추천받은 조건 + searchedAt(받은 시각)·eventKey(어느 행사인지) (App이 보관하므로 다른 화면에 다녀와도 결과 유지)
+// saved·toggleSaved: 관심 아티스트 (마이페이지 '관심 아티스트'와 같은 목록)
 // events: 마이페이지 '내 행사'에 등록한 행사 목록, onGoToEvents: 내 행사 탭으로 이동 (NSU-95)
-export default function Matching({ search, setSearch, events = [], onGoToEvents }) {
+export default function Matching({ saved, toggleSaved, search, setSearch, events = [], onGoToEvents }) {
   // form: 입력 중인 조건 (검색 버튼을 눌러야 search에 반영)
   const [form, setForm] = useState(search || DEFAULT_EVENT);
   const [error, setError] = useState('');
@@ -77,6 +78,8 @@ export default function Matching({ search, setSearch, events = [], onGoToEvents 
   const results = useMemo(() => (searchedAt ? buildSongResults(new Date(searchedAt)) : null), [searchedAt]);
   const eventChanged = Boolean(search) && EVENT_KEYS.some((k) => String(form[k]) !== String(search[k]));
   const [retryNote, setRetryNote] = useState('');
+  // 행사별로 마지막에 추천받은 시각 (같은 행사만 1분 간격, 다른 행사는 바로 받을 수 있음)
+  const lastByEventRef = useRef({});
   const player = useSongPlayer();
   const { stop } = player;
   // 참고 곡으로 찾기로 바꾸면 이쪽 소리를 끔
@@ -92,14 +95,19 @@ export default function Matching({ search, setSearch, events = [], onGoToEvents 
     const message = validateEvent(form);
     setError(message);
     if (message) return;
-    const wait = search?.searchedAt ? RETRY_GAP_MS - (Date.now() - search.searchedAt) : 0;
+    // 어느 행사인지: '내 행사'에서 불러왔으면 그 행사, 직접 입력했으면 행사명으로 구분
+    const eventKey = importId ? `event:${importId}` : `title:${form.title.trim()}`;
+    const lastAt = lastByEventRef.current[eventKey] ?? (search?.eventKey === eventKey ? search.searchedAt : 0);
+    const wait = lastAt ? RETRY_GAP_MS - (Date.now() - lastAt) : 0;
     if (wait > 0) {
       setRetryNote(`같은 행사는 1분에 한 번만 다시 받을 수 있어요. ${Math.ceil(wait / 1000)}초 뒤에 다시 눌러 주세요.`);
       return;
     }
     stop();
     setRetryNote('');
-    setSearch({ ...form, searchedAt: Date.now() });
+    const now = Date.now();
+    lastByEventRef.current[eventKey] = now;
+    setSearch({ ...form, searchedAt: now, eventKey });
     setTimeout(() => resultsRef.current?.focus(), 0);
   }
   // 홈과 같은 무대 배경 위에 화면을 올림. 검색 전에는 파란 무대, 결과가 나오면 공연 사진으로 바뀜
@@ -370,6 +378,8 @@ export default function Matching({ search, setSearch, events = [], onGoToEvents 
                 player={player}
                 onRetry={() => submit()}
                 retryNote={retryNote}
+                saved={saved}
+                toggleSaved={toggleSaved}
               />
             )}
           </section>
@@ -381,6 +391,8 @@ export default function Matching({ search, setSearch, events = [], onGoToEvents 
           form={form}
           setForm={setForm}
           onResultsChange={setSongDone}
+          saved={saved}
+          toggleSaved={toggleSaved}
         />
       </div>
     </div>

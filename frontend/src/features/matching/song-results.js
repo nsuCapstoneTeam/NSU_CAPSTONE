@@ -3,6 +3,8 @@
 // recommendationId · createdAt · isEventChanged · excludedCount · items[] (rank, musicSimilarity, isNewArtist, availability ...)
 // 실제 추천이 아니라 Figma 시안과 같은 예시 값입니다. 서버 연결 전까지 이 파일이 결과를 만듭니다.
 
+import { ARTISTS } from './matching.js';
+
 export const FIRST_PAGE = 10; // 처음에 보여 줄 곡 수 (더보기는 서버를 다시 부르지 않음)
 
 // 참고 곡의 체험용 BPM과 한 마디 16칸 박자 (1 = 박 있음). 실제로는 AI가 분석한 값이 들어옴
@@ -125,6 +127,10 @@ const MORE = [
   '포근',
 ];
 
+// 체험용 아티스트 중 매칭 샘플(ARTISTS)과 이름이 같으면 같은 id를 씀
+// → 관심 저장이 마이페이지 '관심 아티스트'에 그대로 이어짐
+const ARTIST_IDS = Object.fromEntries(ARTISTS.map((a) => [a.name, a.id]));
+
 // 아바타 색 4가지 (my-page 관심 아티스트 카드와 같은 톤)
 const toneOf = (index) => index % 4;
 
@@ -137,7 +143,7 @@ function makeItem(row, index) {
     isNewArtist: isNew,
     // DJ NOVA는 '추천 당시와 다른 음원' 안내를 보여 주기 위한 예시
     availability: artist === 'DJ NOVA' ? 'MUSIC_REVISED' : 'AVAILABLE',
-    artist: { id: `song-artist-${index + 1}`, name: artist, verified, tone: toneOf(index) },
+    artist: { id: ARTIST_IDS[artist] ?? `song-artist-${index + 1}`, name: artist, verified, tone: toneOf(index) },
     music: { id: `song-${index + 1}`, title, bpm, beats, seconds },
     trust: { completed, lastShow },
     passedConditions: ALL_CONDITIONS,
@@ -159,6 +165,13 @@ export function buildSongResults(createdAt = new Date()) {
     excludedCount: 2,
     items: [...TOP, ...more].map(makeItem),
   };
+}
+
+// 관심 저장한 id로 체험용 결과의 아티스트 찾기 (마이페이지 관심 아티스트에서 씀). 없으면 null
+// 반환: { id, name, verified, tone, songTitle }
+export function findResultArtist(id) {
+  const item = buildSongResults(new Date(0)).items.find((i) => i.artist.id === id);
+  return item ? { ...item.artist, songTitle: item.music.title } : null;
 }
 
 // 추천 받은 시각 문구: '10월 24일 오후 3:20'

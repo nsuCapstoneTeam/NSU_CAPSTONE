@@ -8,13 +8,21 @@ import { FIRST_PAGE, formatCreatedAt, referenceTrack, songTrack } from '../song-
 // 안내(조건 바뀜·뺀 곡) → 상위 10곡 → 더보기(서버를 다시 부르지 않음) → 아래 재생 막대
 // results: buildSongResults 결과, onRetry: 바뀐 조건으로 다시 추천받기, retryNote: 다시 받기 안내 문구
 // basis: 추천 이유 비교 기준, reference: 올린 참고 곡 (행사 설명으로 찾기에서는 없음)
-export default function SongResultList({ results, basis, reference, player, onRetry, retryNote }) {
+// saved·toggleSaved: 앱 전체 관심 아티스트 (마이페이지 '관심 아티스트'와 같은 목록, 아티스트 id 기준)
+export default function SongResultList({
+  results,
+  basis,
+  reference,
+  player,
+  onRetry,
+  retryNote,
+  saved = [],
+  toggleSaved,
+}) {
   const { items } = results;
   const [showAll, setShowAll] = useState(false);
   // 펼친 곡 (처음에는 1위를 펼쳐 둠, 한 번에 하나)
   const [openId, setOpenId] = useState(items[0]?.music.id ?? null);
-  // 관심 저장: 체험용 곡이라 이 화면 안에서만 기억 (서버 연결 때 관심 아티스트와 연결)
-  const [saved, setSaved] = useState([]);
   // 펼친 곡의 '곡 듣기' 카드가 화면에 보이는지
   const [cardEl, setCardEl] = useState(null);
   const [seen, setSeen] = useState(false);
@@ -38,8 +46,6 @@ export default function SongResultList({ results, basis, reference, player, onRe
   // 막대에 보여 줄 곡 (목록의 곡 또는 참고 곡)
   const barTrack = playingItem ? songTrack(playingItem) : reference && player.key ? referenceTrack(reference) : null;
   const showBar = Boolean(barTrack) && !cardHandles;
-
-  const toggleSave = (id) => setSaved((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   return (
     <div className={`song-results${showBar ? ' has-bar' : ''}`}>
@@ -108,8 +114,8 @@ export default function SongResultList({ results, basis, reference, player, onRe
             player={player}
             basis={basis}
             reference={reference}
-            saved={saved.includes(item.music.id)}
-            onSave={() => toggleSave(item.music.id)}
+            saved={saved.includes(item.artist.id)}
+            onSave={() => toggleSaved(item.artist.id)}
             cardRef={setCardEl}
           />
         ))}
