@@ -21,6 +21,8 @@ import './matching-stage.css';
 import { eventOptionLabel, eventToSearch } from './event-to-search.js';
 import { sortEvents } from '../my-page/organizer-events.js';
 import { toDateKey } from '../my-page/availability.js';
+import SearchModeSwitch from './components/search-mode-switch.jsx';
+import SongSearch from './components/song-search.jsx';
 
 // 행사 관계자용 매칭 화면: 왼쪽 행사 조건 입력, 오른쪽 추천 결과
 // search: 마지막으로 검색한 조건 (App이 보관하므로 다른 화면에 다녀와도 결과 유지)
@@ -55,6 +57,16 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
     setImportNote({ name: event.name, skipped });
   }
   const resultsRef = useRef(null);
+  // 찾는 방법 (NSU-111): 'event' 행사 설명으로 / 'song' 참고 곡으로
+  const [mode, setMode] = useState('event');
+  // 참고 곡으로 찾기 결과가 있는지 (배경 사진 전환용)
+  const [songDone, setSongDone] = useState(false);
+  const modeSwitch = (
+    <SearchModeSwitch
+      mode={mode}
+      onChange={setMode}
+    />
+  );
   // 저장된 검색 조건이 있을 때만 추천 계산
   const report = search ? matchArtists(search) : null;
   // 입력칸 하나의 값을 바꿈
@@ -72,20 +84,24 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
   // 홈과 같은 무대 배경 위에 화면을 올림. 검색 전에는 파란 무대, 결과가 나오면 공연 사진으로 바뀜
   return (
     <div className="stage-scope match-stage">
-      <StagePhotos active={report ? 2 : 1} />
+      <StagePhotos active={(mode === 'song' ? songDone : report) ? 2 : 1} />
       <div className="match-stage-inner">
         <PageHeading
           eyebrow="FIND YOUR MATCH"
           title="원하는 스타일을 알려 주세요"
           description="필수 조건으로 걸러내고, 항목별 근거로 비교하세요."
         />
-        <div className="matching-layout">
+        <div
+          className="matching-layout"
+          hidden={mode === 'song'}
+        >
           {/* 행사 조건 입력 폼 */}
           <aside>
             <form
               className="panel match-form"
               onSubmit={submit}
             >
+              {modeSwitch}
               <div className="form-heading">
                 <h2>행사 조건</h2>
                 <button
@@ -409,6 +425,14 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
             )}
           </section>
         </div>
+        {/* 참고 곡으로 찾기: 다른 방법으로 바꿔도 올린 곡과 결과를 기억하도록 숨겨만 둠 */}
+        <SongSearch
+          hidden={mode !== 'song'}
+          modeSwitch={modeSwitch}
+          form={form}
+          setForm={setForm}
+          onResultsChange={setSongDone}
+        />
       </div>
     </div>
   );

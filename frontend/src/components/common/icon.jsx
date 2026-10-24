@@ -154,6 +154,9 @@ export default function Icon({ name, size = 20 }) {
       </>
     ),
     plus: <path d="M12 5v14M5 12h14" />,
+    upload: <path d="M12 15V4m-5 5 5-5 5 5M5 15v4h14v-4" />,
+    close: <path d="M6 6l12 12M18 6 6 18" />,
+    refresh: <path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />,
     'chevron-left': <path d="m15 6-6 6 6 6" />,
     'chevron-right': <path d="m9 6 6 6-6 6" />,
     'chevron-down': <path d="m6 9 6 6 6-6" />,
