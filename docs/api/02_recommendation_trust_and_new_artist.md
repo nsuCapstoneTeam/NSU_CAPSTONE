@@ -7,7 +7,8 @@
 - 요구사항: SSOT v1.16(2026-10-18 문서 전체 최종 승인) `AI-MATCH-050`·`051`·`052`·`053`·`054`, `AI-031`·`AI-034`, `STORAGE-103`, `SEC-119`, `TRUST-151`·`153`. `AI-MATCH-155`는 v1.9에서 폐지했다
 - 서버 협의(Linear): [012. CLAP 음악 유사도 기반 곡 추천 흐름](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)(Accepted, 2026-10-10), [014. 추천 생성 잠금·재생 동의 확인·행사 snapshot](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)(Accepted, 2026-10-15), [007. 추천 단위는 곡](https://linear.app/nsu-capstone/document/007-추천-단위는-곡-69137a45b2c6), [010. AI 곡 검색 실패·시간 초과 시 추천 API 응답](https://linear.app/nsu-capstone/document/010-ai-곡-검색-실패시간-초과-시-추천-api-응답-46a63dece138)
 - 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
-- 공통 규칙: [00_conventions.md](./00_conventions.md), Trust Profile 스키마: [01_trust_profile.md](./01_trust_profile.md), 행사: [03_events.md](./03_events.md)
+- 공통 규칙: [00_conventions.md](./00_conventions.md), Trust Profile 스키마: [01_trust_profile.md](./01_trust_profile.md), 행사: [03_events.md](./03_events.md), 곡 업로드·권리: [04_music.md](./04_music.md)
+- Eligibility 판정식: [recommendation_eligibility/00](../adr/recommendation_eligibility/00_eligibility_rules.md) (2026-10-20 NSU-48 설계 세션)
 
 ## 0. 범위
 
@@ -48,8 +49,9 @@
 
 ```text
 0. 행사 정보를 한 번 읽어 고정한다 (snapshot, §4.3)
-1. Eligibility Filter (Spring, AI-MATCH-051), 0의 snapshot으로 판정
-   → AI_RECOMMENDATION_ENABLED(SSOT AI-031)이고 필터를 통과한 아티스트의 ACTIVE (music_id, audioRevision) 쌍 전부
+1. 후보 곡 모으기: AI_RECOMMENDATION_ENABLED(SSOT AI-031)인 아티스트의 ACTIVE (music_id, audioRevision) 쌍
+   → Eligibility Filter (Spring, AI-MATCH-051)가 0의 snapshot으로 거름
+   → 필터를 통과한 쌍 전부
 2. AI 곡 검색 1회: 1의 쌍 전부 + 0의 행사 요청 원문(행사 설명, 행사 종류, 희망 Genre)
    → 음악 유사도 순 상위 100곡, 곡별 상세 정보, 행사 요청 해석 결과
 3. AI 응답 검사 (§1.2) → 호출 중 삭제·revision 변경된 곡 제외 → rank를 1부터 다시 매김
@@ -121,7 +123,7 @@ Spring은 AI 응답을 저장하기 전에 검사한다. AI가 반환한 순서�
   "recommendations": [
     {
       "rank": 1,
-      "musicId": "m-1024",
+      "musicId": "0192f3d1-2b3c-7d4e-9f50-6a7b8c9d0e1f",
       "music": { "title": "곡 제목" },
       "artistId": "0192f3a4-7b1c-7d2e-8f00-1a2b3c4d5e6f",
       "artist": { "name": "활동명", "profileImageUrl": "https://..." },
@@ -138,7 +140,7 @@ Spring은 AI 응답을 저장하기 전에 검사한다. AI가 반환한 순서�
       },
       "eligibility": {
         "passedConditions": [
-          "ARTIST_VERIFIED",
+          "ACCOUNT_ACTIVE",
           "COPYRIGHT_SATISFIED",
           "SCHEDULE_AVAILABLE",
           "REGION_REACHABLE",
@@ -170,7 +172,7 @@ Spring은 AI 응답을 저장하기 전에 검사한다. AI가 반환한 순서�
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `rank` | 정수 1~100 | 음악 유사도 순위. AI가 준 순서다. 다시 볼 때 뺀 곡이 있으면 남은 곡끼리 다시 매긴다(§4.2) |
-| `musicId` | 문자열 | 추천 곡의 식별자(Backend 음악 ID) |
+| `musicId` | UUID 문자열 | 추천 곡의 식별자. [04 곡 API](./04_music.md)의 `musicId`(UUIDv7, 서버 협의 015)다 |
 | `music.title` | 문자열 | 곡 제목 |
 | `artistId` | UUID 문자열 | 곡 아티스트의 `users.id`. 화면은 이 값으로 아티스트 프로필을 연결한다 |
 | `artist.name` | 문자열 | 곡 아티스트의 활동명(SSOT `ART-027`) |
@@ -178,7 +180,7 @@ Spring은 AI 응답을 저장하기 전에 검사한다. AI가 반환한 순서�
 | `isNewArtist` | boolean | 응답 시점에 곡 아티스트가 신규 아티스트인지(§3). 순위에 쓰지 않는다 |
 | `availability` | enum | 응답 시점에 이 곡을 섭외·재생할 수 있는지(§4.2) |
 | `matching` | 객체 | 매칭 정보 (§2.4) |
-| `eligibility.passedConditions` | enum 배열 | 곡 아티스트가 통과한 필수 조건 (§2.3) |
+| `eligibility.passedConditions` | enum 배열 | 곡과 곡 아티스트가 통과한 필수 조건 (§2.3) |
 | `trustProfile` | 객체 | 곡 아티스트의 Trust Profile. 순위에 쓰지 않는다 |
 
 - 길이는 0~100이다. 후보 곡이 100개보다 적으면 있는 만큼만 담고, 후보가 없으면 `[]`이다.
@@ -203,18 +205,20 @@ AI가 준 곡별 상세 정보(BPM·리듬 등)를 화면용 이름으로 옮긴
 
 ### 2.3 `eligibility.passedConditions`
 
-SSOT `AI-MATCH-051`의 필수 조건을 따른다. 필수 조건은 곡이 아니라 곡 아티스트에 대한 조건이다. 응답에 실리는 곡은 모두 필터를 통과했으므로 실패 조건은 나타나지 않는다.
+SSOT `AI-MATCH-051`의 필수 조건을 따른다. 저작권 조건은 곡에 대한 조건이고, 나머지는 곡 아티스트에 대한 조건이다(2026-10-20 결정). 응답에 실리는 곡은 모두 필터를 통과했으므로 실패 조건은 나타나지 않는다.
 
-| 값 | `AI-MATCH-051` 조건 |
-|---|---|
-| `ARTIST_VERIFIED` | Artist 계정/인증 상태 |
-| `COPYRIGHT_SATISFIED` | 저작권 조건 충족 |
-| `SCHEDULE_AVAILABLE` | 행사 날짜 공연 가능 |
-| `REGION_REACHABLE` | 행사 지역 이동 가능 |
-| `BUDGET_WITHIN_RANGE` | 예산 범위 충족 |
-| `PERFORMANCE_TYPE_MATCHED` | 행사가 지정한 희망 공연 형태와 일치 |
+| 값 | `AI-MATCH-051` 조건 | 통과 기준 |
+|---|---|---|
+| `ACCOUNT_ACTIVE` | Artist 계정/인증 상태 | 역할이 ARTIST이고 계정이 `ACTIVE`다. 활동 정지(`SUSPENDED`)·탈퇴(`WITHDRAWN`)는 여기서 걸러진다 |
+| `COPYRIGHT_SATISFIED` | 저작권 조건 충족 | 곡의 권리 근거가 보증(`DECLARED`) 또는 검증(`VERIFIED`)이고, 권리 신고로 중단되지 않았다([04 §1.1](./04_music.md#11-곡-응답-본문)) |
+| `SCHEDULE_AVAILABLE` | 행사 시간대 공연 가능 | 행사 시간대 전체를 아티스트의 `AVAILABLE` 일정이 덮고, 겹치는 `HOLD`·`BOOKED`·`UNAVAILABLE` 일정이 없다 |
+| `REGION_REACHABLE` | 행사 지역 이동 가능 | 행사의 시·군·구 코드나 그 시·도가 아티스트의 공연 가능지역에 있다 |
+| `BUDGET_WITHIN_RANGE` | 예산 범위 충족 | 아티스트 출연료의 최소가 행사 예산의 최대 이하다 |
+| `PERFORMANCE_TYPE_MATCHED` | 행사가 지정한 희망 공연 형태와 일치 | 행사의 공연 형태가 아티스트가 고른 공연 형태 목록에 있다 |
 
 - 순서는 위 표 순서로 고정한다.
+- 판정식과 경계값은 [recommendation_eligibility/00](../adr/recommendation_eligibility/00_eligibility_rules.md)에 있다. 판정에 쓰는 아티스트 정보(일정, 공연 가능지역, 출연료, 공연 형태)가 없으면 그 조건을 통과하지 못한다. 그래서 아티스트 프로필·일정 기능(NSU-12·34)이 생기기 전에는 모든 곡이 빠진다.
+- `ACCOUNT_ACTIVE`는 2026-10-20 `ARTIST_VERIFIED`에서 이름을 바꿨다. 이 조건은 기본 가입을 마친 계정 상태(활성화)를 보는데, 용어집은 활성화를 "인증 완료"로 부르지 않는다. 아직 구현 전이라 하위 호환 문제가 없다.
 - 활동 정지 여부는 필터에서 평가하지만 표시하지 않는다. 모든 후보에게 참이고, 표시하면 제재 개념이 화면 계약에 들어온다.
 - 예산 금액, 출연료 등 근거 수치는 `matching`의 추천 이유에서 다룬다.
 - `PERFORMANCE_TYPE_MATCHED`는 행사가 희망 공연 형태(밴드·솔로·DJ 등)를 지정했을 때만 나타난다. "상관없음"이면 평가하지 않으므로 나타나지 않는다(서버 협의 009).
@@ -267,14 +271,14 @@ Authorization: Bearer {accessToken}
 | `expiresAt` | 시각 문자열 (00 §4) | 주소가 만료되는 시각. 발급 후 10분(설정값) |
 | `availability` | enum | 발급 시점에 판정한 곡 상태(§4.2). `MUSIC_REVISED`면 추천 당시와 다른 현재 음원의 주소다 |
 
-- 원본 파일은 Artist가 업로드한 60~80초 곡(SSOT `AI-033`)이며 MP3·M4A(AAC), 10MB 이하다. 별도 미리듣기 파일을 만들지 않고 원본을 그대로 재생한다(SSOT v1.12 `STORAGE-103`·`SEC-119`, 2026-10-07 승인).
-- 형식 선택의 근거는 2026-10-07 그릴링의 "브라우저에서 재생 가능한 형식만 업로드하고 원본을 그대로 듣기" 결정이다. MP3·M4A(AAC)로 허용 목록을 좁혀 별도 Preview 인코딩·보관 단계를 줄이고, 10MB 제한으로 업로드·전송 부담을 제한한다. WAV로 작업한 Artist는 허용 형식으로 변환해 올려야 한다.
+- 원본 파일은 Artist가 업로드한 60~80초 곡(SSOT `AI-033`)이며 MP3·M4A(AAC), 10MiB(10,485,760바이트) 이하다. 길이를 56~60초로 줄이는 제안은 AI 담당 확인을 기다린다([04 §2.2](./04_music.md#22-검사)). 별도 미리듣기 파일을 만들지 않고 원본을 그대로 재생한다(SSOT v1.12 `STORAGE-103`·`SEC-119`, 2026-10-07 승인).
+- 형식 선택의 근거는 2026-10-07 그릴링의 "브라우저에서 재생 가능한 형식만 업로드하고 원본을 그대로 듣기" 결정이다. MP3·M4A(AAC)로 허용 목록을 좁혀 별도 Preview 인코딩·보관 단계를 줄이고, 10MiB 제한으로 업로드·전송 부담을 제한한다. WAV로 작업한 Artist는 허용 형식으로 변환해 올려야 한다.
 - MP3는 폭넓은 브라우저 재생 호환성을 고려한 선택이다. M4A는 컨테이너이며 AAC codec과 브라우저·OS의 실제 지원을 확인해야 한다. 모든 환경의 재생을 보장한다고 쓰지 않는다([MDN 오디오 codec 안내](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Audio_codecs)).
 - AI 담당이 실제 Docker 환경에서 MP3·M4A(AAC) 디코딩 → 길이 검증 → 기존 Audio Highlight 전처리 → MSCLAP Embedding 생성과 압축 영향을 검증한 뒤 013에 최종 동의한다. 그전까지 013은 Proposed다. 업로드 형식의 제품 선택과 AI 지원 검증 완료는 별개다. 서비스의 대상 브라우저·OS에서도 원본 재생을 확인해야 한다.
 - Audio Highlight는 Artist가 선택한 업로드 구간이다. AI는 업로드 시 임베딩을 만들며, 처음 56초에서 7초×8개 non-overlap Chunk를 사용한다(SSOT `AI-033`). AI가 다른 Highlight 구간을 자동 선정하는 변경은 이번 결정에 포함하지 않는다. 재생은 업로드한 60~80초 원본 전체다.
 - Artist는 AI 추천을 활성화할 때 받는 AI 분석 동의에서 재생에도 동의한다(SSOT `AI-031` v1.12).
 - 주소를 발급할 때마다 곡 아티스트의 현재 상태를 확인한다. 추천을 받은 뒤 아티스트가 `AI_RECOMMENDATION_ENABLED`가 아니게 됐으면(AI 추천을 껐거나 AI 분석 동의를 철회한 경우 등) 그 곡은 다시 보기에서 빠지는 곡(§4.2)이므로 `404 MUSIC_NOT_FOUND`다. 추천 당시의 동의를 지금의 재생 권한으로 보지 않는다(2026-10-07 결정, Codex 설계 리뷰).
-- 곡 아티스트가 저작권 조건(SSOT `AI-MATCH-051`의 `COPYRIGHT_SATISFIED`)을 더 이상 충족하지 않아도 같다. 재생은 원본을 내보내는 일이므로, 권리 문제가 생긴 곡은 다시 보기 목록에서 빼고 주소도 발급하지 않는다(2026-10-14 결정, 보안 리뷰).
+- 곡이 저작권 조건(SSOT `AI-MATCH-051`의 `COPYRIGHT_SATISFIED`)을 더 이상 충족하지 않아도 같다. 권리 신고로 재생이 중단된 곡(NSU-104)이 여기에 든다. 재생은 원본을 내보내는 일이므로, 권리 문제가 생긴 곡은 다시 보기 목록에서 빼고 주소도 발급하지 않는다(2026-10-14 결정, 보안 리뷰. 2026-10-20 곡 단위로 바꿈).
 - 이미 발급한 주소는 만료 시각(최대 10분)까지 쓸 수 있다. Signed URL은 발급한 뒤 회수할 수 없으므로, 철회 뒤의 노출은 짧은 만료로 제한한다.
 - 인증이 `Authorization` 헤더 방식이라 `<audio>` 요소는 토큰을 보낼 수 없다. 그래서 프론트가 이 API로 주소를 받은 뒤 `<audio>`에 넣는다.
 - 추천 응답에 주소를 미리 넣지 않는다. 실제로 들은 곡만 주소가 나가도록 해 원본을 한꺼번에 내려받기 어렵게 하고, 재생 기록과 요청 제한(`SEC-118` Audit Log·Rate Limiting)을 적용하기 위해서다.
@@ -331,7 +335,7 @@ Authorization: Bearer {accessToken}
 - 다시 볼 때 AI를 호출하지 않는다.
 - 생성 응답도 방금 저장한 결과에 이 표의 규칙을 그대로 적용해 만든다. 그래서 생성하는 동안 바뀐 상태(행사 수정, 아티스트 정지·AI 추천 해제)가 생성 응답에도 나타난다(2026-10-07 결정, Codex 설계 리뷰).
 - 섭외 판단에 쓰는 신뢰 정보가 낡지 않도록 `trustProfile`은 현재 값으로 계산한다.
-- 다시 볼 때 Eligibility 전체(일정·예산·지역 등)를 다시 검사하지 않는다. 계정 상태(정지·탈퇴), AI 추천 상태(`AI_RECOMMENDATION_ENABLED`), 저작권 조건, 곡 삭제만 다시 확인해 뺀다(§4.2). 최신 조건을 반영하려면 새로 추천을 받는다.
+- 다시 볼 때 Eligibility 전체(일정·예산·지역 등)를 다시 검사하지 않는다. 계정 상태(정지·탈퇴), AI 추천 상태(`AI_RECOMMENDATION_ENABLED`), 곡의 저작권 조건, 곡 삭제만 다시 확인해 뺀다(§4.2). 최신 조건을 반영하려면 새로 추천을 받는다.
 - 추천 응답은 캐시하지 않는다. 최대 100명의 Trust Profile 일괄 조회 시간을 측정하고, 느릴 때만 Trust Profile 캐시를 도입한다(서버 협의 012).
 
 ### 4.2 다시 볼 때 빼는 곡과 `availability`
@@ -342,7 +346,7 @@ Authorization: Bearer {accessToken}
 |---|---|
 | 곡 아티스트가 활동 정지되었거나 탈퇴했다 | 뺀다 |
 | 곡 아티스트가 `AI_RECOMMENDATION_ENABLED`가 아니다(AI 추천을 껐거나 AI 분석 동의를 철회한 경우 등, SSOT `AI-031`) | 뺀다. 재생 주소도 발급하지 않는다(§2.5) |
-| 곡 아티스트가 저작권 조건(SSOT `AI-MATCH-051`의 `COPYRIGHT_SATISFIED`)을 더 이상 충족하지 않는다 | 뺀다. 재생 주소도 발급하지 않는다(§2.5) |
+| 곡이 저작권 조건(SSOT `AI-MATCH-051`의 `COPYRIGHT_SATISFIED`)을 더 이상 충족하지 않는다. 권리 신고로 재생이 중단된 경우다(NSU-104) | 뺀다. 재생 주소도 발급하지 않는다(§2.5) |
 | 곡이 삭제되었다 | 뺀다 |
 | 곡의 현재 ACTIVE revision이 저장한 revision과 다르다 | 남기고 `availability = MUSIC_REVISED`. 추천 당시와 다른 음원이다. 재생은 현재 음원으로 한다(§2.5) |
 | 그 밖의 경우 | 남기고 `availability = AVAILABLE` |
@@ -484,7 +488,8 @@ Authorization: Bearer {accessToken}
 | 저장 전에 잠금이 만료돼 다른 요청이 들어와도, 저장 트랜잭션에서 다시 세어 1분 간격이나 하루 5회를 넘는 결과는 저장하지 않고 `429`와 `Retry-After`를 준다. 이 경우는 AI를 호출한 뒤의 거절이다 | §5.2 |
 | 다시 볼 때 활동 정지·탈퇴한 아티스트의 곡, `AI_RECOMMENDATION_ENABLED`가 아니게 된 아티스트의 곡, 삭제된 곡은 빠지고, 남은 곡의 `rank`가 1부터 다시 매겨지며, `excludedCount`가 뺀 곡 수와 같다. revision이 바뀐 곡은 남고 `availability = MUSIC_REVISED`다 | §4.2 |
 | 추천 뒤 곡 아티스트가 AI 추천을 끄거나 AI 분석 동의를 철회하면 그 곡의 재생 주소 발급은 `404 MUSIC_NOT_FOUND`다. 철회 전에 발급한 주소는 `expiresAt`까지만 쓸 수 있다 | §2.5·§4.2 |
-| 추천 뒤 곡 아티스트가 저작권 조건을 더 이상 충족하지 않으면 다시 보기에서 빠지고(`excludedCount`에 포함) 재생 주소 발급은 `404 MUSIC_NOT_FOUND`다 | §2.5·§4.2 |
+| 추천 뒤 곡이 권리 신고로 중단되면 다시 보기에서 빠지고(`excludedCount`에 포함) 재생 주소 발급은 `404 MUSIC_NOT_FOUND`다. 같은 아티스트의 다른 곡은 남는다 | §2.5·§4.2 |
+| Eligibility의 조건별 판정(경계값, 데이터가 없는 아티스트)은 [recommendation_eligibility/00](../adr/recommendation_eligibility/00_eligibility_rules.md)의 테스트 기준을 따른다. 응답의 `passedConditions`에 `ARTIST_VERIFIED`가 없고 `ACCOUNT_ACTIVE`가 있다 | §2.3 |
 | `AI_RECOMMENDATION_ENABLED`가 아닌 아티스트의 곡은 추천 후보가 되지 않는다 | §1 |
 | AI를 기다리는 동안 행사의 Eligibility 입력이나 AI 원문 필드가 바뀌면 생성 응답의 `isEventChanged`가 `true`다. Eligibility·AI 입력·저장 지문은 모두 생성을 시작할 때의 snapshot이다 | §4.3 |
 | 생성하는 동안 곡 아티스트가 정지되거나 AI 추천을 끄면 생성 응답에서 그 곡이 빠지고 `excludedCount`에 들어간다 | §4.1·§4.2 |
