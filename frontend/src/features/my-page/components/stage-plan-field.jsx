@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Icon from '../../../components/common/icon.jsx';
-import { STAGE_PLAN_ACCEPT, checkStagePlan, formatBytes } from '../event-place.js';
+import { STAGE_PLAN_ACCEPT, checkStagePlan, formatBytes, stagePlanType } from '../event-place.js';
 import StagePlanExample from './stage-plan-example.jsx';
 
 // 무대 도면 (NSU-115, 선택): 도면 한 장을 끌어다 놓거나 골라 올립니다.
@@ -30,8 +30,10 @@ export default function StagePlanField({ value, onChange }) {
     const message = checkStagePlan(file);
     setError(message);
     if (message) return;
-    setPreviewUrl(URL.createObjectURL(file));
-    onChange({ name: file.name, size: file.size, type: file.type });
+    // 미리 보기 주소는 확장자로 정한 종류로만 만듦 (PDF는 PDF 보기로, 이미지는 그림으로만 열림)
+    const type = stagePlanType(file.name);
+    setPreviewUrl(URL.createObjectURL(new Blob([file], { type })));
+    onChange({ name: file.name, size: file.size, type });
   }
 
   function clear() {

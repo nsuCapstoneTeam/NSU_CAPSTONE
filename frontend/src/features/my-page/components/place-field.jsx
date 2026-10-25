@@ -30,6 +30,22 @@ export default function PlaceField({ form, update, invalid }) {
   const [manual, setManual] = useState(Boolean(form.regionCode) && !form.address);
   const [notice, setNotice] = useState('');
   const [province, setProvince] = useState(form.regionCode.slice(0, 2));
+  const [legacyName] = useState(form.regionCode ? '' : form.region);
+
+  // 검색어를 고치면 고른 주소를 풀어서, 확인하지 않은 예전 주소가 저장되지 않게 함
+  // 지역을 직접 고르는 중이면 적은 글을 주소로 두고, 고른 지역은 그대로 둠
+  function changeQuery(value) {
+    setQuery(value);
+    setResults(null);
+    if (manual) {
+      update('address', value.trim());
+    } else if (form.address && value !== form.address) {
+      update('address', '');
+      update('regionCode', '');
+      setProvince('');
+      setNotice('');
+    }
+  }
 
   function search() {
     const found = searchAddresses(query);
@@ -76,8 +92,8 @@ export default function PlaceField({ form, update, invalid }) {
 
   const label = regionLabel(form.regionCode);
   const chosen = Boolean(form.address) && Boolean(label) && !manual;
-  // 예전에 '서울'처럼 지역 이름만 저장한 행사
-  const legacyRegion = !form.regionCode && form.region;
+  // 예전에 '서울'처럼 지역 이름만 저장한 행사 (폼을 열 때 한 번만 판단, 지역을 고르면 숨김)
+  const legacyRegion = !form.regionCode && legacyName;
 
   return (
     <div
@@ -102,7 +118,7 @@ export default function PlaceField({ form, update, invalid }) {
             id="event-regionCode"
             type="search"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => changeQuery(e.target.value)}
             onKeyDown={(e) => {
               // 엔터는 행사 저장이 아니라 주소 검색
               if (e.key === 'Enter') {
@@ -131,7 +147,7 @@ export default function PlaceField({ form, update, invalid }) {
 
       {legacyRegion && (
         <p className="place-note">
-          예전에 &apos;{form.region}&apos;(으)로 저장한 행사예요. 주소를 다시 골라 주세요.
+          예전에 &apos;{legacyRegion}&apos;(으)로 저장한 행사예요. 주소를 다시 골라 주세요.
         </p>
       )}
 
@@ -225,7 +241,7 @@ export default function PlaceField({ form, update, invalid }) {
       {chosen && (
         <div className="place-preview">
           <PlaceMapPreview label={form.venue.trim() || form.address} />
-          <small>핀 위치가 맞는지 확인해 주세요. 다르면 주소를 다시 검색해 주세요.</small>
+          <small>지도는 예시 그림이라 실제 위치와 달라요. 위의 주소와 지역이 맞는지 확인해 주세요.</small>
         </div>
       )}
 

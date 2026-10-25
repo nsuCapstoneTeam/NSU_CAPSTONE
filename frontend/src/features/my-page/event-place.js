@@ -53,6 +53,8 @@ export function searchAddresses(query, list = DEMO_ADDRESSES) {
 
 // 무대 도면 파일 규칙 [임시 값, 팀 확정 필요]
 export const STAGE_PLAN_RULES = { extensions: ['jpg', 'jpeg', 'png', 'pdf'], maxBytes: 10 * 1024 * 1024 };
+// 확장자별 파일 종류. 미리 보기는 이 종류로만 엽니다 (이름만 .pdf인 다른 파일이 웹 문서로 열리지 않게)
+const STAGE_PLAN_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', pdf: 'application/pdf' };
 export const STAGE_PLAN_ACCEPT = '.jpg,.jpeg,.png,.pdf';
 
 const extensionOf = (name) => (String(name).includes('.') ? String(name).split('.').pop().toLowerCase() : '');
@@ -63,11 +65,18 @@ export function formatBytes(bytes) {
   return `${Math.max(1, Math.round(bytes / 1024))}KB`;
 }
 
+// 확장자로 정한 파일 종류: '도면.PDF' → 'application/pdf', 모르는 확장자면 ''
+export const stagePlanType = (name) => STAGE_PLAN_TYPES[extensionOf(name)] ?? '';
+
 // 올릴 수 없는 파일이면 고치는 방법을 담은 문구, 올릴 수 있으면 ''
 export function checkStagePlan(file) {
   const ext = extensionOf(file.name);
   if (!STAGE_PLAN_RULES.extensions.includes(ext)) {
     return `${file.name}은(는) 올릴 수 없어요. 도면을 PDF나 이미지(JPG·PNG)로 저장해서 올려 주세요.`;
+  }
+  // 브라우저가 알려 준 파일 종류가 확장자와 다르면 받지 않음 (종류를 모르면 확장자를 따름)
+  if (file.type && file.type !== STAGE_PLAN_TYPES[ext]) {
+    return `${file.name}은(는) 확장자와 실제 파일 형식이 달라요. 도면을 PDF나 이미지(JPG·PNG)로 다시 저장해서 올려 주세요.`;
   }
   if (file.size > STAGE_PLAN_RULES.maxBytes) {
     return `${formatBytes(file.size)} 파일이라 올릴 수 없어요. 10MB 이하로 줄여서 올려 주세요.`;

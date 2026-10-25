@@ -10,6 +10,7 @@ import {
   regionCodeFromSigungu,
   regionLabel,
   searchAddresses,
+  stagePlanType,
 } from './event-place.js';
 
 test('지역 목록은 시·도 16곳, 시·군·구 230곳이고 코드가 겹치지 않는다', () => {
@@ -66,6 +67,18 @@ test('무대 도면은 JPG·PNG·PDF, 10MB 이하만 받는다', () => {
   assert.match(checkStagePlan({ name: '도면', size: 1000 }), /PDF나 이미지/);
   assert.match(checkStagePlan({ name: 'big.png', size: 11 * 1024 * 1024 }), /10MB 이하/);
   assert.equal(checkStagePlan({ name: 'edge.png', size: 10 * 1024 * 1024 }), '');
+});
+
+test('무대 도면은 브라우저가 알려 준 파일 종류가 확장자와 같아야 한다', () => {
+  assert.equal(checkStagePlan({ name: 'stage.pdf', type: 'application/pdf', size: 1000 }), '');
+  assert.equal(checkStagePlan({ name: 'stage.JPG', type: 'image/jpeg', size: 1000 }), '');
+  assert.match(checkStagePlan({ name: 'stage.pdf', type: 'text/html', size: 1000 }), /실제 파일 형식이 달라요/);
+  assert.match(checkStagePlan({ name: 'stage.png', type: 'image/svg+xml', size: 1000 }), /실제 파일 형식이 달라요/);
+  // 종류를 모르면(빈 값) 확장자를 따름
+  assert.equal(checkStagePlan({ name: 'stage.pdf', type: '', size: 1000 }), '');
+  assert.equal(stagePlanType('도면.PDF'), 'application/pdf');
+  assert.equal(stagePlanType('도면.jpeg'), 'image/jpeg');
+  assert.equal(stagePlanType('도면.dwg'), '');
 });
 
 test('파일 크기 표시', () => {
