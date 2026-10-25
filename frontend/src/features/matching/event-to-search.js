@@ -1,6 +1,7 @@
 // 내 행사(NSU-56) → 매칭 조건 변환 (NSU-95, 요구사항 AI-MATCH-050: 매칭은 등록된 행사 기준)
 // 화면 없이 값만 바꾸는 순수 함수 (실행 테스트: node --test src/features/matching/event-to-search.test.js)
 import { GENRES, REGIONS, TYPES } from './matching.js';
+import { provinceShort } from '../my-page/event-place.js';
 
 // 행사 하나를 지금 매칭 조건(current)에 덮어써서 돌려줍니다.
 // - 행사에 없는 조건(분위기·템포·리듬)은 current 값을 그대로 둡니다.
@@ -24,7 +25,8 @@ export function eventToSearch(event, current) {
     if (options.includes(value)) search[key] = value;
     else skipped.push(`${label} '${value}'은(는) 매칭 선택지에 없어 '${current[key]}'(으)로 두었어요.`);
   }
-  pick('region', event.region, REGIONS, '지역');
+  // 매칭 지역은 시·도 단위('경기')라 시·군·구 코드의 시·도를 씀. 예전 행사는 저장된 이름('서울') 그대로
+  pick('region', provinceShort(event.regionCode) || event.region, REGIONS, '지역');
   pick('type', event.eventType, TYPES, '행사 종류');
 
   // 매칭은 장르를 하나만 받으므로, 희망 장르 중 선택지에 있는 첫 번째를 사용
