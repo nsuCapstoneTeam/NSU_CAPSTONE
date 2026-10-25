@@ -135,6 +135,7 @@ export default function EventsTab({ events, setEvents, notify }) {
                         <dt>장소</dt>
                         <dd>
                           {event.venue} ({event.region})
+                          {event.address && <small className="event-address">{event.address}</small>}
                         </dd>
                       </div>
                       <div>
@@ -157,6 +158,22 @@ export default function EventsTab({ events, setEvents, notify }) {
                       </div>
                     </dl>
                     <p className="event-description">{event.description}</p>
+                    {(event.notes || event.stagePlan) && (
+                      <dl className="event-facts">
+                        {event.notes && (
+                          <div>
+                            <dt>특이사항</dt>
+                            <dd className="event-notes">{event.notes}</dd>
+                          </div>
+                        )}
+                        {event.stagePlan && (
+                          <div>
+                            <dt>무대 도면</dt>
+                            <dd>{event.stagePlan.name}</dd>
+                          </div>
+                        )}
+                      </dl>
+                    )}
 
                     {confirmId === event.id ? (
                       // 삭제는 되돌릴 수 없어 한 번 더 확인

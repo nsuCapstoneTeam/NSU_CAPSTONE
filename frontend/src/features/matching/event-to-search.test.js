@@ -37,6 +37,19 @@ test('행사 정보를 매칭 조건으로 옮긴다 (예산은 최대값)', () 
   assert.deepEqual(skipped, []);
 });
 
+test('시·군·구 코드로 저장한 행사는 시·도 기준으로 지역을 가져온다 (NSU-115)', () => {
+  const { search, skipped } = eventToSearch(
+    { ...EVENT, region: '경기도 수원시', regionCode: '41110' },
+    DEFAULT_EVENT,
+  );
+  assert.equal(search.region, '경기');
+  assert.deepEqual(skipped, []);
+  // 매칭 선택지에 없는 시·도는 기존 값을 두고 알려 준다
+  const other = eventToSearch({ ...EVENT, region: '제주특별자치도 제주시', regionCode: '50110' }, DEFAULT_EVENT);
+  assert.equal(other.search.region, DEFAULT_EVENT.region);
+  assert.match(other.skipped[0], /'제주'/);
+});
+
 test('행사에 없는 조건(분위기·템포·리듬)은 기존 값을 유지한다', () => {
   const { search } = eventToSearch(EVENT, DEFAULT_EVENT);
   assert.equal(search.mood, DEFAULT_EVENT.mood);

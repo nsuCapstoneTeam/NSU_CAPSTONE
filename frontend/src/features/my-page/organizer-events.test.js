@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   EMPTY_EVENT,
+  NOTES_MAX,
   REQUIRED_FIELDS,
   budgetText,
   eventProblems,
@@ -9,6 +10,7 @@ import {
   isPast,
   normalizeEvent,
   sortEvents,
+  spanMinutes,
   toFormValues,
 } from './organizer-events.js';
 
@@ -20,8 +22,9 @@ const FULL = {
   date: '2026-10-30',
   startTime: '18:00',
   endTime: '20:00',
+  address: '서울 마포구 연남로 45',
+  regionCode: '11440',
   venue: '대운동장 무대',
-  region: '서울',
   artistType: '밴드',
   genres: ['밴드'],
   budgetMin: '30',
@@ -77,6 +80,52 @@ test('저장용 정리: 공백 제거, 숫자 변환 / 폼용 변환은 다시 �
   assert.equal(form.id, 'e1');
 });
 
+test('저장할 때 지역 이름을 코드로 만들고, 특이사항·주소의 공백을 지운다', () => {
+  const saved = normalizeEvent({ ...FULL, notes: '  리허설 18:00  ', address: ' 서울 마포구 연남로 45 ' });
+  assert.equal(saved.region, '서울특별시 마포구');
+  assert.equal(saved.notes, '리허설 18:00');
+  assert.equal(saved.address, '서울 마포구 연남로 45');
+});
+
+test('예전에 저장한 행사(지역 이름만 있음)는 폼에서 장소를 다시 고르게 한다', () => {
+  const old = { ...normalizeEvent(FULL), id: 'old', region: '서울' };
+  for (const key of ['address', 'regionCode', 'notes', 'stagePlan']) delete old[key];
+  assert.equal(isEventList([old]), true);
+  const form = toFormValues(old);
+  assert.equal(form.regionCode, '');
+  assert.equal(form.notes, '');
+  assert.equal(form.stagePlan, null);
+  assert.deepEqual(ids(eventProblems(form)), ['regionCode']);
+  // 다시 고르지 않고 저장해도 예전 지역 이름은 남는다
+  assert.equal(normalizeEvent({ ...form, regionCode: '' }).region, '서울');
+});
+
+test('특이사항은 500자까지 받는다', () => {
+  assert.equal(NOTES_MAX, 500);
+});
+
+test('비워 둘 시간의 길이(분)', () => {
+  assert.equal(spanMinutes('19:00', '19:40'), 40);
+  assert.equal(spanMinutes('18:00', '21:00'), 180);
+  assert.equal(spanMinutes('19:00', '19:00'), 0);
+  assert.equal(spanMinutes('', '19:00'), 0);
+});
+
+test('공연 시간은 선택: 비우면 비워 둘 시간 전체로 저장한다', () => {
+  assert.equal(REQUIRED_FIELDS.some(([id]) => id === 'performanceMinutes'), false);
+  const blank = { ...FULL, performanceMinutes: '' };
+  assert.deepEqual(eventProblems(blank), []);
+  assert.equal(normalizeEvent(blank).performanceMinutes, 120);
+  assert.equal(normalizeEvent(FULL).performanceMinutes, 40);
+});
+
+test('공연 시간은 비워 둘 시간보다 길 수 없다', () => {
+  const problems = eventProblems({ ...FULL, performanceMinutes: '150' });
+  assert.deepEqual(ids(problems), ['performanceMinutes']);
+  assert.match(problems[0].label, /120분 이하/);
+  assert.deepEqual(eventProblems({ ...FULL, performanceMinutes: '120' }), []);
+});
+
 test('날짜·시작 시간 순으로 정렬하고 원본은 그대로 둔다', () => {
   const list = [
     { id: 'b', date: '2026-11-01', startTime: '10:00' },
@@ -106,4 +155,8 @@ test('저장소 형식 검사: 화면에서 쓰는 칸이 하나라도 없거나
   assert.equal(isEventList([{ ...saved, budgetMax: '50' }]), false);
   assert.equal(isEventList([{ ...saved, venue: undefined }]), false);
   assert.equal(isEventList([{ ...saved, genres: [1] }]), false);
+  // 무대 도면은 없거나 { name, size } 모양
+  assert.equal(isEventList([{ ...saved, stagePlan: { name: '도면.pdf', size: 1000, type: 'application/pdf' } }]), true);
+  assert.equal(isEventList([{ ...saved, stagePlan: '도면.pdf' }]), false);
+  assert.equal(isEventList([{ ...saved, notes: 3 }]), false);
 });
