@@ -22,6 +22,8 @@
 | 참고 곡·추천 곡 재생기 (한 번에 한 곡) | `src/features/matching/use-song-player.js` |
 | 역할별 프로필·일정·관심 목록 | `src/features/my-page/my-page.jsx` |
 | 게시글 작성·검색·수정·삭제 | `src/features/board/board-page.jsx` |
+| 행사 찾기: 지역별 행사 수 → 목록 → 장소 → 상세 | `src/features/event-search/event-search-page.jsx`와 `components/` |
+| 행사 찾기 예시 행사·시·도별 세기 | `src/features/event-search/event-search-data.js`, `event-search.js` |
 | 공통 아이콘·제목·선택 상자·태그 | `src/components/common/` 아래 각각의 JSX 파일 |
 | 전체 색상·레이아웃·다크 모드 | `src/app.css` |
 | 샘플 후보, 필수 조건, 점수, 추천 이유 | `src/features/matching/matching.js` |

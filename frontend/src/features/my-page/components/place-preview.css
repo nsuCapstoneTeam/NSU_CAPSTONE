@@ -1,0 +1,107 @@
+/* 장소 보기 공통 (NSU-115 행사 등록, NSU-116 행사 찾기): 지역 칩 + 위치 미리 보기 예시 그림 */
+.place-region-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 10px;
+  border-radius: 8px;
+  background: var(--tint);
+  color: var(--muted);
+  font-size: 12px;
+}
+.place-region-chip svg {
+  color: var(--blue);
+}
+.place-region-chip strong {
+  color: var(--blue);
+  font-size: 13px;
+}
+
+/* 위치 미리 보기 (예시 그림) */
+.place-map {
+  position: relative;
+  container-type: inline-size;
+  margin: 0;
+  height: 200px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  --map-ground: #f1f3f6;
+  --map-water: #d7e8f7;
+  --map-park: #dcefd9;
+  --map-road: #fff;
+  --map-road-edge: #d6dce5;
+}
+:root[data-theme='dark'] .place-map {
+  --map-ground: #1a2638;
+  --map-water: #1d3550;
+  --map-park: #1f3a32;
+  --map-road: #2e3f57;
+  --map-road-edge: #26354a;
+}
+.place-map > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.place-map-ground {
+  fill: var(--map-ground);
+}
+.place-map-water {
+  fill: var(--map-water);
+}
+.place-map-park {
+  fill: var(--map-park);
+}
+.place-map-road,
+.place-map-road-edge {
+  fill: none;
+  stroke-linecap: round;
+}
+.place-map-road {
+  stroke: var(--map-road);
+}
+.place-map-road-edge {
+  stroke: var(--map-road-edge);
+}
+.place-map-pin {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transform: translate(-15px, -34px);
+}
+.place-map-pin path {
+  fill: var(--blue);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.place-map-pin circle {
+  fill: var(--surface);
+}
+.place-map-label {
+  max-width: min(260px, calc(50cqw - 40px));
+  overflow: hidden;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 2px 6px #0a142430;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.place-map figcaption {
+  position: absolute;
+  bottom: 8px;
+  left: 10px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10px;
+  opacity: 0.9;
+}
