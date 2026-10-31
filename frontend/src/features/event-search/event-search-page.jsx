@@ -24,6 +24,17 @@ function scrollToLayout() {
   if (window.scrollY > top) window.scrollTo({ top, behavior: 'instant' });
 }
 
+// 지역을 고른 뒤 목록 제목이 화면 밖(위로 지나갔거나 아래에 가려짐)이면 목록 위쪽이 보이게 옮김
+// 포커스는 preventScroll로 옮기므로, 화면 위치는 여기서만 맞춤 (화면 안이면 그대로)
+function revealList() {
+  const title = document.getElementById('es-list-title');
+  if (!title) return;
+  const { top, bottom } = title.getBoundingClientRect();
+  if (top >= 0 && bottom <= window.innerHeight) return;
+  const list = title.closest('.es-list') ?? title;
+  window.scrollTo({ top: list.getBoundingClientRect().top + window.scrollY - 16, behavior: 'instant' });
+}
+
 export default function EventSearch({ notify }) {
   // 고른 시·도 코드 ('' = 전체 지역)
   const [province, setProvince] = useState('');
@@ -57,6 +68,8 @@ export default function EventSearch({ notify }) {
     setPlaceId(null);
     setVisible(PAGE);
     setFocusId('es-list-title');
+    // 목록이 짧아지면서 제목이 화면 위로 사라지거나, 좁은 화면에서 지역 목록 아래에 가려질 수 있음
+    requestAnimationFrame(revealList);
   }
 
   // 더 보기: 새로 보인 첫 행으로 포커스
