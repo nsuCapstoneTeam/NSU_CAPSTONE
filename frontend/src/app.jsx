@@ -19,6 +19,7 @@ import SignUpComplete from './features/auth/pages/sign-up-complete-page.jsx';
 import AuthRequired from './features/auth/pages/auth-required-page.jsx';
 import MyPage from './features/my-page/my-page.jsx';
 import Board from './features/board/board-page.jsx';
+import EventSearch from './features/event-search/event-search-page.jsx';
 import { STATUS_VALUES as SCHEDULE_STATUSES } from './features/my-page/availability.js';
 import { isEventList } from './features/my-page/organizer-events.js';
 
@@ -203,6 +204,7 @@ export default function App() {
                 {[
                   ['home', '홈'],
                   ['match', '아티스트 매칭'],
+                  ['events', '행사 찾기'],
                   ['board', '자유게시판'],
                   ['mypage', '마이페이지'],
                 ].map(([key, label]) => (
@@ -421,6 +423,8 @@ export default function App() {
             }}
           />
         )}{' '}
+        {/* 행사 찾기 (NSU-116): 공개 행사를 지역별로 보기. 지금은 누구나 볼 수 있음 (로그인 필요 여부는 팀 확정 필요) */}
+        {page === 'events' && <EventSearch notify={setNotice} />}{' '}
         {page === 'board' && (
           <Board
             posts={posts}
