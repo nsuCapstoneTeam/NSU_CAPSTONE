@@ -22,8 +22,10 @@
 | 추천 곡 재생기 (한 번에 한 곡, 박자 소리) | `src/features/matching/use-song-player.js` |
 | 역할별 프로필·일정·관심 목록 | `src/features/my-page/my-page.jsx` |
 | 게시글 작성·검색·수정·삭제 | `src/features/board/board-page.jsx` |
-| 행사 찾기: 지역별 행사 수 → 목록 → 장소 → 상세 | `src/features/event-search/event-search-page.jsx`와 `components/` |
-| 행사 찾기 예시 행사·시·도별 세기 | `src/features/event-search/event-search-data.js`, `event-search.js` |
+| 행사 찾기: 지역 지도 → 목록 → 장소 → 상세 | `src/features/event-search/event-search-page.jsx`와 `components/` |
+| 행사 찾기 지도 (2.5D SVG, 시·도 → 시·군·구, 행사 번호 핀) | `src/features/event-search/map/region-map.jsx`, 계산은 `map-geometry.js`, 데이터 불러오기는 `map-loaders.js` |
+| 지도 경계 데이터 만들기 | `scripts/build-region-map.mjs` → `src/features/event-search/map/map-data/` |
+| 행사 찾기 예시 행사·핀 자리·지역별 세기 | `src/features/event-search/event-search-data.js`, `event-search.js` |
 | 공통 아이콘·제목·선택 상자·태그 | `src/components/common/` 아래 각각의 JSX 파일 |
 | 전체 색상·레이아웃·다크 모드 | `src/app.css` |
 | 샘플 후보, 필수 조건, 점수, 추천 이유 | `src/features/matching/matching.js` |

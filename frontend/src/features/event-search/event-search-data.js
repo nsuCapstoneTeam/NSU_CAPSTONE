@@ -2,13 +2,55 @@
 // 행사 관계자 '내 행사'와 같은 형식(organizer-events.js의 EMPTY_EVENT)이라, API 연결 뒤에는 서버 응답으로 바꾸면 됩니다.
 // 행사 이름·장소·주소는 모두 지어낸 예시예요. regionCode는 data/regions.js의 시·군·구 코드입니다.
 
-const event = (id, fields) => ({
-  id: `demo-event-${id}`,
-  visibility: 'PUBLIC',
-  notes: '',
-  stagePlan: null,
-  ...fields,
-});
+// [체험용] 공연장 좌표: 행사 id → [경도, 위도] (NSU-117)
+// 주소에서 구한 값이 아니라, 그 시·군·구 안에 핀을 찍어 보려고 정한 대략적인 자리예요.
+// 행사에는 venueLat·venueLng(위도·경도)로 넣습니다. 서버가 행사 등록 때 주소로 좌표를 구해
+// 응답에 같은 이름으로 주는 것을 제안 중이에요 (팀 확정 필요, docs/api/03).
+// demo-event-6은 '주소로 좌표를 못 구한 행사'를 보여 주려고 일부러 뺐어요.
+const VENUE_POINTS = {
+  'demo-event-1': [126.925, 37.562],
+  'demo-event-2': [126.9895, 37.5745],
+  'demo-event-3': [127.01, 37.299],
+  'demo-event-4': [126.9255, 37.55],
+  'demo-event-5': [129.16, 35.163],
+  'demo-event-7': [127.712, 37.874],
+  'demo-event-8': [127.045, 37.51],
+  'demo-event-9': [126.639, 37.392],
+  'demo-event-10': [129.118, 35.155],
+  'demo-event-11': [127.156, 36.819],
+  'demo-event-12': [127.276, 36.499],
+  'demo-event-13': [129.286, 35.843],
+  'demo-event-14': [127.111, 37.395],
+  'demo-event-15': [127.349, 36.362],
+  'demo-event-16': [129.064, 35.156],
+  'demo-event-17': [128.595, 35.869],
+  'demo-event-18': [128.938, 37.768],
+  'demo-event-19': [127.153, 35.815],
+  'demo-event-20': [126.768, 37.658],
+  'demo-event-21': [126.31, 33.463],
+  'demo-event-22': [129.301, 35.549],
+  'demo-event-23': [126.724, 37.493],
+  'demo-event-24': [126.915, 35.148],
+  'demo-event-25': [127.427, 36.328],
+  'demo-event-26': [128.425, 34.844],
+  'demo-event-27': [127.99, 36.99],
+  'demo-event-28': [128.617, 35.828],
+  'demo-event-29': [127.736, 34.739],
+  'demo-event-30': [128.723, 36.565],
+};
+
+const event = (id, fields) => {
+  const point = VENUE_POINTS[`demo-event-${id}`];
+  return {
+    id: `demo-event-${id}`,
+    visibility: 'PUBLIC',
+    notes: '',
+    stagePlan: null,
+    venueLat: point ? point[1] : null,
+    venueLng: point ? point[0] : null,
+    ...fields,
+  };
+};
 
 export const DEMO_PUBLIC_EVENTS = [
   event(1, {
@@ -561,3 +603,4 @@ export const DEMO_PUBLIC_EVENTS = [
     description: '탈춤축제 기간의 거리 공연이에요. 축제 분위기를 띄울 팀을 찾아요.',
   }),
 ];
+
