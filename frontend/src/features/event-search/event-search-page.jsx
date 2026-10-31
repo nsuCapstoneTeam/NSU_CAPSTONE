@@ -41,6 +41,13 @@ function scrollToLayout() {
   if (window.scrollY > top) window.scrollTo({ top, behavior: 'instant' });
 }
 
+// 시·군·구를 고른 뒤 목록이 짧아져 목록 제목이 화면 위로 사라졌으면 지도·목록 칸 위쪽으로 올림 (NSU-116 리뷰)
+// 좁은 화면에서 제목이 지도 아래에 있을 때는 움직이지 않음 (지도의 핀과 강조로 결과를 바로 볼 수 있음)
+function revealList() {
+  const title = document.getElementById('es-list-title');
+  if (title && title.getBoundingClientRect().top < 0) scrollToLayout();
+}
+
 const shortName = (code) => PROVINCES.find((p) => p.code === code)?.short ?? '';
 
 export default function EventSearch({ notify }) {
@@ -116,6 +123,7 @@ export default function EventSearch({ notify }) {
     setDistrict(code === district ? '' : code);
     setPlaceId(null);
     setVisible(PAGE);
+    requestAnimationFrame(revealList);
   }
 
   function backToNation() {
