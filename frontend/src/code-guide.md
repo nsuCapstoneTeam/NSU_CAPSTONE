@@ -16,10 +16,9 @@
 | 회원가입 공통 부품 (인증 칸·선택 버튼·진행 표시·빠진 항목 카드) | `src/features/auth/components/signup-fields.jsx` |
 | 행사 조건 입력과 추천 결과 | `src/features/matching/matching-page.jsx` |
 | 매칭 계산·샘플 데이터 | `src/features/matching/matching.js` |
-| 추천 결과 목록·곡 듣기 CD 카드 (두 찾는 방법 공통), 참고 곡으로 찾기 | `src/features/matching/components/song-search.jsx`와 같은 폴더의 `song-*.jsx`, `listen-card.jsx`, `reason-slider.jsx` |
-| 참고 곡 파일 검사 (형식·크기·길이 임시 규칙) | `src/features/matching/reference-song.js` |
-| 추천 결과 체험 데이터·템포/박자 비교 (두 찾는 방법 공통) | `src/features/matching/song-results.js` |
-| 참고 곡·추천 곡 재생기 (한 번에 한 곡) | `src/features/matching/use-song-player.js` |
+| 추천 결과 목록·곡 듣기 CD 카드·추천 이유 슬라이드 | `src/features/matching/components/song-result-list.jsx`와 같은 폴더의 `song-row.jsx`, `listen-card.jsx`, `reason-slider.jsx` |
+| 추천 결과 체험 데이터·원하는 템포 비교 | `src/features/matching/song-results.js` |
+| 추천 곡 재생기 (한 번에 한 곡, 박자 소리) | `src/features/matching/use-song-player.js` |
 | 역할별 프로필·일정·관심 목록 | `src/features/my-page/my-page.jsx` |
 | 게시글 작성·검색·수정·삭제 | `src/features/board/board-page.jsx` |
 | 행사 찾기: 지역별 행사 수 → 목록 → 장소 → 상세 | `src/features/event-search/event-search-page.jsx`와 `components/` |
@@ -39,8 +38,6 @@
 `index.html` → `src/main.jsx` → `App` → 선택한 화면
 
 행사 설명으로 찾기: `Matching` → `validateEvent` → `buildSongResults`(체험 결과) → `SongResultList` → `SongRow`(추천 이유 슬라이드·곡 듣기 카드). `matching.js`의 조건 점수(`matchArtists`)는 이전 계약 기준이라 화면에서는 쓰지 않습니다(NSU-90 API 연결 때 정리).
-
-참고 곡으로 찾기: `SongSearch` → `ReferenceUpload`(파일 검사) → `validateEvent` → `buildSongResults`(체험 결과) → `SongResultList` → `SongRow`(추천 이유 슬라이드·곡 듣기 카드). 파일은 서버로 보내지 않습니다.
 
 저장: `App` → `useStoredState` → `local-demo-store` → 브라우저 localStorage.
 

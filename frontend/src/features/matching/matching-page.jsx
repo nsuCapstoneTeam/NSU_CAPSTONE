@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import {
   DEFAULT_EVENT,
   GENRES,
@@ -17,8 +17,6 @@ import './matching-stage.css';
 import { eventOptionLabel, eventToSearch } from './event-to-search.js';
 import { sortEvents } from '../my-page/organizer-events.js';
 import { toDateKey } from '../my-page/availability.js';
-import SearchModeSwitch from './components/search-mode-switch.jsx';
-import SongSearch from './components/song-search.jsx';
 import SongResultList from './components/song-result-list.jsx';
 import useSongPlayer from './use-song-player.js';
 import { buildSongResults } from './song-results.js';
@@ -62,17 +60,7 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
     setImportNote({ name: event.name, skipped });
   }
   const resultsRef = useRef(null);
-  // 찾는 방법 (NSU-111): 'event' 행사 설명으로 / 'song' 참고 곡으로
-  const [mode, setMode] = useState('event');
-  // 참고 곡으로 찾기 결과가 있는지 (배경 사진 전환용)
-  const [songDone, setSongDone] = useState(false);
-  const modeSwitch = (
-    <SearchModeSwitch
-      mode={mode}
-      onChange={setMode}
-    />
-  );
-  // 행사 설명으로 찾기 결과 (NSU-111): 참고 곡으로 찾기와 같은 목록 형식의 체험용 결과
+  // 행사 설명으로 찾기 결과 (NSU-111): 체험용 결과
   // 받은 시각이 같으면 같은 결과를 보여 줌. 조건을 바꾸면 '조건 바뀜' 안내
   const searchedAt = search?.searchedAt;
   const results = useMemo(() => (searchedAt ? buildSongResults(new Date(searchedAt)) : null), [searchedAt]);
@@ -82,10 +70,6 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
   const lastByEventRef = useRef({});
   const player = useSongPlayer();
   const { stop } = player;
-  // 참고 곡으로 찾기로 바꾸면 이쪽 소리를 끔
-  useEffect(() => {
-    if (mode !== 'event') stop();
-  }, [mode, stop]);
   // 입력칸 하나의 값을 바꿈
   const change = (name, value) =>
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -113,24 +97,20 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
   // 홈과 같은 무대 배경 위에 화면을 올림. 검색 전에는 파란 무대, 결과가 나오면 공연 사진으로 바뀜
   return (
     <div className="stage-scope match-stage">
-      <StagePhotos active={(mode === 'song' ? songDone : results) ? 2 : 1} />
+      <StagePhotos active={results ? 2 : 1} />
       <div className="match-stage-inner">
         <PageHeading
           eyebrow="FIND YOUR MATCH"
           title="원하는 스타일을 알려 주세요"
           description="필수 조건으로 걸러내고, 항목별 근거로 비교하세요."
         />
-        <div
-          className="matching-layout"
-          hidden={mode === 'song'}
-        >
+        <div className="matching-layout">
           {/* 행사 조건 입력 폼 */}
           <aside>
             <form
               className="panel match-form"
               onSubmit={submit}
             >
-              {modeSwitch}
               <div className="form-heading">
                 <h2>행사 조건</h2>
                 <button
@@ -349,7 +329,7 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
                 size={19}
               />
               <p>
-                <strong>지금은 행사 설명으로 찾기 체험판이에요.</strong>
+                <strong>지금은 체험판이에요.</strong>
                 <br />
                 CLAP 음악 유사도 추천은 연결 전이라 결과는 예시 값이에요. 추천 곡은 실제 음원 대신 그 곡의 BPM과
                 박자를 소리로 들려줘요.
@@ -374,7 +354,7 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
               <SongResultList
                 key={results.recommendationId}
                 results={{ ...results, isEventChanged: eventChanged }}
-                basis={{ kind: 'event', tempo: search.tempo, event: search }}
+                basis={{ tempo: search.tempo, event: search }}
                 player={player}
                 onRetry={() => submit()}
                 retryNote={retryNote}
@@ -384,16 +364,6 @@ export default function Matching({ saved, toggleSaved, search, setSearch, events
             )}
           </section>
         </div>
-        {/* 참고 곡으로 찾기: 다른 방법으로 바꿔도 올린 곡과 결과를 기억하도록 숨겨만 둠 */}
-        <SongSearch
-          hidden={mode !== 'song'}
-          modeSwitch={modeSwitch}
-          form={form}
-          setForm={setForm}
-          onResultsChange={setSongDone}
-          saved={saved}
-          toggleSaved={toggleSaved}
-        />
       </div>
     </div>
   );

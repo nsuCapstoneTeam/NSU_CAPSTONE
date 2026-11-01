@@ -1,11 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import Icon from '../../../components/common/icon.jsx';
-import {
-  isSpinPaused,
-  spinElapsed,
-  toggleSpinPaused,
-  usePrefersReducedMotion,
-} from './cd-login-motion.js';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import { spinElapsed } from './cd-login-motion.js';
 import './cd-login.css';
 
 // CD 로그인 화면 틀 (아티스트·행사 관계자 공통, Figma '할래말래 로그인 · 네온 시안' CD 로그인)
@@ -25,9 +19,6 @@ export default function CdLoginStage({
   children,
 }) {
   const stageRef = useRef(null);
-  // 동작 줄이기 설정이면 회전하지 않으므로 멈춤 버튼도 숨김
-  const canSpin = !usePrefersReducedMotion();
-  const [paused, setPaused] = useState(isSpinPaused);
 
   // 역할을 바꿔 화면이 새로 그려져도 CD·링이 보던 각도에서 이어 돌도록 시작 시점을 맞춤
   useLayoutEffect(() => {
@@ -49,7 +40,7 @@ export default function CdLoginStage({
   return (
     <section
       ref={stageRef}
-      className={`cd-login cd-login--${role}${paused ? ' is-paused' : ''}`}
+      className={`cd-login cd-login--${role}`}
       aria-labelledby={titleId}
     >
       {/* 배경: 어두운 무대 + 큰 CD (장식이라 화면 낭독기에서는 숨김) */}
@@ -68,7 +59,7 @@ export default function CdLoginStage({
         <span className="cd-spark" />
       </div>
 
-      {/* 위쪽: 홈으로 돌아가기 · 회전 멈춤 (자동으로 움직이는 화면이라 멈춤 버튼을 둠, DESIGN.md 11.3) */}
+      {/* 위쪽: 홈으로 돌아가기. CD 회전은 움직임 줄이기 설정에서 멈춤 (DESIGN.md 11.3) */}
       <div className="cd-login-top">
         <button
           type="button"
@@ -77,19 +68,6 @@ export default function CdLoginStage({
         >
           ← 홈으로 돌아가기
         </button>
-        {canSpin && (
-          <button
-            type="button"
-            className="cd-login-pause"
-            onClick={() => setPaused(toggleSpinPaused())}
-          >
-            <Icon
-              name={paused ? 'play' : 'pause'}
-              size={14}
-            />
-            {paused ? '회전 재생' : '회전 멈춤'}
-          </button>
-        )}
       </div>
 
       {/* 가운데: 동전(라벨 + 네온 링). 역할을 바꿀 때 이 동전이 뒤집힘 */}

@@ -160,7 +160,7 @@ body.login-full-bleed .site-footer {
   to { transform: rotate(360deg); }
 }
 
-/* ---------- 위쪽: 홈으로 · 회전 멈춤 ---------- */
+/* ---------- 위쪽: 홈으로 돌아가기 ---------- */
 .cd-login-top {
   position: absolute;
   z-index: 3;
@@ -181,35 +181,9 @@ body.login-full-bleed .site-footer {
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
   cursor: pointer;
 }
-.cd-login-pause {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 999px;
-  background: rgba(5, 10, 20, 0.5);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  color: var(--on-dark);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 180ms ease;
-}
-.cd-login-pause:hover {
-  background: rgba(5, 10, 20, 0.72);
-}
 .cd-login-top button:focus-visible {
   outline: 2px solid var(--neon-soft);
   outline-offset: 3px;
-}
-/* 멈춘 동안 CD·네온 링 정지 */
-.cd-login.is-paused .cd-disc-face,
-.cd-login.is-paused .cd-ring,
-.cd-login.is-paused .cd-ring-glow {
-  animation-play-state: paused;
 }
 
 /* ---------- 가운데: 동전(라벨 + 네온 링) ---------- */

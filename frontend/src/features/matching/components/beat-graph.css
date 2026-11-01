@@ -1,5 +1,5 @@
 /* 리듬 그래프 (NSU-113): 그래프 종이 위 심전도 모양 선. 추천 이유 슬라이드와 홈 '음악 매칭' 예시가 함께 씀
-   Figma '추천 이유 슬라이드 · 참고 곡으로 찾기'의 리듬 장 */
+   Figma '추천 이유 슬라이드'의 리듬 장 */
 .beat-graph {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
@@ -19,9 +19,6 @@
 }
 .beat-graph-labels strong {
   font-size: 12px;
-}
-.beat-graph-labels .is-reference strong {
-  color: var(--muted);
 }
 .beat-graph-labels .is-song strong {
   color: var(--blue);
@@ -52,16 +49,10 @@
   width: 100%;
   height: 120px;
 }
-.beat-graph-same {
-  fill: rgb(8 102 223 / 0.1);
-}
 .beat-graph-line {
   fill: none;
   stroke-width: 1.6;
   stroke-linejoin: round;
-}
-.beat-graph-line.is-reference {
-  stroke: #8a96a8;
 }
 .beat-graph-line.is-song {
   stroke: var(--blue);

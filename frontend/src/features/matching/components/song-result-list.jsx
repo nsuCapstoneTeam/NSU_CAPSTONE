@@ -2,17 +2,17 @@ import { useEffect, useState } from 'react';
 import Icon from '../../../components/common/icon.jsx';
 import SongRow from './song-row.jsx';
 import PlayerBar from './player-bar.jsx';
-import { FIRST_PAGE, formatCreatedAt, referenceTrack, songTrack } from '../song-results.js';
+import { FIRST_PAGE, formatCreatedAt, songTrack } from '../song-results.js';
+import '../song-search.css';
 
-// 추천 결과 목록 (NSU-111): 행사 설명으로 찾기 · 참고 곡으로 찾기 공통
+// 추천 결과 목록 (NSU-111): 행사 설명으로 찾기 결과
 // 안내(조건 바뀜·뺀 곡) → 상위 10곡 → 더보기(서버를 다시 부르지 않음) → 아래 재생 막대
 // results: buildSongResults 결과, onRetry: 바뀐 조건으로 다시 추천받기, retryNote: 다시 받기 안내 문구
-// basis: 추천 이유 비교 기준, reference: 올린 참고 곡 (행사 설명으로 찾기에서는 없음)
+// basis: 추천 이유 비교 기준 (reason-slider.jsx)
 // saved·toggleSaved: 앱 전체 관심 아티스트 (마이페이지 '관심 아티스트'와 같은 목록, 아티스트 id 기준)
 export default function SongResultList({
   results,
   basis,
-  reference,
   player,
   onRetry,
   retryNote,
@@ -42,9 +42,9 @@ export default function SongResultList({
   const openItem = items.find((i) => i.music.id === openId);
   const playingItem = items.find((i) => i.music.id === player.key);
   // 재생 막대: 곡을 골랐고, 그 곡을 맡은 카드가 화면에 보이지 않을 때만
-  const cardHandles = cardVisible && openItem && (player.key === openItem.music.id || player.key === 'reference');
-  // 막대에 보여 줄 곡 (목록의 곡 또는 참고 곡)
-  const barTrack = playingItem ? songTrack(playingItem) : reference && player.key ? referenceTrack(reference) : null;
+  const cardHandles = cardVisible && openItem && player.key === openItem.music.id;
+  // 막대에 보여 줄 곡
+  const barTrack = playingItem ? songTrack(playingItem) : null;
   const showBar = Boolean(barTrack) && !cardHandles;
 
   return (
@@ -113,7 +113,6 @@ export default function SongResultList({
             onToggle={() => setOpenId(openId === item.music.id ? null : item.music.id)}
             player={player}
             basis={basis}
-            reference={reference}
             saved={saved.includes(item.artist.id)}
             onSave={() => toggleSaved(item.artist.id)}
             cardRef={setCardEl}
@@ -138,12 +137,8 @@ export default function SongResultList({
       {showBar && (
         <PlayerBar
           player={player}
-          title={playingItem ? playingItem.music.title : reference?.name}
-          subtitle={
-            playingItem
-              ? `${playingItem.artist.name} · ${playingItem.rank}위 · 음악 유사도 ${playingItem.musicSimilarity}`
-              : '내가 올린 참고 곡'
-          }
+          title={playingItem.music.title}
+          subtitle={`${playingItem.artist.name}, ${playingItem.rank}위, 음악 유사도 ${playingItem.musicSimilarity}`}
           track={barTrack}
         />
       )}

@@ -1,5 +1,5 @@
 import Icon from '../../../components/common/icon.jsx';
-import { formatDuration } from '../reference-song.js';
+import { formatDuration } from '../song-results.js';
 
 // 화면 아래 재생 막대 (NSU-111)
 // 재생 중인 곡의 '곡 듣기' 카드가 화면에 보이지 않을 때만 나타납니다. (보이는 동안에는 카드가 재생을 맡음)
