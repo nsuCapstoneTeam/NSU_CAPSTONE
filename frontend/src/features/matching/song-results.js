@@ -1,4 +1,4 @@
-// 추천 결과 (NSU-111) 체험용 데이터와 비교 계산. 행사 설명으로 찾기와 참고 곡으로 찾기가 함께 씁니다.
+// 추천 결과 (NSU-111) 체험용 데이터와 비교 계산. 행사 설명으로 찾기 결과에 씁니다.
 // 결과 모양은 추천 API 계약(docs/api/02)의 목록 응답을 따릅니다.
 // recommendationId · createdAt · isEventChanged · excludedCount · items[] (rank, musicSimilarity, isNewArtist, availability ...)
 // 실제 추천이 아니라 Figma 시안과 같은 예시 값입니다. 서버 연결 전까지 이 파일이 결과를 만듭니다.
@@ -7,11 +7,8 @@ import { ARTISTS } from './matching.js';
 
 export const FIRST_PAGE = 10; // 처음에 보여 줄 곡 수 (더보기는 서버를 다시 부르지 않음)
 
-// 참고 곡의 체험용 BPM과 한 마디 16칸 박자 (1 = 박 있음). 실제로는 AI가 분석한 값이 들어옴
-export const REFERENCE_SAMPLE = {
-  bpm: 102,
-  beats: [1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0],
-};
+// 체험용 가상 곡(11위부터)의 박자를 만들 때 바탕으로 쓰는 한 마디 16칸 박자 (1 = 박 있음)
+const BASE_BEATS = [1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0];
 
 // 통과한 필수 조건 (계약의 passedConditions 값 → 화면 이름)
 export const CONDITION_LABELS = {
@@ -23,7 +20,7 @@ export const CONDITION_LABELS = {
 };
 const ALL_CONDITIONS = Object.keys(CONDITION_LABELS);
 
-// 상위 10곡: Figma '추천 결과 · 참고 곡으로 찾기' 시안과 같은 값
+// 상위 10곡: Figma '추천 결과' 시안과 같은 값
 // [아티스트, 곡, 음악 유사도, 확인 배지, 신규, BPM, 박자, 길이(초), 이 서비스로 한 공연 수, 최근 공연]
 const TOP = [
   [
@@ -155,7 +152,7 @@ export function buildSongResults(createdAt = new Date()) {
   const more = MORE.map((name, i) => {
     const rank = 11 + i;
     const bpm = 84 + ((i * 7) % 48);
-    const beats = REFERENCE_SAMPLE.beats.map((on, k) => ((k + i) % 5 === 0 ? 1 - on : on));
+    const beats = BASE_BEATS.map((on, k) => ((k + i) % 5 === 0 ? 1 - on : on));
     return [name, `샘플 곡 ${rank}`, 65 - i, i % 3 !== 0, i % 6 === 0, bpm, beats, 60 + ((i * 3) % 21), i % 4, null];
   });
   return {
@@ -181,33 +178,6 @@ export function formatCreatedAt(iso) {
   const half = hour < 12 ? '오전' : '오후';
   const h12 = hour % 12 || 12;
   return `${d.getMonth() + 1}월 ${d.getDate()}일 ${half} ${h12}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-// 템포 비교 문구. 기준(3·10 BPM)은 체험용이며 팀 확정 필요
-// 반환: { title: '참고 곡보다 조금 느려요', diff: 4 }
-export function compareTempo(referenceBpm, bpm) {
-  const diff = bpm - referenceBpm;
-  const gap = Math.abs(diff);
-  if (gap <= 3) return { title: '참고 곡과 빠르기가 거의 같아요', diff: gap };
-  const way = diff < 0 ? '느려요' : '빨라요';
-  const amount = gap <= 10 ? '조금' : '많이';
-  return { title: `참고 곡보다 ${amount} ${way}`, diff: gap };
-}
-
-// 박자 비교: 참고 곡에 박이 있는 칸 중 이 곡도 박이 있는 칸
-// 반환: { total: 참고 곡 박 수, same: 겹치는 박 수, cells: 칸별 'both' | 'reference' | 'song' | '' }
-export function compareBeats(reference, song) {
-  const cells = reference.map((on, i) => {
-    if (on && song[i]) return 'both';
-    if (on) return 'reference';
-    if (song[i]) return 'song';
-    return '';
-  });
-  return {
-    total: reference.filter(Boolean).length,
-    same: cells.filter((c) => c === 'both').length,
-    cells,
-  };
 }
 
 // 행사 설명으로 찾기: 행사 조건의 템포 선택 → BPM 구간 (화면 기존 안내: SLOW 89 이하, MEDIUM 90-119, FAST 120 이상)
@@ -239,11 +209,12 @@ export const songTrack = (item) => ({
   bpm: item.music.bpm,
   beats: item.music.beats,
 });
-export const referenceTrack = (reference) => ({
-  key: 'reference',
-  duration: reference.duration,
-  url: reference.url,
-});
+
+// 초 → '1:12' (재생 시간 표시)
+export function formatDuration(seconds) {
+  const total = Math.max(0, Math.floor(seconds || 0));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
 
 // 리듬 그래프(심전도 모양)의 선 하나를 SVG path로 만듦
 // beats: 한 마디 16칸, cellWidth: 칸 너비, bars: 보여 줄 마디 수, baseline: 선의 기준 높이, amp: 박이 솟는 높이

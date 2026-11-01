@@ -1,13 +1,10 @@
-/* 참고 곡으로 찾기 (NSU-111): Figma '추천 결과 · 참고 곡으로 찾기' · '참고 곡 올리기' 시안
+/* 매칭 추천 결과 (NSU-111): Figma '추천 결과' 시안
    눈에 띄는 것은 남색 '곡 듣기' CD 카드 하나만 두고, 나머지는 밝은 카드와 선으로 조용히 둡니다. */
 .match-stage {
   --warn-bg: #fff7e8;
   --warn-line: #f3d9a4;
   --warn-ink: #7a4b00;
   --warn-soft: #9a7a3a;
-  --error-bg: #fff6f5;
-  --error-line: #f0b4ab;
-  --error-ink: #8f1d14;
   --navy: #0b1424;
 }
 :root[data-theme='dark'] .match-stage {
@@ -15,9 +12,6 @@
   --warn-line: #5c4720;
   --warn-ink: #ffd88a;
   --warn-soft: #d8b878;
-  --error-bg: #3a1d1a;
-  --error-line: #7a3a33;
-  --error-ink: #ffb4a8;
 }
 .match-stage [hidden] {
   display: none !important;
@@ -29,303 +23,6 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-
-/* ---------- 찾는 방법 전환 ---------- */
-.search-mode {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 20px;
-}
-.search-mode > span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-.search-mode > div {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 10px;
-  background: var(--soft);
-  border: 1px solid var(--line);
-}
-.search-mode button {
-  padding: 8px 6px;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-}
-.search-mode button[aria-pressed='true'] {
-  background: var(--surface);
-  color: var(--blue);
-  font-weight: 700;
-  box-shadow: 0 1px 4px #163e7a1f;
-}
-
-/* ---------- 참고 곡 올리기 ---------- */
-.song-form-title {
-  margin: 0 0 12px;
-  font-size: 16px !important;
-}
-.ref-upload {
-  display: grid;
-  gap: 12px;
-}
-.ref-drop {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  padding: 26px 16px;
-  border: 1.5px dashed #9fbbe6;
-  border-radius: 12px;
-  background: var(--soft);
-  text-align: center;
-  transition: background 0.15s ease;
-}
-.ref-drop.is-dragging {
-  background: var(--tint);
-  border-color: var(--blue);
-}
-.ref-drop p {
-  margin: 0;
-  color: var(--ink);
-  font-size: 13px;
-}
-.ref-drop .primary {
-  padding: 10px 18px;
-  font-size: 13px;
-}
-.ref-drop-icon {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--tint);
-  color: var(--blue);
-}
-.ref-file {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid #9fbbe6;
-  border-radius: 12px;
-  background: var(--surface);
-}
-.ref-file p {
-  display: grid;
-  flex: 1 1 170px;
-  gap: 2px;
-  min-width: 0;
-  margin: 0;
-}
-.ref-file strong {
-  overflow: hidden;
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ref-file span {
-  color: var(--muted);
-  font-size: 12px;
-}
-.ref-file.is-ready span {
-  color: var(--green);
-}
-.ref-file .text-button {
-  flex: none;
-  margin-left: 50px;
-  padding: 0;
-  font-size: 12px;
-}
-.ref-file-icon {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: var(--tint);
-  color: var(--blue);
-}
-.ref-file.is-error {
-  border-color: var(--error-line);
-  background: var(--error-bg);
-}
-.ref-file.is-error strong {
-  color: var(--error-ink);
-  white-space: normal;
-}
-.ref-file.is-error span {
-  color: var(--error-ink);
-  opacity: 0.85;
-}
-.ref-file.is-error .ref-file-icon {
-  border-radius: 50%;
-  background: transparent;
-  color: var(--error-ink);
-}
-/* 경고문 (임시 규칙) */
-.ref-notice {
-  padding: 14px 16px;
-  border: 1px solid var(--warn-line);
-  border-radius: 12px;
-  background: var(--warn-bg);
-  color: var(--warn-ink);
-}
-.ref-notice strong {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-.ref-notice ul {
-  display: grid;
-  gap: 6px;
-  margin: 10px 0 0;
-  padding-left: 18px;
-  font-size: 12px;
-  line-height: 1.6;
-}
-.ref-notice li::marker {
-  color: var(--warn-soft);
-}
-.song-form .primary:disabled {
-  background: #c9d6ea;
-  border-color: #c9d6ea;
-  cursor: not-allowed;
-  filter: none;
-}
-:root[data-theme='dark'] .song-form .primary:disabled {
-  background: #2a3a52;
-  border-color: #2a3a52;
-  color: #8b9bb2;
-}
-.song-form > .primary {
-  margin-top: 6px;
-}
-.song-form > .field-note:last-child {
-  margin: 10px 0 0;
-}
-
-/* ---------- 결과 왼쪽 카드 ---------- */
-.song-summary .secondary {
-  padding: 11px 16px;
-  font-size: 13px;
-}
-.song-ref {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 10px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--soft);
-}
-.song-ref-head {
-  display: flex;
-  justify-content: space-between;
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-}
-.song-ref strong {
-  overflow: hidden;
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.song-ref-play {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 8px;
-}
-.song-ref-play button {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid #c5d6f0;
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--blue);
-}
-.song-ref-wave {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow: hidden;
-}
-.song-ref-wave i {
-  width: 3px;
-  border-radius: 2px;
-  background: #b4c8e6;
-}
-.song-event-label {
-  margin: 0 0 4px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.song-event-name {
-  margin: 0 0 14px;
-  font-size: 17px !important;
-}
-.song-event {
-  display: grid;
-  gap: 12px;
-  margin: 0 0 18px;
-}
-.song-event div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 13px;
-}
-.song-event dt {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-}
-.song-event dd {
-  margin: 0;
-  text-align: right;
-}
-.song-event dd.is-changed {
-  color: var(--warn-ink);
-  font-weight: 700;
-}
-.song-changed {
-  padding: 1px 6px;
-  border-radius: 6px;
-  background: var(--warn-bg);
-  border: 1px solid var(--warn-line);
-  color: var(--warn-ink);
-  font-size: 10px;
-  font-weight: 700;
-}
-.song-summary > .field-note:last-child {
-  margin: 12px 0 0;
-}
-.song-edit > label,
-.song-edit > .form-pair {
-  margin-bottom: 14px;
-}
-.song-edit-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.song-edit-actions .primary {
-  padding: 11px 16px;
 }
 
 /* ---------- 결과 목록 ---------- */
@@ -811,7 +508,7 @@
   min-width: 0;
 }
 
-/* 템포 막대: 점(이 곡) · 점선 원(참고 곡) · 점선 띠(원하는 템포) */
+/* 템포 막대: 점(이 곡)과 점선 띠(원하는 템포) */
 .tempo-track {
   position: relative;
   height: 6px;
@@ -819,34 +516,7 @@
   border-radius: 3px;
   background: var(--line);
 }
-.tempo-label {
-  position: absolute;
-  bottom: 14px;
-  left: var(--pos);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-  transform: translateX(-50%);
-}
-.tempo-label.is-song {
-  color: var(--blue);
-}
-/* 두 라벨이 가까우면 겹치지 않게 이 곡은 왼쪽, 참고 곡은 오른쪽으로 밀어 둠 */
-.tempo-label.is-song {
-  transform: translateX(-100%);
-}
-.tempo-label.is-reference {
-  transform: translateX(0);
-}
-.tempo-gap {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: var(--from);
-  width: calc(var(--to) - var(--from));
-  background: #9fc4f7;
-}
+
 .tempo-dot {
   position: absolute;
   top: 50%;
@@ -856,18 +526,12 @@
   border-radius: 50%;
   transform: translate(-50%, -50%);
 }
-.tempo-dot.is-song {
-  background: var(--blue);
-  box-shadow: 0 0 0 3px var(--surface);
-}
+
 .tempo-dot.is-plain {
   background: var(--muted);
   box-shadow: 0 0 0 3px var(--surface);
 }
-.tempo-dot.is-reference {
-  border: 1.5px dashed var(--muted);
-  background: var(--surface);
-}
+
 .tempo-band {
   position: absolute;
   top: -6px;
@@ -999,26 +663,7 @@
   justify-content: space-between;
   gap: 8px;
 }
-.listen-switch {
-  display: flex;
-  padding: 3px;
-  border-radius: 14px;
-  background: #ffffff1a;
-}
-.listen-switch button {
-  padding: 4px 12px;
-  border-radius: 11px;
-  background: transparent;
-  color: #c3d1e6;
-  font-size: 12px;
-  font-weight: 500;
-}
-.listen-switch button[aria-pressed='true'] {
-  background: #fff;
-  color: var(--navy);
-  font-weight: 700;
-}
-.listen-switch button:focus-visible,
+
 .listen-play:focus-visible {
   outline: 2px solid #80baff;
   outline-offset: 2px;
@@ -1234,7 +879,5 @@
   .song-playing i {
     animation: none;
   }
-  .ref-drop {
-    transition: none;
-  }
+  
 }

@@ -1,19 +1,16 @@
-// 참고 곡으로 찾기 결과 테스트 (실행: node --test src/features/matching/song-results.test.js)
+// 추천 결과 테스트 (실행: node --test src/features/matching/song-results.test.js)
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FIRST_PAGE,
-  REFERENCE_SAMPLE,
   beatTracePath,
   bpmPosition,
   buildSongResults,
-  compareBeats,
-  compareTempo,
   compareWantedTempo,
   conditionDetail,
   findResultArtist,
   formatCreatedAt,
-  referenceTrack,
+  formatDuration,
   songTrack,
 } from './song-results.js';
 import { ARTISTS } from './matching.js';
@@ -51,43 +48,23 @@ describe('체험용 결과 (계약 모양)', () => {
   });
 });
 
-describe('템포 비교', () => {
-  it('차이에 따라 거의 같음 / 조금 / 많이', () => {
-    assert.deepEqual(compareTempo(102, 98), { title: '참고 곡보다 조금 느려요', diff: 4 });
-    assert.equal(compareTempo(102, 104).title, '참고 곡과 빠르기가 거의 같아요');
-    assert.equal(compareTempo(102, 124).title, '참고 곡보다 많이 빨라요');
-  });
+describe('BPM 위치와 재생 시간', () => {
   it('BPM 위치는 60~160 사이로 자른다', () => {
     assert.equal(bpmPosition(40), 0);
     assert.equal(bpmPosition(102), 42);
     assert.equal(bpmPosition(200), 100);
   });
-});
-
-describe('박자 비교', () => {
-  it('참고 곡의 박 중 이 곡과 겹치는 수를 센다', () => {
-    const { total, same, cells } = compareBeats(REFERENCE_SAMPLE.beats, buildSongResults().items[0].music.beats);
-    assert.equal(total, 6);
-    assert.equal(same, 6);
-    assert.equal(cells.length, 16);
-    assert.equal(cells[15], 'song');
-  });
-  it('겹치지 않는 박은 어느 곡의 박인지 표시한다', () => {
-    const r = compareBeats([1, 1, 0, 0], [1, 0, 1, 0]);
-    assert.deepEqual(r.cells, ['both', 'reference', 'song', '']);
-    assert.equal(r.same, 1);
+  it('재생 시간은 분:초로 보여 준다', () => {
+    assert.equal(formatDuration(72), '1:12');
+    assert.equal(formatDuration(5.9), '0:05');
+    assert.equal(formatDuration(-3), '0:00');
   });
 });
 
 describe('재생기에 넘길 곡 정보', () => {
-  it('추천 곡은 BPM·박자, 참고 곡은 파일 주소를 넘긴다', () => {
+  it('추천 곡은 BPM·박자를 넘긴다', () => {
     const item = buildSongResults().items[0];
     assert.deepEqual(songTrack(item), { key: item.music.id, duration: 72, bpm: 98, beats: item.music.beats });
-    assert.deepEqual(referenceTrack({ duration: 72, url: 'blob:x' }), {
-      key: 'reference',
-      duration: 72,
-      url: 'blob:x',
-    });
   });
 });
 

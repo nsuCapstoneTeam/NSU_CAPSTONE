@@ -6,13 +6,13 @@ import { songTrack } from '../song-results.js';
 
 // 추천 결과 한 줄 (NSU-111): 순위 · 재생 · 아티스트와 곡 · 음악 유사도 · 펼치기 · 관심 저장
 // 펼치면 추천 이유 슬라이드와 '곡 듣기' CD 카드가 나옵니다. 펼친 곡이 재생 중이면 줄 앞은 버튼 대신 재생 중 표시만 둠.
-// basis: 추천 이유 비교 기준 (reason-slider.jsx), reference: 올린 참고 곡 (행사 설명으로 찾기에서는 없음)
-export default function SongRow({ item, expanded, onToggle, player, basis, reference, saved, onSave, cardRef }) {
+// basis: 추천 이유 비교 기준 (reason-slider.jsx)
+export default function SongRow({ item, expanded, onToggle, player, basis, saved, onSave, cardRef }) {
   const track = songTrack(item);
   const panelId = `song-panel-${item.music.id}`;
   const thisPlaying = player.playing && player.key === track.key;
-  // 펼친 곡에서 참고 곡이나 이 곡이 재생 중이면 CD 카드가 재생을 맡음
-  const cardPlaying = expanded && player.playing && (player.key === track.key || player.key === 'reference');
+  // 펼친 곡이 재생 중이면 CD 카드가 재생을 맡음
+  const cardPlaying = expanded && player.playing && player.key === track.key;
   const name = item.artist.name;
 
   return (
@@ -108,7 +108,6 @@ export default function SongRow({ item, expanded, onToggle, player, basis, refer
             <ListenCard
               key={item.music.id}
               item={item}
-              reference={reference}
               player={player}
               cardRef={cardRef}
             />
