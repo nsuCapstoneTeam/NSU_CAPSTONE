@@ -1,6 +1,6 @@
 # ADR: Eligibility 판정 규칙과 구조
 
-- 상태: **Proposed** (PR 리뷰에서 확정)
+- 상태: **Accepted** (PR #150 머지, SSOT v1.17 승인 2026-11-05 팀 Human Confirm)
 - 결정일: **2026-10-20** (NSU-48 설계 세션)
 - 관련: [02 추천 응답 §1·§2.3·§4.2](../../api/02_recommendation_trust_and_new_artist.md), [04 곡 API §1.1](../../api/04_music.md), [music_upload/01 곡 권리 검증](../music_upload/01_music_rights_verification.md), SSOT `AI-MATCH-051`·`ART-027`~`029`·`AI-031`, 서버 협의 009·014, NSU-48. NSU-13은 이 이슈의 중복으로 닫았다
 
@@ -123,7 +123,7 @@ Eligibility가 곡 목록과 AI 추천 상태까지 읽으면 맡는 일이 커�
   - 공연 가능 일정: 시작·끝(`Asia/Seoul` 벽시계)과 상태(`AVAILABLE`·`HOLD`·`BOOKED`·`UNAVAILABLE`, SSOT `ART-029`)
 - 02 §2.3의 `ARTIST_VERIFIED`가 `ACCOUNT_ACTIVE`로 바뀐다. 프론트가 아직 쓰지 않아 하위 호환 문제는 없다.
 - 행사에 "자작곡만" 같은 새 조건을 넣지 않는다. 03 행사 계약은 바뀌지 않는다.
-- SSOT `AI-MATCH-051`에 판정식과 곡 단위 저작권을 적는 v1.17 개정이 필요하다(승인 필요).
+- SSOT v1.17(2026-11-05 팀 Human Confirm으로 승인)이 `AI-MATCH-051`의 판정식과 곡 단위 저작권을 반영했다.
 - 구현 점검(2026-11-05, NSU-48)에서 나온 전제를 다음 이슈가 지켜야 한다. 이 전제가 깨지면 데이터가 없는 아티스트가 통과(fail-open)할 수 있다.
   - NSU-12·34(프로필·일정 창구): 데이터가 없으면 기본값을 만들지 않고 그 아티스트의 키를 비운다. 예를 들어 출연료가 없다고 `0`을 돌려주면 예산 조건을 통과하고, 일정이 없다고 `AVAILABLE`로 채우면 일정 조건을 통과한다.
   - NSU-12·34: 일정 창구는 `[from, to)`와 겹치거나 맞닿는 일정만 아티스트 수와 관계없이 한 번에 읽는다. 아티스트마다 읽으면 조회 횟수가 일정하다는 조건이 깨진다.
@@ -131,11 +131,13 @@ Eligibility가 곡 목록과 AI 추천 상태까지 읽으면 맡는 일이 커�
   - NSU-12·34: 실제 창구를 붙일 때 `EmptyArtistProfileReader`·`EmptyArtistScheduleReader`를 지운다. 둘 다 `@Component`라서 남겨 두면 같은 인터페이스의 빈이 둘이 되어 서버가 뜨지 않는다.
   - NSU-63(후보 모으기): `MusicCandidate`의 `rightsBasis`와 `isSuspended`는 반드시 서버가 곡 테이블에서 읽은 값을 쓴다. 요청 본문 등 클라이언트 입력을 넘기지 않는다.
   - NSU-63: `COPYRIGHT_SATISFIED`는 04 §1.1 후보 조건 중 권리 근거와 중단 여부만 본다. 음원 처리 상태(`audioStatus = ACTIVE`)와 `AI_RECOMMENDATION_ENABLED`는 후보를 모을 때 거른다(02 §1). 다시 보기(NSU-86)는 `filterAccountAndCopyright` 말고 이 둘과 곡 삭제를 따로 확인한다(02 §4.2).
+  - NSU-105: Eligibility는 `VERIFIED_ARTIST`를 다시 보지 않으므로, 실명 책임은 업로드 시점에만 성립한다. NSU-105는 본인확인이 무효가 될 수 있게 설계하면 그 아티스트의 곡을 중단(`isSuspended`)하거나, 무효가 될 수 없게 한다. 시연용 Mock 본인확인 계정의 곡이 운영 데이터에 남지 않게 하는 것도 NSU-105 몫이다.
   - NSU-89(곡): 권리 근거 enum은 `music.domain.RightsBasis`에 이미 있다. 새로 만들지 않고 이 enum을 쓴다. 값을 늘리면 `EligibilityFilter`의 `switch`가 컴파일되지 않아 통과 여부를 정하게 된다.
   - NSU-63: `EligibilityFilter`를 AI 호출과 같은 DB 트랜잭션 안에서 부르지 않는다. 트랜잭션 안의 외부 호출은 연결을 쥔 채 기다리게 한다.
-  - NSU-63: 후보 아티스트 수의 상한을 정하고, 그 크기로 계정 일괄 조회(`findAllById`의 `IN` 목록)를 통합 테스트한다. 구현 점검에서 이 크기를 확인하지 못했다.
+  - NSU-63: 후보 수의 상한은 API 02 §1대로 AI가 측정해 NSUAI-15에 공개하는 입력 상한을 따른다. Spring이 임의로 자르지 않는다. 그 크기로 계정 일괄 조회(`findAllById`의 `IN` 목록)를 통합 테스트한다. 구현 점검에서 이 크기를 확인하지 못했다. 상한이 pgjdbc 바인드 파라미터 상한(약 3만 2천 개)을 넘으면 계정·프로필·일정 창구는 `IN` 목록 대신 `= ANY(:ids)` 배열 바인딩이나 청크 조회를 쓴다.
   - NSU-63: 같은 `musicId`가 후보에 두 번 들어오면 결과에도 두 번 나온다. 필터는 중복을 거르지 않으므로 후보를 모을 때 `(music_id, audioRevision)`이 겹치지 않게 한다.
   - NSU-12·34: 실제 창구를 붙일 때 1명·100명 조회 횟수 통합 테스트(`EligibilityFilterIntegrationTest`)가 프로필·일정 창구의 조회까지 세도록 늘린다. 지금은 빈 구현이라 계정 조회만 센다.
+  - NSU-12·34: 조회 횟수 통합 테스트는 Hibernate `Statistics`로 센다. 그래서 창구는 JPA(Spring Data·`EntityManager`)로 조회한다. `JdbcTemplate`·`JdbcClient`로 만들면 DataSource 수준(datasource-proxy 등)에서 세도록 테스트를 바꾼다.
   - NSU-12·34: 일정은 `start < end`로 저장한다(DB CHECK 등). 필터는 null 값과 뒤집힌 막힌 일정을 그 아티스트의 실패로 보지만, 저장 단계에서 막는 것이 먼저다.
   - 입력 전제: `EligibilityInput`은 행사 검증을 거친 값이다. `start < end`(03 §3.1·§3.6, `EventRequest`가 `0 < 종료 − 시작 ≤ 24시간`을 검증)이고 `regionCode`는 5자리다. 판정 코드는 이를 다시 검사하지 않는다.
 
@@ -154,7 +156,7 @@ Eligibility가 곡 목록과 AI 추천 상태까지 읽으면 맡는 일이 커�
 |---|---|
 | 아티스트 프로필·일정 테이블까지 이 이슈에서 만들기 | 마이페이지(NSU-12) 설계를 함께 해야 해 범위가 2~3배다. 저작권 데이터는 여전히 다른 이슈에 있다 |
 | NSU-12·33을 먼저 설계하고 NSU-48은 나중에 | Spring↔AI 연동(NSU-63)이 그만큼 늦어진다 |
-| 계정 조건을 `VERIFIED_ARTIST`(실명 본인확인을 마친 아티스트)로 판정 | 본인확인을 하지 않은 아티스트가 추천에서 빠진다. `AI-031`에서도 `VERIFIED_ARTIST`를 뺐다([music_upload/01](../music_upload/01_music_rights_verification.md)) |
+| 계정 조건을 `VERIFIED_ARTIST`(실명 본인확인을 마친 아티스트)로 판정 | 같은 조건을 두 번 판정하게 된다. v1.17에서 곡 업로드가 `VERIFIED_ARTIST` 전용이 되어, 곡이 있는 아티스트는 업로드 때 이미 본인확인을 마쳤다. 추천 참여와 프로필 관리는 `ACTIVE` ARTIST가 기준이다(v1.17 `AI-031`·`ART-027`). 업로드 조건의 출처는 PR #186의 ADR `music_upload/02`다 |
 | `ARTIST_VERIFIED` 이름 유지 | 화면 문구가 "인증된 아티스트"가 되기 쉽고, 용어집과 어긋난다 |
 | 저작권 조건을 아티스트 단위로 두고, 권리가 취소된 곡은 곡 쪽에서 끄기 | 곡 쪽 규칙이 구현되기 전까지 취소된 곡이 남는다. NSU-89 설계에서 곡 단위로 정했다 |
 | 일정: 막힌 시간만 확인 | 일정을 관리하지 않는 아티스트가 안 되는 날에 추천된다 |
