@@ -90,9 +90,9 @@ public record EventPartnerProfileRequest(
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
         String trimmed = value.strip();
-        // NBSP·폭 없는 공백·한글 채움 문자처럼 strip()이 남기지만 보이지 않는 글자만 있으면 빈 값이다.
-        // 길이보다 먼저 본다(보이지 않는 글자가 길이를 넘어도 빈 값이다)
-        if (trimmed.codePoints().allMatch(EventPartnerProfileRequest::invisible)) {
+        // 보이는 글자(글자·숫자·문장부호·기호)가 하나도 없으면 빈 값이다. 공백·서식 문자·결합 표식만 있는 값이
+        // 그렇다. 길이보다 먼저 본다(보이지 않는 글자가 길이를 넘어도 빈 값이다)
+        if (trimmed.codePoints().noneMatch(EventPartnerProfileRequest::visible)) {
             return null;
         }
         if (trimmed.codePointCount(0, trimmed.length()) > max) {
@@ -101,12 +101,21 @@ public record EventPartnerProfileRequest(
         return trimmed;
     }
 
-    private static boolean invisible(int codePoint) {
-        int type = Character.getType(codePoint);
-        return Character.isWhitespace(codePoint)
-            || type == Character.SPACE_SEPARATOR
-            || type == Character.FORMAT
-            || type == Character.CONTROL
-            || BLANK_LETTERS.contains(codePoint);
+    /** 유니코드 일반 범주가 글자(L)·숫자(N)·문장부호(P)·기호(S)이면서 아무것도 그리지 않는 글자가 아니다 */
+    private static boolean visible(int codePoint) {
+        if (BLANK_LETTERS.contains(codePoint)) {
+            return false;
+        }
+        return switch (Character.getType(codePoint)) {
+            case Character.UPPERCASE_LETTER, Character.LOWERCASE_LETTER, Character.TITLECASE_LETTER,
+                 Character.MODIFIER_LETTER, Character.OTHER_LETTER,
+                 Character.DECIMAL_DIGIT_NUMBER, Character.LETTER_NUMBER, Character.OTHER_NUMBER,
+                 Character.CONNECTOR_PUNCTUATION, Character.DASH_PUNCTUATION, Character.START_PUNCTUATION,
+                 Character.END_PUNCTUATION, Character.INITIAL_QUOTE_PUNCTUATION,
+                 Character.FINAL_QUOTE_PUNCTUATION, Character.OTHER_PUNCTUATION,
+                 Character.MATH_SYMBOL, Character.CURRENCY_SYMBOL, Character.MODIFIER_SYMBOL,
+                 Character.OTHER_SYMBOL -> true;
+            default -> false;
+        };
     }
 }

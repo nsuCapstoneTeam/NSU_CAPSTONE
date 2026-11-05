@@ -322,6 +322,25 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
     }
 
     @Test
+    void 글자_숫자_문장부호_기호가_하나도_없으면_빈_값이다() throws Exception {
+        // 변형 선택자, 결합 자소 결합자, 몽골 자유 변형 선택자처럼 혼자서는 아무것도 그리지 않는 결합 표식
+        for (String invisible : List.of("️", "͏", "᠋", "󠄀")) {
+            Map<String, Object> body = validProfile();
+            body.put("name", invisible);
+            putProfile(partner, body).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        }
+
+        // 보이는 글자가 하나라도 있으면 저장한다: 이모지(기호), 숫자, 문장부호
+        for (String visible : List.of("😀", "7", "-")) {
+            Map<String, Object> body = validProfile();
+            body.put("name", visible);
+            putProfile(partner, body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value(visible));
+        }
+    }
+
+    @Test
     void 글자_수는_코드포인트로_센다() throws Exception {
         Map<String, Object> body = validProfile();
         body.put("name", "😀".repeat(40));
