@@ -34,6 +34,8 @@ public record EventPartnerProfileRequest(
     private static final int MAX_LIST = 3;
     /** 글자로 분류되지만 화면에 아무것도 그리지 않는 한글 채움 문자와 점자 빈칸 */
     private static final Set<Integer> BLANK_LETTERS = Set.of(0x115F, 0x1160, 0x3164, 0xFFA0, 0x2800);
+    /** 앞뒤에서 지우는 서식 문자: 폭 없는 공백, 단어 결합자, BOM */
+    private static final Set<Integer> EDGE_INVISIBLES = Set.of(0x200B, 0x2060, 0xFEFF);
 
     /** 글자 수는 앞뒤 공백을 지운 뒤 센다. 선택 문자열은 비면 null이다(05 §2). */
     public ProfileContent toContent() {
@@ -106,8 +108,9 @@ public record EventPartnerProfileRequest(
     }
 
     /**
-     * 앞뒤의 공백·공백 구분자(NBSP 등)·서식 문자(폭 없는 공백, BOM 등)를 지운다. strip()은 NBSP와 서식 문자를 남긴다.
-     * 결합 표식(e + U+0301)은 앞 글자의 일부라 지우지 않는다.
+     * 앞뒤의 공백·공백 구분자(NBSP 등)와 폭 없는 공백·단어 결합자·BOM을 지운다. strip()은 NBSP와 이 세 글자를 남긴다.
+     * 다른 서식 문자는 지우지 않는다. 이모지 태그 문자(깃발)와 ZWJ(가족 이모지)가 서식 문자라서, 지우면 이모지가 깨진다.
+     * 결합 표식(e + U+0301)도 앞 글자의 일부라 지우지 않는다.
      */
     private static String trimSpacing(String value) {
         int start = 0;
@@ -122,8 +125,9 @@ public record EventPartnerProfileRequest(
     }
 
     private static boolean spacing(int codePoint) {
-        int type = Character.getType(codePoint);
-        return Character.isWhitespace(codePoint) || type == Character.SPACE_SEPARATOR || type == Character.FORMAT;
+        return Character.isWhitespace(codePoint)
+            || Character.getType(codePoint) == Character.SPACE_SEPARATOR
+            || EDGE_INVISIBLES.contains(codePoint);
     }
 
     /** 유니코드 일반 범주가 글자(L)·숫자(N)·문장부호(P)·기호(S)이면서 아무것도 그리지 않는 글자가 아니다 */

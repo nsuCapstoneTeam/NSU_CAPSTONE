@@ -356,6 +356,19 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
     }
 
     @Test
+    void 끝에_있는_이모지_시퀀스는_지우지_않는다() throws Exception {
+        // 스코틀랜드 깃발(검은 깃발 + 태그 문자 + 취소 태그)과 ZWJ 가족 이모지. 태그 문자와 ZWJ는 서식 문자(Cf)다
+        String scotland = "🏴󠁧󠁢󠁳󠁣󠁴󠁿";
+        String family = "👨‍👩‍👧";
+        for (String name : List.of("김담당 " + scotland, "김담당 " + family)) {
+            Map<String, Object> body = validProfile();
+            body.put("name", name);
+            putProfile(partner, body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value(name));
+        }
+    }
+
+    @Test
     void 짝_없는_서로게이트가_든_문자열은_VALIDATION_ERROR다() throws Exception {
         // 그대로 두면 UTF-8로 바꿀 때 '?'로 조용히 바뀌어 저장된다
         for (String field : List.of("name", "organization", "bio")) {
