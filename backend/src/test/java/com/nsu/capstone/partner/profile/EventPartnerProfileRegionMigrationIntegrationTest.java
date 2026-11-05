@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.zaxxer.hikari.HikariDataSource;
+import java.util.Arrays;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationInfo;
+import org.flywaydb.core.api.MigrationVersion;
 import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,7 +19,8 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 /**
  * 05 §5: 지역 배열에는 FK가 없으므로, 행정구역 개편 마이그레이션이 배열 이전이나 다시 정규화하기를 빠뜨리면 CI에서 잡는다.
- * 같은 컨테이너에 별도 데이터베이스를 V7까지 만들고 여러 지역 조합을 담은 프로필을 넣은 뒤, 최신까지 마이그레이션하고 점검 함수를 부른다.
+ * 같은 컨테이너에 별도 데이터베이스를 마지막 마이그레이션 바로 앞까지 만들고, 그 시점의 지역 목록으로 여러 지역 조합을 담은 프로필을 넣은 뒤,
+ * 마지막 마이그레이션을 적용하고 점검 함수를 부른다.
  * 별도 데이터베이스를 쓰는 이유는 운영과 같은 기본 search_path로 돌게 해서 확장(pgvector 등)을 쓰는 마이그레이션도 그대로 적용하기 위해서다.
  * 운영 기동 경로(Flyway 콜백)에서 점검하지 않는 이유는 ADR event_partner_profile/00 "지역 점검을 강제하는 방법"에 있다.
  */
@@ -64,6 +68,15 @@ class EventPartnerProfileRegionMigrationIntegrationTest extends EventPartnerProf
     }
 
     @Test
+    void V7_뒤의_개편이_만든_코드도_다음_개편의_이전_누락을_잡는다() {
+        JdbcTemplate migrated = migrateWithProfiles(
+            "classpath:db/migration", "classpath:db/region-migration-fixture/new-code-then-lost");
+
+        assertThatThrownBy(() -> migrated.execute("SELECT check_event_partner_profile_regions()"))
+            .hasMessageContaining("41999");
+    }
+
+    @Test
     void 시드는_원소가_여러_개인_배열을_담는다() {
         JdbcTemplate migrated = migrateWithProfiles("classpath:db/migration");
 
@@ -73,12 +86,12 @@ class EventPartnerProfileRegionMigrationIntegrationTest extends EventPartnerProf
     }
 
     /**
-     * V7까지 만든 뒤 정규형 지역 조합마다 프로필을 하나씩 넣고, 주어진 경로의 남은 마이그레이션을 적용한다.
+     * 시드 버전({@link #seedVersion})까지 만든 뒤 정규형 지역 조합마다 프로필을 하나씩 넣고, 주어진 경로의 남은 마이그레이션을 적용한다.
      * 조합: 코드 하나, 시·도 쌍, 같은 시·도의 시·군·구 쌍(이웃한 코드), 시·도와 다른 시·도의 시·군·구.
      */
     private JdbcTemplate migrateWithProfiles(String... locations) {
         DataSource databaseDataSource = databaseDataSource();
-        flyway(databaseDataSource, locations).target(PROFILE_TABLE_VERSION).load().migrate();
+        flyway(databaseDataSource, locations).target(seedVersion(databaseDataSource, locations)).load().migrate();
 
         JdbcTemplate jdbc = new JdbcTemplate(databaseDataSource);
         jdbc.execute("""
@@ -118,6 +131,20 @@ class EventPartnerProfileRegionMigrationIntegrationTest extends EventPartnerProf
 
         flyway(databaseDataSource, locations).load().migrate();
         return jdbc;
+    }
+
+    /**
+     * 시드를 만들 버전: 마지막 마이그레이션 바로 앞(그 시점의 지역 목록으로 시드를 만들고 마지막 하나만 검사한다).
+     * 개편 PR은 마이그레이션을 하나씩 더하므로, 앞선 개편이 만든 코드도 시드에 들어간다. 프로필 테이블(V7)보다 앞으로는 가지 않는다.
+     */
+    private static String seedVersion(DataSource databaseDataSource, String... locations) {
+        MigrationVersion[] versions = Arrays.stream(flyway(databaseDataSource, locations).load().info().all())
+            .map(MigrationInfo::getVersion)
+            .sorted()
+            .toArray(MigrationVersion[]::new);
+        MigrationVersion profileTable = MigrationVersion.fromVersion(PROFILE_TABLE_VERSION);
+        MigrationVersion beforeLast = versions.length >= 2 ? versions[versions.length - 2] : profileTable;
+        return (beforeLast.compareTo(profileTable) > 0 ? beforeLast : profileTable).getVersion();
     }
 
     private static FluentConfiguration flyway(DataSource databaseDataSource, String... locations) {
