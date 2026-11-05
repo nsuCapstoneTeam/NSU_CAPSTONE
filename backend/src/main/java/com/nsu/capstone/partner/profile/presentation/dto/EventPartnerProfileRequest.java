@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 수정 본문(05 EVENT_PARTNER 프로필 API §2). enum과 코드는 문자열로 받아 직접 검사한다.
@@ -31,6 +32,8 @@ public record EventPartnerProfileRequest(
     private static final int ORGANIZATION_MAX = 60;
     private static final int BIO_MAX = 700;
     private static final int MAX_LIST = 3;
+    /** 글자로 분류되지만 화면에 아무것도 그리지 않는 한글 채움 문자와 점자 빈칸 */
+    private static final Set<Integer> BLANK_LETTERS = Set.of(0x115F, 0x1160, 0x3164, 0xFFA0, 0x2800);
 
     /** 글자 수는 앞뒤 공백을 지운 뒤 센다. 선택 문자열은 비면 null이다(05 §2). */
     public ProfileContent toContent() {
@@ -87,11 +90,15 @@ public record EventPartnerProfileRequest(
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
         String trimmed = value.strip();
+        // NBSP·폭 없는 공백·한글 채움 문자처럼 strip()이 남기지만 보이지 않는 글자만 있으면 빈 값이다.
+        // 길이보다 먼저 본다(보이지 않는 글자가 길이를 넘어도 빈 값이다)
+        if (trimmed.codePoints().allMatch(EventPartnerProfileRequest::invisible)) {
+            return null;
+        }
         if (trimmed.codePointCount(0, trimmed.length()) > max) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
-        // NBSP·폭 없는 공백처럼 strip()이 남기지만 보이지 않는 글자만 있으면 빈 값이다
-        return trimmed.codePoints().allMatch(EventPartnerProfileRequest::invisible) ? null : trimmed;
+        return trimmed;
     }
 
     private static boolean invisible(int codePoint) {
@@ -99,6 +106,7 @@ public record EventPartnerProfileRequest(
         return Character.isWhitespace(codePoint)
             || type == Character.SPACE_SEPARATOR
             || type == Character.FORMAT
-            || type == Character.CONTROL;
+            || type == Character.CONTROL
+            || BLANK_LETTERS.contains(codePoint);
     }
 }

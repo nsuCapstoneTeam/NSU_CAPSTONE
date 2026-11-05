@@ -305,6 +305,23 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
     }
 
     @Test
+    void 한글_채움_문자와_점자_빈칸도_보이지_않는_글자다() throws Exception {
+        // "투명 닉네임"에 쓰이는 한글 채움 문자(U+3164·U+115F·U+1160·U+FFA0)와 점자 빈칸(U+2800)
+        for (String invisible : List.of("ㅤ", "ᅟᅠ", "ﾠ", "⠀")) {
+            Map<String, Object> body = validProfile();
+            body.put("name", invisible);
+            putProfile(partner, body).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        }
+
+        // 길이보다 빈 값 판정이 먼저다: 보이지 않는 글자 61개인 소속은 400이 아니라 null이다
+        Map<String, Object> body = validProfile();
+        body.put("organization", "ㅤ".repeat(61));
+        putProfile(partner, body).andExpect(status().isOk())
+            .andExpect(jsonPath("$.organization").value((Object) null));
+    }
+
+    @Test
     void 글자_수는_코드포인트로_센다() throws Exception {
         Map<String, Object> body = validProfile();
         body.put("name", "😀".repeat(40));
