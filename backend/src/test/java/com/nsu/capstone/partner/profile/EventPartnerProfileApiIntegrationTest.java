@@ -1,10 +1,12 @@
 package com.nsu.capstone.partner.profile;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
@@ -234,6 +236,32 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         assertRegions(List.of("11680", "11680"), List.of("11680"));
         assertRegions(List.of("44", "11", "41110"), List.of("11", "41110", "44"));
         assertRegions(List.of(), List.of());
+    }
+
+    @Test
+    void 깨진_JSON과_타입이_안_맞는_값은_code_없는_ProblemDetail_400이다() throws Exception {
+        mockMvc.perform(put(PATH).header("Authorization", bearer(partner))
+                .contentType(APPLICATION_JSON).content("{broken"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").doesNotExist())
+            .andExpect(jsonPath("$.status").value(400));
+        mockMvc.perform(put(PATH).header("Authorization", bearer(partner))
+                .contentType(APPLICATION_JSON)
+                .content("{\"name\":\"김\",\"eventTypes\":{},\"regionCodes\":[]}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").doesNotExist());
+    }
+
+    @Test
+    void 본문의_updatedAt과_모르는_필드는_무시한다() throws Exception {
+        Map<String, Object> body = validProfile();
+        body.put("updatedAt", "2000-01-01T00:00:00+09:00");
+        body.put("userId", "00000000-0000-0000-0000-000000000000");
+        body.put("unknown", "x");
+
+        putProfile(partner, body).andExpect(status().isOk())
+            .andExpect(jsonPath("$.updatedAt").value(startsWith("2026-10-18T10:00:00+09:00")))
+            .andExpect(jsonPath("$.userId").doesNotExist());
     }
 
     private void assertRegions(List<String> requested, List<String> expected) throws Exception {
