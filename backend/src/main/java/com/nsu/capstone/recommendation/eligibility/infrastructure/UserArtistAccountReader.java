@@ -1,6 +1,6 @@
 package com.nsu.capstone.recommendation.eligibility.infrastructure;
 
-import com.nsu.capstone.identity.domain.User;
+import com.nsu.capstone.identity.repository.UserAccountRow;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.recommendation.eligibility.application.ArtistAccountReader;
 import com.nsu.capstone.recommendation.eligibility.domain.ArtistAccount;
@@ -24,9 +24,9 @@ public class UserArtistAccountReader implements ArtistAccountReader {
 
     @Override
     public Map<UUID, ArtistAccount> findByArtistIds(Collection<UUID> artistIds) {
-        return userRepository.findAllById(artistIds).stream().collect(Collectors.toUnmodifiableMap(
-            User::getId,
-            user -> new ArtistAccount(user.getRole(), user.getStatus())
+        return userRepository.findAllByIdIn(artistIds).stream().collect(Collectors.toUnmodifiableMap(
+            UserAccountRow::id,
+            row -> new ArtistAccount(row.role(), row.status())
         ));
     }
 }

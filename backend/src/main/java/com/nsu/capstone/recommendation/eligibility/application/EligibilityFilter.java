@@ -51,6 +51,7 @@ public class EligibilityFilter {
         COPYRIGHT,
         ACCOUNT,
         PROFILE_MISSING,
+        SCHEDULE_MISSING,
         SCHEDULE,
         REGION,
         BUDGET,
@@ -72,6 +73,11 @@ public class EligibilityFilter {
         this.profileReader = profileReader;
         this.scheduleReader = scheduleReader;
         this.meterRegistry = meterRegistry;
+        // 0과 지표 없음을 구분하려고 모든 카운터를 미리 0으로 등록한다.
+        meterRegistry.counter(PASSED_METER);
+        for (Rejection rejection : Rejection.values()) {
+            meterRegistry.counter(REJECTED_METER, "condition", rejection.name());
+        }
     }
 
     public List<EligibleMusic> filter(EligibilityInput event, List<MusicCandidate> candidates) {
@@ -177,6 +183,9 @@ public class EligibilityFilter {
         if (profile == null) {
             return Rejection.PROFILE_MISSING;
         }
+        if (hasNoUsableSchedule(slots)) {
+            return Rejection.SCHEDULE_MISSING;
+        }
         if (!isScheduleAvailable(event, slots)) {
             return Rejection.SCHEDULE;
         }
@@ -198,9 +207,6 @@ public class EligibilityFilter {
      * 막힌 일정(HOLD·BOOKED·UNAVAILABLE)이 행사와 겹치면 AVAILABLE이 덮고 있어도 실패한다.
      */
     private static boolean isScheduleAvailable(EligibilityInput event, List<ScheduleSlot> slots) {
-        if (slots == null || slots.stream().anyMatch(EligibilityFilter::isIncomplete)) {
-            return false;
-        }
         // 시작이 끝보다 늦거나 같은 막힌 일정은 ADR의 [시작, 끝)와 달리 겹친다고 본다. 잘못된 데이터는 fail-closed다.
         boolean blocked = slots.stream().anyMatch(slot ->
             slot.status() != ScheduleStatus.AVAILABLE
@@ -223,6 +229,14 @@ public class EligibilityFilter {
             }
         }
         return !coveredUntil.isBefore(event.end());
+    }
+
+    /**
+     * 창구가 일정을 주지 않았거나(null, 빈 목록) 값이 빠진 슬롯이 있으면 일정 데이터가 없는 것으로 본다.
+     * 실제 충돌과 구분해 지표에 남기려는 것이고, 어느 쪽이든 일정 조건은 실패다.
+     */
+    private static boolean hasNoUsableSchedule(List<ScheduleSlot> slots) {
+        return slots == null || slots.isEmpty() || slots.stream().anyMatch(EligibilityFilter::isIncomplete);
     }
 
     private static boolean isIncomplete(ScheduleSlot slot) {

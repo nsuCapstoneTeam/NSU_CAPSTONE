@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.ToLongFunction;
 import java.util.stream.IntStream;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -91,6 +92,20 @@ class EligibilityFilterIntegrationTest {
     }
 
     @Test
+    void readsAccountsWithoutLoadingUserEntities() {
+        List<MusicCandidate> candidates = IntStream.range(0, 3)
+            .mapToObj(i -> candidate(saveArtist(UserStatus.ACTIVE)))
+            .toList();
+
+        long loadedEntities = measure(
+            () -> assertThat(filter.filterAccountAndCopyright(candidates)).hasSize(3),
+            Statistics::getEntityLoadCount
+        );
+
+        assertThat(loadedEntities).isZero();
+    }
+
+    @Test
     void issuesSameNumberOfStatementsForOneAndHundredArtists() {
         List<MusicCandidate> candidates = IntStream.range(0, 100)
             .mapToObj(i -> candidate(saveArtist(UserStatus.ACTIVE)))
@@ -112,12 +127,16 @@ class EligibilityFilterIntegrationTest {
     }
 
     private long countStatements(Runnable query) {
+        return measure(query, Statistics::getPrepareStatementCount);
+    }
+
+    private long measure(Runnable query, ToLongFunction<Statistics> metric) {
         Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         statistics.clear();
         statistics.setStatisticsEnabled(true);
         try {
             query.run();
-            return statistics.getPrepareStatementCount();
+            return metric.applyAsLong(statistics);
         } finally {
             statistics.setStatisticsEnabled(false);
         }

@@ -592,8 +592,6 @@ class EligibilityFilterTest {
 
     @Test
     void countsMusicRejectedForSchedule() {
-        UUID noSchedule = readyArtist();
-        schedules.remove(noSchedule);
         UUID blocked = readyArtist();
         schedules.put(blocked, List.of(
             available(at(15, 12, 0), at(15, 23, 0)),
@@ -601,10 +599,10 @@ class EligibilityFilterTest {
         ));
 
         filter.filter(EVENT, List.of(
-            candidate(noSchedule), candidate(blocked), candidate(blocked), candidate(readyArtist())
+            candidate(blocked), candidate(blocked), candidate(readyArtist())
         ));
 
-        assertThat(rejected("SCHEDULE")).isEqualTo(3.0);
+        assertThat(rejected("SCHEDULE")).isEqualTo(2.0);
     }
 
     @Test
@@ -658,12 +656,69 @@ class EligibilityFilterTest {
 
         filter.filter(eventAskingFor(ArtistType.BAND), candidates);
 
-        assertThat(rejected("SCHEDULE")).isEqualTo(2.0);
-        assertThat(rejected("REGION") + rejected("BUDGET") + rejected("PERFORMANCE_TYPE")).isZero();
+        assertThat(rejected("SCHEDULE_MISSING")).isEqualTo(2.0);
+        assertThat(rejected("SCHEDULE") + rejected("REGION") + rejected("BUDGET")
+            + rejected("PERFORMANCE_TYPE")).isZero();
         assertThat(counted("eligibility.passed")
             + rejected("ACCOUNT") + rejected("COPYRIGHT") + rejected("PROFILE_MISSING")
-            + rejected("SCHEDULE") + rejected("REGION") + rejected("BUDGET")
-            + rejected("PERFORMANCE_TYPE")).isEqualTo(candidates.size());
+            + rejected("SCHEDULE_MISSING") + rejected("SCHEDULE") + rejected("REGION")
+            + rejected("BUDGET") + rejected("PERFORMANCE_TYPE")).isEqualTo(candidates.size());
+    }
+
+    @Test
+    void countsMusicWithoutUsableScheduleDataAsScheduleMissing() {
+        UUID absent = readyArtist();
+        schedules.remove(absent);
+        UUID nullValue = readyArtist();
+        schedules.put(nullValue, null);
+        UUID emptyList = readyArtist();
+        schedules.put(emptyList, List.of());
+        UUID incompleteSlot = readyArtist();
+        schedules.put(incompleteSlot, List.of(
+            available(at(15, 12, 0), at(15, 23, 0)),
+            new ScheduleSlot(at(15, 1, 0), at(15, 2, 0), null)
+        ));
+
+        filter.filter(EVENT, List.of(
+            candidate(absent), candidate(nullValue), candidate(emptyList), candidate(incompleteSlot)
+        ));
+
+        assertThat(rejected("SCHEDULE_MISSING")).isEqualTo(4.0);
+        assertThat(rejected("SCHEDULE")).isZero();
+    }
+
+    @Test
+    void countsUncoveredEventAndInvertedBlockedSlotAsSchedule() {
+        UUID uncovered = readyArtist();
+        schedules.put(uncovered, List.of(available(at(15, 12, 0), at(15, 20, 0))));
+        UUID invertedBlocked = readyArtist();
+        schedules.put(invertedBlocked, List.of(
+            available(at(15, 12, 0), at(15, 23, 0)),
+            new ScheduleSlot(at(15, 21, 0), at(15, 17, 0), ScheduleStatus.BOOKED)
+        ));
+
+        filter.filter(EVENT, List.of(candidate(uncovered), candidate(invertedBlocked)));
+
+        assertThat(rejected("SCHEDULE")).isEqualTo(2.0);
+        assertThat(rejected("SCHEDULE_MISSING")).isZero();
+    }
+
+    @Test
+    void registersEveryCounterAtZeroWhenCreated() {
+        SimpleMeterRegistry fresh = new SimpleMeterRegistry();
+
+        new EligibilityFilter(ids -> Map.of(), ids -> Map.of(), (ids, from, to) -> Map.of(), fresh);
+
+        assertThat(fresh.find("eligibility.passed").counter()).isNotNull().extracting(Counter::count)
+            .isEqualTo(0.0);
+        for (String condition : List.of(
+            "COPYRIGHT", "ACCOUNT", "PROFILE_MISSING", "SCHEDULE_MISSING",
+            "SCHEDULE", "REGION", "BUDGET", "PERFORMANCE_TYPE"
+        )) {
+            Counter counter = fresh.find("eligibility.rejected").tag("condition", condition).counter();
+            assertThat(counter).as(condition).isNotNull();
+            assertThat(counter.count()).as(condition).isZero();
+        }
     }
 
     private double counted(String name, String... tags) {
