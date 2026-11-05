@@ -25,3 +25,23 @@ CREATE TABLE event_partner_profiles (
         AND cardinality(string_to_array(array_to_string(region_codes, ','), ',')) = cardinality(region_codes)
     )
 );
+
+-- 지역 배열에는 FK가 없다. 행정구역 개편 마이그레이션이 코드를 옮긴 뒤 끝에서 이 함수를 불러,
+-- 저장된 코드가 모두 regions의 code(시·군·구) 또는 province_code(시·도)에 있는지 확인한다.
+-- 어긋나면 예외로 마이그레이션을 실패시킨다(05 §5, ADR event_partner_profile/00 Consequences).
+CREATE FUNCTION check_event_partner_profile_regions() RETURNS void
+LANGUAGE plpgsql AS $$
+DECLARE
+    unknown_codes TEXT;
+BEGIN
+    SELECT string_agg(DISTINCT c.code, ', ' ORDER BY c.code) INTO unknown_codes
+    FROM event_partner_profiles p
+    CROSS JOIN LATERAL unnest(p.region_codes) AS c(code)
+    WHERE NOT EXISTS (
+        SELECT 1 FROM regions r WHERE r.code = c.code OR r.province_code = c.code
+    );
+    IF unknown_codes IS NOT NULL THEN
+        RAISE EXCEPTION '지역 목록에 없는 EVENT_PARTNER 프로필 지역 코드가 있다: %', unknown_codes;
+    END IF;
+END;
+$$;

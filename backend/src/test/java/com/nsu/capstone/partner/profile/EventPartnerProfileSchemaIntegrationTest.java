@@ -38,6 +38,57 @@ class EventPartnerProfileSchemaIntegrationTest extends EventPartnerProfileIntegr
             """, partner.getId())).isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    void 행사_종류_CHECK는_events와_프로필_모두_EventType_값_전체와_같다() {
+        for (EventType type : EventType.values()) {
+            insert("ARRAY['" + type.name() + "']", "ARRAY[]::varchar[]");
+            insertEvent(type.name());
+        }
+        assertThatThrownBy(() -> insert("ARRAY['NOT_A_TYPE']", "ARRAY[]::varchar[]"))
+            .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> insertEvent("NOT_A_TYPE"))
+            .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(Arrays.stream(EventType.values()).map(Enum::name))
+            .containsExactlyInAnyOrderElementsOf(allowedEventTypes("ck_events_event_type"));
+    }
+
+    @Test
+    void 지역_점검_쿼리는_목록에_없는_코드가_있으면_실패하고_정상_데이터는_통과한다() {
+        insert("ARRAY[]::varchar[]", "ARRAY['11','11680','36']");
+        jdbcTemplate.execute("SELECT check_event_partner_profile_regions()");
+
+        insert("ARRAY[]::varchar[]", "ARRAY['11','99999']");
+        assertThatThrownBy(() -> jdbcTemplate.execute("SELECT check_event_partner_profile_regions()"))
+            .hasMessageContaining("99999");
+
+        insert("ARRAY[]::varchar[]", "ARRAY['29']");
+        assertThatThrownBy(() -> jdbcTemplate.execute("SELECT check_event_partner_profile_regions()"))
+            .hasMessageContaining("29");
+    }
+
+    private java.util.List<String> allowedEventTypes(String constraint) {
+        String definition = jdbcTemplate.queryForObject(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = ?",
+            String.class, constraint);
+        java.util.List<String> values = new java.util.ArrayList<>();
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("'([A-Z_]+)'").matcher(definition);
+        while (matcher.find()) {
+            values.add(matcher.group(1));
+        }
+        return values;
+    }
+
+    private void insertEvent(String eventType) {
+        jdbcTemplate.update("DELETE FROM events");
+        jdbcTemplate.update("""
+            INSERT INTO events (id, event_partner_id, status, name, event_type, start_at, end_at,
+                performance_minutes, venue, region_code, genres, budget_min, budget_max,
+                expected_audience, description, visibility, created_at, updated_at)
+            VALUES (?, ?, 'OPEN', '행사', ?, now(), now() + interval '2 hours', 30, '장소', '11680',
+                ARRAY['POP']::varchar[], 0, 100, 10, '설명', 'PUBLIC', now(), now())
+            """, uuidV7Generator.generate(), partner.getId(), eventType);
+    }
+
     private void assertRejected(String eventTypes, String regionCodes) {
         assertThatThrownBy(() -> insert(eventTypes, regionCodes))
             .as("%s / %s", eventTypes, regionCodes)
