@@ -109,6 +109,63 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         getProfile(other).andExpect(jsonPath("$.name").value("이담당"));
     }
 
+    @Test
+    void PUT은_전체를_교체한다() throws Exception {
+        putProfile(partner, validProfile()).andExpect(status().isOk());
+        Map<String, Object> replacement = validProfile();
+        replacement.remove("organization");
+        replacement.put("eventTypes", List.of());
+
+        putProfile(partner, replacement).andExpect(status().isOk())
+            .andExpect(jsonPath("$.organization").value((Object) null))
+            .andExpect(jsonPath("$.eventTypes").isEmpty());
+        getProfile(partner)
+            .andExpect(jsonPath("$.organization").value((Object) null))
+            .andExpect(jsonPath("$.eventTypes").isEmpty());
+    }
+
+    @Test
+    void 글자_수_경계는_이름_40_소속_60_소개_700까지_통과한다() throws Exception {
+        Map<String, Object> body = validProfile();
+        body.put("name", "가".repeat(40));
+        body.put("organization", "나".repeat(60));
+        body.put("bio", "다".repeat(700));
+
+        putProfile(partner, body).andExpect(status().isOk());
+    }
+
+    @Test
+    void 글자_수를_넘거나_이름이_비면_VALIDATION_ERROR다() throws Exception {
+        for (Map.Entry<String, String> invalid : Map.of(
+            "name", "",
+            "name ", "   ",
+            "name  ", "가".repeat(41),
+            "organization", "나".repeat(61),
+            "bio", "다".repeat(701)).entrySet()) {
+            Map<String, Object> body = validProfile();
+            body.put(invalid.getKey().trim(), invalid.getValue());
+            putProfile(partner, body).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        }
+        Map<String, Object> noName = validProfile();
+        noName.remove("name");
+        putProfile(partner, noName).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void 앞뒤_공백은_지워_저장하고_빈_소개와_소속은_null이다() throws Exception {
+        Map<String, Object> body = validProfile();
+        body.put("name", "  김담당 ");
+        body.put("organization", "  ");
+        body.put("bio", null);
+
+        putProfile(partner, body).andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("김담당"))
+            .andExpect(jsonPath("$.organization").value((Object) null))
+            .andExpect(jsonPath("$.bio").value((Object) null));
+    }
+
     private List<String> fieldNames(String json) {
         return new ArrayList<>(objectMapper.readTree(json).propertyNames());
     }
