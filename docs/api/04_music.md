@@ -118,7 +118,7 @@ Content-Type: multipart/form-data; boundary=...
 | `title` | 문자열 | O | 앞뒤 공백을 지운 뒤 1~100자 |
 | `isCover` | 불리언 | O | `true` 또는 `false` |
 | `hasThirdPartyRights` | 불리언 | O | 아티스트 말고 권리를 가진 사람이 있으면 `true`. 커버곡의 원곡(보호기간이 끝나지 않은 곡), 공동 창작·공동 연주, 남이 만든 MR·비트·샘플, 남이 가진 상업 발매 Master가 그렇다 |
-| `isCollectivelyManaged` | 불리언 | O | `true` 또는 `false`. 신탁만 한 자작곡은 `hasThirdPartyRights = false`, `isCollectivelyManaged = true`이고 이용허락서를 받지 않는다. 신탁곡의 재생 근거는 상용화 전 KOMCA 사전 신고·협의로 마련한다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)) |
+| `isCollectivelyManaged` | 불리언 | O | `true` 또는 `false`. 신탁만 한 자작곡은 `hasThirdPartyRights = false`, `isCollectivelyManaged = true`이고 이용허락서를 받지 않는다. 신탁곡의 재생 근거는 상용화 전 신탁단체와 이용허락·요율을 협의해 마련한다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)) |
 | `isRightsWarranted` | 불리언 | O | 권리 확인·이용 동의. `true`만 받는다 |
 | `rightsWarrantyVersion` | 문자열 | O | 화면에 보여 준 권리 확인·이용 동의 문구(서식 01의 화면판)의 버전. 지금 버전이어야 한다 |
 | `licenseFiles` | 파일, 여러 개 | 조건부 | `hasThirdPartyRights = true`면 1개 이상 필수이고, `false`면 보내지 않는다. 권리자별 이용허락서(서식 02) 또는 같은 범위를 담은 기존 계약서. PDF·JPEG·PNG, 파일당 5MiB(5,242,880바이트) 이하, 최대 5개(설정값). 형식은 파일 내용으로 판별한다 |
