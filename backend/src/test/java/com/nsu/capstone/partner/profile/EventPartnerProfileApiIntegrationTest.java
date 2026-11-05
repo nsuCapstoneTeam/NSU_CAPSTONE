@@ -14,6 +14,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrationTestBase {
 
@@ -226,6 +229,17 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
             putProfile(partner, body).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         }
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void 목록에_없는_지역_코드는_WARN_로그에_코드를_남긴다(CapturedOutput output) throws Exception {
+        // 개편 마이그레이션이 배열 이전을 빠뜨리면 같은 사라진 코드가 반복해 보인다(05 §5 관측)
+        Map<String, Object> body = validProfile();
+        body.put("regionCodes", List.of("11", "29"));
+        putProfile(partner, body).andExpect(status().isBadRequest());
+
+        assertThat(output.getOut()).contains("WARN").contains("29");
     }
 
     @Test
