@@ -163,6 +163,21 @@ class EligibilityFilterTest {
     }
 
     @Test
+    void dropsMusicOfArtistWithNegativeMinFeeEvenForUnpaidEvent() {
+        EligibilityInput unpaid = new EligibilityInput(
+            at(15, 18, 0), at(15, 22, 0), 60, "11680", 0, 0, null
+        );
+        UUID negativeFee = readyArtist();
+        profiles.put(negativeFee, profileWith(Set.of("11680"), -1L, Set.of(ArtistType.SOLO)));
+        UUID free = readyArtist();
+        profiles.put(free, profileWith(Set.of("11680"), 0L, Set.of(ArtistType.SOLO)));
+
+        assertThat(filter.filter(unpaid, List.of(candidate(negativeFee), candidate(free))))
+            .extracting(EligibleMusic::artistId)
+            .containsExactly(free);
+    }
+
+    @Test
     void keepsMusicOfArtistWhoseMinFeeEqualsBudgetMax() {
         UUID artistId = readyArtist();
         profiles.put(artistId, profileWith(Set.of("11680"), 1_000_000L, Set.of(ArtistType.SOLO)));
@@ -628,7 +643,8 @@ class EligibilityFilterTest {
             candidate(expensive), candidate(noFee), candidate(noFee), candidate(readyArtist())
         ));
 
-        assertThat(rejected("BUDGET")).isEqualTo(3.0);
+        assertThat(rejected("BUDGET")).isEqualTo(1.0);
+        assertThat(rejected("PROFILE_INCOMPLETE")).isEqualTo(2.0);
     }
 
     @Test
@@ -661,7 +677,7 @@ class EligibilityFilterTest {
             + rejected("PERFORMANCE_TYPE")).isZero();
         assertThat(counted("eligibility.passed")
             + rejected("ACCOUNT") + rejected("COPYRIGHT") + rejected("PROFILE_MISSING")
-            + rejected("SCHEDULE_MISSING") + rejected("SCHEDULE") + rejected("REGION")
+            + rejected("PROFILE_INCOMPLETE") + rejected("SCHEDULE_MISSING") + rejected("SCHEDULE") + rejected("REGION")
             + rejected("BUDGET") + rejected("PERFORMANCE_TYPE")).isEqualTo(candidates.size());
     }
 
@@ -679,6 +695,25 @@ class EligibilityFilterTest {
 
         assertThat(rejected("SCHEDULE_MISSING")).isEqualTo(2.0);
         assertThat(rejected("SCHEDULE")).isZero();
+    }
+
+    @Test
+    void countsProfileWithMissingOrInvalidFieldsAsProfileIncomplete() {
+        UUID noFee = readyArtist();
+        profiles.put(noFee, profileWith(Set.of("11680"), null, Set.of(ArtistType.BAND)));
+        UUID negativeFee = readyArtist();
+        profiles.put(negativeFee, profileWith(Set.of("11680"), -1L, Set.of(ArtistType.BAND)));
+        UUID noRegions = readyArtist();
+        profiles.put(noRegions, profileWith(null, 100_000L, Set.of(ArtistType.BAND)));
+        UUID noTypes = readyArtist();
+        profiles.put(noTypes, profileWith(Set.of("11680"), 100_000L, null));
+
+        filter.filter(eventAskingFor(ArtistType.BAND), List.of(
+            candidate(noFee), candidate(negativeFee), candidate(noRegions), candidate(noTypes)
+        ));
+
+        assertThat(rejected("PROFILE_INCOMPLETE")).isEqualTo(4.0);
+        assertThat(rejected("BUDGET") + rejected("REGION") + rejected("PERFORMANCE_TYPE")).isZero();
     }
 
     @Test
@@ -719,7 +754,7 @@ class EligibilityFilterTest {
         assertThat(fresh.find("eligibility.passed").counter()).isNotNull().extracting(Counter::count)
             .isEqualTo(0.0);
         for (String condition : List.of(
-            "COPYRIGHT", "ACCOUNT", "PROFILE_MISSING", "SCHEDULE_MISSING",
+            "COPYRIGHT", "ACCOUNT", "PROFILE_MISSING", "PROFILE_INCOMPLETE", "SCHEDULE_MISSING",
             "SCHEDULE", "REGION", "BUDGET", "PERFORMANCE_TYPE"
         )) {
             Counter counter = fresh.find("eligibility.rejected").tag("condition", condition).counter();

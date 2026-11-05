@@ -1,6 +1,5 @@
 package com.nsu.capstone.recommendation.eligibility.application;
 
-import com.nsu.capstone.event.domain.ArtistType;
 import com.nsu.capstone.event.recommendation.EligibilityInput;
 import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.domain.UserStatus;
@@ -51,6 +50,7 @@ public class EligibilityFilter {
         COPYRIGHT,
         ACCOUNT,
         PROFILE_MISSING,
+        PROFILE_INCOMPLETE,
         SCHEDULE_MISSING,
         SCHEDULE,
         REGION,
@@ -184,6 +184,9 @@ public class EligibilityFilter {
         if (profile == null) {
             return Rejection.PROFILE_MISSING;
         }
+        if (isProfileIncomplete(event, profile)) {
+            return Rejection.PROFILE_INCOMPLETE;
+        }
         if (hasIncompleteSchedule(slots)) {
             return Rejection.SCHEDULE_MISSING;
         }
@@ -244,25 +247,33 @@ public class EligibilityFilter {
         return slot == null || slot.start() == null || slot.end() == null || slot.status() == null;
     }
 
+    /**
+     * 판정에 쓰는 프로필 값이 비었거나(출연료·공연 가능지역 미입력, 행사가 형태를 지정했는데 공연 형태 미입력)
+     * 출연료가 음수면 프로필이 덜 채워진 것으로 본다. 진짜 탈락 사유(예산·지역·형태 불일치)와 지표를 나누려는
+     * 것이고, 어느 쪽이든 판정은 실패다.
+     */
+    private static boolean isProfileIncomplete(EligibilityInput event, ArtistProfile profile) {
+        return profile.performableRegionCodes() == null
+            || profile.feeMin() == null
+            || profile.feeMin() < 0
+            || (event.artistType() != null && profile.performanceTypes() == null);
+    }
+
     private static boolean isRegionReachable(EligibilityInput event, ArtistProfile profile) {
         Set<String> regionCodes = profile.performableRegionCodes();
-        if (regionCodes == null) {
-            return false;
-        }
         return regionCodes.contains(event.regionCode())
             || regionCodes.contains(event.regionCode().substring(0, PROVINCE_CODE_LENGTH));
     }
 
     private static boolean isBudgetWithinRange(EligibilityInput event, ArtistProfile profile) {
-        return profile.feeMin() != null && profile.feeMin() <= event.budgetMax();
+        return profile.feeMin() <= event.budgetMax();
     }
 
     private static boolean isPerformanceTypeMatched(EligibilityInput event, ArtistProfile profile) {
         if (event.artistType() == null) {
             return true;
         }
-        Set<ArtistType> performanceTypes = profile.performanceTypes();
-        return performanceTypes != null && performanceTypes.contains(event.artistType());
+        return profile.performanceTypes().contains(event.artistType());
     }
 
     private static List<EligibilityCondition> passedConditions(EligibilityInput event) {
