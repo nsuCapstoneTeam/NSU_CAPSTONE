@@ -20,6 +20,7 @@ import com.nsu.capstone.recommendation.eligibility.domain.MusicCandidate;
 import com.nsu.capstone.recommendation.eligibility.domain.ScheduleSlot;
 import com.nsu.capstone.recommendation.eligibility.domain.ScheduleStatus;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +38,8 @@ class EligibilityFilterTest {
     private final Map<UUID, ArtistProfile> profiles = new HashMap<>();
     private final Map<UUID, List<ScheduleSlot>> schedules = new HashMap<>();
     private final EligibilityFilter filter = new EligibilityFilter(
-        ids -> accounts, ids -> profiles, (ids, from, to) -> schedules
+        ids -> only(accounts, ids), ids -> only(profiles, ids),
+        (ids, from, to) -> only(schedules, ids)
     );
 
     @Test
@@ -312,24 +314,30 @@ class EligibilityFilterTest {
     }
 
     @Test
-    void asksScheduleReaderForEventWindowOfActiveArtistsOnly() {
+    void asksProfileAndScheduleReadersOnlyAboutActiveArtistsWithEventWindow() {
         UUID active = readyArtist();
         UUID suspended = readyArtist();
         accounts.put(suspended, new ArtistAccount(UserRole.ARTIST, UserStatus.SUSPENDED));
         List<Object> asked = new java.util.ArrayList<>();
         EligibilityFilter recording = new EligibilityFilter(
-            ids -> accounts, ids -> profiles,
+            ids -> only(accounts, ids),
+            ids -> {
+                asked.add(Set.copyOf(ids));
+                return only(profiles, ids);
+            },
             (ids, from, to) -> {
                 asked.add(Set.copyOf(ids));
                 asked.add(from);
                 asked.add(to);
-                return schedules;
+                return only(schedules, ids);
             }
         );
 
         recording.filter(EVENT, List.of(candidate(active), candidate(suspended)));
 
-        assertThat(asked).containsExactly(Set.of(active), EVENT.start(), EVENT.end());
+        assertThat(asked).containsExactly(
+            Set.of(active), Set.of(active), EVENT.start(), EVENT.end()
+        );
     }
 
     @Test
@@ -434,6 +442,16 @@ class EligibilityFilterTest {
         profiles.put(id, new ArtistProfile(Set.of("11680"), 100_000L, Set.of(ArtistType.SOLO)));
         schedules.put(id, List.of(available(at(15, 12, 0), at(15, 23, 0))));
         return id;
+    }
+
+    private static <V> Map<UUID, V> only(Map<UUID, V> source, Collection<UUID> ids) {
+        Map<UUID, V> found = new HashMap<>();
+        source.forEach((id, value) -> {
+            if (ids.contains(id)) {
+                found.put(id, value);
+            }
+        });
+        return found;
     }
 
     private static MusicCandidate candidate(UUID artistId) {

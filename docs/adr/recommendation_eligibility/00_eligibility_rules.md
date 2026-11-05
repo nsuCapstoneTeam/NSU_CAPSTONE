@@ -127,7 +127,11 @@ Eligibility가 곡 목록과 AI 추천 상태까지 읽으면 맡는 일이 커�
 - 구현 점검(2026-11-05, NSU-48)에서 나온 전제를 다음 이슈가 지켜야 한다. 이 전제가 깨지면 데이터가 없는 아티스트가 통과(fail-open)할 수 있다.
   - NSU-12·34(프로필·일정 창구): 데이터가 없으면 기본값을 만들지 않고 그 아티스트의 키를 비운다. 예를 들어 출연료가 없다고 `0`을 돌려주면 예산 조건을 통과하고, 일정이 없다고 `AVAILABLE`로 채우면 일정 조건을 통과한다.
   - NSU-12·34: 일정 창구는 `[from, to)`와 겹치거나 맞닿는 일정만 아티스트 수와 관계없이 한 번에 읽는다. 아티스트마다 읽으면 조회 횟수가 일정하다는 조건이 깨진다.
+  - NSU-12·34: 일정을 DB의 `timestamptz`에 저장하면 `Asia/Seoul` 벽시계(`LocalDateTime`)로 바꿔 돌려준다. 서버 기본 시간대(보통 UTC)로 바꾸면 막힌 일정이 9시간 어긋나 조회되지 않고, 일정 조건을 통과해 버린다.
+  - NSU-12·34: 실제 창구를 붙일 때 `EmptyArtistProfileReader`·`EmptyArtistScheduleReader`를 지운다. 둘 다 `@Component`라서 남겨 두면 같은 인터페이스의 빈이 둘이 되어 서버가 뜨지 않는다.
   - NSU-63(후보 모으기): `MusicCandidate`의 `rightsBasis`와 `isSuspended`는 반드시 서버가 곡 테이블에서 읽은 값을 쓴다. 요청 본문 등 클라이언트 입력을 넘기지 않는다.
+  - NSU-63: `COPYRIGHT_SATISFIED`는 04 §1.1 후보 조건 중 권리 근거와 중단 여부만 본다. 음원 처리 상태(`audioStatus = ACTIVE`)와 `AI_RECOMMENDATION_ENABLED`는 후보를 모을 때 거른다(02 §1). 다시 보기(NSU-86)는 `filterAccountAndCopyright` 말고 이 둘과 곡 삭제를 따로 확인한다(02 §4.2).
+  - NSU-89(곡): 권리 근거 enum은 `music.domain.RightsBasis`에 이미 있다. 새로 만들지 않고 이 enum을 쓴다. 값을 늘리면 `EligibilityFilter`의 `switch`가 컴파일되지 않아 통과 여부를 정하게 된다.
   - NSU-63: `EligibilityFilter`를 AI 호출과 같은 DB 트랜잭션 안에서 부르지 않는다. 트랜잭션 안의 외부 호출은 연결을 쥔 채 기다리게 한다.
   - NSU-63: 후보 아티스트 수의 상한을 정하고, 그 크기로 계정 일괄 조회(`findAllById`의 `IN` 목록)를 통합 테스트한다. 구현 점검에서 이 크기를 확인하지 못했다.
   - 입력 전제: `EligibilityInput`은 행사 검증을 거친 값이다. `start < end`(03 §3.1·§3.6, `EventRequest`가 `0 < 종료 − 시작 ≤ 24시간`을 검증)이고 `regionCode`는 5자리다. 판정 코드는 이를 다시 검사하지 않는다.

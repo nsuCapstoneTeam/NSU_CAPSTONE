@@ -72,7 +72,8 @@ public class EligibilityFilter {
     }
 
     /**
-     * 다시 보기(API 02 §4.2)처럼 행사 조건 없이 계정 조건과 저작권 조건만 판정한다.
+     * 다시 보기(API 02 §4.2)처럼 행사 조건 없이 계정 조건과 저작권 조건만 판정한다. 음원 처리 상태,
+     * AI_RECOMMENDATION_ENABLED, 곡 삭제는 여기서 보지 않는다.
      */
     public List<MusicCandidate> filterAccountAndCopyright(List<MusicCandidate> candidates) {
         List<MusicCandidate> copyrightPassed = candidates.stream()
@@ -97,7 +98,19 @@ public class EligibilityFilter {
     }
 
     private static boolean isCopyrightSatisfied(MusicCandidate music) {
-        return music.rightsBasis() != null && !music.isSuspended();
+        return hasAcceptedRightsBasis(music) && !music.isSuspended();
+    }
+
+    /**
+     * switch에 default를 두지 않아, RightsBasis에 값이 늘면 컴파일 오류로 통과 여부를 정하게 한다.
+     */
+    private static boolean hasAcceptedRightsBasis(MusicCandidate music) {
+        if (music.rightsBasis() == null) {
+            return false;
+        }
+        return switch (music.rightsBasis()) {
+            case DECLARED, VERIFIED -> true;
+        };
     }
 
     private static boolean isArtistEligible(
