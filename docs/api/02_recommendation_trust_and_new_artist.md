@@ -280,6 +280,7 @@ Authorization: Bearer {accessToken}
 - 주소를 발급할 때마다 곡 아티스트의 현재 상태를 확인한다. 추천을 받은 뒤 아티스트가 `AI_RECOMMENDATION_ENABLED`가 아니게 됐으면(AI 추천을 껐거나 AI 분석 동의를 철회한 경우 등) 그 곡은 다시 보기에서 빠지는 곡(§4.2)이므로 `404 MUSIC_NOT_FOUND`다. 추천 당시의 동의를 지금의 재생 권한으로 보지 않는다(2026-10-07 결정, Codex 설계 리뷰).
 - 곡이 저작권 조건(SSOT `AI-MATCH-051`의 `COPYRIGHT_SATISFIED`)을 더 이상 충족하지 않아도 같다. 권리 신고로 재생이 중단된 곡(NSU-104)이 여기에 든다. 재생은 원본을 내보내는 일이므로, 권리 문제가 생긴 곡은 다시 보기 목록에서 빼고 주소도 발급하지 않는다(2026-10-14 결정, 보안 리뷰. 2026-10-20 곡 단위로 바꿈).
 - 이미 발급한 주소는 만료 시각(최대 10분)까지 쓸 수 있다. Signed URL은 발급한 뒤 회수할 수 없으므로, 철회 뒤의 노출은 짧은 만료로 제한한다.
+- 예외: 권리 신고로 곡이 중단되면(NSU-104) 이미 발급한 주소도 만료 시각을 기다리지 않고 바로 쓸 수 없어야 한다(2026-11-05 결정, [ADR music_upload/02](../adr/music_upload/02_music_rights_documents.md) 6절). 저작권법 제103조의 중단 요구는 즉시 따라야 하기 때문이다. 끊는 방법(예: 원본을 격리 경로로 옮김)은 NSU-104에서 정한다. 이용 기간 만료·철회를 알려 온 때도 같다.
 - 인증이 `Authorization` 헤더 방식이라 `<audio>` 요소는 토큰을 보낼 수 없다. 그래서 프론트가 이 API로 주소를 받은 뒤 `<audio>`에 넣는다.
 - 추천 응답에 주소를 미리 넣지 않는다. 실제로 들은 곡만 주소가 나가도록 해 원본을 한꺼번에 내려받기 어렵게 하고, 재생 기록과 요청 제한(`SEC-118` Audit Log·Rate Limiting)을 적용하기 위해서다.
 - 경로에 `rank` 대신 `musicId`를 쓴다. 다시 볼 때 순위 번호가 바뀔 수 있기 때문이다(§4.2).
@@ -489,6 +490,7 @@ Authorization: Bearer {accessToken}
 | 다시 볼 때 활동 정지·탈퇴한 아티스트의 곡, `AI_RECOMMENDATION_ENABLED`가 아니게 된 아티스트의 곡, 삭제된 곡은 빠지고, 남은 곡의 `rank`가 1부터 다시 매겨지며, `excludedCount`가 뺀 곡 수와 같다. revision이 바뀐 곡은 남고 `availability = MUSIC_REVISED`다 | §4.2 |
 | 추천 뒤 곡 아티스트가 AI 추천을 끄거나 AI 분석 동의를 철회하면 그 곡의 재생 주소 발급은 `404 MUSIC_NOT_FOUND`다. 철회 전에 발급한 주소는 `expiresAt`까지만 쓸 수 있다 | §2.5·§4.2 |
 | 추천 뒤 곡이 권리 신고로 중단되면 다시 보기에서 빠지고(`excludedCount`에 포함) 재생 주소 발급은 `404 MUSIC_NOT_FOUND`다. 같은 아티스트의 다른 곡은 남는다 | §2.5·§4.2 |
+| 곡이 권리 신고로 중단되면, 중단 전에 발급해 아직 만료되지 않은 그 곡의 재생 주소로 요청해도 음원을 받을 수 없다(NSU-104) | §2.5 |
 | Eligibility의 조건별 판정(경계값, 데이터가 없는 아티스트)은 [recommendation_eligibility/00](../adr/recommendation_eligibility/00_eligibility_rules.md)의 테스트 기준을 따른다. 응답의 `passedConditions`에 `ARTIST_VERIFIED`가 없고 `ACCOUNT_ACTIVE`가 있다 | §2.3 |
 | `AI_RECOMMENDATION_ENABLED`가 아닌 아티스트의 곡은 추천 후보가 되지 않는다 | §1 |
 | AI를 기다리는 동안 행사의 Eligibility 입력이나 AI 원문 필드가 바뀌면 생성 응답의 `isEventChanged`가 `true`다. Eligibility·AI 입력·저장 지문은 모두 생성을 시작할 때의 snapshot이다 | §4.3 |
