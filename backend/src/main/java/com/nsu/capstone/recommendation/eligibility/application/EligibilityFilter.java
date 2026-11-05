@@ -22,6 +22,14 @@ import org.springframework.stereotype.Service;
 /**
  * 후보 곡을 필수 조건(SSOT AI-MATCH-051)으로 거른다. 판정식은 ADR recommendation_eligibility/00이다.
  * 창구마다 조회는 한 번이라서, 아티스트 수와 관계없이 조회 횟수가 일정하다.
+ *
+ * <p>호출하는 쪽이 지킬 전제는 다음과 같다(ADR Consequences).
+ * <ul>
+ *   <li>{@link MusicCandidate}의 권리 정보는 서버가 곡 테이블에서 읽은 값이다. 클라이언트 입력을 넣지 않는다.
+ *   <li>AI 호출과 같은 DB 트랜잭션 안에서 부르지 않는다.
+ *   <li>{@link EligibilityInput}은 행사 검증을 거친 값이다. {@code start < end}이고 regionCode는
+ *       5자리라고 보고 다시 검사하지 않는다.
+ * </ul>
  */
 @Service
 public class EligibilityFilter {

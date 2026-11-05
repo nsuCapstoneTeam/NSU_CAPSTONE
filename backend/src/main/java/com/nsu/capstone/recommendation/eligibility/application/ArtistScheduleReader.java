@@ -13,8 +13,9 @@ import java.util.UUID;
 public interface ArtistScheduleReader {
 
     /**
-     * {@code [from, to)}와 겹치거나 맞닿는 일정을 아티스트 ID별로 한 번에 돌려준다. 일정이 없는
-     * 아티스트는 키가 없어도 된다.
+     * {@code [from, to)}와 겹치거나 맞닿는 일정을 아티스트 수와 관계없이 한 번에 읽어 아티스트 ID별로
+     * 돌려준다. 일정이 없는 아티스트는 키를 비운다. {@code AVAILABLE}로 채우면 일정 조건을 통과하므로
+     * 채우지 않는다.
      */
     Map<UUID, List<ScheduleSlot>> findByArtistIds(
         Collection<UUID> artistIds, LocalDateTime from, LocalDateTime to
