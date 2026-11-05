@@ -109,7 +109,7 @@ Authorization: Bearer {accessToken}
 | `OFFICIAL_ACTIVITY` | `null` | 공식 발매 또는 공연 활동 증빙 검증 완료 |
 
 - 확인이 끝난 항목만 넣는다. 진행 중, 반려, 취소된 검증은 넣지 않는다.
-- `IDENTITY`는 곡 업로드·PRIVATE 행사 열람·댓글 권한(`VERIFIED_ARTIST`)의 근거인 실명 본인확인을 EVENT_PARTNER에게 보여 준다. 화면은 "실명 본인확인"으로 표시하고, "인증된 아티스트"로 쓰지 않는다(용어집). 2026-11-05에 추가했다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)).
+- `IDENTITY`는 곡 업로드·PRIVATE 행사 열람·댓글 권한(`VERIFIED_ARTIST`)의 근거인 실명 본인확인을 EVENT_PARTNER에게 보여 준다. 요구사항은 SSOT `TRUST-142`(v1.18 초안 ③, 팀 확인 전)이고, `TRUST-152`에 따라 Artist Reliability에 더하지 않는다. 화면은 "실명 본인확인"으로 표시하고, "인증된 아티스트"로 쓰지 않는다(용어집). 2026-11-05에 추가했다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)).
 - 시연 서버의 `IDENTITY`는 테스트 본인확인이다. 테스트임은 항목마다 표시하지 않고 시연 환경 배너로 알린다. 테스트 본인확인은 시연 DB에만 있고 운영 DB로 옮기지 않는다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)).
 - NSU-105를 구현하기 전에는 본인확인 기록이 없어 `IDENTITY`가 나오지 않는다.
 - 외부 계정을 연동했다는 사실만으로는 넣지 않는다. 연동한 계정의 작업 내역 표시는 아티스트 프로필(작업물) API(NSU-79)가 맡는다. YouTube Music 아티스트 채널은 `YOUTUBE`로 표시한다.

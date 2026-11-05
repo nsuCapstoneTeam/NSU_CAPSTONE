@@ -298,7 +298,7 @@
   - `music_upload/02` §7 "MVP 시연" 행: KCP 테스트 창(`SANDBOX`), Mock은 등록부 대조용 시드 계정만, `SANDBOX`의 등록 정보 제출은 `403 IDENTITY_NAME_UNAVAILABLE`
   - 04 §3.2 검사표·본문, §4 오류표, §5 테스트 기준과 `music_upload/01` 안전장치 4: 대조는 `MOCK` 이름만 쓰고, `SANDBOX`는 `403 IDENTITY_NAME_UNAVAILABLE`
 - `IDENTITY_NAME_UNAVAILABLE`을 `ErrorCode`에 더하는 일은 등록 정보 제출 구현(NSU-89)이 한다.
-- Trust Profile 계약(01 §4.3)에 `IDENTITY`를 추가했다. enum 값 추가라 하위 호환이다(00 §3). 구현은 NSU-105가 한다. 01 §4.2에 "`COPYRIGHT`가 있으면 `IDENTITY`도 있다" 불변식을 넣었다. 등록정보 일치는 본인확인 이름이 있어야 생기기 때문이다. 01 §7에 Verification을 출처 도메인별 `VerificationSource`(NSU-105: `IDENTITY`, NSU-89: `COPYRIGHT`)로 읽어 합치는 구조를 적었다.
+- Trust Profile 계약(01 §4.3)에 `IDENTITY`를 추가했다. enum 값 추가라 하위 호환이다(00 §3). SSOT에는 `TRUST-142`의 Artist Trust Verification 후보에 v1.18 초안 ③으로 올렸다(팀 확인 전). 구현은 NSU-105가 한다. 01 §4.2에 "`COPYRIGHT`가 있으면 `IDENTITY`도 있다" 불변식을 넣었다. 등록정보 일치는 본인확인 이름이 있어야 생기기 때문이다. 01 §7에 Verification을 출처 도메인별 `VerificationSource`(NSU-105: `IDENTITY`, NSU-89: `COPYRIGHT`)로 읽어 합치는 구조를 적었다.
 - 테스트 표시는 배너라서 Trust Profile 계약(01 §4.3)과 본인확인 상태 API에 출처 필드를 더하지 않는다. 환경 값 API도 만들지 않는다.
 - 운영 단계는 새 ADR로 미룬다. 그 ADR이 정할 것은 사업자등록·본인확인 계약, 운영 제공자와 `LIVE` 채널 검사, 운영 DB(시연 데이터를 옮기지 않음), 환경 값과 배너·공개 쓰기 필터를 끄는 방법이다.
 - 등록부 대조 시연에 쓸 팀원의 등록곡이 없으면 시연용 곡을 새로 등록한다. cros.or.kr에서 인증서로 접수하고, 처리 기간은 7일(신청서 서식 기준)이며 수수료가 든다. 등록 뒤 공공데이터 API에서 그 등록번호가 조회되는지 미리 확인한다(NSU-129).
