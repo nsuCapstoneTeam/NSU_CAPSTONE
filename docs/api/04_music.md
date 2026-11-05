@@ -142,6 +142,7 @@ Content-Type: multipart/form-data; boundary=...
 | 순서 | 검사 | 실패하면 |
 |---|---|---|
 | 1 | 로그인 | `401 AUTHENTICATION_REQUIRED` |
+| 1-1 | 시연 서버(`DEMO`)에서 허용 목록 계정([00 §8](./00_conventions.md#8-에러-형식)) | `403 DEMO_WRITE_NOT_ALLOWED` |
 | 2 | 역할이 ARTIST이고 계정이 `ACTIVE` | `403 ACCESS_DENIED` |
 | 2-1 | 실명 본인확인을 마침(`VERIFIED_ARTIST`, NSU-105) | `403 IDENTITY_VERIFICATION_REQUIRED` |
 | 3 | 파트 검증(§2.1). 아래 순서로 보고 처음 걸린 오류 하나만 준다 | ① 파트 누락·형식 오류는 `400 VALIDATION_ERROR` ② 동의 문구 버전이 지금 버전이 아니면 `400 REQUIRED_TERMS_NOT_AGREED` ③ `isCover = true`이면 `400 COVER_MUSIC_NOT_ACCEPTED`(커버곡, 2026-11-05 김동엽 결정, SSOT v1.18 초안, 팀 확인 전) ④ `isOwnComposition = false`이면 `400 THIRD_PARTY_COMPOSITION_NOT_ACCEPTED`(남의 작사·작곡·편곡이 들어갔거나 그 권리를 양도·독점계약한 곡, SSOT v1.18 초안, 팀 확인 전) ⑤ `isCollectivelyManaged = true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`(신탁곡, 출시 전 협의까지 받지 않음, SSOT v1.18 초안, 팀 확인 전) ⑥ `hasThirdPartyRights = true`인데 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED` |
@@ -152,7 +153,7 @@ Content-Type: multipart/form-data; boundary=...
 | 8 | 길이 | `400 AUDIO_DURATION_OUT_OF_RANGE` |
 | 9 | 이용허락서 형식: PDF·JPEG·PNG, 파일당 5MiB 이하 | `400 UNSUPPORTED_LICENSE_FORMAT`, `413 LICENSE_TOO_LARGE` |
 
-- 시연 서버(`DEMO`)에서는 허용 목록에 있는 팀 계정만 올린다(`403 DEMO_WRITE_NOT_ALLOWED`, NSU-129). 시연 본인확인(`SANDBOX`)은 이름을 저장하지 않아, 업로더를 특정하는 것은 이 허용 목록이다. 이 검사의 순서와 계약은 NSU-129가 이 문서에 적는다. NSU-129가 끝나기 전에는 업로드 API를 외부에서 접속할 수 있는 서버에 배포하지 않는다([music_upload/02](../adr/music_upload/02_music_rights_documents.md) 7절).
+- 시연 서버(`DEMO`)에서는 허용 목록에 있는 팀 계정만 올린다(`403 DEMO_WRITE_NOT_ALLOWED`, NSU-129). 시연 본인확인(`SANDBOX`)은 이름을 저장하지 않아, 업로더를 특정하는 것은 이 허용 목록이다. 검사 순서는 위 표의 1-1(인증 바로 다음)이고, 오류는 00 §8의 공통 오류다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)). NSU-129가 끝나기 전에는 업로드 API를 외부에서 접속할 수 있는 서버에 배포하지 않는다([music_upload/02](../adr/music_upload/02_music_rights_documents.md) 7절).
 
 - **크기**: 10MiB를 넘으면 서버가 파일을 다 받기 전에 끊는다. 응답은 `413`이고 본문은 Spring 표준 `ProblemDetail`이다(ADR-007 §4.4). 화면은 상태 코드로 분기한다. 이 검사는 위 순서와 관계없이 먼저 나올 수 있다. 요청 전체 상한은 36MiB(설정값)다. 파일 합계 35MiB(음원 10MiB + 이용허락서 5개 × 5MiB)에 텍스트 파트와 multipart 경계 1MiB를 더한 값이다([ADR 00](../adr/music_upload/00_music_upload_validation.md)). 5MiB를 넘는 이용허락서는 `413 LICENSE_TOO_LARGE`(ADR-007 본문)다. 10MiB를 넘는 이용허락서는 음원과 같은 표준 `413`이 먼저 나올 수 있다.
 - **형식**: 파일 앞부분의 바이트로 MP3와 MP4 계열을 가린다. M4A는 오디오 트랙의 코덱이 AAC(`mp4a`)인지 보고, `esds`의 AudioSpecificConfig로 AAC 코어가 AAC-LC(객체 유형 2)인지 본다. HE-AAC(5)·HE-AACv2(29)는 그 안의 코어 객체 유형이 2여야 한다. 다음 파일은 형식 오류로 거절한다.
@@ -277,6 +278,7 @@ Content-Type: multipart/form-data; boundary=...
 | 순서 | 검사 | 실패하면 |
 |---|---|---|
 | 1 | 로그인 | `401 AUTHENTICATION_REQUIRED` |
+| 1-1 | 시연 서버(`DEMO`)에서 허용 목록 계정([00 §8](./00_conventions.md#8-에러-형식)) | `403 DEMO_WRITE_NOT_ALLOWED` |
 | 2 | 역할이 ARTIST이고 계정이 `ACTIVE` | `403 ACCESS_DENIED` |
 | 3 | `musicId` 형식 | `400 INVALID_MUSIC_ID` |
 | 4 | 호출자가 올린, 삭제하지 않은 곡 | `404 MUSIC_NOT_FOUND` |
