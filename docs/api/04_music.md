@@ -3,13 +3,13 @@
 ARTIST가 추천에 쓸 곡(AI Sample)을 올리고, 저작권을 등록한 곡이면 등록 정보를 내 "등록정보 일치"를 받는 API다.
 
 - 구현 이슈: NSU-89 (새 곡 업로드, 형식·크기·길이 검사, 권리 서류 검증, 저작권 등록 정보), NSU-103 (원본·권리 서류 교체·삭제·S3 정리), NSU-104 (권리 신고 대응: 수령인 공지·즉시 중단·양쪽 통보·재개·반복 침해 계정 정지), NSU-105 (실명 본인확인)
-- 요구사항: SSOT v1.16 `AI-030`~`AI-034`, `AI-038`, `RIGHTS-014`~`026`, `STORAGE-101`~`103`, `SEC-118`. 곡 단위 권리 검증은 v1.17 개정 대상이다(§6)
+- 요구사항: SSOT v1.17(2026-11-05 문서 전체 최종 승인) `AI-030`~`AI-034`, `AI-038`, `RIGHTS-014`~`026`·`RIGHTS-161`, `ADMIN-095`·`096`, `STORAGE-101`~`103`, `SEC-118`
 - 결정 기록: [music_upload/00 업로드 검사](../adr/music_upload/00_music_upload_validation.md), [music_upload/01 곡 권리 검증](../adr/music_upload/01_music_rights_verification.md), [music_upload/02 곡 권리 서류](../adr/music_upload/02_music_rights_documents.md)
 - 관련 계약: [02 추천 응답 §2.3·§2.5·§4.2](./02_recommendation_trust_and_new_artist.md), 서버 협의 [001](https://linear.app/nsu-capstone/document/001-audio-revision과-생성-버전-분리-c5c95e36f3e2)·[002](https://linear.app/nsu-capstone/document/002-revision별-벡터-보관과-active-전환-후-정리-e974a4620c8f)·[003](https://linear.app/nsu-capstone/document/003-ai-처리-상태와-backend-활성-상태-분리-3a0c0ca81f50)·[013](https://linear.app/nsu-capstone/document/013-ai-sample-업로드-형식크기와-추천-목록-재생-2a3ba45048cd)·[015](https://linear.app/nsu-capstone/document/015-audiorevision-타입이름증가-규칙과-musicid-타입-75e01dadc3f4)
 - 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
 - 공통 규칙: [00_conventions.md](./00_conventions.md). 에러 형식과 공통 `code`는 [ADR-007](../adr/ADR-007-spring-backend-global-exception-handling.md)을 따른다
 
-> 상태: Proposed. 2026-10-20 NSU-89 설계 세션(`51255b80`)과 NSU-48·89 설계 세션에서 정했다. 권리 서류(§2.1의 `hasThirdPartyRights`·`licenseFiles`)는 2026-11-05 결정을 반영했다([music_upload/02](../adr/music_upload/02_music_rights_documents.md)). 업로드 길이를 56~60초로 줄이는 제안은 AI 담당의 확인을 기다린다(§2.2). 확인 전까지는 SSOT `AI-033`의 60~80초를 쓴다.
+> 상태: Proposed. 2026-10-20 NSU-89 설계 세션(`51255b80`)과 NSU-48·89 설계 세션에서 정했다. 권리 서류(§2.1의 `hasThirdPartyRights`·`licenseFiles`)는 2026-11-05 결정을 반영했다([music_upload/02](../adr/music_upload/02_music_rights_documents.md)). 업로드 길이는 SSOT v1.17 `AI-033`의 56~60초(경계 포함)다(§2.2).
 
 ---
 
@@ -73,7 +73,7 @@ ARTIST가 추천에 쓸 곡(AI Sample)을 올리고, 저작권을 등록한 곡�
   1. `rights.basis`가 `DECLARED` 또는 `VERIFIED`다.
   2. `rights.isSuspended = false`다.
   3. `audioStatus = ACTIVE`다.
-  4. 곡 아티스트가 `AI_RECOMMENDATION_ENABLED`다. 그 조건은 계정이 `ACTIVE`인 ARTIST, AI 분석 동의, 1·2를 만족하는 곡 1개 이상이다. 등록정보가 일치한 곡이 없어도 된다(2026-10-20 결정, SSOT v1.17 개정 대상).
+  4. 곡 아티스트가 `AI_RECOMMENDATION_ENABLED`다. 그 조건은 계정이 `ACTIVE`인 ARTIST, AI 분석 동의, 1·2를 만족하는 곡 1개 이상이다. 등록정보가 일치한 곡이 없어도 된다(2026-10-20 결정, SSOT v1.17 `AI-031`).
 - 1·2는 Eligibility의 저작권 조건(`COPYRIGHT_SATISFIED`)이다(02 §2.3). 3·4는 후보 곡을 모을 때 거른다(02 §1).
 - `audioRevision`은 서버 사이에서만 쓰고 이 응답에 내보내지 않는다(02 §2.1과 같다).
 - enum 값은 v1 안에서 추가될 수 있다(00 §3).
@@ -91,11 +91,11 @@ sequenceDiagram
 
     A->>S: POST /api/v1/me/music (음원, 제목, 커버곡 여부, 제3자 권리 여부, 신탁 여부, 권리 확인·이용 동의와 문구 버전, 이용허락서)
     S->>S: 인증·역할·계정 상태, 입력 칸 검사
-    S->>T: 음원과 이용허락서를 임시 파일로 받음 (음원 10MiB·서류 5MiB 상한, SHA-256 계산)
+    S->>T: 음원과 이용허락서를 임시 파일로 받음 (파일마다 10MiB 상한, SHA-256 계산)
     S->>D: 같은 파일의 기존 곡·권리 중단 기록 확인, 곡 수 확인 (아티스트 단위 잠금)
     S->>T: 형식 판별, 프레임으로 길이 측정, 이용허락서 형식 판별
     alt 중단 기록·곡 수·형식·길이·서류 검사 실패
-        S-->>A: 400 또는 409
+        S-->>A: 400, 409 또는 413
     else 통과
         S->>B: 원본 저장 (private/ai-samples/...), 이용허락서 저장 (private/rights-evidence/...)
         S->>D: 곡, revision 1, 이용허락서 정보 저장 후 커밋
@@ -130,7 +130,7 @@ Content-Type: multipart/form-data; boundary=...
 - 이용허락서는 `licenseFiles` 이름의 파트를 파일 수만큼 반복해 보낸다.
 - 서버는 이용허락서에 적힌 이용 기간을 읽거나 저장하지 않는다. 허락 만료·철회는 권리자나 아티스트가 알려 오면 NSU-104의 즉시 중단 절차로 멈춘다([music_upload/02](../adr/music_upload/02_music_rights_documents.md) 6절).
 - **서버는 검증만 한다.** 서버는 동의 문구 버전, 이용허락서 첨부 여부·개수, 파일 형식·크기만 확인한다. 서류의 진위, 서명한 사람의 권한, 허락 범위는 판단하지 않고 사람이 심사하지도 않는다. 권리 문제는 신고가 오면 NSU-104 절차로 처리한다([music_upload/02](../adr/music_upload/02_music_rights_documents.md)).
-- **곡은 실명 본인확인을 마친 아티스트(`VERIFIED_ARTIST`)만 올린다(2026-11-05 결정).** 침해 신고가 왔을 때 책임을 물을 실명이 남게 하기 위해서다. 본인확인은 NSU-105가 만들고, 시연에서는 Mock·테스트 본인확인으로 통과한다([music_upload/02](../adr/music_upload/02_music_rights_documents.md) 7절).
+- **곡은 실명 본인확인을 마친 아티스트(`VERIFIED_ARTIST`)만 올린다(2026-11-05 결정).** 침해 신고가 왔을 때 책임을 물을 실명이 남게 하기 위해서다. 본인확인은 NSU-105가 만든다. 시연에서는 PortOne + NHN KCP 테스트 채널로 본인확인한 계정(출처 `SANDBOX`)과, 팀이 시드 스크립트로만 만든 Mock 본인확인 계정이 통과한다([music_upload/02](../adr/music_upload/02_music_rights_documents.md) 7절).
 - 파일 이름과 `Content-Type`은 판정에 쓰지 않는다. 형식은 파일 내용으로 판별한다(§2.2).
 
 ### 2.2 검사
@@ -163,7 +163,7 @@ Content-Type: multipart/form-data; boundary=...
   - M4A: AAC 프레임 수 × 1024 ÷ 코어 샘플레이트로 잰다. 1024샘플 구성(`frameLengthFlag = 0`)만 받고, 코어 샘플레이트는 AudioSpecificConfig에서 읽는다. `mp4a` 상자의 샘플레이트 칸은 쓰지 않는다.
   - M4A의 일관성 검사: 시간 표(`stts` 합 ÷ `mdhd` 시간 단위)로 잰 길이가 프레임으로 잰 길이와 허용 오차(설정값, 기본 1초) 넘게 다르면 형식 오류다. 재생 구간 표가 있으면 항목 1개, 일반 재생만 받고, 그 구간 길이(`segment_duration` ÷ `mvhd` 시간 단위)도 프레임으로 잰 길이와 허용 오차 안이어야 한다. 인코더가 앞쪽 무음 샘플(priming)을 잘라 내려고 넣는 항목이 이 경우다. 플레이어는 재생 구간 표대로 재생해서, 구간을 반복하거나 잘라 내면 프레임 길이와 실제 재생 길이가 달라지기 때문이다.
   - 재생 구간의 시작 위치(`media_time`)는 앞쪽 무음 범위(설정값, 기본 4096샘플) 이하여야 한다. 시작 위치에 구간 길이(미디어 시간 단위로 바꾼 값)를 더한 끝 위치는 샘플 범위(`stts` 합) 안이어야 한다. 70초 파일의 시작 위치를 60초로 옮기고 구간 길이를 70초로 두면, 길이 비교는 통과해도 실제로는 마지막 10초만 재생되기 때문이다.
-  - 허용 범위는 설정값이다. 지금은 SSOT `AI-033`의 **60~80초(경계 포함)**다. AI 담당이 동의하면 **56~60초**로 바꾼다(2026-10-20 Slack 제안). 이 문서의 다른 규칙은 바뀌지 않는다.
+  - 허용 범위는 설정값이고, SSOT v1.17 `AI-033`의 **56~60초(경계 포함)**다. 2026-10-20 AI 담당이 동의했다(서버 협의 013).
   - 경계 근처의 허용 오차는 AI 담당의 답(같은 Slack 제안의 질문 2)을 받아 정한다.
 - 검사 3까지는 파일 내용을 보지 않는다. 검사 4부터 받은 임시 파일을 읽는다. SHA-256은 임시 파일에 쓰면서 함께 계산한다. 이용허락서 형식(검사 9)은 파일 앞부분의 바이트로 판별하며, 서류의 내용은 읽지 않는다.
 
@@ -273,7 +273,7 @@ Content-Type: multipart/form-data; boundary=...
 | 3 | `musicId` 형식 | `400 INVALID_MUSIC_ID` |
 | 4 | 호출자가 올린, 삭제하지 않은 곡 | `404 MUSIC_NOT_FOUND` |
 | 5 | 파트 검증(§3.1) | `400 VALIDATION_ERROR` |
-| 6 | 실명 본인확인을 마침(NSU-105) | `403 IDENTITY_VERIFICATION_REQUIRED` |
+| 6 | 실명 본인확인을 마침(NSU-105). 출처가 `SANDBOX`인 본인확인은 이름을 저장하지 않아 대조할 수 없으므로 통과하지 못한다 | `403 IDENTITY_VERIFICATION_REQUIRED` |
 | 7 | 곡이 중단되지 않음 | `409 MUSIC_RIGHTS_SUSPENDED` |
 | 8 | 등록증이 PDF·JPEG·PNG이고 5MiB 이하 | `400 UNSUPPORTED_CERTIFICATE_FORMAT`, `413 CERTIFICATE_TOO_LARGE` |
 | 9 | 그 등록번호를 내 다른 곡이 쓰지 않음 | `409 COPYRIGHT_REGISTRATION_ALREADY_USED` |
@@ -291,7 +291,7 @@ Content-Type: multipart/form-data; boundary=...
 | 저작자·권리자 | 그중 한 명의 이름이 아티스트의 본인확인 이름과 같다. 공백은 무시한다 |
 
 - **대조가 확인하는 범위**: "본인확인 이름이 등록부의 저작자·권리자 중 한 명의 이름과 같고, 그 제호로 등록된 번호를 냈다"까지다. 이름이 같은 다른 사람이 등록부를 이름으로 검색해 남의 등록번호를 내도 통과하고, 등록 저작자가 자기 번호를 남의 음원에 붙여도 통과한다. 그래서 통과해도 `rights.basis`와 `VERIFIED_ARTIST`를 바꾸지 않는다. Trust Profile의 `COPYRIGHT`는 "등록부 저작자·권리자와 실명 일치"라는 정보로만 쓴다(01 §4.3). 음원과 등록 저작물을 잇는 확인 방법은 상용화 전에 정한다(오디오 지문 검사 등).
-- 본인확인 이름에는 Mock·테스트 인증 이름도 쓴다(시연용, 2026-10-20 결정). 대조에 쓴 본인확인의 출처(`MOCK`·`SANDBOX`·`PRODUCTION`)를 기록한다. 운영으로 넘어갈 때 `MOCK`·`SANDBOX`로 받은 등록정보 일치는 지우고, 그때 받은 등록증도 함께 지운다(NSU-105).
+- 시연의 대조에는 Mock 본인확인 이름만 쓴다(팀원의 실명으로 시드 스크립트가 만든 계정, 2026-11-05 결정). `SANDBOX` 본인확인은 이름을 저장하지 않으므로 등록 정보를 내면 `403 IDENTITY_VERIFICATION_REQUIRED`다. 대조에 쓴 본인확인의 출처(`MOCK`·`SANDBOX`·`PRODUCTION`)를 기록한다. 운영으로 넘어갈 때 `MOCK`·`SANDBOX`로 받은 등록정보 일치는 지우고, 그때 받은 등록증도 함께 지운다(NSU-105).
 - 예명으로 등록한 곡은 본인확인 이름과 달라 통과하지 못한다. 그 곡은 등록정보 일치를 받지 못한다.
 - **공동 저작자·권리자**: 같은 등록번호를 여러 아티스트가 각자 낼 수 있다. 제출자마다 따로 대조하고, 등록부의 저작자·권리자 중에 자기 본인확인 이름이 있어야 통과한다. 등록번호를 플랫폼 전체에서 한 곡에만 쓰게 하면 공동 권리자가 막히고, 먼저 낸 사람이 번호를 차지할 수 있기 때문이다. 한 아티스트는 한 등록번호를 곡 하나에만 쓴다(검사 9).
 - 커버곡은 등록부의 저작자가 원곡 저작자라 통과하지 못한다. 권리 확인·이용 동의와 원곡 권리자의 이용허락서(§2.1)로 `DECLARED`가 되어 추천 후보가 된다.
@@ -332,7 +332,7 @@ Content-Type: multipart/form-data; boundary=...
 | 삭제하지 않은 곡이 이미 3개 | 409 | `MUSIC_LIMIT_EXCEEDED` |
 | 권리 신고로 중단된 곡에 등록 정보를 냄. 권리 중단 기록이 남은 파일을 올림(§2.3) | 409 | `MUSIC_RIGHTS_SUSPENDED` |
 | 그 등록번호를 내 다른 곡이 쓰고 있음 | 409 | `COPYRIGHT_REGISTRATION_ALREADY_USED` |
-| 음원이 10MiB를 넘음 | 413 | 없음. Spring 표준 `ProblemDetail` |
+| 파일 하나(음원·이용허락서·등록증)가 10MiB를 넘거나 요청 전체가 36MiB를 넘음 | 413 | 없음. Spring 표준 `ProblemDetail` |
 | 등록증이 5MiB를 넘음 | 413 | `CERTIFICATE_TOO_LARGE` |
 | 이용허락서가 5MiB를 넘음 | 413 | `LICENSE_TOO_LARGE` |
 | 등록 정보 제출 요청 제한을 넘음 | 429 | `TOO_MANY_REQUESTS`, `Retry-After` 헤더 |
@@ -349,7 +349,7 @@ Content-Type: multipart/form-data; boundary=...
 | 대상 | 경우 |
 |---|---|
 | 역할·상태 | EVENT_PARTNER의 업로드·등록 정보 제출은 `403 ACCESS_DENIED`. `SUSPENDED` 아티스트도 `403` |
-| 업로드 자격 | 실명 본인확인을 하지 않은 `ACTIVE` 아티스트의 업로드는 `403 IDENTITY_VERIFICATION_REQUIRED`이고 곡과 파일이 남지 않는다. Mock 본인확인을 마친 시연 계정은 통과한다 |
+| 업로드 자격 | 실명 본인확인을 하지 않은 `ACTIVE` 아티스트의 업로드는 `403 IDENTITY_VERIFICATION_REQUIRED`이고 곡과 파일이 남지 않는다. PortOne 테스트 채널로 본인확인한(`SANDBOX`) 시연 계정과 Mock 본인확인 시드 계정은 통과한다 |
 | 파트 | 각 필수 파트를 뺀 요청, 불리언에 `"yes"`, 제목 0자·101자, `isRightsWarranted = false`는 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다 |
 | 동의 문구 버전 | 지금 버전과 다른 `rightsWarrantyVersion`은 `400 REQUIRED_TERMS_NOT_AGREED`이고 곡이 생기지 않는다. 통과한 곡에는 요청에 담긴 버전이 저장된다 |
 | 권리 서류 | `hasThirdPartyRights = true`에 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED`이고 곡이 생기지 않는다. `false`에 이용허락서를 보내거나 6개를 보내면 `VALIDATION_ERROR`. 확장자만 `.pdf`인 텍스트 파일은 `UNSUPPORTED_LICENSE_FORMAT`. 5MiB 이용허락서는 통과, 1바이트 넘으면 `413 LICENSE_TOO_LARGE`. 통과한 곡의 이용허락서는 `private/rights-evidence/`에 저장되고, 거절된 요청의 이용허락서는 남지 않는다 |
@@ -370,7 +370,7 @@ Content-Type: multipart/form-data; boundary=...
 | 저장 실패 | 커밋을 요청하기 전에 DB 오류가 나면 S3 원본을 지우고 `500`이다. 곡은 없다 |
 | 커밋 결과 미상 | 커밋은 됐는데 응답 직전에 연결이 끊긴 경우(커밋 뒤 연결 예외를 던지는 대역)는 `500`이고 S3 원본이 남는다. 같은 파일·같은 입력으로 다시 보내면 `201`과 같은 `musicId`이고, 그 원본을 읽을 수 있다. 커밋 요청 뒤 시간이 초과된 경우도 원본을 지우지 않는다 |
 | 트랜잭션 수명 | `transaction_timeout`을 짧게 둔 테스트에서, S3 저장 뒤 시간을 넘긴 업로드 트랜잭션은 커밋되지 않고 곡이 생기지 않는다. 업로드 트랜잭션에 `transaction_timeout`이 걸려 있는지 확인한다 |
-| 등록 정보 | 본인확인 전이면 `403 IDENTITY_VERIFICATION_REQUIRED`. 다른 아티스트의 곡은 `404`. 중단된 곡은 `409`. 내 다른 곡이 쓴 등록번호는 `409 COPYRIGHT_REGISTRATION_ALREADY_USED` |
+| 등록 정보 | 본인확인 전이거나 본인확인 출처가 `SANDBOX`이면 `403 IDENTITY_VERIFICATION_REQUIRED`. 다른 아티스트의 곡은 `404`. 중단된 곡은 `409`. 내 다른 곡이 쓴 등록번호는 `409 COPYRIGHT_REGISTRATION_ALREADY_USED` |
 | 공동 권리자 | 등록부에 함께 오른 공동 저작자 두 명은 같은 등록번호로 각자의 곡에서 통과한다. 먼저 낸 사람이 있어도 다른 아티스트는 `409`가 아니다 |
 | 동시 등록번호 제출 | 같은 아티스트가 제목이 같은 두 곡에 같은 등록번호를 동시에 내면, 하나만 `200`이고 다른 하나는 `409 COPYRIGHT_REGISTRATION_ALREADY_USED`다. 진 요청의 등록증은 남지 않는다. 두 요청 모두 외부 API 대조를 통과한 경우로 확인한다 |
 | 대조 | 번호 없음, 분류가 음악이 아님, 제호 다름, 저작자·권리자에 본인확인 이름이 없음은 각각 `COPYRIGHT_REGISTRATION_MISMATCH`이고 곡은 `isRegistrationMatched = false`로 남는다. 제호의 앞뒤 공백·대소문자만 다르면 통과 |
@@ -387,7 +387,7 @@ Content-Type: multipart/form-data; boundary=...
 |---|---|
 | [02 추천 응답](./02_recommendation_trust_and_new_artist.md) | §2.3 `ARTIST_VERIFIED` → `ACCOUNT_ACTIVE`, 저작권 조건은 곡 단위. §1·§2.5·§4.1·§4.2 저작권 조건 문구를 곡 단위로. `musicId` 예시를 UUID로. 이 PR에서 고친다 |
 | [01 Trust Profile §4.3](./01_trust_profile.md#43-verifications) | `COPYRIGHT`를 넣는 조건을 "등록정보가 일치하고(`rights.isRegistrationMatched`) 중단되지 않은 곡이 1개 이상"으로. 표시는 "등록부 저작자·권리자와 실명 일치"이고 권한의 근거가 아니다. 이 PR에서 고친다 |
-| 서버 협의 013 | AI 담당이 동의하면 업로드 길이 60~80초 → 56~60초 |
+| 서버 협의 013 | 업로드 길이 56~60초는 2026-10-20 AI 담당이 동의했다. MP3·M4A 해독 검증이 끝날 때까지 013은 Proposed다 |
 | Linear NSU-103·104·105 이슈 | NSU-103: 정리 작업은 어떤 revision도 가리키지 않고 정리 유예(1시간)가 지난 원본과, 어떤 곡도 가리키지 않는 등록증·이용허락서를 지운다. 유예가 `transaction_timeout`보다 길지 않으면 서버 시작을 막는다(§2.4·§3.2). 곡 삭제·원본 교체가 권리 중단 기록을 지우지 않는다(§2.3). NSU-104: 신고 대응 다섯 가지를 구현한다. ① 신고 수령인 공지 ② 즉시 중단(새 재생 주소 발급, 이미 발급한 재생 주소, 추천·다시 보기, AI 분석 모두) ③ 신고자와 업로더 양쪽 통보 ④ 소명하면 재개(재개 예정일 전에 소송 제기를 통보받으면 제외) ⑤ 반복 침해 계정 정지. 중단 기록을 (아티스트, 파일 SHA-256)으로 남기고 정식 재개로만 푼다. NSU-105: 본인확인 결과는 서버가 발급한 ID로 사용자 계정에 묶고 한 번만 쓴다. 남의 인증 결과로 이름을 가져와 `VERIFIED_ARTIST`·등록정보 일치를 얻지 못하게 하기 위해서다 |
-| SSOT v1.17 (승인 필요) | `RIGHTS-*` 곡 단위 검증과 Work·AI Sample 통합, 등록부 대조는 "등록정보 일치"로 기록하고 권리 근거를 바꾸지 않음, `VERIFIED_ARTIST` = 실명 본인확인을 마친 `ACTIVE` ARTIST, `ADMIN-096` 표시를 "등록부 저작자·권리자와 실명 일치"로, `AI-030`·`AI-031` AI 추천 조건에서 `VERIFIED_ARTIST`를 빼고 "추천에 쓸 수 있는 곡 1개 이상"으로, `AI-032` 최대 3곡, `AI-MATCH-051` 판정식과 곡 단위 저작권, AI 동의 시 `AI-033` 길이. 2026-11-05 추가: `RIGHTS-016`·`017`·`023` 제3자 권리가 있으면 이용허락서 첨부, `ADMIN-095` 관리자 권리 검증 없음, `STORAGE-102` 이용허락서 보관, `RIGHTS-161` 곡 권리 신고·중단·재개 신설 |
+| SSOT v1.17 (2026-11-05 승인, 반영됨) | `RIGHTS-*` 곡 단위 검증과 Work·AI Sample 통합, 등록부 대조는 "등록정보 일치"로 기록하고 권리 근거를 바꾸지 않음, `VERIFIED_ARTIST` = 실명 본인확인을 마친 `ACTIVE` ARTIST, `ADMIN-096` 표시를 "등록부 저작자·권리자와 실명 일치"로, `AI-030`·`AI-031` AI 추천 조건에서 `VERIFIED_ARTIST`를 빼고 "추천에 쓸 수 있는 곡 1개 이상"으로, `AI-032` 최대 3곡, `AI-MATCH-051` 판정식과 곡 단위 저작권, `AI-033` 업로드 길이 56~60초. 2026-11-05 추가: `RIGHTS-016`·`017`·`023` 제3자 권리가 있으면 이용허락서 첨부, `ADMIN-095` 관리자 권리 검증 없음, `STORAGE-102` 이용허락서 보관, `RIGHTS-161` 곡 권리 신고·중단·재개 신설 |
 | 권리 서식 `docs/곡_권리_서식_샘플/` | 운영자 검토 단계를 빼고 서버 검증과 신고 대응으로 고쳤다. 실행 코드가 읽지 않는 문서라 jar에 넣지 않도록 `docs/`에 둔다. 이 PR에서 함께 넣는다 |

@@ -4,7 +4,7 @@
 
 - 구현 이슈: NSU-48·NSU-63 (Spring↔AI 연동), NSU-70 (Trust Profile 조합), NSU-86·87·88·89 (다시 보기·재생·생성 제한·업로드 검사), NSUAI-28 (옛 NSU-16, AI 팀으로 이동)
 - 관련 이슈: NSU-28, NSU-90 (화면), NSU-71 (취소), NSUAI-9, NSUAI-10, NSUAI-12, NSUAI-15, NSUAI-16, NSUAI-25
-- 요구사항: SSOT v1.16(2026-10-18 문서 전체 최종 승인) `AI-MATCH-050`·`051`·`052`·`053`·`054`, `AI-031`·`AI-034`, `STORAGE-103`, `SEC-119`, `TRUST-151`·`153`. `AI-MATCH-155`는 v1.9에서 폐지했다
+- 요구사항: SSOT v1.16(2026-10-18 문서 전체 최종 승인) `AI-MATCH-050`·`051`·`052`·`053`·`054`, `AI-031`·`AI-034`, `STORAGE-103`, `SEC-119`, `TRUST-151`·`153`. `AI-MATCH-155`는 v1.9에서 폐지했다. §2.5의 업로드 길이와 권리 신고 때 재생 차단은 SSOT v1.17(2026-11-05 승인) `AI-033`·`RIGHTS-161`을 따른다
 - 서버 협의(Linear): [012. CLAP 음악 유사도 기반 곡 추천 흐름](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)(Accepted, 2026-10-10), [014. 추천 생성 잠금·재생 동의 확인·행사 snapshot](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)(Accepted, 2026-10-15), [007. 추천 단위는 곡](https://linear.app/nsu-capstone/document/007-추천-단위는-곡-69137a45b2c6), [010. AI 곡 검색 실패·시간 초과 시 추천 API 응답](https://linear.app/nsu-capstone/document/010-ai-곡-검색-실패시간-초과-시-추천-api-응답-46a63dece138)
 - 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
 - 공통 규칙: [00_conventions.md](./00_conventions.md), Trust Profile 스키마: [01_trust_profile.md](./01_trust_profile.md), 행사: [03_events.md](./03_events.md), 곡 업로드·권리: [04_music.md](./04_music.md)
@@ -271,11 +271,11 @@ Authorization: Bearer {accessToken}
 | `expiresAt` | 시각 문자열 (00 §4) | 주소가 만료되는 시각. 발급 후 10분(설정값) |
 | `availability` | enum | 발급 시점에 판정한 곡 상태(§4.2). `MUSIC_REVISED`면 추천 당시와 다른 현재 음원의 주소다 |
 
-- 원본 파일은 Artist가 업로드한 60~80초 곡(SSOT `AI-033`)이며 MP3·M4A(AAC), 10MiB(10,485,760바이트) 이하다. 길이를 56~60초로 줄이는 제안은 AI 담당 확인을 기다린다([04 §2.2](./04_music.md#22-검사)). 별도 미리듣기 파일을 만들지 않고 원본을 그대로 재생한다(SSOT v1.12 `STORAGE-103`·`SEC-119`, 2026-10-07 승인).
+- 원본 파일은 Artist가 업로드한 56~60초 곡(SSOT v1.17 `AI-033`, [04 §2.2](./04_music.md#22-검사))이며 MP3·M4A(AAC), 10MiB(10,485,760바이트) 이하다. 별도 미리듣기 파일을 만들지 않고 원본을 그대로 재생한다(SSOT v1.12 `STORAGE-103`·`SEC-119`, 2026-10-07 승인).
 - 형식 선택의 근거는 2026-10-07 그릴링의 "브라우저에서 재생 가능한 형식만 업로드하고 원본을 그대로 듣기" 결정이다. MP3·M4A(AAC)로 허용 목록을 좁혀 별도 Preview 인코딩·보관 단계를 줄이고, 10MiB 제한으로 업로드·전송 부담을 제한한다. WAV로 작업한 Artist는 허용 형식으로 변환해 올려야 한다.
 - MP3는 폭넓은 브라우저 재생 호환성을 고려한 선택이다. M4A는 컨테이너이며 AAC codec과 브라우저·OS의 실제 지원을 확인해야 한다. 모든 환경의 재생을 보장한다고 쓰지 않는다([MDN 오디오 codec 안내](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Audio_codecs)).
 - AI 담당이 실제 Docker 환경에서 MP3·M4A(AAC) 디코딩 → 길이 검증 → 기존 Audio Highlight 전처리 → MSCLAP Embedding 생성과 압축 영향을 검증한 뒤 013에 최종 동의한다. 그전까지 013은 Proposed다. 업로드 형식의 제품 선택과 AI 지원 검증 완료는 별개다. 서비스의 대상 브라우저·OS에서도 원본 재생을 확인해야 한다.
-- Audio Highlight는 Artist가 선택한 업로드 구간이다. AI는 업로드 시 임베딩을 만들며, 처음 56초에서 7초×8개 non-overlap Chunk를 사용한다(SSOT `AI-033`). AI가 다른 Highlight 구간을 자동 선정하는 변경은 이번 결정에 포함하지 않는다. 재생은 업로드한 60~80초 원본 전체다.
+- Audio Highlight는 Artist가 선택한 업로드 구간이다. AI는 업로드 시 임베딩을 만들며, 처음 56초에서 7초×8개 non-overlap Chunk를 사용한다(SSOT `AI-033`). AI가 다른 Highlight 구간을 자동 선정하는 변경은 이번 결정에 포함하지 않는다. 재생은 업로드한 56~60초 원본 전체다.
 - Artist는 AI 추천을 활성화할 때 받는 AI 분석 동의에서 재생에도 동의한다(SSOT `AI-031` v1.12).
 - 주소를 발급할 때마다 곡 아티스트의 현재 상태를 확인한다. 추천을 받은 뒤 아티스트가 `AI_RECOMMENDATION_ENABLED`가 아니게 됐으면(AI 추천을 껐거나 AI 분석 동의를 철회한 경우 등) 그 곡은 다시 보기에서 빠지는 곡(§4.2)이므로 `404 MUSIC_NOT_FOUND`다. 추천 당시의 동의를 지금의 재생 권한으로 보지 않는다(2026-10-07 결정, Codex 설계 리뷰).
 - 곡이 저작권 조건(SSOT `AI-MATCH-051`의 `COPYRIGHT_SATISFIED`)을 더 이상 충족하지 않아도 같다. 권리 신고로 재생이 중단된 곡(NSU-104)이 여기에 든다. 재생은 원본을 내보내는 일이므로, 권리 문제가 생긴 곡은 다시 보기 목록에서 빼고 주소도 발급하지 않는다(2026-10-14 결정, 보안 리뷰. 2026-10-20 곡 단위로 바꿈).

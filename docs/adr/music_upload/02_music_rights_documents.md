@@ -2,7 +2,7 @@
 
 - 상태: **Proposed** (PR 리뷰에서 확정)
 - 결정일: **2026-11-05** (김동엽). 2026-11-02 초안(운영자가 이용허락 범위를 검토한 뒤 이용 시작)을 대체한다
-- 관련: [PR #150](https://github.com/nsuCapstoneTeam/NSU_CAPSTONE/pull/150), [00 곡 업로드 검사](./00_music_upload_validation.md), [01 곡 권리 검증](./01_music_rights_verification.md), [04 곡 API §2](../../api/04_music.md), SSOT v1.17 초안 `RIGHTS-016`·`017`·`023`·`161`, `ADMIN-095`, `STORAGE-102`, NSU-89·103·104
+- 관련: [PR #150](https://github.com/nsuCapstoneTeam/NSU_CAPSTONE/pull/150), [00 곡 업로드 검사](./00_music_upload_validation.md), [01 곡 권리 검증](./01_music_rights_verification.md), [04 곡 API §2](../../api/04_music.md), SSOT v1.17(2026-11-05 승인) `RIGHTS-016`·`017`·`018`·`023`·`024`·`161`, `ADMIN-095`, `STORAGE-102`, NSU-89·103·104·105
 
 ## 1. 결정 요약
 
@@ -182,9 +182,9 @@ A를 택한 이유는 다음과 같다.
 | 구분 | 방식 |
 |---|---|
 | 실제 서비스 | 사업자등록 → 본인확인 서비스 계약 → 실명 본인확인을 마친 아티스트만 업로드 |
-| MVP 시연 | PortOne + NHN KCP 테스트 채널의 실제 창으로 본인확인해 `VERIFIED_ARTIST`가 되고, 출처는 `SANDBOX`다. 서버는 PortOne 재조회 응답의 `channel.type`·`channel.key`로 출처를 정한다(`DEMO`는 `TEST` 채널, `PRODUCTION`은 `LIVE` 운영 채널만 받는다). Mock 본인확인은 HTTP로 열지 않고 팀이 시드 스크립트로만 만들며, 등록부 대조 시연(팀원 등록곡)에만 쓴다. 시연 방식은 ADR `identity_verification/00`(브랜치 `docs/NSU-105-identity-verification-demo`, 2026-11-05 결정)이 정한다 |
+| MVP 시연 | PortOne + NHN KCP 테스트 채널의 실제 창으로 본인확인해 `VERIFIED_ARTIST`가 되고, 출처는 `SANDBOX`다. 서버는 PortOne 재조회 응답의 `channel.type`·`channel.key`로 출처를 정한다. 시연 환경(`DEMO`)은 `TEST`이고 설정한 테스트 채널 키일 때만, 운영 환경(`PRODUCTION`)은 `LIVE`이고 설정한 운영 채널 키일 때만 받는다. `channel`이 없으면 거절한다. Mock 본인확인은 HTTP로 열지 않고 팀이 시드 스크립트로만 만들며, 등록부 대조 시연(팀원 등록곡)에만 쓴다. 시연 방식은 ADR `identity_verification/00`(브랜치 `docs/NSU-105-identity-verification-demo`, 2026-11-05 결정)이 정한다 |
 
-- 서버는 업로드 때 서류를 검증하지 않고, 권리 문제는 신고가 오면 6절 3단계로 처리한다(1절과 같다).
+- 서버는 업로드 때 서류의 진위와 허락 범위를 판단하지 않고(첨부 여부·형식·크기만 검증한다), 권리 문제는 신고가 오면 6절 3단계로 처리한다(1절과 같다).
 - 시연용 본인확인 결과는 출처(`MOCK`·`SANDBOX`)를 남기고, 운영 전환 때 무효로 한다([01](./01_music_rights_verification.md) 본인확인 출처 안전장치).
 - 본인확인 구현은 NSU-105다. 곡 업로드(NSU-89)는 NSU-105의 본인확인 결과를 읽으므로 NSU-105가 먼저다. Mock 본인확인은 시드 스크립트 전용이다(HTTP 경로 없음).
 
@@ -196,7 +196,7 @@ A를 택한 이유는 다음과 같다.
 | [04 곡 API](../../api/04_music.md) §1.1·§2 | `hasThirdPartyRights`, `licenseFiles`, `RIGHTS_LICENSE_REQUIRED`·`UNSUPPORTED_LICENSE_FORMAT`·`LICENSE_TOO_LARGE`, 저장 규칙과 테스트 기준 |
 | [00 곡 업로드 검사](./00_music_upload_validation.md) | 업로드 입력에 제3자 권리 여부와 이용허락서 |
 | 권리 서식 00·01·02 | 운영자 검토 단계를 빼고 서버 검증과 신고 대응으로 바꿨다 |
-| SSOT v1.17 초안 | `RIGHTS-016`·`017`·`018`·`023`, `ADMIN-095`, `STORAGE-102`에 표시. `RIGHTS-161`(곡 권리 신고·중단·재개) 신설 |
+| SSOT v1.17(2026-11-05 승인) | `RIGHTS-016`·`017`·`018`·`023`, `ADMIN-095`, `STORAGE-102`에 반영. `RIGHTS-161`(곡 권리 신고·중단·재개) 신설 |
 | Linear | NSU-89(서류 검증), NSU-103(서류 삭제·정리), NSU-104(신고 대응 다섯 가지) |
 | Eligibility·AI 추천 후보(7절 업로드 자격) | 곡 업로드가 `VERIFIED_ARTIST` 전용이 되어, 본인확인을 하지 않은 아티스트는 곡이 없으므로 Eligibility·`AI-031` 후보가 되지 못한다. `recommendation_eligibility/00`과 [01](./01_music_rights_verification.md)의 버린 안 사유에 반영한다(브랜치 `docs/NSU-105-identity-verification-demo`) |
 
@@ -205,6 +205,10 @@ A를 택한 이유는 다음과 같다.
 1. 신고 양식, 통보 수단, 재개 예정일까지의 기간, 반복 침해 기준 수와 집계 기간(NSU-104)
 2. 이미 발급한 재생 주소를 바로 끊는 방법(NSU-104)
 3. 서식의 빈칸(운영 주체, 연락처, 기간, 대가, 처리 업체)과 배포 전 법률 검토(상용화 전)
+4. 허락 만료·철회·아티스트의 이용 종료 요청을 신고와 같은 흐름으로 멈출 때, (아티스트, 파일 SHA-256) 중단 기록을 남기는지와 반복 침해 집계에 넣는지(NSU-104)
+5. 분쟁 중인 곡을 아티스트가 지울 때 이용허락서를 7일 안에 지울지, 분쟁 대응용으로 따로 보존할지(NSU-103·104)
+6. 운영 전환 때 테스트 본인확인(`MOCK`·`SANDBOX`)으로 올린 곡과 서류의 처리(NSU-105)
+7. 시연 서버의 공개 쓰기 제한 오류(`403 DEMO_WRITE_NOT_ALLOWED`)와 검사 순서는 NSU-129에서 곡 API에 적는다
 
 ## 9. 준비한 서식과 읽는 순서
 
@@ -222,8 +226,8 @@ A를 택한 이유는 다음과 같다.
 
 ## 10. 근거와 확인 범위
 
-- 논의 경위: PR #150의 권리 보증·등록부 대조 → 30초·56~60초 방안 → YouTube 분석 방안 → 아티스트 서류 제출 방안 → 운영자 검토 3단계 초안(2026-11-02) → 서버 검증만 하는 A안과 신고 대응 다섯 가지 확정, 곡 업로드를 실명 본인확인을 마친 아티스트로 한정하고 시연은 더미 계정과 Mock·테스트 본인확인으로 하기로 확정(2026-11-05, 김동엽).
-- 제품 요구사항: [Linear MVP SSOT](https://linear.app/nsu-capstone/document/ssot-아티스트-행사-매칭-플랫폼-mvp-요구사항-e38bb23f87b1) v1.17 초안(승인 대기). 관련 항목은 `RIGHTS-016`·`017`·`018`·`023`·`161`, `ADMIN-095`, `STORAGE-102`, `AI-030`~`038`, `AI-MATCH-051`이다.
+- 논의 경위: PR #150의 권리 보증·등록부 대조 → 30초·56~60초 방안 → YouTube 분석 방안 → 아티스트 서류 제출 방안 → 운영자 검토 3단계 초안(2026-11-02) → 서버 검증만 하는 A안과 신고 대응 다섯 가지 확정, 곡 업로드를 실명 본인확인을 마친 아티스트로 한정하고 시연은 더미 계정과 Mock 본인확인으로 정했다가 같은 날 PortOne·NHN KCP 테스트 창으로 바꾸고 Mock은 등록부 대조에만 쓰기로 확정(2026-11-05, 김동엽, `identity_verification/00`).
+- 제품 요구사항: [Linear MVP SSOT](https://linear.app/nsu-capstone/document/ssot-아티스트-행사-매칭-플랫폼-mvp-요구사항-e38bb23f87b1) v1.17(2026-11-05 Human Confirm 승인). 관련 항목은 `RIGHTS-016`·`017`·`018`·`023`·`161`, `ADMIN-095`, `STORAGE-102`, `AI-030`~`038`, `AI-MATCH-051`이다.
 - 용어와 기존 서버 결정: [용어집](https://linear.app/nsu-capstone/document/용어집-context-475370673105), [000 서버 협의 목록](https://linear.app/nsu-capstone/document/000-server-agreements-목록-7e0bf3793fd3), [014 재생 동의 확인](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f).
 - 법령: [저작권법 제102조](https://law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0102&lsiSeq=285693&urlMode=lsScJoRltInfoR)·[제103조](https://law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0103&lsiSeq=285693&urlMode=lsScJoRltInfoR)는 2026-10-29 시행본(법률 제21595호)을 2026-11-05 확인했다. 제35조의5·제46조와 YouTube API 정책은 2026-11-02 확인했다. KOMCA 규정 언급은 검토 경위를 설명하기 위한 것이며, 우리 서비스에 적용되는 이용허락·면제 범위를 확인한 결과가 아니다.
 
