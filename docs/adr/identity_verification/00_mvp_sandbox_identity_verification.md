@@ -111,10 +111,10 @@
 - 2026-11-05 코드 상태:
   - 시연에 필요한 기능은 아직 구현되지 않았다. PRIVATE 행사는 등록자만 보도록 항상 거부하고(`DenyingCanViewPrivateEvent`), 댓글 코드는 없다.
   - 인증 코드 재전송 쿨다운은 가입 세션 단위뿐이다(`SignupRedisKeys.cooldown`). 가입 세션은 로그인 없이 만들 수 있어서, 세션을 새로 만들면 같은 번호로 계속 보낼 수 있다. 번호·IP·전체 한도는 없다.
-  - 가입 필수 약관 동의는 가입 세션의 값으로만 남고 DB에 저장하지 않는다(`SignupVerificationService.agreeRequiredTerms`).
+  - 가입 필수 약관 동의는 가입 세션의 값으로만 남고 DB에 저장하지 않는다(`SignupVerificationService.agreeRequiredTerms`). 이 ADR이 바꾼다("개인정보", 계약 `signup-terms-and-send-limits.md` §1.1).
   - Spring 프로필 파일이 없다. 환경을 나누는 설정이 아직 없다.
   - SMS는 CoolSMS를 쓴다(2026-11-05 사용자 결정). CoolSMS GitHub 조직 페이지는 SOLAPI SDK를 100% 지원한다고 밝힌다. 그래서 지금의 `SolapiSmsSender`를 그대로 쓰고, CoolSMS 계정으로 실제로 보내지는지는 NSU-129 리허설에서 확인한다.
-  - 인증 코드 발송(`sendEmailCode`·`sendPhoneCode`)은 약관 동의 여부를 보지 않는다. 동의는 가입을 마칠 때만 확인한다(`SignupRequiredConditionsValidator`).
+  - 인증 코드 발송(`sendEmailCode`·`sendPhoneCode`)은 약관 동의 여부를 보지 않는다. 동의는 가입을 마칠 때만 확인한다(`SignupRequiredConditionsValidator`). 이 ADR이 동의를 세션 생성 때 받도록 바꾼다("개인정보").
   - 프론트는 `VERIFICATION_REQUEST_LIMIT_EXCEEDED`를 "인증번호는 60초 뒤에 다시 받을 수 있어요."로 고정해 보여 준다(`frontend/src/features/auth/api/auth-api.js`). 백엔드는 `Retry-After`를 보내지 않는다.
   - 가입 인증 코드 발송 제한을 수신처 단위로 바꾸고 Redis 저장을 원자화하는 이슈가 이미 있다(NSU-123).
 

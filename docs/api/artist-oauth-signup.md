@@ -17,10 +17,10 @@
 `POST /api/v1/auth/signup/artist/oauth/session`
 
 ```json
-{"oauthSignupSessionId":"<server-issued opaque ID>","phone":"01012345678","email":"artist@example.com","agreements":[{"id":"service-terms","version":"2026-11-05"}]}
+{"oauthSignupSessionId":"<server-issued opaque ID>","phone":"01012345678","email":"artist@example.com","agreements":[{"id":"service","version":"v1"},{"id":"privacy","version":"v1"},{"id":"demo-notice","version":"v1"},{"id":"overseas-transfer","version":"v1"}]}
 ```
 
-- ID·phone·agreements는 필수다. 필수 약관이 빠지면 `400 REQUIRED_TERMS_NOT_AGREED`다. email은 Provider 이메일이 없거나 미검증이면 필수다.
+- ID·phone·agreements는 필수다. 필수 약관이 빠지면 `400 REQUIRED_TERMS_NOT_AGREED`다. `agreements`는 [signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1의 약관 ID·버전을 쓴다(위 예시는 `DEMO` 기준). 이 필드는 구현 전이며, NSU-123 배포 전까지 지금 서버는 `agreements` 없이 준비하고 약관 PUT으로 동의를 받는다. email은 Provider 이메일이 없거나 미검증이면 필수다.
 - 검증된 Provider 이메일은 생략하거나 동일 값만 보낼 수 있다.
 - 서버는 ARTIST/OAUTH를 고정한다. Provider 식별정보·role·인증 완료 boolean은 입력으로 사용하지 않는다.
 - 최초 생성은 201, 같은 입력의 재요청은 200이다. 응답은 아래 세 필드다.

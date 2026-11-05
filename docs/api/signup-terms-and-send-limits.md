@@ -2,6 +2,7 @@
 
 가입 세션을 만들 때 필수 약관 동의를 함께 받고, 인증 코드 발송에 하루·1시간 한도를 둔다. 이미 구현된 가입 API를 바꾸는 계약이다.
 
+- 상태: **구현 전**(2026-11-06). 지금 서버와 가입 화면은 옛 흐름(세션 생성 뒤 약관 PUT, 발송 한도 없음)이다. NSU-123 백엔드와 NSU-129 가입 화면을 같은 배포로 낼 때 이 계약으로 바뀐다(§2). 그 전까지 클라이언트는 옛 흐름을 쓴다.
 - 구현 이슈: NSU-123(백엔드), NSU-129(가입 화면)
 - 근거: ADR [identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md) "개인정보"·"인증 메시지 발송 한도"(2026-11-05 결정)
 - 함께 보는 계약: [artist-oauth-signup.md](./artist-oauth-signup.md)(OAuth 가입 준비·최종 가입)
