@@ -89,6 +89,10 @@ public record EventPartnerProfileRequest(
         if (value.indexOf('\u0000') >= 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
+        // 짝 없는 서로게이트는 UTF-8로 바꿀 때 '?'로 조용히 바뀌므로 거절한다
+        if (value.codePoints().anyMatch(cp -> cp <= Character.MAX_VALUE && Character.isSurrogate((char) cp))) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        }
         String trimmed = value.strip();
         // 보이는 글자(글자·숫자·문장부호·기호)가 하나도 없으면 빈 값이다. 공백·서식 문자·결합 표식만 있는 값이
         // 그렇다. 길이보다 먼저 본다(보이지 않는 글자가 길이를 넘어도 빈 값이다)

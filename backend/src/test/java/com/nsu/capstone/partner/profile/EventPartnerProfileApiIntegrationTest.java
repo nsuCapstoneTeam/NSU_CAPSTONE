@@ -341,6 +341,20 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
     }
 
     @Test
+    void 짝_없는_서로게이트가_든_문자열은_VALIDATION_ERROR다() throws Exception {
+        // 그대로 두면 UTF-8로 바꿀 때 '?'로 조용히 바뀌어 저장된다
+        for (String field : List.of("name", "organization", "bio")) {
+            String body = """
+                {"name": "김담당", "eventTypes": [], "regionCodes": [], "%s": "김\\uD800"}
+                """.formatted(field);
+            mockMvc.perform(put(PATH).header("Authorization", bearer(partner))
+                    .contentType(APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        }
+    }
+
+    @Test
     void 글자_수는_코드포인트로_센다() throws Exception {
         Map<String, Object> body = validProfile();
         body.put("name", "😀".repeat(40));
