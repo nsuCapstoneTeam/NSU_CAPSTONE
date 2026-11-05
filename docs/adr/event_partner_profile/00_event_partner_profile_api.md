@@ -137,18 +137,19 @@ ADR event_management/01은 "앱 안의 정적 파일로 목록 관리"를 DB가 
 
 ## Consequences
 
-- `V7__create_event_partner_profiles_table.sql`이 새 테이블을 만든다. 기존 테이블을 바꾸지 않는다. 롤백은 테이블을 지우는 forward 마이그레이션이다(PR 설명에 적는다).
+- `V7__create_event_partner_profiles_table.sql`이 새 테이블을 만든다. 기존 테이블을 바꾸지 않는다. 롤백은 점검 함수 `check_event_partner_profile_regions()`와 테이블을 지우는 forward 마이그레이션이다(PR 설명에 적는다).
 - **행정구역 개편 때의 배열 이전**: ADR event_management/01의 "목록 변경과 저장된 코드 이전을 마이그레이션 하나로"를 이 배열에도 적용한다.
   - 각 코드를 새 코드로 바꾼 뒤 05 §2의 정규화(중복 합침, 시·도 안의 시·군·구 합침, 시·군·구 하나뿐인 시·도)를 다시 적용한다. 예: 2026-07 광주·전남 통합(`29`·`46` → `12`) 때 `["29", "46"]`은 `["12"]`, `["29", "46110"]`은 `["12"]`가 된다.
   - 하나가 둘 이상으로 나뉘어 3개를 넘으면, 그 시·도 코드로 합친다.
-  - 같은 마이그레이션 끝에서 "저장된 코드가 모두 `regions`의 `code` 또는 `province_code`에 있다"를 확인하는 점검 쿼리를 실행하고, 어긋나면 마이그레이션을 실패시킨다.
+  - 같은 마이그레이션 끝에서 점검 함수 `check_event_partner_profile_regions()`를 부른다. 저장된 코드가 모두 `regions`의 `code` 또는 `province_code`에 있는지와 배열이 정규형(정렬 포함)인지 확인하고, 어긋나면 마이그레이션을 실패시킨다.
+  - **받아들인 위험**: `PUT`이 지역을 검증한 뒤 저장하기 전에 개편 마이그레이션이 커밋되면 사라진 코드가 저장될 수 있다. 창이 수 밀리초이고 개편은 드문 배포라서, 저장 문장 안에서 존재를 다시 확인하는 방식(SQL이 복잡해지고 0행일 때 `400`으로 바꾸는 분기 필요) 대신 개편 마이그레이션을 앱을 멈춘 배포에서 적용하기로 했다. 남은 코드는 다음 개편의 점검 함수가 잡는다(2026-11-05 사용자 결정).
   - 이전을 빠뜨리면 사라진 코드가 남고, 화면이 받은 값을 그대로 보낸 `PUT`이 `400`이 된다. 위 점검이 이를 막는다.
 - 테이블은 사용자의 역할을 검사하지 못한다. EVENT_PARTNER만 행을 만드는 것은 API의 역할 제한이 보장한다.
 - 행사 종류 허용 값이 `ck_events_event_type`과 이 테이블의 `CHECK` 두 곳에 있다. 값을 더할 때 두 `CHECK`를 같은 마이그레이션에서 고친다. 한쪽만 고치면 앱 검증을 통과한 값이 DB에서 거절돼 `500`이 된다. 두 `CHECK`가 `EventType`과 같은지 확인하는 테스트를 둔다(05 §6).
 - 프로필 응답에는 이메일·휴대폰이 없다. 다만 소속·소개에 사용자가 연락처를 적을 수는 있다. 다른 사용자용 조회를 열 때 이 점을 고려해 노출할 필드를 정한다.
 - 화면과 서버를 함께 배포한다. 필드를 더하면, 그 필드를 모르는 이전 화면이 저장할 때 새 필드가 지워질 수 있다.
 - **받아들인 위험: 계정 상태**. JWT는 role claim만 보고 계정 상태를 보지 않는다. 상태 검사는 로그인 시점(`LoginPrincipal.isEnabled`)에만 있다. 그래서 정지된 사용자가 만료 전 토큰으로 프로필을 고칠 수 있다. 행사 API도 같다. 토큰 발급 뒤 상태 반영은 Auth/User 도메인(00 §7, `AUTH-160`)이 정한다.
-- 탈퇴할 때 프로필을 지우는 연동과 보유기간은 탈퇴 기능을 설계할 때 정한다. 그때 이 API의 삭제를 다시 쓸 수 있다. FK는 `ON DELETE`를 두지 않는다(사용자 행은 상태로만 탈퇴를 표시한다). 개인정보처리방침의 수집 항목에 담당자 이름을 더하는 일은 PR 설명에 후속 작업으로 적는다.
+- 탈퇴할 때 프로필을 지우는 연동과 보유기간은 탈퇴 기능을 설계할 때 정한다(NSU-134). 탈퇴한 사용자는 로그인할 수 없어 스스로 삭제 API를 부를 수 없으므로, 탈퇴 처리가 대신 지워야 한다. FK는 `ON DELETE`를 두지 않는다(사용자 행은 상태로만 탈퇴를 표시한다). 개인정보처리방침의 수집 항목에 담당자 이름을 더하는 일은 NSU-133이다. 두 이슈 모두 실사용자에게 서비스를 열기 전에 끝낸다.
 
 ## Excluded
 
@@ -164,7 +165,7 @@ ADR event_management/01은 "앱 안의 정적 파일로 목록 관리"를 DB가 
 ## Reused
 
 - 분류 값 `EventType`과 그 허용 목록(03 §3.3), 지역 목록 `regions`(03 §7)
-- 배열 + `CHECK` 저장 방식(`events.genres`, `Event.java`의 `@JdbcTypeCode(SqlTypes.ARRAY)`)
+- 배열 + `CHECK` 저장 방식(`events.genres`의 `VARCHAR[]`와 `CHECK`). 접근은 JPA 엔티티(`Event.java`의 `@JdbcTypeCode(SqlTypes.ARRAY)`)를 재사용하지 않고 Spring `JdbcClient`로 한다. `INSERT … ON CONFLICT … DO UPDATE … RETURNING` 한 문장(결정 4)을 JPA의 `save`로는 쓸 수 없기 때문이다. `JdbcClient`는 이미 있는 `spring-boot-starter-data-jpa`를 통해 들어와 의존성을 더하지 않는다
 - 역할 제한과 호출자 식별(`MyEventController`의 `@PreAuthorize`, `@AuthenticationPrincipal Jwt`)
 - 오류 형식 `ErrorCode`·`ErrorResponse`·`GlobalExceptionHandler`(ADR-007). 새 `code`는 없다
 
