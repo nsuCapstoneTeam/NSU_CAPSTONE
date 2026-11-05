@@ -32,14 +32,19 @@
 
 ```mermaid
 flowchart TD
-    IN["입력: 행사 조건(EligibilityInput) + 후보 곡 목록"] --> ART["곡의 아티스트를 중복 없이 뽑기"]
-    ART --> READ["아티스트 정보를 한꺼번에 읽기<br/>계정, 공연 가능지역, 출연료, 공연 형태, 일정"]
-    READ --> AC{"아티스트 조건<br/>계정, 일정, 지역, 예산, 공연 형태"}
-    AC -- "하나라도 실패" --> OUT1["그 아티스트의 곡 모두 제외"]
-    AC -- "모두 통과" --> SC{"곡 조건<br/>저작권(권리 근거·중단 여부)"}
+    IN["입력: 행사 조건(EligibilityInput) + 후보 곡 목록"] --> SC{"곡 조건<br/>저작권(권리 근거·중단 여부)"}
     SC -- "실패" --> OUT2["그 곡만 제외"]
-    SC -- "통과" --> RES["출력: 통과한 곡 + 통과한 조건 목록"]
+    SC -- "통과" --> ACC["남은 곡의 아티스트 계정을 한꺼번에 읽기"]
+    ACC --> AC1{"계정 조건"}
+    AC1 -- "실패" --> OUT1["그 아티스트의 곡 모두 제외"]
+    AC1 -- "통과" --> READ["프로필·일정을 한꺼번에 읽기"]
+    READ --> AC2{"아티스트 조건<br/>일정, 지역, 예산, 공연 형태"}
+    AC2 -- "하나라도 실패" --> OUT1
+    AC2 -- "모두 통과" --> RES["출력: 통과한 곡 + 통과한 조건 목록"]
 ```
+
+- 판정 순서는 저작권 → 계정 → 프로필 → 일정 → 지역 → 예산 → 공연 형태다. 저작권을 먼저 보면 계정·프로필·일정을 읽을 아티스트가 줄어든다. 판정 결과는 순서와 관계없이 같다.
+- 지표(`eligibility.rejected`)는 곡마다 이 순서에서 처음 실패한 조건 하나로만 센다. 예를 들어 계정이 정지되고 곡도 중단된 경우는 `COPYRIGHT`로 센다.
 
 **구조**
 
@@ -132,14 +137,17 @@ Eligibility가 곡 목록과 AI 추천 상태까지 읽으면 맡는 일이 커�
   - NSU-63(후보 모으기): `MusicCandidate`의 `rightsBasis`와 `isSuspended`는 반드시 서버가 곡 테이블에서 읽은 값을 쓴다. 요청 본문 등 클라이언트 입력을 넘기지 않는다.
   - NSU-63: `COPYRIGHT_SATISFIED`는 04 §1.1 후보 조건 중 권리 근거와 중단 여부만 본다. 음원 처리 상태(`audioStatus = ACTIVE`)와 `AI_RECOMMENDATION_ENABLED`는 후보를 모을 때 거른다(02 §1). 다시 보기(NSU-86)는 `filterAccountAndCopyright` 말고 이 둘과 곡 삭제를 따로 확인한다(02 §4.2).
   - NSU-105: Eligibility는 `VERIFIED_ARTIST`를 다시 보지 않으므로, 실명 책임은 업로드 시점에만 성립한다. NSU-105는 본인확인이 무효가 될 수 있게 설계하면 그 아티스트의 곡을 중단(`isSuspended`)하거나, 무효가 될 수 없게 한다. 시연용 Mock 본인확인 계정의 곡이 운영 데이터에 남지 않게 하는 것도 NSU-105 몫이다.
+  - NSU-89(곡): 곡 업로드는 `VERIFIED_ARTIST`만 할 수 있게 검사한다(SSOT v1.17 `RIGHTS-023`·`RIGHTS-024`). Eligibility는 `VERIFIED_ARTIST`를 판정하지 않고 이 업로드 검사에 기댄다(버린 안 참고). main의 `docs/api/04_music.md` §2.2는 아직 `ARTIST`·`ACTIVE`만 검사하므로, 업로드 관문(`403 IDENTITY_VERIFICATION_REQUIRED`)을 계약에 넣는 PR #186이 머지되기 전에 NSU-89를 구현하지 않는다.
   - NSU-89(곡): 권리 근거 enum은 `music.domain.RightsBasis`에 이미 있다. 새로 만들지 않고 이 enum을 쓴다. 값을 늘리면 `EligibilityFilter`의 `switch`가 컴파일되지 않아 통과 여부를 정하게 된다.
   - NSU-63: `EligibilityFilter`를 AI 호출과 같은 DB 트랜잭션 안에서 부르지 않는다. 트랜잭션 안의 외부 호출은 연결을 쥔 채 기다리게 한다.
   - NSU-63: 후보 수의 상한은 API 02 §1대로 AI가 측정해 NSUAI-15에 공개하는 입력 상한을 따른다. Spring이 임의로 자르지 않는다. 그 크기로 계정 일괄 조회(`UserRepository.findAllByIdIn`의 `IN` 목록, `UserAccountRow` projection)를 통합 테스트한다. 구현 점검에서 이 크기를 확인하지 못했다. 상한이 pgjdbc 바인드 파라미터 상한(약 3만 2천 개)을 넘으면 계정·프로필·일정 창구는 `IN` 목록 대신 `= ANY(:ids)` 배열 바인딩이나 청크 조회를 쓴다.
+  - NSU-63: 후보 수가 요청마다 달라 `IN` 목록 길이도 달라진다. 그러면 SQL 문자열이 매번 바뀌어 Hibernate·pgjdbc 문장 캐시가 밀린다. 후보 규모를 정할 때 창구 조회를 `= ANY(:ids)` 배열 바인딩으로 하거나 `hibernate.query.in_clause_parameter_padding`을 켠다. 전역 설정이라 다른 `IN` 쿼리에도 영향이 있는지 함께 본다.
   - NSU-63: 같은 `musicId`가 후보에 두 번 들어오면 결과에도 두 번 나온다. 필터는 중복을 거르지 않으므로 후보를 모을 때 `(music_id, audioRevision)`이 겹치지 않게 한다.
   - NSU-12·34: 실제 창구를 붙일 때 1명·100명 조회 횟수 통합 테스트(`EligibilityFilterIntegrationTest`)가 프로필·일정 창구의 조회까지 세도록 늘린다. 지금은 빈 구현이라 계정 조회만 센다.
   - NSU-12·34: 조회 횟수 통합 테스트는 Hibernate `Statistics`로 센다. 그래서 창구는 JPA(Spring Data·`EntityManager`)로 조회한다. `JdbcTemplate`·`JdbcClient`로 만들면 DataSource 수준(datasource-proxy 등)에서 세도록 테스트를 바꾼다.
   - NSU-12·34(필수): 일정 테이블에 DB `CHECK (start_at < end_at)`를 건다. 보통의 겹침 조회(`start < to AND end > from`)는 뒤집힌 행을 돌려주지 않는다. 그래서 필터가 null 값과 뒤집힌 막힌 일정을 그 아티스트의 실패(fail-closed)로 보는 것은 창구가 그 행을 돌려줄 때만 동작한다. 저장 단계에서 막아야 하고, 창구 통합 테스트에서 뒤집힌 행을 저장할 수 없음을 확인한다.
-  - 지표: `eligibility.rejected{condition}`의 condition 값은 `COPYRIGHT`, `ACCOUNT`, `PROFILE_MISSING`, `SCHEDULE_MISSING`, `SCHEDULE`, `REGION`, `BUDGET`, `PERFORMANCE_TYPE` 8개이고, 생성할 때 모두 0으로 등록한다. `SCHEDULE_MISSING`은 일정 데이터가 없거나 값이 빠진 경우(창구 고장 신호), `SCHEDULE`은 막힌 일정과 겹치거나 `AVAILABLE`로 덮지 못한 실제 충돌이다. 이 지표는 지금 프로세스 안에만 쌓인다. `micrometer-registry-*` 의존성과 actuator 노출 설정이 없기 때문이다. 내보내기와 노출 범위는 배포 설계 때 정하고, 그 전에는 INFO 로그(`Eligibility 판정을 마쳤다: …`)로 본다.
+  - 지표: `eligibility.rejected{condition}`의 condition 값은 `COPYRIGHT`, `ACCOUNT`, `PROFILE_MISSING`, `SCHEDULE_MISSING`, `SCHEDULE`, `REGION`, `BUDGET`, `PERFORMANCE_TYPE` 8개이고, 생성할 때 모두 0으로 등록한다. `SCHEDULE_MISSING`은 창구가 값을 null로 주었거나 슬롯의 시작·끝·상태가 빠진 경우(창구 계약 위반)다. `SCHEDULE`은 행사 시간대에 일정이 없거나(키 없음·빈 목록), 막힌 일정과 겹치거나, `AVAILABLE`로 덮지 못한 경우다. 창구가 조용히 빈 결과를 돌려주는 고장은 `SCHEDULE`·`PROFILE_MISSING`과 구분되지 않고, 분포가 한꺼번에 바뀌는 것으로만 드러난다. 창구 쪽 조회 오류·건수 지표는 NSU-12·34가 정한다. 이 지표는 지금 프로세스 안에만 쌓인다. `micrometer-registry-*` 의존성과 actuator 노출 설정이 없기 때문이다. 내보내기와 노출 범위는 배포 설계 때 정하고, 그 전에는 INFO 로그(`Eligibility 판정을 마쳤다: …`)로 본다.
+  - NSU-122(검색창 즉시 추천): 행사가 없어 `filter`를 부를 수 없다. 적용할 필수 조건을 NSU-122에서 정하고, 계정·저작권만 볼 때는 `filterAccountAndCopyright`를 쓴다. 평가하지 않은 조건(일정·지역·예산·공연 형태)을 `passedConditions`나 "필수 조건 통과" 문구로 통과처럼 표시하지 않는다.
   - 입력 전제: `EligibilityInput`은 행사 검증을 거친 값이다. `start < end`(03 §3.1·§3.6, `EventRequest`가 `0 < 종료 − 시작 ≤ 24시간`을 검증)이고 `regionCode`는 5자리다. 판정 코드는 이를 다시 검사하지 않는다.
 
 ## Reused

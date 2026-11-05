@@ -656,8 +656,8 @@ class EligibilityFilterTest {
 
         filter.filter(eventAskingFor(ArtistType.BAND), candidates);
 
-        assertThat(rejected("SCHEDULE_MISSING")).isEqualTo(2.0);
-        assertThat(rejected("SCHEDULE") + rejected("REGION") + rejected("BUDGET")
+        assertThat(rejected("SCHEDULE")).isEqualTo(2.0);
+        assertThat(rejected("SCHEDULE_MISSING") + rejected("REGION") + rejected("BUDGET")
             + rejected("PERFORMANCE_TYPE")).isZero();
         assertThat(counted("eligibility.passed")
             + rejected("ACCOUNT") + rejected("COPYRIGHT") + rejected("PROFILE_MISSING")
@@ -666,25 +666,32 @@ class EligibilityFilterTest {
     }
 
     @Test
-    void countsMusicWithoutUsableScheduleDataAsScheduleMissing() {
-        UUID absent = readyArtist();
-        schedules.remove(absent);
+    void countsNullScheduleValueAndIncompleteSlotAsScheduleMissing() {
         UUID nullValue = readyArtist();
         schedules.put(nullValue, null);
-        UUID emptyList = readyArtist();
-        schedules.put(emptyList, List.of());
         UUID incompleteSlot = readyArtist();
         schedules.put(incompleteSlot, List.of(
             available(at(15, 12, 0), at(15, 23, 0)),
             new ScheduleSlot(at(15, 1, 0), at(15, 2, 0), null)
         ));
 
-        filter.filter(EVENT, List.of(
-            candidate(absent), candidate(nullValue), candidate(emptyList), candidate(incompleteSlot)
-        ));
+        filter.filter(EVENT, List.of(candidate(nullValue), candidate(incompleteSlot)));
 
-        assertThat(rejected("SCHEDULE_MISSING")).isEqualTo(4.0);
+        assertThat(rejected("SCHEDULE_MISSING")).isEqualTo(2.0);
         assertThat(rejected("SCHEDULE")).isZero();
+    }
+
+    @Test
+    void countsArtistWithNoSlotInEventWindowAsSchedule() {
+        UUID absent = readyArtist();
+        schedules.remove(absent);
+        UUID emptyList = readyArtist();
+        schedules.put(emptyList, List.of());
+
+        filter.filter(EVENT, List.of(candidate(absent), candidate(emptyList)));
+
+        assertThat(rejected("SCHEDULE")).isEqualTo(2.0);
+        assertThat(rejected("SCHEDULE_MISSING")).isZero();
     }
 
     @Test

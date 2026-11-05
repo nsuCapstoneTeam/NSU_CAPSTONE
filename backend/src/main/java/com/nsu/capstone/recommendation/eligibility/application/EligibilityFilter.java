@@ -86,7 +86,8 @@ public class EligibilityFilter {
         rejected.forEach((rejection, count) ->
             meterRegistry.counter(REJECTED_METER, "condition", rejection.name()).increment(count));
         meterRegistry.counter(PASSED_METER).increment(eligible.size());
-        // 식별자와 개인정보는 남기지 않는다. 창구 고장과 맞는 아티스트 없음을 구분하는 데 쓴다.
+        // 식별자와 개인정보는 남기지 않는다. 조건별 탈락 분포를 보는 데 쓴다.
+        // 창구가 빈 결과를 돌려주는 고장은 분포가 한꺼번에 바뀌는 것으로만 드러난다.
         log.info("Eligibility 판정을 마쳤다: 후보 {}곡, 통과 {}곡, 조건별 탈락 {}",
             candidates.size(), eligible.size(), rejected);
         return eligible;
@@ -112,7 +113,7 @@ public class EligibilityFilter {
         List<EligibleMusic> eligible = new ArrayList<>();
         for (MusicCandidate music : accountAndCopyrightPassed) {
             Rejection failed = firstFailure(
-                event, profiles.get(music.artistId()), schedules.get(music.artistId())
+                event, profiles.get(music.artistId()), schedules.getOrDefault(music.artistId(), List.of())
             );
             if (failed == null) {
                 eligible.add(new EligibleMusic(
@@ -183,7 +184,7 @@ public class EligibilityFilter {
         if (profile == null) {
             return Rejection.PROFILE_MISSING;
         }
-        if (hasNoUsableSchedule(slots)) {
+        if (hasIncompleteSchedule(slots)) {
             return Rejection.SCHEDULE_MISSING;
         }
         if (!isScheduleAvailable(event, slots)) {
@@ -232,11 +233,11 @@ public class EligibilityFilter {
     }
 
     /**
-     * 창구가 일정을 주지 않았거나(null, 빈 목록) 값이 빠진 슬롯이 있으면 일정 데이터가 없는 것으로 본다.
-     * 실제 충돌과 구분해 지표에 남기려는 것이고, 어느 쪽이든 일정 조건은 실패다.
+     * 창구가 값을 null로 주었거나 값이 빠진 슬롯이 있으면 창구가 계약을 어긴 것으로 본다. 키가 없거나 빈
+     * 목록이면 행사 시간대에 일정이 없다는 뜻이라 일정 조건 실패(SCHEDULE)로 센다. 어느 쪽이든 판정은 실패다.
      */
-    private static boolean hasNoUsableSchedule(List<ScheduleSlot> slots) {
-        return slots == null || slots.isEmpty() || slots.stream().anyMatch(EligibilityFilter::isIncomplete);
+    private static boolean hasIncompleteSchedule(List<ScheduleSlot> slots) {
+        return slots == null || slots.stream().anyMatch(EligibilityFilter::isIncomplete);
     }
 
     private static boolean isIncomplete(ScheduleSlot slot) {
