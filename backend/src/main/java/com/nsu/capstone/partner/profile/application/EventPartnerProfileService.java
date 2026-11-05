@@ -26,4 +26,9 @@ public class EventPartnerProfileService {
     public StoredProfile save(UUID userId, ProfileContent content) {
         return repository.upsert(userId, content, clock.instant());
     }
+
+    /** 프로필이 없어도 오류가 아니다(05 §1). */
+    public void delete(UUID userId) {
+        repository.delete(userId);
+    }
 }

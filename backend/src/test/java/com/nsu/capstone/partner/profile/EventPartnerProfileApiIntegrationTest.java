@@ -1,10 +1,13 @@
 package com.nsu.capstone.partner.profile;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.nsu.capstone.identity.domain.User;
+import com.nsu.capstone.identity.domain.UserRole;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -39,6 +42,32 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
             .andReturn().getResponse().getContentAsString();
 
         assertThat(objectMapper.readTree(fetched)).isEqualTo(objectMapper.readTree(saved));
+    }
+
+    /** 토큰 없는 PUT·DELETE는 전역 CSRF 설정 때문에 401이 아니라 403이다. 계약과 어긋나 main에 보고했다. */
+    @Test
+    void 토큰이_없는_조회는_401이다() throws Exception {
+        mockMvc.perform(get(PATH)).andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+    }
+
+    @Test
+    void ARTIST는_세_동작_모두_403이고_행이_생기거나_지워지지_않는다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "artist@example.com");
+        putProfile(partner, validProfile()).andExpect(status().isOk());
+
+        getProfile(artist).andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        putProfile(artist, validProfile()).andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        deleteProfile(artist).andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM event_partner_profiles", Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+            "SELECT count(*) FROM event_partner_profiles WHERE user_id = ?", Integer.class,
+            artist.getId())).isZero();
     }
 
     private List<String> fieldNames(String json) {

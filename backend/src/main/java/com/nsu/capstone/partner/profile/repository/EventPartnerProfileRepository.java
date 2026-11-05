@@ -65,6 +65,12 @@ public class EventPartnerProfileRepository {
             .single();
     }
 
+    public void delete(UUID userId) {
+        jdbc.sql("DELETE FROM event_partner_profiles WHERE user_id = :userId")
+            .param("userId", userId)
+            .update();
+    }
+
     private static List<String> strings(Array array) throws SQLException {
         return List.of((String[]) array.getArray());
     }
