@@ -59,7 +59,7 @@ EVENT_PARTNER 프로필은 표시 정보다. 추천 Eligibility나 순위에 쓰
 | 성능 | PK 단건 조회 1번 | PK 단건 조회 1번 | 조회 3번 또는 조인. 수정 때 자식 행을 지우고 다시 넣음 |
 | 메모리 | 차이 없음 | 차이 없음 | 차이 없음 |
 | 확장성 | NSU-119가 `artist_profiles`로 같은 패턴을 쓸 수 있음 | 역할마다 컬럼이 쌓임 | 지역 역검색에 유리(지금은 필요 없음) |
-| 운영 부담 | 새 테이블이라 락 위험 없음. 개편 마이그레이션에 배열 이전이 더해짐 | `users` `ALTER` | 테이블 3개 |
+| 운영 부담 | 기존 테이블을 바꾸지 않는다. 다만 FK를 만들 때 `users`에 짧은 `SHARE ROW EXCLUSIVE` 락이 걸려, 그동안 `users` 쓰기(가입)가 기다린다. 개편 마이그레이션에 배열 이전이 더해짐 | `users` `ALTER`(`ACCESS EXCLUSIVE` 락) | 테이블 3개, FK 락은 채택안과 같음 |
 | 사용자 경험 | 차이 없음 | 차이 없음 | 차이 없음 |
 | 구현량 | 작음 | 작음 | 큼 |
 
@@ -114,7 +114,7 @@ ADR event_management/01은 "앱 안의 정적 파일로 목록 관리"를 DB가 
 | 관점 | 채택: `/api/v1/me/event-partner-profile` | `/api/v1/me/profile`(역할에 따라 본문이 다름) |
 |---|---|---|
 | 정확성 | 경로마다 스키마 하나 | 같은 경로가 역할마다 다른 본문. 다른 역할의 필드를 거절하는 규칙이 더 필요 |
-| 보안 | `@PreAuthorize("hasRole('EVENT_PARTNER')")`로 역할 제한(`MyEventController`와 같음) | 서비스 안에서 역할로 분기. 빠뜨리면 다른 역할의 테이블에 씀 |
+| 보안 | 경로 하나에 역할 하나라서, `SecurityConfig`의 URL 규칙 `hasRole("EVENT_PARTNER")`가 본문 파싱 전에 막는다(검사 순서 `401` → `403` → `400`). 컨트롤러의 `@PreAuthorize`(`MyEventController`와 같음)는 두 번째 방어선이다 | 서비스 안에서 역할로 분기. 빠뜨리면 다른 역할의 테이블에 씀 |
 | 성능·메모리 | 차이 없음 | 차이 없음 |
 | 확장성 | 공개 조회를 열 때 `/event-partners/{id}/profile`로 이름이 이어짐 | 역할이 늘면 oneOf가 늘어남 |
 | 운영 부담 | 낮음 | Scalar 문서의 oneOf 보정 |
@@ -137,10 +137,12 @@ ADR event_management/01은 "앱 안의 정적 파일로 목록 관리"를 DB가 
 
 ## Consequences
 
-- `V7__create_event_partner_profiles_table.sql`이 새 테이블을 만든다. 기존 테이블을 바꾸지 않는다. 롤백은 점검 함수 `check_event_partner_profile_regions()`와 테이블을 지우는 forward 마이그레이션이다(PR 설명에 적는다).
+- `V7__create_event_partner_profiles_table.sql`이 새 테이블과 점검 함수를 만든다. 기존 테이블의 정의는 바꾸지 않는다(FK를 만드는 동안 `users`에 짧은 락).
+- **롤백**: 1차는 앱만 이전 버전으로 되돌린다. Flyway 기본 설정(`ignoreMigrationPatterns=*:future`)이라 이전 앱은 V7이 적용된 DB로도 뜨고, 사용자가 입력한 프로필이 남는다. 이전 앱에는 `afterMigrate.sql`이 없어 점검이 돌지 않을 뿐이다. 기능을 폐기할 때만 데이터를 백업한 뒤 점검 함수·`afterMigrate.sql`·테이블을 지우는 forward 마이그레이션을 쓴다(PR 설명에 적는다).
 - **행정구역 개편 때의 배열 이전**: ADR event_management/01의 "목록 변경과 저장된 코드 이전을 마이그레이션 하나로"를 이 배열에도 적용한다.
   - 각 코드를 새 코드로 바꾼 뒤 05 §2의 정규화(중복 합침, 시·도 안의 시·군·구 합침, 시·군·구 하나뿐인 시·도)를 다시 적용한다. 예: 2026-07 광주·전남 통합(`29`·`46` → `12`) 때 `["29", "46"]`은 `["12"]`, `["29", "46110"]`은 `["12"]`가 된다.
-  - 하나가 둘 이상으로 나뉘어 3개를 넘으면, 그 시·도 코드로 합친다.
+  - 한 지역이 둘 이상으로 나뉠 때(시·도를 넘는 경우 포함) 어느 코드로 옮길지는 ADR event_management/01대로 그런 개편이 생길 때 정한다. 이 배열에는 결과가 정규형이고 3개 이하여야 한다는 조건만 더한다.
+  - 점검 함수 호출은 개편 마이그레이션 작성자의 기억에 맡기지 않는다. Flyway `afterMigrate` 콜백(`db/migration/afterMigrate.sql`)이 마이그레이션마다 부른다.
   - 같은 마이그레이션 끝에서 점검 함수 `check_event_partner_profile_regions()`를 부른다. 저장된 코드가 모두 `regions`의 `code` 또는 `province_code`에 있는지와 배열이 정규형(정렬 포함)인지 확인하고, 어긋나면 마이그레이션을 실패시킨다.
   - **받아들인 위험**: `PUT`이 지역을 검증한 뒤 저장하기 전에 개편 마이그레이션이 커밋되면 사라진 코드가 저장될 수 있다. 창이 수 밀리초이고 개편은 드문 배포라서, 저장 문장 안에서 존재를 다시 확인하는 방식(SQL이 복잡해지고 0행일 때 `400`으로 바꾸는 분기 필요) 대신 개편 마이그레이션을 앱을 멈춘 배포에서 적용하기로 했다. 남은 코드는 다음 개편의 점검 함수가 잡는다(2026-11-05 사용자 결정).
   - 이전을 빠뜨리면 사라진 코드가 남고, 화면이 받은 값을 그대로 보낸 `PUT`이 `400`이 된다. 위 점검이 이를 막는다.
@@ -149,6 +151,7 @@ ADR event_management/01은 "앱 안의 정적 파일로 목록 관리"를 DB가 
 - 프로필 응답에는 이메일·휴대폰이 없다. 다만 소속·소개에 사용자가 연락처를 적을 수는 있다. 다른 사용자용 조회를 열 때 이 점을 고려해 노출할 필드를 정한다.
 - 화면과 서버를 함께 배포한다. 필드를 더하면, 그 필드를 모르는 이전 화면이 저장할 때 새 필드가 지워질 수 있다.
 - **받아들인 위험: 계정 상태**. JWT는 role claim만 보고 계정 상태를 보지 않는다. 상태 검사는 로그인 시점(`LoginPrincipal.isEnabled`)에만 있다. 그래서 정지된 사용자가 만료 전 토큰으로 프로필을 고칠 수 있다. 행사 API도 같다. 토큰 발급 뒤 상태 반영은 Auth/User 도메인(00 §7, `AUTH-160`)이 정한다.
+- **받아들인 위험: `updatedAt` 순서**. `updatedAt`은 앱 시계(`Clock`)로 정한다. 행사 API와 같은 방식이고, 테스트에서 시계를 고정할 수 있다. 앱 인스턴스가 여러 대이고 시계가 어긋나면, 나중에 실행되어 남은 저장의 `updatedAt`이 앞서 응답한 저장보다 이를 수 있다. 지금은 인스턴스가 하나다. 여러 대로 늘릴 때 DB 시각(`ON CONFLICT … SET updated_at = clock_timestamp()`)을 다시 검토한다(2026-11-05 사용자 결정).
 - 탈퇴할 때 프로필을 지우는 연동과 보유기간은 탈퇴 기능을 설계할 때 정한다(NSU-134). 탈퇴한 사용자는 로그인할 수 없어 스스로 삭제 API를 부를 수 없으므로, 탈퇴 처리가 대신 지워야 한다. FK는 `ON DELETE`를 두지 않는다(사용자 행은 상태로만 탈퇴를 표시한다). 개인정보처리방침의 수집 항목에 담당자 이름을 더하는 일은 NSU-133이다. 두 이슈 모두 실사용자에게 서비스를 열기 전에 끝낸다.
 
 ## Excluded
@@ -166,7 +169,7 @@ ADR event_management/01은 "앱 안의 정적 파일로 목록 관리"를 DB가 
 
 - 분류 값 `EventType`과 그 허용 목록(03 §3.3), 지역 목록 `regions`(03 §7)
 - 배열 + `CHECK` 저장 방식(`events.genres`의 `VARCHAR[]`와 `CHECK`). 접근은 JPA 엔티티(`Event.java`의 `@JdbcTypeCode(SqlTypes.ARRAY)`)를 재사용하지 않고 Spring `JdbcClient`로 한다. `INSERT … ON CONFLICT … DO UPDATE … RETURNING` 한 문장(결정 4)을 JPA의 `save`로는 쓸 수 없기 때문이다. `JdbcClient`는 이미 있는 `spring-boot-starter-data-jpa`를 통해 들어와 의존성을 더하지 않는다
-- 역할 제한과 호출자 식별(`MyEventController`의 `@PreAuthorize`, `@AuthenticationPrincipal Jwt`)
+- 역할 제한과 호출자 식별(`MyEventController`의 `@PreAuthorize`, `@AuthenticationPrincipal Jwt`). 여기에 `SecurityConfig`의 URL 규칙을 더했다(위 "경로")
 - 오류 형식 `ErrorCode`·`ErrorResponse`·`GlobalExceptionHandler`(ADR-007). 새 `code`는 없다
 
 ## Rejected Alternatives
