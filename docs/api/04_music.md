@@ -274,7 +274,8 @@ Content-Type: multipart/form-data; boundary=...
 | 3 | `musicId` 형식 | `400 INVALID_MUSIC_ID` |
 | 4 | 호출자가 올린, 삭제하지 않은 곡 | `404 MUSIC_NOT_FOUND` |
 | 5 | 파트 검증(§3.1) | `400 VALIDATION_ERROR` |
-| 6 | 실명 본인확인을 마침(NSU-105). 출처가 `SANDBOX`인 본인확인은 이름을 저장하지 않아 대조할 수 없으므로 통과하지 못한다 | `403 IDENTITY_VERIFICATION_REQUIRED` |
+| 6 | 실명 본인확인을 마침(NSU-105) | `403 IDENTITY_VERIFICATION_REQUIRED` |
+| 6-1 | 본인확인 이름이 있음. 출처가 `SANDBOX`인 본인확인은 이름을 저장하지 않는다 | `403 IDENTITY_NAME_UNAVAILABLE` |
 | 7 | 곡이 중단되지 않음 | `409 MUSIC_RIGHTS_SUSPENDED` |
 | 8 | 등록증이 PDF·JPEG·PNG이고 5MiB 이하 | `400 UNSUPPORTED_CERTIFICATE_FORMAT`, `413 CERTIFICATE_TOO_LARGE` |
 | 9 | 그 등록번호를 내 다른 곡이 쓰지 않음 | `409 COPYRIGHT_REGISTRATION_ALREADY_USED` |
@@ -292,7 +293,7 @@ Content-Type: multipart/form-data; boundary=...
 | 저작자·권리자 | 그중 한 명의 이름이 아티스트의 본인확인 이름과 같다. 공백은 무시한다 |
 
 - **대조가 확인하는 범위**: "본인확인 이름이 등록부의 저작자·권리자 중 한 명의 이름과 같고, 그 제호로 등록된 번호를 냈다"까지다. 이름이 같은 다른 사람이 등록부를 이름으로 검색해 남의 등록번호를 내도 통과하고, 등록 저작자가 자기 번호를 남의 음원에 붙여도 통과한다. 그래서 통과해도 `rights.basis`와 `VERIFIED_ARTIST`를 바꾸지 않는다. Trust Profile의 `COPYRIGHT`는 "등록부 저작자·권리자와 실명 일치"라는 정보로만 쓴다(01 §4.3). 음원과 등록 저작물을 잇는 확인 방법은 상용화 전에 정한다(오디오 지문 검사 등).
-- 시연의 대조에는 Mock 본인확인 이름만 쓴다(팀원의 실명으로 시드 스크립트가 만든 계정, 2026-11-05 결정). `SANDBOX` 본인확인은 이름을 저장하지 않으므로 등록 정보를 내면 `403 IDENTITY_VERIFICATION_REQUIRED`다. 대조에 쓴 본인확인의 출처(`MOCK`·`SANDBOX`·`PRODUCTION`)를 기록한다. 운영으로 넘어갈 때 `MOCK`·`SANDBOX`로 받은 등록정보 일치는 지우고, 그때 받은 등록증도 함께 지운다(NSU-105).
+- 시연의 대조에는 Mock 본인확인 이름만 쓴다(팀원의 실명으로 시드 스크립트가 만든 계정, 2026-11-05 결정). `SANDBOX` 본인확인은 이름을 저장하지 않으므로 등록 정보를 내면 `403 IDENTITY_NAME_UNAVAILABLE`이다. 본인확인을 다시 해도 풀리지 않으므로 `IDENTITY_VERIFICATION_REQUIRED`와 구분한다(NSU-105 ADR `identity_verification/00`). 대조에 쓴 본인확인의 출처(`MOCK`·`SANDBOX`·`PRODUCTION`)를 기록한다. 운영으로 넘어갈 때 `MOCK`·`SANDBOX`로 받은 등록정보 일치는 지우고, 그때 받은 등록증도 함께 지운다(NSU-105).
 - 예명으로 등록한 곡은 본인확인 이름과 달라 통과하지 못한다. 그 곡은 등록정보 일치를 받지 못한다.
 - **공동 저작자·권리자**: 같은 등록번호를 여러 아티스트가 각자 낼 수 있다. 제출자마다 따로 대조하고, 등록부의 저작자·권리자 중에 자기 본인확인 이름이 있어야 통과한다. 등록번호를 플랫폼 전체에서 한 곡에만 쓰게 하면 공동 권리자가 막히고, 먼저 낸 사람이 번호를 차지할 수 있기 때문이다. 한 아티스트는 한 등록번호를 곡 하나에만 쓴다(검사 9).
 - 커버곡은 등록부의 저작자가 원곡 저작자라 통과하지 못한다. 권리 확인·이용 동의와 원곡 권리자의 이용허락서(§2.1)로 `DECLARED`가 되어 추천 후보가 된다.
@@ -329,6 +330,7 @@ Content-Type: multipart/form-data; boundary=...
 | 등록증이 PDF·JPEG·PNG가 아님 | 400 | `UNSUPPORTED_CERTIFICATE_FORMAT` |
 | 등록부와 대조 실패(§3.2) | 400 | `COPYRIGHT_REGISTRATION_MISMATCH` |
 | 실명 본인확인을 하지 않고 곡을 올리거나 등록 정보를 냄 | 403 | `IDENTITY_VERIFICATION_REQUIRED` |
+| 본인확인 출처가 `SANDBOX`라 이름이 없는데 등록 정보를 냄 | 403 | `IDENTITY_NAME_UNAVAILABLE` |
 | 곡이 없음, 삭제됨, 다른 아티스트의 곡 | 404 | `MUSIC_NOT_FOUND` |
 | 같은 파일로 올린 곡이 있는데 다른 입력을 보냄(§2.3) | 409 | `MUSIC_ALREADY_UPLOADED` |
 | 삭제하지 않은 곡이 이미 3개 | 409 | `MUSIC_LIMIT_EXCEEDED` |
@@ -373,7 +375,7 @@ Content-Type: multipart/form-data; boundary=...
 | 저장 실패 | 커밋을 요청하기 전에 DB 오류가 나면 S3 원본을 지우고 `500`이다. 곡은 없다 |
 | 커밋 결과 미상 | 커밋은 됐는데 응답 직전에 연결이 끊긴 경우(커밋 뒤 연결 예외를 던지는 대역)는 `500`이고 S3 원본이 남는다. 같은 파일·같은 입력으로 다시 보내면 `201`과 같은 `musicId`이고, 그 원본을 읽을 수 있다. 커밋 요청 뒤 시간이 초과된 경우도 원본을 지우지 않는다 |
 | 트랜잭션 수명 | `transaction_timeout`을 짧게 둔 테스트에서, S3 저장 뒤 시간을 넘긴 업로드 트랜잭션은 커밋되지 않고 곡이 생기지 않는다. 업로드 트랜잭션에 `transaction_timeout`이 걸려 있는지 확인한다 |
-| 등록 정보 | 본인확인 전이거나 본인확인 출처가 `SANDBOX`이면 `403 IDENTITY_VERIFICATION_REQUIRED`. 다른 아티스트의 곡은 `404`. 중단된 곡은 `409`. 내 다른 곡이 쓴 등록번호는 `409 COPYRIGHT_REGISTRATION_ALREADY_USED` |
+| 등록 정보 | 본인확인 전이면 `403 IDENTITY_VERIFICATION_REQUIRED`, 본인확인 출처가 `SANDBOX`이면 `403 IDENTITY_NAME_UNAVAILABLE`. 다른 아티스트의 곡은 `404`. 중단된 곡은 `409`. 내 다른 곡이 쓴 등록번호는 `409 COPYRIGHT_REGISTRATION_ALREADY_USED` |
 | 공동 권리자 | 등록부에 함께 오른 공동 저작자 두 명은 같은 등록번호로 각자의 곡에서 통과한다. 먼저 낸 사람이 있어도 다른 아티스트는 `409`가 아니다 |
 | 동시 등록번호 제출 | 같은 아티스트가 제목이 같은 두 곡에 같은 등록번호를 동시에 내면, 하나만 `200`이고 다른 하나는 `409 COPYRIGHT_REGISTRATION_ALREADY_USED`다. 진 요청의 등록증은 남지 않는다. 두 요청 모두 외부 API 대조를 통과한 경우로 확인한다 |
 | 대조 | 번호 없음, 분류가 음악이 아님, 제호 다름, 저작자·권리자에 본인확인 이름이 없음은 각각 `COPYRIGHT_REGISTRATION_MISMATCH`이고 곡은 `isRegistrationMatched = false`로 남는다. 제호의 앞뒤 공백·대소문자만 다르면 통과 |

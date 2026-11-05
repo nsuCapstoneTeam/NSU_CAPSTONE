@@ -186,7 +186,7 @@ A를 택한 이유는 다음과 같다.
 | 구분 | 방식 |
 |---|---|
 | 실제 서비스 | 사업자등록 → 본인확인 서비스 계약 → 실명 본인확인을 마친 아티스트만 업로드 |
-| MVP 시연 | PortOne + NHN KCP 테스트 채널의 실제 창으로 본인확인해 `VERIFIED_ARTIST`가 되고, 출처는 `SANDBOX`다. 서버는 PortOne 재조회 응답의 `channel.type`·`channel.key`로 출처를 정한다. 시연 환경(`DEMO`)은 `TEST`이고 설정한 테스트 채널 키일 때만, 운영 환경(`PRODUCTION`)은 `LIVE`이고 설정한 운영 채널 키일 때만 받는다. `channel`이 없으면 거절한다. Mock 본인확인은 HTTP로 열지 않고 팀이 시드 스크립트로만 만들며, 등록부 대조 시연(팀원 등록곡)에만 쓴다. 시연 방식은 ADR `identity_verification/00`(NSU-105, 2026-11-05 결정)이 정한다. 이 ADR은 아직 main에 없으며 별도 PR로 올라온다 |
+| MVP 시연 | PortOne + NHN KCP 테스트 채널의 실제 창으로 본인확인해 `VERIFIED_ARTIST`가 되고, 출처는 `SANDBOX`다. 서버는 PortOne 재조회 응답의 `channel.type`·`channel.key`로 출처를 정한다. 시연 환경(`DEMO`)은 `TEST`이고 설정한 테스트 채널 키일 때만, 운영 환경(`PRODUCTION`)은 `LIVE`이고 설정한 운영 채널 키일 때만 받는다. `channel`이 없으면 거절한다. Mock 본인확인은 HTTP로 고르는 경로가 없고 팀이 시드 스크립트로만 만들며, 등록부 대조 시연(팀원 실명, 팀원 등록곡)에만 쓴다. `SANDBOX` 본인확인은 이름을 저장하지 않아 등록 정보를 내면 `403 IDENTITY_NAME_UNAVAILABLE`이다. 시연 방식은 ADR `identity_verification/00`(NSU-105, 2026-11-05 결정)이 정한다. 이 ADR은 아직 main에 없으며 별도 PR로 올라온다 |
 
 - 서버는 업로드 때 서류의 진위와 허락 범위를 판단하지 않고(첨부 여부·형식·크기만 검증한다), 권리 문제는 신고가 오면 6절 3단계로 처리한다(1절과 같다).
 - 시연용 본인확인 결과는 출처(`MOCK`·`SANDBOX`)를 남기고, 운영 전환 때 무효로 한다([01](./01_music_rights_verification.md) 본인확인 출처 안전장치).

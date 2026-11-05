@@ -55,7 +55,7 @@ stateDiagram-v2
 1. 본인확인 기록과 등록부 대조 기록에 출처(`MOCK`·`SANDBOX`·`PRODUCTION`)를 남긴다.
 2. 운영 환경에서는 Mock·테스트 본인확인 제공자를 켤 수 없게 한다.
 3. 운영으로 넘어갈 때 `MOCK`·`SANDBOX` 본인확인은 무효로 한다. 그 이름으로 받은 등록정보 일치를 지우고, 그 본인확인으로 얻은 `VERIFIED_ARTIST`도 풀린다. 아티스트는 운영 본인확인을 다시 받아야 한다.
-4. 본인확인을 하지 않은 아티스트는 등록 정보를 낼 수 없다(`403 IDENTITY_VERIFICATION_REQUIRED`). 출처가 `SANDBOX`인 본인확인도 저장된 이름이 없어 같은 `403`이다. 그런 아티스트의 곡은 등록정보 일치를 받지 못한다.
+4. 본인확인을 하지 않은 아티스트는 등록 정보를 낼 수 없다(`403 IDENTITY_VERIFICATION_REQUIRED`). 출처가 `SANDBOX`인 본인확인은 저장된 이름이 없어 `403 IDENTITY_NAME_UNAVAILABLE`이다(다시 본인확인해도 풀리지 않아 구분한다). 그런 아티스트의 곡은 등록정보 일치를 받지 못한다.
 
 ## Context
 
