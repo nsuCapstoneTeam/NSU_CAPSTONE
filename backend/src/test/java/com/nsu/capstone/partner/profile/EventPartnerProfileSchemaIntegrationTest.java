@@ -54,6 +54,8 @@ class EventPartnerProfileSchemaIntegrationTest extends EventPartnerProfileIntegr
             .isInstanceOf(DataIntegrityViolationException.class);
         assertThat(Arrays.stream(EventType.values()).map(Enum::name))
             .containsExactlyInAnyOrderElementsOf(allowedEventTypes("ck_events_event_type"));
+        assertThat(Arrays.stream(EventType.values()).map(Enum::name))
+            .containsExactlyInAnyOrderElementsOf(allowedEventTypes("ck_event_partner_profiles_event_types"));
     }
 
     @Test
