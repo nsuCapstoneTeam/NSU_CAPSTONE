@@ -2,7 +2,7 @@
 
 아티스트 1명의 Trust Profile(Verification, Artist Reliability, 근거 집계, Risk Signal, Activity Freshness)을 조회한다. 추천 결과에 넣을 여러 명의 Trust Profile은 HTTP가 아닌 내부 일괄 조회 계약(§7)으로 조합한다.
 
-- 구현 이슈: NSU-70
+- 구현 이슈: NSU-70, NSU-105(`verifications`의 `IDENTITY`)
 - 요구사항: SSOT `TRUST-149`~`TRUST-154` (현재 리비전 v1.14에서 확인)
   - v1.4(2026-10-04 승인): MVP의 "근거 부족 · 관측 0건" 표시(`TRUST-149`), 위험 신호 정책(`TRUST-150`), 신뢰 정보를 순위에 쓰지 않는 원칙(`TRUST-153`)
   - v1.9(2026-10-07 승인): 추천 순위 기준이 음악 유사도로 바뀌었다(`TRUST-153`). 신뢰 정보를 순위에 쓰지 않는 원칙은 그대로다
@@ -89,6 +89,7 @@ Authorization: Bearer {accessToken}
 5. 관측 내역(`observations`)은 전체 관측 기준이다. 최근 14건 창은 Risk Signal에만 쓴다.
 6. 모든 배열은 항목이 없으면 `[]`다.
 7. 필드는 생략하지 않는다. 값이 없으면 `null` 또는 `0`이다.
+8. `verifications`에 `COPYRIGHT`가 있으면 `IDENTITY`도 있다. 등록정보 일치는 본인확인 이름으로만 생기기 때문이다([music_upload/01](../adr/music_upload/01_music_rights_verification.md) 본인확인 출처 안전장치 3·4). 조합할 때 `IDENTITY`가 없는 아티스트의 `COPYRIGHT`는 넣지 않는다(§7).
 
 `ratePercent`의 뜻은 "관측(아티스트에게 성패가 달려 있었던 공연 결과) 중 이행한 비율의 추정치"다. 공연이 실제로 열릴 확률이 아니다. 화면에는 "아티스트 귀책 기준 이행률"로 표시하고 `evidence.exclusions`를 함께 표시한다. 정상 완료만 50회 이어지면 `R ≈ 0.996`이 되어 `100`이 될 수 있다.
 
@@ -100,6 +101,7 @@ Authorization: Bearer {accessToken}
 
 | `type` | `provider` | 넣는 조건 |
 |---|---|---|
+| `IDENTITY` | `null` | 실명 본인확인을 마침(NSU-105). 확인했다는 사실만 넣고, 본인확인 정보와 출처는 내보내지 않는다(§5) |
 | `EXTERNAL_ACCOUNT` | `YOUTUBE` / `SOUNDCLOUD` | 해당 외부 계정의 **제어권이 확인됨** |
 | `COPYRIGHT` | `null` | 저작권 등록부와 대조를 통과하고(`rights.isRegistrationMatched`) 권리 신고로 중단되지 않은 곡이 1개 이상([04 §1.1](./04_music.md#11-곡-응답-본문)). 뜻은 "본인확인 이름이 한국저작권위원회 등록부의 저작자·권리자 중 한 명의 이름과 같음"이다. 이름이 같은 다른 사람일 수 있고, 올린 음원이 그 저작물인지도 확인하지 않는다. 권리 보증만 한 곡은 넣지 않는다 |
 | `BUSINESS_REGISTRATION` | `null` | 사업자등록정보 검증 완료 |
@@ -107,9 +109,12 @@ Authorization: Bearer {accessToken}
 | `OFFICIAL_ACTIVITY` | `null` | 공식 발매 또는 공연 활동 증빙 검증 완료 |
 
 - 확인이 끝난 항목만 넣는다. 진행 중, 반려, 취소된 검증은 넣지 않는다.
+- `IDENTITY`는 곡 업로드·PRIVATE 행사 열람·댓글 권한(`VERIFIED_ARTIST`)의 근거인 실명 본인확인을 EVENT_PARTNER에게 보여 준다. 화면은 "실명 본인확인"으로 표시하고, "인증된 아티스트"로 쓰지 않는다(용어집). 2026-11-05에 추가했다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)).
+- 시연 서버의 `IDENTITY`는 테스트 본인확인이다. 테스트임은 항목마다 표시하지 않고 시연 환경 배너로 알린다. 테스트 본인확인은 시연 DB에만 있고 운영 DB로 옮기지 않는다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)).
+- NSU-105를 구현하기 전에는 본인확인 기록이 없어 `IDENTITY`가 나오지 않는다.
 - 외부 계정을 연동했다는 사실만으로는 넣지 않는다. 연동한 계정의 작업 내역 표시는 아티스트 프로필(작업물) API(NSU-79)가 맡는다. YouTube Music 아티스트 채널은 `YOUTUBE`로 표시한다.
 - provider별 제어권 확인 기준은 Verification 도메인(NSU-33)이 정한다.
-- `COPYRIGHT`는 곡의 권리 정보(04, NSU-89)로 계산한다. 2026-10-20 설계에서 권리 검증 단위가 Work에서 곡으로 바뀌었다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)). 시연용 Mock 본인확인으로 받은 등록정보 일치도 들어간다. 운영으로 넘어갈 때 이 일치는 지워져 빠진다(NSU-105).
+- `COPYRIGHT`는 곡의 권리 정보(04, NSU-89)로 계산한다. 2026-10-20 설계에서 권리 검증 단위가 Work에서 곡으로 바뀌었다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)). 시연용 Mock 본인확인으로 받은 등록정보 일치도 들어간다. 이 일치는 시연 DB에만 있고 운영으로 옮기지 않는다(NSU-105).
 - 화면은 `COPYRIGHT`를 "저작권 검증 완료"가 아니라 "등록부 저작자·권리자와 실명 일치"로 표시한다. 이름이 같은 다른 사람도 대조를 통과하고, 등록 저작자가 자기 등록번호를 남의 음원에 붙여도 통과하기 때문이다(2026-10-21 설계 리뷰 1·2차). SSOT `ADMIN-096`의 표시 문구는 v1.17에서 고친다.
 - `COPYRIGHT`는 EVENT_PARTNER가 참고할 정보다. PRIVATE 행사 열람·댓글 권한(`VERIFIED_ARTIST`)의 근거가 아니다. 그 권한은 실명 본인확인(NSU-105)으로 정한다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)).
 - 제어권 확인 결과는 연결이 유지되는 동안 유효하다. 자동으로 다시 확인하거나 기간 만료로 빼지 않는다(07 D45).
@@ -178,6 +183,7 @@ Authorization: Bearer {accessToken}
 | `performanceId`, `sourceDomain`, `sourceId`, 상대 EVENT_PARTNER 식별자 | 개별 공연·상대방 특정 방지 |
 | 확정 출처(`ADMIN_DECISION` 등), 판정 시각, 개별 결과의 날짜 | 판정 과정은 Dispute 도메인 정보 |
 | 진행 중·반려·취소된 Verification, 증빙 원본, 외부 계정 ID·URL | 검증이 아니거나 민감한 권리 문서(`ADMIN-096`) |
+| 실명 본인확인 정보(이름·생년월일·성별·휴대폰 번호·통신사·외국인 여부·CI·DI), 본인확인 시각, 본인확인 출처(`MOCK`·`SANDBOX`·`PRODUCTION`) | 개인정보다. 테스트 본인확인임은 출처 대신 시연 환경 배너로 알린다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)) |
 | Reliability 내부 값(`α`, `β`, 반올림 전 `R`) | 정책 변경 시 표시 계약이 흔들리지 않게 함 |
 
 날짜는 월 단위까지만 내보낸다. 날짜를 내보내면 공연 일정과 대조해 특정 행사나 상대방을 추정할 수 있다.
@@ -227,6 +233,7 @@ Authorization: Bearer {accessToken}
   "artistId": "0192f3a4-7b1c-7d2e-8f00-1a2b3c4d5e6f",
   "policyVersion": "reliability-v1",
   "verifications": [
+    { "type": "IDENTITY", "provider": null },
     { "type": "EXTERNAL_ACCOUNT", "provider": "YOUTUBE" },
     { "type": "COPYRIGHT", "provider": null }
   ],
@@ -322,6 +329,20 @@ Map<UUID, TrustProfile> findByArtistIds(Collection<UUID> artistIds);
 - 존재하지 않거나 `role = ARTIST`가 아닌 ID는 결과 Map에 넣지 않는다. 계정 상태(`SUSPENDED` 등)에 따른 제외는 호출자(추천의 Eligibility)가 이미 적용했으므로 이 계약에서 다시 거르지 않는다.
 - 빈 입력은 빈 Map이다.
 
+Verification은 여러 도메인에서 온다. `IDENTITY`는 본인확인(NSU-105), `COPYRIGHT`는 곡 권리 정보(NSU-89)가 만든다. 그래서 Verification을 읽는 포트(`VerificationReader`)는 출처 도메인마다 source를 하나씩 두고 결과를 합친다.
+
+```java
+// 출처 도메인마다 하나씩 구현한다(NSU-105: IDENTITY, NSU-89: COPYRIGHT)
+interface VerificationSource {
+    Map<UUID, List<VerificationItem>> findVerifiedByArtistIds(Collection<UUID> artistIds);
+}
+```
+
+- 합치는 `VerificationReader`는 source마다 한 번씩 부른다. 쿼리 수는 source 수로 정해지고 아티스트 수와 관계없다.
+- 합친 뒤 §4.3 순서로 정렬하고, 같은 (`type`, `provider`)는 하나만 남긴다.
+- `IDENTITY`가 없는 아티스트의 `COPYRIGHT`는 버린다(§4.2 불변식 8). 정상 흐름에서는 생기지 않는 데이터 불일치라, 버릴 때 아티스트 ID를 담아 경고 로그를 남긴다.
+- source 하나가 실패하면 Trust Profile 조회 전체가 실패한다. 빠진 항목을 "확인 안 됨"으로 보여 주지 않기 위해서다.
+
 ## 8. 테스트 기준
 
 | 기준 | 근거 |
@@ -329,6 +350,9 @@ Map<UUID, TrustProfile> findByArtistIds(Collection<UUID> artistIds);
 | §3의 상태 코드와 `code`가 표대로 나온다 | 본 문서 |
 | 축약형 UUID(`1-2-3-4-5`)는 `400 INVALID_ARTIST_ID`이고, 응답의 `artistId`는 소문자다 | §1 |
 | 같은 (`type`, `provider`)의 Verification은 한 번만 나온다 | §4.3 |
+| 실명 본인확인을 마친 아티스트는 `verifications`에 `IDENTITY`가 있고, §5의 본인확인 정보와 출처는 응답에 없다 | §4.3·§5 |
+| 등록정보 일치 곡이 있어도 `IDENTITY`가 없으면 `COPYRIGHT`가 나오지 않는다 | §4.2 불변식 8, §7 |
+| 일괄 조회의 쿼리 수가 아티스트 1명과 100명에서 같다 | §7 |
 | `401`·`403`도 `{code, message}` 형식이다 | 00_conventions §8, ADR-007 |
 | §4.2 불변식이 모든 응답에서 성립한다 | 본 문서 |
 | 관측 0~3건이면 `ratePercent = null` | `TRUST-149`, NSU-70 AC |
