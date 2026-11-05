@@ -175,7 +175,7 @@ class OpenApiDocsIntegrationTest {
 
         assertThat(publicApis).hasSize(20);
         assertThat(publicApisWithAuth).isEmpty();
-        assertThat(otherApis).hasSize(7);
+        assertThat(otherApis).hasSize(10);
         assertThat(otherApisWithOverride).isEmpty();
     }
 
@@ -211,6 +211,9 @@ class OpenApiDocsIntegrationTest {
         }
         if (path.startsWith("/api/v1/regions")) {
             return "지역";
+        }
+        if (path.startsWith("/api/v1/me/event-partner-profile")) {
+            return "EVENT_PARTNER 프로필";
         }
         return "행사";
     }
