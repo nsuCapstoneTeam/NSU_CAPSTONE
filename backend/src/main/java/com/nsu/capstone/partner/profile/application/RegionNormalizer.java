@@ -17,13 +17,12 @@ final class RegionNormalizer {
 
     private static final int PROVINCE_LENGTH = 2;
 
-    private final Set<String> cityCodes;
+    private final Map<String, String> provinceOfCity = new HashMap<>();
     private final Map<String, Integer> citiesPerProvince = new HashMap<>();
 
     RegionNormalizer(List<Region> regions) {
-        this.cityCodes = new TreeSet<>();
         for (Region region : regions) {
-            cityCodes.add(region.getCode());
+            provinceOfCity.put(region.getCode(), region.getProvinceCode());
             citiesPerProvince.merge(region.getProvinceCode(), 1, Integer::sum);
         }
     }
@@ -35,7 +34,7 @@ final class RegionNormalizer {
         for (String code : codes) {
             if (code != null && citiesPerProvince.containsKey(code) && code.length() == PROVINCE_LENGTH) {
                 provinces.add(code);
-            } else if (code != null && cityCodes.contains(code)) {
+            } else if (code != null && provinceOfCity.containsKey(code)) {
                 cities.add(code);
             } else {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR);
@@ -43,7 +42,7 @@ final class RegionNormalizer {
         }
         Set<String> result = new TreeSet<>(provinces);
         for (String city : cities) {
-            String province = city.substring(0, PROVINCE_LENGTH);
+            String province = provinceOfCity.get(city);
             if (citiesPerProvince.get(province) == 1) {
                 result.add(province);
             } else if (!provinces.contains(province)) {
