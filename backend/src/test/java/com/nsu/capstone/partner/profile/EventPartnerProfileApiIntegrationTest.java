@@ -341,6 +341,21 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
     }
 
     @Test
+    void 앞뒤의_NBSP_폭_없는_공백_BOM도_지우고_센다() throws Exception {
+        // 웹에서 복사한 이름 끝에 NBSP가 붙어도 40자 이름은 통과하고, 지운 값이 저장된다
+        Map<String, Object> body = validProfile();
+        body.put("name", "﻿​" + "가".repeat(40) + "  ");
+        putProfile(partner, body).andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("가".repeat(40)));
+
+        // 끝의 결합 표식은 앞 글자의 일부라 지우지 않는다(e + U+0301 = é)
+        body = validProfile();
+        body.put("name", "René");
+        putProfile(partner, body).andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("René"));
+    }
+
+    @Test
     void 짝_없는_서로게이트가_든_문자열은_VALIDATION_ERROR다() throws Exception {
         // 그대로 두면 UTF-8로 바꿀 때 '?'로 조용히 바뀌어 저장된다
         for (String field : List.of("name", "organization", "bio")) {

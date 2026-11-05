@@ -93,7 +93,7 @@ public record EventPartnerProfileRequest(
         if (value.codePoints().anyMatch(cp -> cp <= Character.MAX_VALUE && Character.isSurrogate((char) cp))) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
-        String trimmed = value.strip();
+        String trimmed = trimSpacing(value);
         // 보이는 글자(글자·숫자·문장부호·기호)가 하나도 없으면 빈 값이다. 공백·서식 문자·결합 표식만 있는 값이
         // 그렇다. 길이보다 먼저 본다(보이지 않는 글자가 길이를 넘어도 빈 값이다)
         if (trimmed.codePoints().noneMatch(EventPartnerProfileRequest::visible)) {
@@ -103,6 +103,27 @@ public record EventPartnerProfileRequest(
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
         return trimmed;
+    }
+
+    /**
+     * 앞뒤의 공백·공백 구분자(NBSP 등)·서식 문자(폭 없는 공백, BOM 등)를 지운다. strip()은 NBSP와 서식 문자를 남긴다.
+     * 결합 표식(e + U+0301)은 앞 글자의 일부라 지우지 않는다.
+     */
+    private static String trimSpacing(String value) {
+        int start = 0;
+        int end = value.length();
+        while (start < end && spacing(value.codePointAt(start))) {
+            start += Character.charCount(value.codePointAt(start));
+        }
+        while (end > start && spacing(value.codePointBefore(end))) {
+            end -= Character.charCount(value.codePointBefore(end));
+        }
+        return value.substring(start, end);
+    }
+
+    private static boolean spacing(int codePoint) {
+        int type = Character.getType(codePoint);
+        return Character.isWhitespace(codePoint) || type == Character.SPACE_SEPARATOR || type == Character.FORMAT;
     }
 
     /** 유니코드 일반 범주가 글자(L)·숫자(N)·문장부호(P)·기호(S)이면서 아무것도 그리지 않는 글자가 아니다 */
