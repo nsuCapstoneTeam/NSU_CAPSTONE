@@ -214,11 +214,10 @@ public class EligibilityFilter {
      * 맞닿기만 한 막힌 일정은 겹치지 않는다. 겹치면 AVAILABLE이 덮고 있어도 실패한다.
      */
     private static boolean hasBlockedOverlap(EligibilityInput event, List<ScheduleSlot> slots) {
-        // 시작이 끝보다 늦거나 같은 막힌 일정은 ADR의 [시작, 끝)와 달리 겹친다고 본다. 잘못된 데이터는 fail-closed다.
         return slots.stream().anyMatch(slot ->
             slot.status() != ScheduleStatus.AVAILABLE
-                && (!slot.start().isBefore(slot.end())
-                    || (slot.start().isBefore(event.end()) && slot.end().isAfter(event.start()))));
+                && slot.start().isBefore(event.end())
+                && slot.end().isAfter(event.start()));
     }
 
     /**
@@ -243,7 +242,7 @@ public class EligibilityFilter {
     }
 
     /**
-     * 창구가 값을 null로 주었거나 값이 빠진 슬롯이 있으면 창구가 계약을 어긴 것으로 본다. 키가 없거나 빈
+     * 창구가 값을 null로 주었거나 값이 빠지거나 시작·끝이 뒤집힌 슬롯이 있으면 창구가 계약을 어긴 것으로 본다. 키가 없거나 빈
      * 목록이면 행사 시간대에 일정이 없다는 뜻이라 SCHEDULE_NOT_COVERED로 센다. 어느 쪽이든 판정은 실패다.
      */
     private static boolean hasIncompleteSchedule(List<ScheduleSlot> slots) {
@@ -251,19 +250,25 @@ public class EligibilityFilter {
     }
 
     private static boolean isIncomplete(ScheduleSlot slot) {
-        return slot == null || slot.start() == null || slot.end() == null || slot.status() == null;
+        // 시작이 끝보다 늦거나 같은 슬롯도 상태와 관계없이 잘못된 값이다. 그 아티스트의 일정 조건은 실패(fail-closed)다.
+        return slot == null || slot.start() == null || slot.end() == null || slot.status() == null
+            || !slot.start().isBefore(slot.end());
     }
 
     /**
-     * 판정에 쓰는 프로필 값이 비었거나(출연료·공연 가능지역 미입력, 행사가 형태를 지정했는데 공연 형태 미입력)
+     * 판정에 쓰는 프로필 값이 비었거나(출연료·공연 가능지역 미입력, 행사가 형태를 지정했는데 공연 형태 미입력. 목록은 null과 빈 목록 모두)
      * 출연료가 음수면 프로필이 덜 채워진 것으로 본다. 진짜 탈락 사유(예산·지역·형태 불일치)와 지표를 나누려는
      * 것이고, 어느 쪽이든 판정은 실패다.
      */
     private static boolean isProfileIncomplete(EligibilityInput event, ArtistProfile profile) {
-        return profile.performableRegionCodes() == null
+        return isBlank(profile.performableRegionCodes())
             || profile.feeMin() == null
             || profile.feeMin() < 0
-            || (event.artistType() != null && profile.performanceTypes() == null);
+            || (event.artistType() != null && isBlank(profile.performanceTypes()));
+    }
+
+    private static boolean isBlank(Set<?> values) {
+        return values == null || values.isEmpty();
     }
 
     private static boolean isRegionReachable(EligibilityInput event, ArtistProfile profile) {

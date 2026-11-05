@@ -612,17 +612,32 @@ class EligibilityFilterTest {
             available(at(15, 12, 0), at(15, 23, 0)),
             new ScheduleSlot(at(15, 19, 0), at(15, 21, 0), ScheduleStatus.BOOKED)
         ));
+
+        filter.filter(EVENT, List.of(candidate(blocked), candidate(blocked), candidate(readyArtist())));
+
+        assertThat(rejected("SCHEDULE_BLOCKED")).isEqualTo(2.0);
+    }
+
+    @Test
+    void countsInvertedSlotOfAnyStatusAsScheduleInvalid() {
         UUID invertedBlocked = readyArtist();
         schedules.put(invertedBlocked, List.of(
             available(at(15, 12, 0), at(15, 23, 0)),
             new ScheduleSlot(at(15, 21, 0), at(15, 17, 0), ScheduleStatus.BOOKED)
         ));
-
-        filter.filter(EVENT, List.of(
-            candidate(blocked), candidate(blocked), candidate(invertedBlocked), candidate(readyArtist())
+        UUID invertedAvailable = readyArtist();
+        schedules.put(invertedAvailable, List.of(
+            available(at(15, 12, 0), at(15, 23, 0)),
+            available(at(15, 21, 0), at(15, 17, 0))
         ));
 
-        assertThat(rejected("SCHEDULE_BLOCKED")).isEqualTo(3.0);
+        List<EligibleMusic> result = filter.filter(EVENT, List.of(
+            candidate(invertedBlocked), candidate(invertedAvailable), candidate(readyArtist())
+        ));
+
+        assertThat(result).hasSize(1);
+        assertThat(rejected("SCHEDULE_INVALID")).isEqualTo(2.0);
+        assertThat(rejected("SCHEDULE_BLOCKED")).isZero();
     }
 
     @Test
@@ -720,6 +735,19 @@ class EligibilityFilterTest {
 
         assertThat(rejected("PROFILE_INCOMPLETE")).isEqualTo(4.0);
         assertThat(rejected("BUDGET") + rejected("REGION") + rejected("PERFORMANCE_TYPE")).isZero();
+    }
+
+    @Test
+    void countsEmptyRegionOrTypeSetAsProfileIncomplete() {
+        UUID emptyRegions = readyArtist();
+        profiles.put(emptyRegions, profileWith(Set.of(), 100_000L, Set.of(ArtistType.BAND)));
+        UUID emptyTypes = readyArtist();
+        profiles.put(emptyTypes, profileWith(Set.of("11680"), 100_000L, Set.of()));
+
+        filter.filter(eventAskingFor(ArtistType.BAND), List.of(candidate(emptyRegions), candidate(emptyTypes)));
+
+        assertThat(rejected("PROFILE_INCOMPLETE")).isEqualTo(2.0);
+        assertThat(rejected("REGION") + rejected("PERFORMANCE_TYPE")).isZero();
     }
 
     @Test
