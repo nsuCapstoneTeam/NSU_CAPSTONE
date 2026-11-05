@@ -17,10 +17,10 @@
 `POST /api/v1/auth/signup/artist/oauth/session`
 
 ```json
-{"oauthSignupSessionId":"<server-issued opaque ID>","phone":"01012345678","email":"artist@example.com"}
+{"oauthSignupSessionId":"<server-issued opaque ID>","phone":"01012345678","email":"artist@example.com","agreements":[{"id":"service-terms","version":"2026-11-05"}]}
 ```
 
-- ID와 phone은 필수다. email은 Provider 이메일이 없거나 미검증이면 필수다.
+- ID·phone·agreements는 필수다. 필수 약관이 빠지면 `400 REQUIRED_TERMS_NOT_AGREED`다. email은 Provider 이메일이 없거나 미검증이면 필수다.
 - 검증된 Provider 이메일은 생략하거나 동일 값만 보낼 수 있다.
 - 서버는 ARTIST/OAUTH를 고정한다. Provider 식별정보·role·인증 완료 boolean은 입력으로 사용하지 않는다.
 - 최초 생성은 201, 같은 입력의 재요청은 200이다. 응답은 아래 세 필드다.
@@ -33,7 +33,7 @@
 미검증 이메일은 준비 단계에서 고정한 주소에 기존 서비스 이메일 인증을 수행한다.
 입력 변경 API는 제공하지 않는다.
 
-휴대폰 인증·필수 약관 동의·성인 확인 및 필요한 이메일 인증은 기존
+필수 약관 동의는 이 준비 요청의 `agreements`로 받는다([signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1, 2026-11-05). 휴대폰 인증·성인 확인 및 필요한 이메일 인증은 기존
 `/api/v1/auth/signup/artist/session` 아래 API를 그대로 사용한다.
 약관은 서버 설정의 ID·버전 목록을 검증하고, 성인 확인은 생년월일로 만 18세 이상을 확인한다.
 필수 약관 설정에는 서비스 이용약관과 개인정보처리방침의 실제 버전이 모두 포함되어야 한다.
