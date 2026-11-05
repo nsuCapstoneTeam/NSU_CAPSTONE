@@ -288,6 +288,23 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
     }
 
     @Test
+    void 보이는_글자가_없는_값은_빈_값으로_본다() throws Exception {
+        // NBSP, 폭 없는 공백, 단어 결합자는 strip()이 지우지 않지만 화면에는 아무것도 보이지 않는다
+        String invisible = " ​⁠";
+        Map<String, Object> body = validProfile();
+        body.put("name", invisible);
+        putProfile(partner, body).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        body = validProfile();
+        body.put("organization", invisible);
+        body.put("bio", "   ");
+        putProfile(partner, body).andExpect(status().isOk())
+            .andExpect(jsonPath("$.organization").value((Object) null))
+            .andExpect(jsonPath("$.bio").value((Object) null));
+    }
+
+    @Test
     void 글자_수는_코드포인트로_센다() throws Exception {
         Map<String, Object> body = validProfile();
         body.put("name", "😀".repeat(40));

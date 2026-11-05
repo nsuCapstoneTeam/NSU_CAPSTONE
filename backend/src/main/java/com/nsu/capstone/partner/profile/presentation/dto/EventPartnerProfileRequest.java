@@ -90,6 +90,15 @@ public record EventPartnerProfileRequest(
         if (trimmed.codePointCount(0, trimmed.length()) > max) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
-        return trimmed.isEmpty() ? null : trimmed;
+        // NBSP·폭 없는 공백처럼 strip()이 남기지만 보이지 않는 글자만 있으면 빈 값이다
+        return trimmed.codePoints().allMatch(EventPartnerProfileRequest::invisible) ? null : trimmed;
+    }
+
+    private static boolean invisible(int codePoint) {
+        int type = Character.getType(codePoint);
+        return Character.isWhitespace(codePoint)
+            || type == Character.SPACE_SEPARATOR
+            || type == Character.FORMAT
+            || type == Character.CONTROL;
     }
 }
