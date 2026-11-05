@@ -89,6 +89,8 @@ public abstract class EventIntegrationTestBase {
         clock.set(NOW);
         jdbcTemplate.update("DELETE FROM events");
         jdbcTemplate.update("DELETE FROM oauth_accounts");
+        // EVENT_PARTNER 프로필이 users를 참조하므로, 다른 테스트가 남긴 행이 있어도 users를 지울 수 있게 먼저 지운다
+        jdbcTemplate.update("DELETE FROM event_partner_profiles");
         userRepository.deleteAll();
         partner = newUser(UserRole.EVENT_PARTNER, "partner@example.com");
     }

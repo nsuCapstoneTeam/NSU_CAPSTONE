@@ -11,6 +11,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 class EventPartnerProfileConcurrencyIntegrationTest extends EventPartnerProfileIntegrationTestBase {
@@ -54,7 +55,10 @@ class EventPartnerProfileConcurrencyIntegrationTest extends EventPartnerProfileI
                     .isIn(List.of("첫째", "첫째 소속", "11"), List.of("둘째", "둘째 소속", "44"));
             }
         } finally {
-            pool.shutdownNow();
+            // 단언이 실패해도 진행 중인 PUT이 끝난 뒤 정리(@AfterEach)가 돌게 한다.
+            // shutdownNow는 진행 중인 요청을 멈추지 못해, 정리 뒤에 커밋된 행이 다른 테스트의 users 삭제를 FK로 막을 수 있다
+            pool.shutdown();
+            pool.awaitTermination(30, TimeUnit.SECONDS);
         }
     }
 
