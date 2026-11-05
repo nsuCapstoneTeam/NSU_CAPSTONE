@@ -118,7 +118,7 @@ Content-Type: multipart/form-data; boundary=...
 | `title` | 문자열 | O | 앞뒤 공백을 지운 뒤 1~100자 |
 | `isCover` | 불리언 | O | `true` 또는 `false` |
 | `hasThirdPartyRights` | 불리언 | O | 아티스트 말고 권리를 가진 사람이 있으면 `true`. 커버곡의 원곡(보호기간이 끝나지 않은 곡), 공동 창작·공동 연주, 남이 만든 MR·비트·샘플, 남이 가진 상업 발매 Master가 그렇다 |
-| `isCollectivelyManaged` | 불리언 | O | `true` 또는 `false`. `true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`이고 곡을 만들지 않는다(2026-11-05 결정). 신탁곡은 재생·분석 근거가 없어서, 플랫폼이 출시 전 신탁단체(KOMCA·KOSCAP)와 이용허락·요율을 협의한 뒤에 받는다. 협의가 끝나면 이 검사를 설정값으로 끈다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)) |
+| `isCollectivelyManaged` | 불리언 | O | `true` 또는 `false`. `true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`이고 곡을 만들지 않는다(2026-11-05 김동엽 결정, SSOT v1.18 초안, 팀 확인 전). 신탁곡은 재생·분석 근거가 없어서, 플랫폼이 출시 전 신탁단체(KOMCA·KOSCAP)와 이용허락·요율을 협의한 뒤에 받는다. 협의가 끝나면 이 검사를 설정값으로 끈다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)) |
 | `isRightsWarranted` | 불리언 | O | 권리 확인·이용 동의. `true`만 받는다 |
 | `rightsWarrantyVersion` | 문자열 | O | 화면에 보여 준 권리 확인·이용 동의 문구(서식 01의 화면판)의 버전. 지금 버전이어야 한다 |
 | `licenseFiles` | 파일, 여러 개 | 조건부 | `hasThirdPartyRights = true`면 1개 이상 필수이고, `false`면 보내지 않는다. 권리자별 이용허락서(서식 02) 또는 같은 범위를 담은 기존 계약서. PDF·JPEG·PNG, 파일당 5MiB(5,242,880바이트) 이하, 최대 5개(설정값). 형식은 파일 내용으로 판별한다 |
@@ -141,13 +141,15 @@ Content-Type: multipart/form-data; boundary=...
 | 1 | 로그인 | `401 AUTHENTICATION_REQUIRED` |
 | 2 | 역할이 ARTIST이고 계정이 `ACTIVE` | `403 ACCESS_DENIED` |
 | 2-1 | 실명 본인확인을 마침(`VERIFIED_ARTIST`, NSU-105) | `403 IDENTITY_VERIFICATION_REQUIRED` |
-| 3 | 파트 검증(§2.1) | `400 VALIDATION_ERROR`. 동의 문구 버전이 지금 버전이 아니면 `400 REQUIRED_TERMS_NOT_AGREED`. `hasThirdPartyRights = true`인데 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED`. `isCollectivelyManaged = true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`(신탁곡, 출시 전 협의까지 받지 않음) |
+| 3 | 파트 검증(§2.1). 아래 순서로 보고 처음 걸린 오류 하나만 준다 | ① 파트 누락·형식 오류는 `400 VALIDATION_ERROR` ② 동의 문구 버전이 지금 버전이 아니면 `400 REQUIRED_TERMS_NOT_AGREED` ③ `isCollectivelyManaged = true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`(신탁곡, 출시 전 협의까지 받지 않음, SSOT v1.18 초안, 팀 확인 전) ④ `hasThirdPartyRights = true`인데 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED` |
 | 4 | 같은 파일(SHA-256)로 이미 올린 곡이 있음(§2.3) | 같은 입력이면 `201` + 그 곡, 다른 입력이면 `409 MUSIC_ALREADY_UPLOADED` |
 | 5 | 같은 파일(SHA-256)에 권리 중단 기록이 남아 있음(§2.3) | `409 MUSIC_RIGHTS_SUSPENDED` |
 | 6 | 삭제하지 않은 곡이 이미 3개 | `409 MUSIC_LIMIT_EXCEEDED` |
 | 7 | 형식: MP3, 또는 AAC를 담은 M4A | `400 UNSUPPORTED_AUDIO_FORMAT` |
 | 8 | 길이 | `400 AUDIO_DURATION_OUT_OF_RANGE` |
 | 9 | 이용허락서 형식: PDF·JPEG·PNG, 파일당 5MiB 이하 | `400 UNSUPPORTED_LICENSE_FORMAT`, `413 LICENSE_TOO_LARGE` |
+
+- 시연 서버(`DEMO`)에서는 허용 목록에 있는 팀 계정만 올린다(`403 DEMO_WRITE_NOT_ALLOWED`, NSU-129). 시연 본인확인(`SANDBOX`)은 이름을 저장하지 않아, 업로더를 특정하는 것은 이 허용 목록이다. 이 검사의 순서와 계약은 NSU-129가 이 문서에 적는다. NSU-129가 끝나기 전에는 업로드 API를 외부에서 접속할 수 있는 서버에 배포하지 않는다([music_upload/02](../adr/music_upload/02_music_rights_documents.md) 7절).
 
 - **크기**: 10MiB를 넘으면 서버가 파일을 다 받기 전에 끊는다. 응답은 `413`이고 본문은 Spring 표준 `ProblemDetail`이다(ADR-007 §4.4). 화면은 상태 코드로 분기한다. 이 검사는 위 순서와 관계없이 먼저 나올 수 있다. 요청 전체 상한은 36MiB(설정값)다. 파일 합계 35MiB(음원 10MiB + 이용허락서 5개 × 5MiB)에 텍스트 파트와 multipart 경계 1MiB를 더한 값이다([ADR 00](../adr/music_upload/00_music_upload_validation.md)). 5MiB를 넘는 이용허락서는 `413 LICENSE_TOO_LARGE`(ADR-007 본문)다. 10MiB를 넘는 이용허락서는 음원과 같은 표준 `413`이 먼저 나올 수 있다.
 - **형식**: 파일 앞부분의 바이트로 MP3와 MP4 계열을 가린다. M4A는 오디오 트랙의 코덱이 AAC(`mp4a`)인지 보고, `esds`의 AudioSpecificConfig로 AAC 코어가 AAC-LC(객체 유형 2)인지 본다. HE-AAC(5)·HE-AACv2(29)는 그 안의 코어 객체 유형이 2여야 한다. 다음 파일은 형식 오류로 거절한다.
@@ -356,7 +358,7 @@ Content-Type: multipart/form-data; boundary=...
 | 업로드 자격 | 실명 본인확인을 하지 않은 `ACTIVE` 아티스트의 업로드는 `403 IDENTITY_VERIFICATION_REQUIRED`이고 곡과 파일이 남지 않는다. PortOne 테스트 채널로 본인확인한(`SANDBOX`) 시연 계정과 Mock 본인확인 시드 계정은 통과한다 |
 | 파트 | 각 필수 파트를 뺀 요청, 불리언에 `"yes"`, 제목 0자·101자, `isRightsWarranted = false`는 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다 |
 | 동의 문구 버전 | 지금 버전과 다른 `rightsWarrantyVersion`은 `400 REQUIRED_TERMS_NOT_AGREED`이고 곡이 생기지 않는다. 통과한 곡에는 요청에 담긴 버전이 저장된다 |
-| 신탁곡 | `isCollectivelyManaged = true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`이고 곡과 파일이 남지 않는다. 검사를 끄는 설정에서는 `201`이다 |
+| 신탁곡(SSOT v1.18 초안, 팀 확인 전) | `isCollectivelyManaged = true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`이고 곡과 파일이 남지 않는다. 검사를 끄는 설정에서는 `201`이다 |
 | 권리 서류 | `hasThirdPartyRights = true`에 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED`이고 곡이 생기지 않는다. `false`에 이용허락서를 보내거나 6개를 보내면 `VALIDATION_ERROR`. 확장자만 `.pdf`인 텍스트 파일은 `UNSUPPORTED_LICENSE_FORMAT`. 5MiB 이용허락서는 통과, 1바이트 넘으면 `413 LICENSE_TOO_LARGE`. 통과한 곡의 이용허락서는 `private/rights-evidence/`에 저장되고, 거절된 요청의 이용허락서는 남지 않는다 |
 | 서류 내용 | 서명이 없는 빈 서식 PDF도 형식이 맞으면 통과한다. 서버는 서류 내용을 판단하지 않는다 |
 | 크기 | 10MiB(10,485,760바이트)는 통과, 1바이트 넘으면 `413`. 등록증 5MiB는 통과, 1바이트 넘으면 `413 CERTIFICATE_TOO_LARGE` |
