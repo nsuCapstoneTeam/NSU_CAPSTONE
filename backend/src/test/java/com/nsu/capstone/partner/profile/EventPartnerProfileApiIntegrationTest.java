@@ -27,6 +27,20 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
             .containsExactlyInAnyOrder("name", "organization", "bio", "eventTypes", "regionCodes", "updatedAt");
     }
 
+    @Test
+    void 첫_PUT은_200이고_응답이_이어서_한_조회와_같다() throws Exception {
+        String saved = putProfile(partner, validProfile())
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("김담당"))
+            .andExpect(jsonPath("$.updatedAt").isNotEmpty())
+            .andReturn().getResponse().getContentAsString();
+
+        String fetched = getProfile(partner).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(objectMapper.readTree(fetched)).isEqualTo(objectMapper.readTree(saved));
+    }
+
     private List<String> fieldNames(String json) {
         return new ArrayList<>(objectMapper.readTree(json).propertyNames());
     }

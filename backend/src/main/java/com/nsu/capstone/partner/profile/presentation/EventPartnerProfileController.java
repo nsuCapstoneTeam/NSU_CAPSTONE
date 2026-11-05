@@ -2,6 +2,7 @@ package com.nsu.capstone.partner.profile.presentation;
 
 import com.nsu.capstone.global.exception.ErrorResponse;
 import com.nsu.capstone.partner.profile.application.EventPartnerProfileService;
+import com.nsu.capstone.partner.profile.presentation.dto.EventPartnerProfileRequest;
 import com.nsu.capstone.partner.profile.presentation.dto.EventPartnerProfileResponse;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -12,6 +13,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -43,5 +46,21 @@ public class EventPartnerProfileController {
         return service.find(UUID.fromString(jwt.getSubject()))
             .map(EventPartnerProfileResponse::from)
             .orElseGet(EventPartnerProfileResponse::empty);
+    }
+
+    @PutMapping
+    @ApiResponse(responseCode = "200")
+    @ApiResponse(
+        responseCode = "400",
+        description = "VALIDATION_ERROR. 잘못된 JSON·타입은 code 없는 ProblemDetail",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+    )
+    public EventPartnerProfileResponse put(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestBody EventPartnerProfileRequest request
+    ) {
+        return EventPartnerProfileResponse.from(
+            service.save(UUID.fromString(jwt.getSubject()), request.toContent())
+        );
     }
 }
