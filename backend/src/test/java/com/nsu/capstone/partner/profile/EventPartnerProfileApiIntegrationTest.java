@@ -264,6 +264,40 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
             .andExpect(jsonPath("$.userId").doesNotExist());
     }
 
+    @Test
+    void ARTIST는_본문이_깨져도_400이_아니라_403이다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "artist2@example.com");
+
+        mockMvc.perform(put(PATH).header("Authorization", bearer(artist))
+                .contentType(APPLICATION_JSON).content("{broken"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        mockMvc.perform(put(PATH).header("Authorization", bearer(artist))
+                .contentType(APPLICATION_JSON).content("{\"eventTypes\":{}}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void NUL_문자가_든_문자열은_VALIDATION_ERROR다() throws Exception {
+        for (String field : List.of("name", "organization", "bio")) {
+            Map<String, Object> body = validProfile();
+            body.put(field, "a\u0000b");
+            putProfile(partner, body).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        }
+    }
+
+    @Test
+    void 글자_수는_코드포인트로_센다() throws Exception {
+        Map<String, Object> body = validProfile();
+        body.put("name", "😀".repeat(40));
+        putProfile(partner, body).andExpect(status().isOk());
+
+        body.put("name", "😀".repeat(41));
+        putProfile(partner, body).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
     private void assertRegions(List<String> requested, List<String> expected) throws Exception {
         Map<String, Object> body = validProfile();
         body.put("regionCodes", requested);

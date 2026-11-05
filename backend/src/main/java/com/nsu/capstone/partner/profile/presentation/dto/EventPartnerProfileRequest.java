@@ -82,6 +82,10 @@ public record EventPartnerProfileRequest(
         if (value == null) {
             return null;
         }
+        // PostgreSQL은 NUL이 든 문자열을 저장하지 못해 그대로 두면 500이 된다
+        if (value.indexOf('\u0000') >= 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        }
         String trimmed = value.strip();
         if (trimmed.codePointCount(0, trimmed.length()) > max) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);

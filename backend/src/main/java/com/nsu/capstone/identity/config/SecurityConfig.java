@@ -48,6 +48,10 @@ public class SecurityConfig {
         OAUTH_RESULT_ENDPOINT
     );
 
+    // 역할 검사를 본문 파싱보다 먼저 한다. @PreAuthorize만 두면 깨진 JSON을 보낸 ARTIST가 403이 아니라 400을 받는다(05 §4 검사 순서)
+    private static final RequestMatcher EVENT_PARTNER_PROFILE_ENDPOINT =
+        PathPatternRequestMatcher.pathPattern("/api/v1/me/event-partner-profile");
+
     // shortcut: API 문서 경로를 로그인 없이 연다(배포 서버 없음), 배포 설계(ADR-006) 때 막거나 끈다
     private static final RequestMatcher API_DOCS_ENDPOINTS = new OrRequestMatcher(
         PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/v3/api-docs/**"),
@@ -111,6 +115,7 @@ public class SecurityConfig {
                     OAUTH_PUBLIC_ENDPOINTS,
                     API_DOCS_ENDPOINTS
                 ).permitAll()
+                .requestMatchers(EVENT_PARTNER_PROFILE_ENDPOINT).hasRole("EVENT_PARTNER")
                 .anyRequest().authenticated()
             )
             .csrf(csrf -> csrf.ignoringRequestMatchers(
