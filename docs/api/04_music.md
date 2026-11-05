@@ -130,6 +130,7 @@ Content-Type: multipart/form-data; boundary=...
 - 이용허락서는 `licenseFiles` 이름의 파트를 파일 수만큼 반복해 보낸다.
 - 서버는 이용허락서에 적힌 이용 기간을 읽거나 저장하지 않는다. 허락 만료·철회는 권리자나 아티스트가 알려 오면 NSU-104의 즉시 중단 절차로 멈춘다([music_upload/02](../adr/music_upload/02_music_rights_documents.md) 6절).
 - **서버는 검증만 한다.** 서버는 동의 문구 버전, 이용허락서 첨부 여부·개수, 파일 형식·크기만 확인한다. 서류의 진위, 서명한 사람의 권한, 허락 범위는 판단하지 않고 사람이 심사하지도 않는다. 권리 문제는 신고가 오면 NSU-104 절차로 처리한다([music_upload/02](../adr/music_upload/02_music_rights_documents.md)).
+- **곡은 실명 본인확인을 마친 아티스트(`VERIFIED_ARTIST`)만 올린다(2026-11-05 결정).** 침해 신고가 왔을 때 책임을 물을 실명이 남게 하기 위해서다. 본인확인은 NSU-105가 만들고, 시연에서는 Mock·테스트 본인확인으로 통과한다([music_upload/02](../adr/music_upload/02_music_rights_documents.md) 7절).
 - 파일 이름과 `Content-Type`은 판정에 쓰지 않는다. 형식은 파일 내용으로 판별한다(§2.2).
 
 ### 2.2 검사
@@ -138,6 +139,7 @@ Content-Type: multipart/form-data; boundary=...
 |---|---|---|
 | 1 | 로그인 | `401 AUTHENTICATION_REQUIRED` |
 | 2 | 역할이 ARTIST이고 계정이 `ACTIVE` | `403 ACCESS_DENIED` |
+| 2-1 | 실명 본인확인을 마침(`VERIFIED_ARTIST`, NSU-105) | `403 IDENTITY_VERIFICATION_REQUIRED` |
 | 3 | 파트 검증(§2.1) | `400 VALIDATION_ERROR`. 동의 문구 버전이 지금 버전이 아니면 `400 REQUIRED_TERMS_NOT_AGREED`. `hasThirdPartyRights = true`인데 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED` |
 | 4 | 같은 파일(SHA-256)로 이미 올린 곡이 있음(§2.3) | 같은 입력이면 `201` + 그 곡, 다른 입력이면 `409 MUSIC_ALREADY_UPLOADED` |
 | 5 | 같은 파일(SHA-256)에 권리 중단 기록이 남아 있음(§2.3) | `409 MUSIC_RIGHTS_SUSPENDED` |
@@ -324,7 +326,7 @@ Content-Type: multipart/form-data; boundary=...
 | 길이가 허용 범위 밖 | 400 | `AUDIO_DURATION_OUT_OF_RANGE` |
 | 등록증이 PDF·JPEG·PNG가 아님 | 400 | `UNSUPPORTED_CERTIFICATE_FORMAT` |
 | 등록부와 대조 실패(§3.2) | 400 | `COPYRIGHT_REGISTRATION_MISMATCH` |
-| 실명 본인확인을 하지 않음 | 403 | `IDENTITY_VERIFICATION_REQUIRED` |
+| 실명 본인확인을 하지 않고 곡을 올리거나 등록 정보를 냄 | 403 | `IDENTITY_VERIFICATION_REQUIRED` |
 | 곡이 없음, 삭제됨, 다른 아티스트의 곡 | 404 | `MUSIC_NOT_FOUND` |
 | 같은 파일로 올린 곡이 있는데 다른 입력을 보냄(§2.3) | 409 | `MUSIC_ALREADY_UPLOADED` |
 | 삭제하지 않은 곡이 이미 3개 | 409 | `MUSIC_LIMIT_EXCEEDED` |
@@ -347,6 +349,7 @@ Content-Type: multipart/form-data; boundary=...
 | 대상 | 경우 |
 |---|---|
 | 역할·상태 | EVENT_PARTNER의 업로드·등록 정보 제출은 `403 ACCESS_DENIED`. `SUSPENDED` 아티스트도 `403` |
+| 업로드 자격 | 실명 본인확인을 하지 않은 `ACTIVE` 아티스트의 업로드는 `403 IDENTITY_VERIFICATION_REQUIRED`이고 곡과 파일이 남지 않는다. Mock 본인확인을 마친 시연 계정은 통과한다 |
 | 파트 | 각 필수 파트를 뺀 요청, 불리언에 `"yes"`, 제목 0자·101자, `isRightsWarranted = false`는 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다 |
 | 동의 문구 버전 | 지금 버전과 다른 `rightsWarrantyVersion`은 `400 REQUIRED_TERMS_NOT_AGREED`이고 곡이 생기지 않는다. 통과한 곡에는 요청에 담긴 버전이 저장된다 |
 | 권리 서류 | `hasThirdPartyRights = true`에 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED`이고 곡이 생기지 않는다. `false`에 이용허락서를 보내거나 6개를 보내면 `VALIDATION_ERROR`. 확장자만 `.pdf`인 텍스트 파일은 `UNSUPPORTED_LICENSE_FORMAT`. 5MiB 이용허락서는 통과, 1바이트 넘으면 `413 LICENSE_TOO_LARGE`. 통과한 곡의 이용허락서는 `private/rights-evidence/`에 저장되고, 거절된 요청의 이용허락서는 남지 않는다 |
