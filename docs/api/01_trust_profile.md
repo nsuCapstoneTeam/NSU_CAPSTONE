@@ -89,7 +89,7 @@ Authorization: Bearer {accessToken}
 5. 관측 내역(`observations`)은 전체 관측 기준이다. 최근 14건 창은 Risk Signal에만 쓴다.
 6. 모든 배열은 항목이 없으면 `[]`다.
 7. 필드는 생략하지 않는다. 값이 없으면 `null` 또는 `0`이다.
-8. `verifications`에 `COPYRIGHT`가 있으면 `IDENTITY`도 있다. 등록정보 일치는 본인확인 이름으로만 생기기 때문이다([music_upload/01](../adr/music_upload/01_music_rights_verification.md) 본인확인 출처 안전장치 3·4). 조합할 때 `IDENTITY`가 없는 아티스트의 `COPYRIGHT`는 넣지 않는다(§7).
+8. `verifications`에 `COPYRIGHT`가 있으면 `IDENTITY`도 있다. 등록정보 일치는 본인확인 이름으로만 생기기 때문이다([music_upload/01](../adr/music_upload/01_music_rights_verification.md) 본인확인 출처 안전장치 4). 조합할 때 `IDENTITY`가 없는 아티스트의 `COPYRIGHT`는 넣지 않는다(§7).
 
 `ratePercent`의 뜻은 "관측(아티스트에게 성패가 달려 있었던 공연 결과) 중 이행한 비율의 추정치"다. 공연이 실제로 열릴 확률이 아니다. 화면에는 "아티스트 귀책 기준 이행률"로 표시하고 `evidence.exclusions`를 함께 표시한다. 정상 완료만 50회 이어지면 `R ≈ 0.996`이 되어 `100`이 될 수 있다.
 
