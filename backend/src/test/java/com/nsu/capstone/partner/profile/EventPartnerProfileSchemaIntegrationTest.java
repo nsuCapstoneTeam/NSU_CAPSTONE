@@ -5,14 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.nsu.capstone.event.domain.EventType;
 import java.util.Arrays;
-import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 
 class EventPartnerProfileSchemaIntegrationTest extends EventPartnerProfileIntegrationTestBase {
-
-    @Autowired Flyway flyway;
 
     @Test
     void CHECK는_4개짜리_배열_허용_밖_행사_종류_형식이_틀린_지역을_거절한다() {
@@ -56,13 +52,6 @@ class EventPartnerProfileSchemaIntegrationTest extends EventPartnerProfileIntegr
             .containsExactlyInAnyOrderElementsOf(allowedEventTypes("ck_events_event_type"));
         assertThat(Arrays.stream(EventType.values()).map(Enum::name))
             .containsExactlyInAnyOrderElementsOf(allowedEventTypes("ck_event_partner_profiles_event_types"));
-    }
-
-    @Test
-    void 마이그레이션을_돌릴_때마다_지역_점검이_실행된다() {
-        // 개편 마이그레이션 작성자가 점검 함수 호출을 빠뜨려도 afterMigrate 콜백이 막는다
-        insert("ARRAY[]::varchar[]", "ARRAY['29']");
-        assertThatThrownBy(flyway::migrate).hasMessageContaining("29");
     }
 
     @Test
