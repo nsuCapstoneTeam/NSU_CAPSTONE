@@ -134,7 +134,7 @@ Eligibility가 곡 목록과 AI 추천 상태까지 읽으면 맡는 일이 커�
   - NSU-105: Eligibility는 `VERIFIED_ARTIST`를 다시 보지 않으므로, 실명 책임은 업로드 시점에만 성립한다. NSU-105는 본인확인이 무효가 될 수 있게 설계하면 그 아티스트의 곡을 중단(`isSuspended`)하거나, 무효가 될 수 없게 한다. 시연용 Mock 본인확인 계정의 곡이 운영 데이터에 남지 않게 하는 것도 NSU-105 몫이다.
   - NSU-89(곡): 권리 근거 enum은 `music.domain.RightsBasis`에 이미 있다. 새로 만들지 않고 이 enum을 쓴다. 값을 늘리면 `EligibilityFilter`의 `switch`가 컴파일되지 않아 통과 여부를 정하게 된다.
   - NSU-63: `EligibilityFilter`를 AI 호출과 같은 DB 트랜잭션 안에서 부르지 않는다. 트랜잭션 안의 외부 호출은 연결을 쥔 채 기다리게 한다.
-  - NSU-63: 후보 수의 상한은 API 02 §1대로 AI가 측정해 NSUAI-15에 공개하는 입력 상한을 따른다. Spring이 임의로 자르지 않는다. 그 크기로 계정 일괄 조회(`findAllById`의 `IN` 목록)를 통합 테스트한다. 구현 점검에서 이 크기를 확인하지 못했다. 상한이 pgjdbc 바인드 파라미터 상한(약 3만 2천 개)을 넘으면 계정·프로필·일정 창구는 `IN` 목록 대신 `= ANY(:ids)` 배열 바인딩이나 청크 조회를 쓴다.
+  - NSU-63: 후보 수의 상한은 API 02 §1대로 AI가 측정해 NSUAI-15에 공개하는 입력 상한을 따른다. Spring이 임의로 자르지 않는다. 그 크기로 계정 일괄 조회(`UserRepository.findAllByIdIn`의 `IN` 목록, `UserAccountRow` projection)를 통합 테스트한다. 구현 점검에서 이 크기를 확인하지 못했다. 상한이 pgjdbc 바인드 파라미터 상한(약 3만 2천 개)을 넘으면 계정·프로필·일정 창구는 `IN` 목록 대신 `= ANY(:ids)` 배열 바인딩이나 청크 조회를 쓴다.
   - NSU-63: 같은 `musicId`가 후보에 두 번 들어오면 결과에도 두 번 나온다. 필터는 중복을 거르지 않으므로 후보를 모을 때 `(music_id, audioRevision)`이 겹치지 않게 한다.
   - NSU-12·34: 실제 창구를 붙일 때 1명·100명 조회 횟수 통합 테스트(`EligibilityFilterIntegrationTest`)가 프로필·일정 창구의 조회까지 세도록 늘린다. 지금은 빈 구현이라 계정 조회만 센다.
   - NSU-12·34: 조회 횟수 통합 테스트는 Hibernate `Statistics`로 센다. 그래서 창구는 JPA(Spring Data·`EntityManager`)로 조회한다. `JdbcTemplate`·`JdbcClient`로 만들면 DataSource 수준(datasource-proxy 등)에서 세도록 테스트를 바꾼다.

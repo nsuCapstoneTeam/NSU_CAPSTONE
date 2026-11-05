@@ -9,11 +9,13 @@ import com.nsu.capstone.TestcontainersConfiguration;
 import com.nsu.capstone.event.recommendation.EligibilityInput;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserStatus;
+import com.nsu.capstone.identity.repository.UserAccountRow;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.support.UuidV7Generator;
 import com.nsu.capstone.music.domain.RightsBasis;
 import com.nsu.capstone.recommendation.eligibility.domain.MusicCandidate;
 import jakarta.persistence.EntityManagerFactory;
+import java.lang.reflect.RecordComponent;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -103,6 +105,13 @@ class EligibilityFilterIntegrationTest {
         );
 
         assertThat(loadedEntities).isZero();
+    }
+
+    @Test
+    void accountProjectionCarriesOnlyIdRoleAndStatus() {
+        assertThat(UserAccountRow.class.getRecordComponents())
+            .extracting(RecordComponent::getName)
+            .containsExactly("id", "role", "status");
     }
 
     @Test
