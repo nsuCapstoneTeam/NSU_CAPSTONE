@@ -130,6 +130,7 @@ Content-Type: multipart/form-data; boundary=...
 - 이용허락서는 `licenseFiles` 이름의 파트를 파일 수만큼 반복해 보낸다.
 - 서버는 이용허락서에 적힌 이용 기간을 읽거나 저장하지 않는다. 허락 만료·철회는 권리자나 아티스트가 알려 오면 NSU-104의 즉시 중단 절차로 멈춘다([music_upload/02](../adr/music_upload/02_music_rights_documents.md) 6절).
 - **서버는 검증만 한다.** 서버는 동의 문구 버전, 이용허락서 첨부 여부·개수, 파일 형식·크기만 확인한다. 서류의 진위, 서명한 사람의 권한, 허락 범위는 판단하지 않고 사람이 심사하지도 않는다. 권리 문제는 신고가 오면 NSU-104 절차로 처리한다([music_upload/02](../adr/music_upload/02_music_rights_documents.md)).
+- 위 "만"은 권리 검증의 범위다. 이용허락서·등록증 파일에도 SSOT `SEC-118`의 보안 검사(File Type Validation, Malware Scan 등)를 적용한다. Malware Scan의 방식과 MVP 적용 범위는 NSU-89 구현 때 정한다.
 - **곡은 실명 본인확인을 마친 아티스트(`VERIFIED_ARTIST`)만 올린다(2026-11-05 결정).** 침해 신고가 왔을 때 책임을 물을 실명이 남게 하기 위해서다. 본인확인은 NSU-105가 만든다. 시연에서는 PortOne + NHN KCP 테스트 채널로 본인확인한 계정(출처 `SANDBOX`)과, 팀이 시드 스크립트로만 만든 Mock 본인확인 계정이 통과한다([music_upload/02](../adr/music_upload/02_music_rights_documents.md) 7절).
 - 파일 이름과 `Content-Type`은 판정에 쓰지 않는다. 형식은 파일 내용으로 판별한다(§2.2).
 
