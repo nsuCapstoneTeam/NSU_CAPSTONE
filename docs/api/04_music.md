@@ -61,7 +61,7 @@ ARTIST가 추천에 쓸 곡(AI Sample)을 올리고, 저작권을 등록한 곡�
 | `musicId` | UUID 문자열 | 곡 식별자. AI의 `music_id`와 같은 값이다(서버 협의 015) |
 | `title` | 문자열 | 곡 제목 |
 | `isCover` | 불리언 | 남이 먼저 발표한 곡을 다시 부르거나 연주한 곡인지(보호기간이 끝난 곡 포함). 올릴 때 아티스트가 고른다 |
-| `isOwnComposition` | 불리언 | 작사·작곡·편곡을 모두 올린 아티스트가 직접 했는지. 올릴 때 아티스트가 고른다 |
+| `isOwnComposition` | 불리언 | 작사·작곡·편곡을 모두 올린 아티스트가 직접 했고 그 권리를 지금도 가지고 있는지. 올릴 때 아티스트가 고른다 |
 | `hasThirdPartyRights` | 불리언 | 아티스트 말고 권리를 가진 사람이 있는지. 올릴 때 아티스트가 고른다. `true`인 곡은 올릴 때 이용허락서를 함께 냈다(§2.1). 서버는 이용허락서의 진위와 허락 범위를 판단하지 않는다 |
 | `isCollectivelyManaged` | 불리언 | 이 곡의 저작권을 KOMCA·KOSCAP 같은 신탁관리단체에 맡겼는지. 올릴 때 아티스트가 신고한다 |
 | `rights.basis` | enum | 권리의 근거. `DECLARED`(아티스트가 권리 확인·이용 동의를 했고, 제3자 권리가 있으면 이용허락서를 냈음. 서버는 서류 내용을 판단하지 않는다), `VERIFIED`(올린 음원이 등록 저작물임을 확인함). 지금은 `VERIFIED`를 주는 경로가 없다. 오디오 지문 검사처럼 음원과 등록 저작물을 잇는 검사를 넣을 때 정한다 |
@@ -119,8 +119,8 @@ Content-Type: multipart/form-data; boundary=...
 | `file` | 파일 | O | MP3, 또는 AAC를 담은 M4A(AAC-LC 코어, 1024샘플 프레임. HE-AAC·HE-AACv2 포함). 10MiB(10,485,760바이트) 이하. 길이는 §2.2 |
 | `title` | 문자열 | O | 앞뒤 공백을 지운 뒤 1~100자 |
 | `isCover` | 불리언 | O | `true` 또는 `false`. `true`이면 `400 COVER_MUSIC_NOT_ACCEPTED`이고 곡을 만들지 않는다. MVP에서는 커버곡(보호기간이 끝난 원곡을 직접 연주한 곡 포함)을 받지 않는다(2026-11-05 김동엽 결정, SSOT v1.18 초안, 팀 확인 전). 원곡이 신탁된 곡이면 작곡가의 허락서도 재생 근거가 되지 않고, 원곡의 신탁 여부나 보호기간 만료는 서버가 확인할 수 없기 때문이다. 출시 전 신탁단체 협의 뒤 다시 정하며, 그때까지 이 검사를 설정값으로 끄지 않는다 |
-| `isOwnComposition` | 불리언 | O | `true` 또는 `false`. `false`이면 `400 THIRD_PARTY_COMPOSITION_NOT_ACCEPTED`이고 곡을 만들지 않는다. MVP에서는 작사·작곡·편곡을 아티스트가 모두 직접 한 곡만 받는다(2026-11-05 김동엽 결정, SSOT v1.18 초안, 팀 확인 전). 남이 쓴 곡을 부른 곡, 공동 창작곡, 남이 만든 MR·비트·샘플을 쓴 곡이 여기에 걸린다. 그 작사·작곡자가 KOMCA·KOSCAP 회원이면 본인의 이용허락서도 재생 근거가 되지 않고, 서버는 그 신탁 여부를 확인할 수 없기 때문이다. 출시 전 신탁단체 협의 뒤 다시 정한다 |
-| `hasThirdPartyRights` | 불리언 | O | 아티스트 말고 실연·녹음물 권리를 가진 사람이 있으면 `true`. 함께 연주·노래한 사람, 남이 가진 녹음물(Master)이 그렇다. 남의 작사·작곡·편곡은 이 값과 상관없이 `isOwnComposition`으로, 커버곡은 `isCover`로 거절한다 |
+| `isOwnComposition` | 불리언 | O | `true` 또는 `false`. `false`이면 `400 THIRD_PARTY_COMPOSITION_NOT_ACCEPTED`이고 곡을 만들지 않는다. MVP에서는 작사·작곡·편곡을 아티스트가 모두 직접 했고 그 권리를 지금도 가진 곡만 받는다(2026-11-05·06 김동엽 결정, SSOT v1.18 초안, 팀 확인 전). 남이 쓴 곡을 부른 곡, 공동 창작곡, 남이 만든 MR·비트·샘플을 쓴 곡, 직접 만들었지만 작사·작곡·편곡 권리를 음악출판사 등에 양도하거나 독점 계약한 곡이 여기에 걸린다. 지금 작사·작곡 권리자가 KOMCA·KOSCAP 회원이면 그 권리자의 이용허락서도 재생 근거가 되지 않고, 서버는 그 신탁 여부를 확인할 수 없기 때문이다. 출시 전 신탁단체 협의 뒤 다시 정한다 |
+| `hasThirdPartyRights` | 불리언 | O | 아티스트 말고 실연·녹음물 권리를 가진 사람이 있으면 `true`. 함께 연주·노래한 사람, 남이 가진 녹음물(Master)이 그렇다. 남의 작사·작곡·편곡과 양도·독점계약한 작사·작곡·편곡 권리는 이 값과 상관없이 `isOwnComposition`으로, 커버곡은 `isCover`로 거절한다 |
 | `isCollectivelyManaged` | 불리언 | O | `true` 또는 `false`. `true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`이고 곡을 만들지 않는다(2026-11-05 김동엽 결정, SSOT v1.18 초안, 팀 확인 전). 신탁곡은 재생·분석 근거가 없어서, 플랫폼이 출시 전 신탁단체(KOMCA·KOSCAP)와 이용허락·요율을 협의한 뒤에 받는다. 협의가 끝나면 이 검사를 설정값으로 끈다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)) |
 | `isRightsWarranted` | 불리언 | O | 권리 확인·이용 동의. `true`만 받는다 |
 | `rightsWarrantyVersion` | 문자열 | O | 화면에 보여 준 권리 확인·이용 동의 문구(서식 01의 화면판)의 버전. 지금 버전이어야 한다 |
@@ -144,7 +144,7 @@ Content-Type: multipart/form-data; boundary=...
 | 1 | 로그인 | `401 AUTHENTICATION_REQUIRED` |
 | 2 | 역할이 ARTIST이고 계정이 `ACTIVE` | `403 ACCESS_DENIED` |
 | 2-1 | 실명 본인확인을 마침(`VERIFIED_ARTIST`, NSU-105) | `403 IDENTITY_VERIFICATION_REQUIRED` |
-| 3 | 파트 검증(§2.1). 아래 순서로 보고 처음 걸린 오류 하나만 준다 | ① 파트 누락·형식 오류는 `400 VALIDATION_ERROR` ② 동의 문구 버전이 지금 버전이 아니면 `400 REQUIRED_TERMS_NOT_AGREED` ③ `isCover = true`이면 `400 COVER_MUSIC_NOT_ACCEPTED`(커버곡, 2026-11-05 김동엽 결정, SSOT v1.18 초안, 팀 확인 전) ④ `isOwnComposition = false`이면 `400 THIRD_PARTY_COMPOSITION_NOT_ACCEPTED`(남의 작사·작곡·편곡이 들어간 곡, SSOT v1.18 초안, 팀 확인 전) ⑤ `isCollectivelyManaged = true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`(신탁곡, 출시 전 협의까지 받지 않음, SSOT v1.18 초안, 팀 확인 전) ⑥ `hasThirdPartyRights = true`인데 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED` |
+| 3 | 파트 검증(§2.1). 아래 순서로 보고 처음 걸린 오류 하나만 준다 | ① 파트 누락·형식 오류는 `400 VALIDATION_ERROR` ② 동의 문구 버전이 지금 버전이 아니면 `400 REQUIRED_TERMS_NOT_AGREED` ③ `isCover = true`이면 `400 COVER_MUSIC_NOT_ACCEPTED`(커버곡, 2026-11-05 김동엽 결정, SSOT v1.18 초안, 팀 확인 전) ④ `isOwnComposition = false`이면 `400 THIRD_PARTY_COMPOSITION_NOT_ACCEPTED`(남의 작사·작곡·편곡이 들어갔거나 그 권리를 양도·독점계약한 곡, SSOT v1.18 초안, 팀 확인 전) ⑤ `isCollectivelyManaged = true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`(신탁곡, 출시 전 협의까지 받지 않음, SSOT v1.18 초안, 팀 확인 전) ⑥ `hasThirdPartyRights = true`인데 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED` |
 | 4 | 같은 파일(SHA-256)로 이미 올린 곡이 있음(§2.3) | 같은 입력이면 `201` + 그 곡, 다른 입력이면 `409 MUSIC_ALREADY_UPLOADED` |
 | 5 | 같은 파일(SHA-256)에 권리 중단 기록이 남아 있음(§2.3) | `409 MUSIC_RIGHTS_SUSPENDED` |
 | 6 | 삭제하지 않은 곡이 이미 3개 | `409 MUSIC_LIMIT_EXCEEDED` |
@@ -332,7 +332,7 @@ Content-Type: multipart/form-data; boundary=...
 | 권리 확인·이용 동의 문구 버전이 지금 버전이 아님 | 400 | `REQUIRED_TERMS_NOT_AGREED` |
 | `hasThirdPartyRights = true`인데 이용허락서가 없음 | 400 | `RIGHTS_LICENSE_REQUIRED` |
 | `isCover = true`(커버곡, MVP에서 받지 않음) | 400 | `COVER_MUSIC_NOT_ACCEPTED` |
-| `isOwnComposition = false`(남의 작사·작곡·편곡, MVP에서 받지 않음) | 400 | `THIRD_PARTY_COMPOSITION_NOT_ACCEPTED` |
+| `isOwnComposition = false`(남의 작사·작곡·편곡, 또는 그 권리를 양도·독점계약함. MVP에서 받지 않음) | 400 | `THIRD_PARTY_COMPOSITION_NOT_ACCEPTED` |
 | `isCollectivelyManaged = true`(신탁곡, 신탁단체 협의 전) | 400 | `COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED` |
 | 이용허락서가 PDF·JPEG·PNG가 아님 | 400 | `UNSUPPORTED_LICENSE_FORMAT` |
 | 길이가 허용 범위 밖 | 400 | `AUDIO_DURATION_OUT_OF_RANGE` |
@@ -366,7 +366,7 @@ Content-Type: multipart/form-data; boundary=...
 | 파트 | 각 필수 파트를 뺀 요청, 불리언에 `"yes"`, 제목 0자·101자, `isRightsWarranted = false`는 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다 |
 | 동의 문구 버전 | 지금 버전과 다른 `rightsWarrantyVersion`은 `400 REQUIRED_TERMS_NOT_AGREED`이고 곡이 생기지 않는다. 통과한 곡에는 요청에 담긴 버전이 저장된다 |
 | 커버곡(2026-11-05 김동엽 결정, SSOT v1.18 초안, 팀 확인 전) | `isCover = true`이면 `400 COVER_MUSIC_NOT_ACCEPTED`이고 곡과 파일이 남지 않는다. 신탁곡이면서 커버곡이면 `400 COVER_MUSIC_NOT_ACCEPTED`가 먼저다 |
-| 남의 작곡(SSOT v1.18 초안, 팀 확인 전) | `isOwnComposition = false`이면 `400 THIRD_PARTY_COMPOSITION_NOT_ACCEPTED`이고 곡과 파일이 남지 않는다. 커버곡이기도 하면 `COVER_MUSIC_NOT_ACCEPTED`가 먼저다 |
+| 남의 작곡, 양도·독점계약한 작곡(SSOT v1.18 초안, 팀 확인 전) | `isOwnComposition = false`이면 `400 THIRD_PARTY_COMPOSITION_NOT_ACCEPTED`이고 곡과 파일이 남지 않는다. 커버곡이기도 하면 `COVER_MUSIC_NOT_ACCEPTED`가 먼저다 |
 | 신탁곡(SSOT v1.18 초안, 팀 확인 전) | `isCollectivelyManaged = true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`이고 곡과 파일이 남지 않는다. 검사를 끄는 설정에서는 `201`이다 |
 | 권리 서류 | `hasThirdPartyRights = true`에 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED`이고 곡이 생기지 않는다. `false`에 이용허락서를 보내거나 6개를 보내면 `VALIDATION_ERROR`. 확장자만 `.pdf`인 텍스트 파일은 `UNSUPPORTED_LICENSE_FORMAT`. 5MiB 이용허락서는 통과, 1바이트 넘으면 `413 LICENSE_TOO_LARGE`. 통과한 곡의 이용허락서는 `private/rights-evidence/`에 저장되고, 거절된 요청의 이용허락서는 남지 않는다 |
 | 서류 내용 | 서명이 없는 빈 서식 PDF도 형식이 맞으면 통과한다. 서버는 서류 내용을 판단하지 않는다 |
@@ -406,5 +406,5 @@ Content-Type: multipart/form-data; boundary=...
 | 서버 협의 013 | 업로드 길이 56~60초는 2026-10-20 AI 담당이 동의했다. MP3·M4A 해독 검증이 끝날 때까지 013은 Proposed다 |
 | Linear NSU-103·104·105 이슈 | NSU-103: 정리 작업은 어떤 revision도 가리키지 않고 정리 유예(1시간)가 지난 원본과, 어떤 곡도 가리키지 않는 등록증·이용허락서를 지운다. 유예가 `transaction_timeout`보다 길지 않으면 서버 시작을 막는다(§2.4·§3.2). 곡 삭제·원본 교체가 권리 중단 기록을 지우지 않는다(§2.3). NSU-104: 신고 대응 다섯 가지를 구현한다. ① 신고 수령인 공지 ② 즉시 중단(새 재생 주소 발급, 이미 발급한 재생 주소, 추천·다시 보기, AI 분석 모두) ③ 신고자와 업로더 양쪽 통보 ④ 소명하면 재개(재개 예정일 전에 소송 제기를 통보받으면 제외) ⑤ 반복 침해 계정 정지. 중단 기록을 (아티스트, 파일 SHA-256)으로 남기고 정식 재개로만 푼다. NSU-105: 본인확인 결과는 서버가 발급한 ID로 사용자 계정에 묶고 한 번만 쓴다. 남의 인증 결과로 이름을 가져와 `VERIFIED_ARTIST`·등록정보 일치를 얻지 못하게 하기 위해서다 |
 | SSOT v1.17 (2026-11-05 승인, 반영됨) | `RIGHTS-*` 곡 단위 검증과 Work·AI Sample 통합, 등록부 대조는 "등록정보 일치"로 기록하고 권리 근거를 바꾸지 않음, `VERIFIED_ARTIST` = 실명 본인확인을 마친 `ACTIVE` ARTIST, `ADMIN-096` 표시를 "등록부 저작자·권리자와 실명 일치"로, `AI-030`·`AI-031` AI 추천 조건에서 `VERIFIED_ARTIST`를 빼고 "추천에 쓸 수 있는 곡 1개 이상"으로, `AI-032` 최대 3곡, `AI-MATCH-051` 판정식과 곡 단위 저작권, `AI-033` 업로드 길이 56~60초. 2026-11-05 추가: `RIGHTS-016`·`017`·`023` 제3자 권리가 있으면 이용허락서 첨부, `ADMIN-095` 관리자 권리 검증 없음, `STORAGE-102` 이용허락서 보관, `RIGHTS-161` 곡 권리 신고·중단·재개 신설 |
-| SSOT v1.18 (초안, 팀 확인 전) | `RIGHTS-023` 커버곡은 MVP에서 업로드를 받지 않음(`COVER_MUSIC_NOT_ACCEPTED`). 남의 작사·작곡·편곡이 들어간 곡도 받지 않음(`THIRD_PARTY_COMPOSITION_NOT_ACCEPTED`, `RIGHTS-016`·`017`). 신탁곡(KOMCA·KOSCAP)은 출시 전 신탁단체 협의까지 업로드를 받지 않음(`COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`, 2026-11-05 김동엽 결정) |
+| SSOT v1.18 (초안, 팀 확인 전) | `RIGHTS-023` 커버곡은 MVP에서 업로드를 받지 않음(`COVER_MUSIC_NOT_ACCEPTED`). 남의 작사·작곡·편곡이 들어간 곡과 작사·작곡·편곡 권리를 양도·독점계약한 곡도 받지 않음(`THIRD_PARTY_COMPOSITION_NOT_ACCEPTED`, `RIGHTS-016`·`017`). 신탁곡(KOMCA·KOSCAP)은 출시 전 신탁단체 협의까지 업로드를 받지 않음(`COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`, 2026-11-05 김동엽 결정) |
 | 권리 서식 `docs/곡_권리_서식_샘플/` | 운영자 검토 단계를 빼고 서버 검증과 신고 대응으로 고쳤다. 실행 코드가 읽지 않는 문서라 jar에 넣지 않도록 `docs/`에 둔다. 이 PR에서 함께 넣는다 |
