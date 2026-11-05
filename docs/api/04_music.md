@@ -148,7 +148,7 @@ Content-Type: multipart/form-data; boundary=...
 | 8 | 길이 | `400 AUDIO_DURATION_OUT_OF_RANGE` |
 | 9 | 이용허락서 형식: PDF·JPEG·PNG, 파일당 5MiB 이하 | `400 UNSUPPORTED_LICENSE_FORMAT`, `413 LICENSE_TOO_LARGE` |
 
-- **크기**: 10MiB를 넘으면 서버가 파일을 다 받기 전에 끊는다. 응답은 `413`이고 본문은 Spring 표준 `ProblemDetail`이다(ADR-007 §4.4). 화면은 상태 코드로 분기한다. 이 검사는 위 순서와 관계없이 먼저 나올 수 있다. 요청 전체 상한은 음원 10MiB와 이용허락서 5개 × 5MiB를 더한 크기다(설정값). 5MiB를 넘는 이용허락서는 `413 LICENSE_TOO_LARGE`(ADR-007 본문)다. 10MiB를 넘는 이용허락서는 음원과 같은 표준 `413`이 먼저 나올 수 있다.
+- **크기**: 10MiB를 넘으면 서버가 파일을 다 받기 전에 끊는다. 응답은 `413`이고 본문은 Spring 표준 `ProblemDetail`이다(ADR-007 §4.4). 화면은 상태 코드로 분기한다. 이 검사는 위 순서와 관계없이 먼저 나올 수 있다. 요청 전체 상한은 36MiB(설정값)다. 파일 합계 35MiB(음원 10MiB + 이용허락서 5개 × 5MiB)에 텍스트 파트와 multipart 경계 1MiB를 더한 값이다([ADR 00](../adr/music_upload/00_music_upload_validation.md)). 5MiB를 넘는 이용허락서는 `413 LICENSE_TOO_LARGE`(ADR-007 본문)다. 10MiB를 넘는 이용허락서는 음원과 같은 표준 `413`이 먼저 나올 수 있다.
 - **형식**: 파일 앞부분의 바이트로 MP3와 MP4 계열을 가린다. M4A는 오디오 트랙의 코덱이 AAC(`mp4a`)인지 보고, `esds`의 AudioSpecificConfig로 AAC 코어가 AAC-LC(객체 유형 2)인지 본다. HE-AAC(5)·HE-AACv2(29)는 그 안의 코어 객체 유형이 2여야 한다. 다음 파일은 형식 오류로 거절한다.
   - 조각난 MP4(`moof`)
   - 오디오 트랙이 2개 이상인 M4A
