@@ -53,8 +53,24 @@ class EventPartnerProfileSchemaIntegrationTest extends EventPartnerProfileIntegr
     }
 
     @Test
+    void 지역_점검_쿼리는_정규형이_아닌_배열이_있으면_실패한다() {
+        // 개편 마이그레이션이 코드만 바꾸고 05 §2 정규화(정렬 포함)를 빠뜨린 경우
+        for (String regionCodes : java.util.List.of(
+            "ARRAY['26','11']",
+            "ARRAY['11','11680']",
+            "ARRAY['36110']",
+            "ARRAY['11','11']"
+        )) {
+            insert("ARRAY[]::varchar[]", regionCodes);
+            assertThatThrownBy(() -> jdbcTemplate.execute("SELECT check_event_partner_profile_regions()"))
+                .as(regionCodes)
+                .hasMessageContaining("정규형");
+        }
+    }
+
+    @Test
     void 지역_점검_쿼리는_목록에_없는_코드가_있으면_실패하고_정상_데이터는_통과한다() {
-        insert("ARRAY[]::varchar[]", "ARRAY['11','11680','36']");
+        insert("ARRAY[]::varchar[]", "ARRAY['11','36','41110']");
         jdbcTemplate.execute("SELECT check_event_partner_profile_regions()");
 
         insert("ARRAY[]::varchar[]", "ARRAY['11','99999']");

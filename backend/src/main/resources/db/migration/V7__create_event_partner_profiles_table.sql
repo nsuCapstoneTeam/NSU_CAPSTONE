@@ -33,6 +33,7 @@ CREATE FUNCTION check_event_partner_profile_regions() RETURNS void
 LANGUAGE plpgsql AS $$
 DECLARE
     unknown_codes TEXT;
+    unnormalized_users TEXT;
 BEGIN
     SELECT string_agg(DISTINCT c.code, ', ' ORDER BY c.code) INTO unknown_codes
     FROM event_partner_profiles p
@@ -42,6 +43,23 @@ BEGIN
     );
     IF unknown_codes IS NOT NULL THEN
         RAISE EXCEPTION '지역 목록에 없는 EVENT_PARTNER 프로필 지역 코드가 있다: %', unknown_codes;
+    END IF;
+
+    -- 05 §2 정규형: 오름차순·중복 없음, 시·도와 그 안의 시·군·구가 함께 없음,
+    -- 시·군·구가 하나뿐인 시·도의 시·군·구 코드 없음. 앱의 정규화와 같은 순서(문자열 비교)다.
+    SELECT string_agg(p.user_id::text, ', ') INTO unnormalized_users
+    FROM event_partner_profiles p
+    WHERE p.region_codes::text[] <> ARRAY(
+            SELECT DISTINCT c COLLATE "C" FROM unnest(p.region_codes::text[]) AS c ORDER BY 1)
+        OR EXISTS (
+            SELECT 1
+            FROM unnest(p.region_codes) AS c(code)
+            JOIN regions r ON r.code = c.code
+            WHERE r.province_code = ANY (p.region_codes)
+                OR (SELECT count(*) FROM regions s WHERE s.province_code = r.province_code) = 1
+        );
+    IF unnormalized_users IS NOT NULL THEN
+        RAISE EXCEPTION 'EVENT_PARTNER 프로필 지역 코드가 정규형이 아닌 사용자가 있다: %', unnormalized_users;
     END IF;
 END;
 $$;
