@@ -2,8 +2,11 @@ package com.nsu.capstone.partner.profile;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import com.zaxxer.hikari.HikariDataSource;
+import java.sql.Connection;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -76,6 +79,22 @@ class EventPartnerProfileRegionMigrationIntegrationTest extends EventPartnerProf
         assertThatThrownBy(() -> migrateStepwiseWithProfiles(
             "classpath:db/migration", "classpath:db/region-migration-fixture/reorg-not-last"))
             .hasMessageContaining("41110");
+    }
+
+    @Test
+    void users를_오래_잡은_트랜잭션이_있으면_V7은_무기한_기다리지_않고_실패한다() throws Exception {
+        // FK를 만들 때 users에 SHARE ROW EXCLUSIVE 락이 필요하다. 기다리는 동안 뒤에 온 가입도 모두 막히므로 상한을 둔다(V6과 같은 규칙)
+        DataSource databaseDataSource = databaseDataSource();
+        flyway(databaseDataSource, "classpath:db/migration").target("6").load().migrate();
+        try (Connection holder = databaseDataSource.getConnection()) {
+            holder.setAutoCommit(false);
+            holder.createStatement().execute("LOCK TABLE users IN ROW EXCLUSIVE MODE");
+
+            assertTimeoutPreemptively(Duration.ofSeconds(15), () -> assertThatThrownBy(
+                () -> flyway(databaseDataSource, "classpath:db/migration").target("7").load().migrate())
+                .hasMessageContaining("lock timeout"));
+            holder.rollback();
+        }
     }
 
     @Test

@@ -1,5 +1,11 @@
 -- EVENT_PARTNER 프로필 (05 EVENT_PARTNER 프로필 API §5, ADR event_partner_profile/00).
 -- 가입할 때 만들지 않고 처음 PUT할 때 만든다. user_id가 PK이면서 users.id를 참조한다(1:1).
+
+-- FK를 만들 때 users에 SHARE ROW EXCLUSIVE 락이 필요하다. 긴 트랜잭션이 users를 붙잡고 있으면 이 문장이
+-- 락 대기열에서 줄을 서고, 그 뒤에 온 가입(users INSERT)도 함께 멈춘다. 3초 안에 락을 얻지 못하면
+-- 마이그레이션을 실패시킨다(V6과 같은 규칙). SET LOCAL이라 이 마이그레이션 트랜잭션에서만 적용된다.
+SET LOCAL lock_timeout = '3s';
+
 CREATE TABLE event_partner_profiles (
     user_id UUID PRIMARY KEY REFERENCES users (id),
     name VARCHAR(40) NOT NULL,
