@@ -10,6 +10,7 @@ import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrationTestBase {
@@ -68,6 +69,44 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         assertThat(jdbcTemplate.queryForObject(
             "SELECT count(*) FROM event_partner_profiles WHERE user_id = ?", Integer.class,
             artist.getId())).isZero();
+    }
+
+    @Test
+    void 삭제하면_204이고_이어서_한_조회는_저장_전과_같다() throws Exception {
+        putProfile(partner, validProfile()).andExpect(status().isOk());
+
+        deleteProfile(partner).andExpect(status().isNoContent());
+
+        getProfile(partner).andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value((Object) null))
+            .andExpect(jsonPath("$.updatedAt").value((Object) null))
+            .andExpect(jsonPath("$.eventTypes").isEmpty())
+            .andExpect(jsonPath("$.regionCodes").isEmpty());
+    }
+
+    @Test
+    void 프로필이_없을_때_삭제도_204이고_삭제_뒤_PUT은_새로_저장된다() throws Exception {
+        deleteProfile(partner).andExpect(status().isNoContent());
+
+        putProfile(partner, validProfile()).andExpect(status().isOk());
+        deleteProfile(partner).andExpect(status().isNoContent());
+        putProfile(partner, validProfile()).andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("김담당"));
+    }
+
+    @Test
+    void 두_EVENT_PARTNER의_프로필은_서로_보이지_않고_삭제도_서로_영향이_없다() throws Exception {
+        User other = newUser(UserRole.EVENT_PARTNER, "other@example.com");
+        putProfile(partner, validProfile()).andExpect(status().isOk());
+        Map<String, Object> otherBody = validProfile();
+        otherBody.put("name", "이담당");
+        putProfile(other, otherBody).andExpect(status().isOk());
+
+        getProfile(partner).andExpect(jsonPath("$.name").value("김담당"));
+        getProfile(other).andExpect(jsonPath("$.name").value("이담당"));
+
+        deleteProfile(partner).andExpect(status().isNoContent());
+        getProfile(other).andExpect(jsonPath("$.name").value("이담당"));
     }
 
     private List<String> fieldNames(String json) {
