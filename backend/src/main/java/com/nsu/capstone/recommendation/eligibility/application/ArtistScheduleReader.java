@@ -15,7 +15,8 @@ public interface ArtistScheduleReader {
     /**
      * {@code [from, to)}와 겹치거나 맞닿는 일정을 아티스트 수와 관계없이 한 번에 읽어 아티스트 ID별로
      * 돌려준다. 일정이 없는 아티스트는 키를 비운다. {@code AVAILABLE}로 채우면 일정 조건을 통과하므로
-     * 채우지 않는다.
+     * 채우지 않는다. {@code from}·{@code to}는 Asia/Seoul 벽시계라서 같은 시간대로 바꿔 조회한다.
+     * 지도 자체는 null로 돌려주지 않고, 조회에 실패하면 예외를 던진다.
      */
     Map<UUID, List<ScheduleSlot>> findByArtistIds(
         Collection<UUID> artistIds, LocalDateTime from, LocalDateTime to
