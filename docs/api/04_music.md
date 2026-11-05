@@ -118,7 +118,7 @@ Content-Type: multipart/form-data; boundary=...
 | `title` | 문자열 | O | 앞뒤 공백을 지운 뒤 1~100자 |
 | `isCover` | 불리언 | O | `true` 또는 `false` |
 | `hasThirdPartyRights` | 불리언 | O | 아티스트 말고 권리를 가진 사람이 있으면 `true`. 커버곡의 원곡(보호기간이 끝나지 않은 곡), 공동 창작·공동 연주, 남이 만든 MR·비트·샘플, 남이 가진 상업 발매 Master가 그렇다 |
-| `isCollectivelyManaged` | 불리언 | O | `true` 또는 `false`. 신탁만 한 자작곡은 `hasThirdPartyRights = false`, `isCollectivelyManaged = true`이고 이용허락서를 받지 않는다. 신탁곡의 재생 근거는 상용화 전 신탁단체와 이용허락·요율을 협의해 마련한다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)) |
+| `isCollectivelyManaged` | 불리언 | O | `true` 또는 `false`. `true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`이고 곡을 만들지 않는다(2026-11-05 결정). 신탁곡은 재생·분석 근거가 없어서, 플랫폼이 출시 전 신탁단체(KOMCA·KOSCAP)와 이용허락·요율을 협의한 뒤에 받는다. 협의가 끝나면 이 검사를 설정값으로 끈다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)) |
 | `isRightsWarranted` | 불리언 | O | 권리 확인·이용 동의. `true`만 받는다 |
 | `rightsWarrantyVersion` | 문자열 | O | 화면에 보여 준 권리 확인·이용 동의 문구(서식 01의 화면판)의 버전. 지금 버전이어야 한다 |
 | `licenseFiles` | 파일, 여러 개 | 조건부 | `hasThirdPartyRights = true`면 1개 이상 필수이고, `false`면 보내지 않는다. 권리자별 이용허락서(서식 02) 또는 같은 범위를 담은 기존 계약서. PDF·JPEG·PNG, 파일당 5MiB(5,242,880바이트) 이하, 최대 5개(설정값). 형식은 파일 내용으로 판별한다 |
@@ -141,7 +141,7 @@ Content-Type: multipart/form-data; boundary=...
 | 1 | 로그인 | `401 AUTHENTICATION_REQUIRED` |
 | 2 | 역할이 ARTIST이고 계정이 `ACTIVE` | `403 ACCESS_DENIED` |
 | 2-1 | 실명 본인확인을 마침(`VERIFIED_ARTIST`, NSU-105) | `403 IDENTITY_VERIFICATION_REQUIRED` |
-| 3 | 파트 검증(§2.1) | `400 VALIDATION_ERROR`. 동의 문구 버전이 지금 버전이 아니면 `400 REQUIRED_TERMS_NOT_AGREED`. `hasThirdPartyRights = true`인데 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED` |
+| 3 | 파트 검증(§2.1) | `400 VALIDATION_ERROR`. 동의 문구 버전이 지금 버전이 아니면 `400 REQUIRED_TERMS_NOT_AGREED`. `hasThirdPartyRights = true`인데 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED`. `isCollectivelyManaged = true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`(신탁곡, 출시 전 협의까지 받지 않음) |
 | 4 | 같은 파일(SHA-256)로 이미 올린 곡이 있음(§2.3) | 같은 입력이면 `201` + 그 곡, 다른 입력이면 `409 MUSIC_ALREADY_UPLOADED` |
 | 5 | 같은 파일(SHA-256)에 권리 중단 기록이 남아 있음(§2.3) | `409 MUSIC_RIGHTS_SUSPENDED` |
 | 6 | 삭제하지 않은 곡이 이미 3개 | `409 MUSIC_LIMIT_EXCEEDED` |
@@ -323,6 +323,7 @@ Content-Type: multipart/form-data; boundary=...
 | MP3·AAC M4A가 아님. 조각난 MP4, 오디오 트랙 2개 이상, AAC-LC 코어가 아니거나 1024샘플 프레임이 아닌 AAC, 지원하지 않는 재생 구간 표(edit list), 개수 칸이 상한을 넘거나 서로 맞지 않음, 샘플 표가 가리키지 않는 데이터, 샘플레이트가 바뀌는 MP3, 프레임으로 잰 길이와 시간 표·재생 구간이 허용 오차 넘게 다름 | 400 | `UNSUPPORTED_AUDIO_FORMAT` |
 | 권리 확인·이용 동의 문구 버전이 지금 버전이 아님 | 400 | `REQUIRED_TERMS_NOT_AGREED` |
 | `hasThirdPartyRights = true`인데 이용허락서가 없음 | 400 | `RIGHTS_LICENSE_REQUIRED` |
+| `isCollectivelyManaged = true`(신탁곡, 신탁단체 협의 전) | 400 | `COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED` |
 | 이용허락서가 PDF·JPEG·PNG가 아님 | 400 | `UNSUPPORTED_LICENSE_FORMAT` |
 | 길이가 허용 범위 밖 | 400 | `AUDIO_DURATION_OUT_OF_RANGE` |
 | 등록증이 PDF·JPEG·PNG가 아님 | 400 | `UNSUPPORTED_CERTIFICATE_FORMAT` |
@@ -353,6 +354,7 @@ Content-Type: multipart/form-data; boundary=...
 | 업로드 자격 | 실명 본인확인을 하지 않은 `ACTIVE` 아티스트의 업로드는 `403 IDENTITY_VERIFICATION_REQUIRED`이고 곡과 파일이 남지 않는다. PortOne 테스트 채널로 본인확인한(`SANDBOX`) 시연 계정과 Mock 본인확인 시드 계정은 통과한다 |
 | 파트 | 각 필수 파트를 뺀 요청, 불리언에 `"yes"`, 제목 0자·101자, `isRightsWarranted = false`는 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다 |
 | 동의 문구 버전 | 지금 버전과 다른 `rightsWarrantyVersion`은 `400 REQUIRED_TERMS_NOT_AGREED`이고 곡이 생기지 않는다. 통과한 곡에는 요청에 담긴 버전이 저장된다 |
+| 신탁곡 | `isCollectivelyManaged = true`이면 `400 COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`이고 곡과 파일이 남지 않는다. 검사를 끄는 설정에서는 `201`이다 |
 | 권리 서류 | `hasThirdPartyRights = true`에 이용허락서가 없으면 `400 RIGHTS_LICENSE_REQUIRED`이고 곡이 생기지 않는다. `false`에 이용허락서를 보내거나 6개를 보내면 `VALIDATION_ERROR`. 확장자만 `.pdf`인 텍스트 파일은 `UNSUPPORTED_LICENSE_FORMAT`. 5MiB 이용허락서는 통과, 1바이트 넘으면 `413 LICENSE_TOO_LARGE`. 통과한 곡의 이용허락서는 `private/rights-evidence/`에 저장되고, 거절된 요청의 이용허락서는 남지 않는다 |
 | 서류 내용 | 서명이 없는 빈 서식 PDF도 형식이 맞으면 통과한다. 서버는 서류 내용을 판단하지 않는다 |
 | 크기 | 10MiB(10,485,760바이트)는 통과, 1바이트 넘으면 `413`. 등록증 5MiB는 통과, 1바이트 넘으면 `413 CERTIFICATE_TOO_LARGE` |
@@ -391,4 +393,5 @@ Content-Type: multipart/form-data; boundary=...
 | 서버 협의 013 | 업로드 길이 56~60초는 2026-10-20 AI 담당이 동의했다. MP3·M4A 해독 검증이 끝날 때까지 013은 Proposed다 |
 | Linear NSU-103·104·105 이슈 | NSU-103: 정리 작업은 어떤 revision도 가리키지 않고 정리 유예(1시간)가 지난 원본과, 어떤 곡도 가리키지 않는 등록증·이용허락서를 지운다. 유예가 `transaction_timeout`보다 길지 않으면 서버 시작을 막는다(§2.4·§3.2). 곡 삭제·원본 교체가 권리 중단 기록을 지우지 않는다(§2.3). NSU-104: 신고 대응 다섯 가지를 구현한다. ① 신고 수령인 공지 ② 즉시 중단(새 재생 주소 발급, 이미 발급한 재생 주소, 추천·다시 보기, AI 분석 모두) ③ 신고자와 업로더 양쪽 통보 ④ 소명하면 재개(재개 예정일 전에 소송 제기를 통보받으면 제외) ⑤ 반복 침해 계정 정지. 중단 기록을 (아티스트, 파일 SHA-256)으로 남기고 정식 재개로만 푼다. NSU-105: 본인확인 결과는 서버가 발급한 ID로 사용자 계정에 묶고 한 번만 쓴다. 남의 인증 결과로 이름을 가져와 `VERIFIED_ARTIST`·등록정보 일치를 얻지 못하게 하기 위해서다 |
 | SSOT v1.17 (2026-11-05 승인, 반영됨) | `RIGHTS-*` 곡 단위 검증과 Work·AI Sample 통합, 등록부 대조는 "등록정보 일치"로 기록하고 권리 근거를 바꾸지 않음, `VERIFIED_ARTIST` = 실명 본인확인을 마친 `ACTIVE` ARTIST, `ADMIN-096` 표시를 "등록부 저작자·권리자와 실명 일치"로, `AI-030`·`AI-031` AI 추천 조건에서 `VERIFIED_ARTIST`를 빼고 "추천에 쓸 수 있는 곡 1개 이상"으로, `AI-032` 최대 3곡, `AI-MATCH-051` 판정식과 곡 단위 저작권, `AI-033` 업로드 길이 56~60초. 2026-11-05 추가: `RIGHTS-016`·`017`·`023` 제3자 권리가 있으면 이용허락서 첨부, `ADMIN-095` 관리자 권리 검증 없음, `STORAGE-102` 이용허락서 보관, `RIGHTS-161` 곡 권리 신고·중단·재개 신설 |
+| SSOT v1.18 (초안, 팀 확인 전) | `RIGHTS-023` 신탁곡(KOMCA·KOSCAP)은 출시 전 신탁단체 협의까지 업로드를 받지 않음(`COLLECTIVELY_MANAGED_MUSIC_NOT_ACCEPTED`, 2026-11-05 김동엽 결정) |
 | 권리 서식 `docs/곡_권리_서식_샘플/` | 운영자 검토 단계를 빼고 서버 검증과 신고 대응으로 고쳤다. 실행 코드가 읽지 않는 문서라 jar에 넣지 않도록 `docs/`에 둔다. 이 PR에서 함께 넣는다 |
