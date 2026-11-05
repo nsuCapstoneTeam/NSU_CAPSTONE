@@ -239,7 +239,10 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         body.put("regionCodes", List.of("11", "29"));
         putProfile(partner, body).andExpect(status().isBadRequest());
 
-        assertThat(output.getOut()).contains("WARN").contains("29");
+        // 다른 WARN이나 시각의 "29"에 우연히 맞지 않도록, 같은 줄에 로거·레벨·메시지·코드가 함께 있어야 한다
+        assertThat(output.getOut().lines())
+            .anyMatch(line -> line.contains("WARN") && line.contains("RegionNormalizer")
+                && line.contains("지역 목록에 없는 EVENT_PARTNER 프로필 지역 코드: 29"));
     }
 
     @Test
