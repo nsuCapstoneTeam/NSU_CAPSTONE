@@ -209,6 +209,50 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         }
     }
 
+    @Test
+    void 목록에_없는_지역_형식이_틀린_값_4개는_VALIDATION_ERROR다() throws Exception {
+        for (List<String> invalid : List.of(
+            List.of("11999"),
+            List.of("29"),
+            List.of("123"),
+            List.of("ab"),
+            List.of("1168a"),
+            List.of(""),
+            List.of("11", "26", "27", "28"))) {
+            Map<String, Object> body = validProfile();
+            body.put("regionCodes", invalid);
+            putProfile(partner, body).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        }
+    }
+
+    @Test
+    void 지역은_정규화해_저장하고_코드_오름차순으로_돌려준다() throws Exception {
+        assertRegions(List.of("11", "11680"), List.of("11"));
+        assertRegions(List.of("36110"), List.of("36"));
+        assertRegions(List.of("36", "36110"), List.of("36"));
+        assertRegions(List.of("11680", "11680"), List.of("11680"));
+        assertRegions(List.of("44", "11", "41110"), List.of("11", "41110", "44"));
+        assertRegions(List.of(), List.of());
+    }
+
+    private void assertRegions(List<String> requested, List<String> expected) throws Exception {
+        Map<String, Object> body = validProfile();
+        body.put("regionCodes", requested);
+        String saved = putProfile(partner, body).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        String fetched = getProfile(partner).andReturn().getResponse().getContentAsString();
+
+        assertThat(strings(saved, "regionCodes")).containsExactlyElementsOf(expected);
+        assertThat(strings(fetched, "regionCodes")).containsExactlyElementsOf(expected);
+    }
+
+    private List<String> strings(String json, String field) {
+        List<String> values = new ArrayList<>();
+        objectMapper.readTree(json).get(field).forEach(node -> values.add(node.asString()));
+        return values;
+    }
+
     private List<String> fieldNames(String json) {
         return new ArrayList<>(objectMapper.readTree(json).propertyNames());
     }
