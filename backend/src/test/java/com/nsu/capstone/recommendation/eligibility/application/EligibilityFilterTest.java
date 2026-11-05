@@ -424,6 +424,113 @@ class EligibilityFilterTest {
             .isEmpty();
     }
 
+    @Test
+    void dropsOnlyArtistWhoseScheduleValueIsNull() {
+        UUID broken = readyArtist();
+        schedules.put(broken, null);
+        MusicCandidate healthy = candidate(readyArtist());
+
+        List<EligibleMusic> result = filter.filter(EVENT, List.of(candidate(broken), healthy));
+
+        assertThat(result).extracting(EligibleMusic::musicId).containsExactly(healthy.musicId());
+    }
+
+    @Test
+    void dropsOnlyArtistWhoseRegionSetIsNull() {
+        UUID broken = readyArtist();
+        profiles.put(broken, profileWith(null, 100_000L, Set.of(ArtistType.SOLO)));
+        MusicCandidate healthy = candidate(readyArtist());
+
+        List<EligibleMusic> result = filter.filter(EVENT, List.of(candidate(broken), healthy));
+
+        assertThat(result).extracting(EligibleMusic::musicId).containsExactly(healthy.musicId());
+    }
+
+    @Test
+    void whenEventAsksTypeDropsOnlyArtistWhoseTypeSetIsNull() {
+        UUID broken = readyArtist();
+        profiles.put(broken, profileWith(Set.of("11680"), 100_000L, null));
+        MusicCandidate healthy = candidate(readyArtist());
+        profiles.put(healthy.artistId(), profileWith(
+            Set.of("11680"), 100_000L, Set.of(ArtistType.BAND)
+        ));
+
+        List<EligibleMusic> result = filter.filter(
+            eventAskingFor(ArtistType.BAND), List.of(candidate(broken), healthy)
+        );
+
+        assertThat(result).extracting(EligibleMusic::musicId).containsExactly(healthy.musicId());
+    }
+
+    @Test
+    void whenEventAsksNoTypeKeepsArtistWhoseTypeSetIsNull() {
+        UUID noTypeData = readyArtist();
+        profiles.put(noTypeData, profileWith(Set.of("11680"), 100_000L, null));
+
+        assertThat(filter.filter(EVENT, List.of(candidate(noTypeData)))).hasSize(1);
+    }
+
+    @Test
+    void dropsOnlyArtistWhoseScheduleHasSlotWithNullField() {
+        ScheduleSlot covering = available(at(15, 12, 0), at(15, 23, 0));
+        UUID nullStatus = readyArtist();
+        schedules.put(nullStatus, List.of(covering, new ScheduleSlot(at(15, 1, 0), at(15, 2, 0), null)));
+        UUID nullStart = readyArtist();
+        schedules.put(nullStart, List.of(covering, new ScheduleSlot(null, at(15, 2, 0), ScheduleStatus.AVAILABLE)));
+        UUID nullEnd = readyArtist();
+        schedules.put(nullEnd, List.of(covering, new ScheduleSlot(at(15, 1, 0), null, ScheduleStatus.BOOKED)));
+        UUID nullSlot = readyArtist();
+        schedules.put(nullSlot, java.util.Arrays.asList(covering, null));
+        MusicCandidate healthy = candidate(readyArtist());
+
+        List<EligibleMusic> result = filter.filter(EVENT, List.of(
+            candidate(nullStatus), candidate(nullStart), candidate(nullEnd), candidate(nullSlot), healthy
+        ));
+
+        assertThat(result).extracting(EligibleMusic::musicId).containsExactly(healthy.musicId());
+    }
+
+    @Test
+    void treatsBlockedSlotWithStartNotBeforeEndAsOverlappingEvent() {
+        ScheduleSlot covering = available(at(15, 12, 0), at(15, 23, 0));
+        UUID inverted = readyArtist();
+        schedules.put(inverted, List.of(
+            covering, new ScheduleSlot(at(15, 21, 0), at(15, 17, 0), ScheduleStatus.BOOKED)
+        ));
+        UUID zeroLengthInsideEvent = readyArtist();
+        schedules.put(zeroLengthInsideEvent, List.of(
+            covering, new ScheduleSlot(at(15, 19, 0), at(15, 19, 0), ScheduleStatus.HOLD)
+        ));
+        UUID zeroLengthOutsideEvent = readyArtist();
+        schedules.put(zeroLengthOutsideEvent, List.of(
+            covering, new ScheduleSlot(at(15, 10, 0), at(15, 10, 0), ScheduleStatus.UNAVAILABLE)
+        ));
+        MusicCandidate healthy = candidate(readyArtist());
+
+        List<EligibleMusic> result = filter.filter(EVENT, List.of(
+            candidate(inverted), candidate(zeroLengthInsideEvent),
+            candidate(zeroLengthOutsideEvent), healthy
+        ));
+
+        assertThat(result).extracting(EligibleMusic::musicId).containsExactly(healthy.musicId());
+    }
+
+    @Test
+    void doesNotUseInvertedAvailableSlotToCoverEvent() {
+        UUID invertedOnly = readyArtist();
+        schedules.put(invertedOnly, List.of(available(at(15, 23, 0), at(15, 12, 0))));
+        UUID invertedBridgesGap = readyArtist();
+        schedules.put(invertedBridgesGap, List.of(
+            available(at(15, 12, 0), at(15, 19, 0)), available(at(15, 23, 0), at(15, 18, 0))
+        ));
+
+        List<EligibleMusic> result = filter.filter(
+            EVENT, List.of(candidate(invertedOnly), candidate(invertedBridgesGap))
+        );
+
+        assertThat(result).isEmpty();
+    }
+
     private static EligibilityInput eventAskingFor(ArtistType artistType) {
         return new EligibilityInput(
             at(15, 18, 0), at(15, 22, 0), 60, "11680", 500_000, 1_000_000, artistType

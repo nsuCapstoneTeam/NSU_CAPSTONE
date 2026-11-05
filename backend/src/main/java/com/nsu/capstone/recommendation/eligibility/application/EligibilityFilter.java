@@ -1,5 +1,6 @@
 package com.nsu.capstone.recommendation.eligibility.application;
 
+import com.nsu.capstone.event.domain.ArtistType;
 import com.nsu.capstone.event.recommendation.EligibilityInput;
 import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.domain.UserStatus;
@@ -129,10 +130,14 @@ public class EligibilityFilter {
      * 막힌 일정(HOLD·BOOKED·UNAVAILABLE)이 행사와 겹치면 AVAILABLE이 덮고 있어도 실패한다.
      */
     private static boolean isScheduleAvailable(EligibilityInput event, List<ScheduleSlot> slots) {
+        if (slots == null || slots.stream().anyMatch(EligibilityFilter::isIncomplete)) {
+            return false;
+        }
+        // 시작이 끝보다 늦거나 같은 막힌 일정은 ADR의 [시작, 끝)와 달리 겹친다고 본다. 잘못된 데이터는 fail-closed다.
         boolean blocked = slots.stream().anyMatch(slot ->
             slot.status() != ScheduleStatus.AVAILABLE
-                && slot.start().isBefore(event.end())
-                && slot.end().isAfter(event.start()));
+                && (!slot.start().isBefore(slot.end())
+                    || (slot.start().isBefore(event.end()) && slot.end().isAfter(event.start()))));
         if (blocked) {
             return false;
         }
@@ -152,8 +157,15 @@ public class EligibilityFilter {
         return !coveredUntil.isBefore(event.end());
     }
 
+    private static boolean isIncomplete(ScheduleSlot slot) {
+        return slot == null || slot.start() == null || slot.end() == null || slot.status() == null;
+    }
+
     private static boolean isRegionReachable(EligibilityInput event, ArtistProfile profile) {
         Set<String> regionCodes = profile.performableRegionCodes();
+        if (regionCodes == null) {
+            return false;
+        }
         return regionCodes.contains(event.regionCode())
             || regionCodes.contains(event.regionCode().substring(0, PROVINCE_CODE_LENGTH));
     }
@@ -163,7 +175,11 @@ public class EligibilityFilter {
     }
 
     private static boolean isPerformanceTypeMatched(EligibilityInput event, ArtistProfile profile) {
-        return event.artistType() == null || profile.performanceTypes().contains(event.artistType());
+        if (event.artistType() == null) {
+            return true;
+        }
+        Set<ArtistType> performanceTypes = profile.performanceTypes();
+        return performanceTypes != null && performanceTypes.contains(event.artistType());
     }
 
     private static List<EligibilityCondition> passedConditions(EligibilityInput event) {
