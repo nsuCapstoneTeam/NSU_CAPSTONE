@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 class EligibilityFilterTest {
@@ -37,9 +39,10 @@ class EligibilityFilterTest {
     private final Map<UUID, ArtistAccount> accounts = new HashMap<>();
     private final Map<UUID, ArtistProfile> profiles = new HashMap<>();
     private final Map<UUID, List<ScheduleSlot>> schedules = new HashMap<>();
+    private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
     private final EligibilityFilter filter = new EligibilityFilter(
         ids -> only(accounts, ids), ids -> only(profiles, ids),
-        (ids, from, to) -> only(schedules, ids)
+        (ids, from, to) -> only(schedules, ids), meters
     );
 
     @Test
@@ -330,7 +333,8 @@ class EligibilityFilterTest {
                 asked.add(from);
                 asked.add(to);
                 return only(schedules, ids);
-            }
+            },
+            meters
         );
 
         recording.filter(EVENT, List.of(candidate(active), candidate(suspended)));
@@ -355,7 +359,8 @@ class EligibilityFilterTest {
             (ids, from, to) -> {
                 reads.add("schedule");
                 return schedules;
-            }
+            },
+            meters
         );
         UUID suspended = readyArtist();
         accounts.put(suspended, new ArtistAccount(UserRole.ARTIST, UserStatus.SUSPENDED));
@@ -417,7 +422,7 @@ class EligibilityFilterTest {
     void dropsEverythingWhileProfileAndScheduleAreNotAvailable() {
         UUID artistId = readyArtist();
         EligibilityFilter withEmptyReaders = new EligibilityFilter(
-            ids -> accounts, ids -> Map.of(), (ids, from, to) -> Map.of()
+            ids -> accounts, ids -> Map.of(), (ids, from, to) -> Map.of(), meters
         );
 
         assertThat(withEmptyReaders.filter(EVENT, List.of(candidate(artistId), candidate(artistId))))
@@ -529,6 +534,145 @@ class EligibilityFilterTest {
         );
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void countsPassedMusic() {
+        UUID first = readyArtist();
+        UUID second = readyArtist();
+
+        filter.filter(EVENT, List.of(candidate(first), candidate(first), candidate(second)));
+
+        assertThat(counted("eligibility.passed")).isEqualTo(3.0);
+    }
+
+    @Test
+    void countsMusicRejectedByAccountEvenWhenNothingPasses() {
+        UUID suspended = readyArtist();
+        accounts.put(suspended, new ArtistAccount(UserRole.ARTIST, UserStatus.SUSPENDED));
+        UUID partner = readyArtist();
+        accounts.put(partner, new ArtistAccount(UserRole.EVENT_PARTNER, UserStatus.ACTIVE));
+
+        filter.filter(EVENT, List.of(candidate(suspended), candidate(suspended), candidate(partner)));
+
+        assertThat(rejected("ACCOUNT")).isEqualTo(3.0);
+    }
+
+    @Test
+    void countsMusicRejectedByCopyrightOnlyOnceEvenIfAccountAlsoFails() {
+        UUID suspendedAccount = readyArtist();
+        accounts.put(suspendedAccount, new ArtistAccount(UserRole.ARTIST, UserStatus.SUSPENDED));
+        MusicCandidate stoppedMusicOfSuspendedAccount = new MusicCandidate(
+            UUID.randomUUID(), 1L, suspendedAccount, RightsBasis.DECLARED, true
+        );
+        MusicCandidate normalMusicOfSuspendedAccount = candidate(suspendedAccount);
+        MusicCandidate unknownBasis = new MusicCandidate(
+            UUID.randomUUID(), 1L, readyArtist(), null, false
+        );
+
+        filter.filter(EVENT, List.of(
+            stoppedMusicOfSuspendedAccount, normalMusicOfSuspendedAccount, unknownBasis
+        ));
+
+        assertThat(rejected("COPYRIGHT")).isEqualTo(2.0);
+        assertThat(rejected("ACCOUNT")).isEqualTo(1.0);
+    }
+
+    @Test
+    void countsMusicRejectedForMissingProfile() {
+        UUID noProfile = readyArtist();
+        profiles.remove(noProfile);
+
+        filter.filter(EVENT, List.of(
+            candidate(noProfile), candidate(noProfile), candidate(readyArtist())
+        ));
+
+        assertThat(rejected("PROFILE_MISSING")).isEqualTo(2.0);
+    }
+
+    @Test
+    void countsMusicRejectedForSchedule() {
+        UUID noSchedule = readyArtist();
+        schedules.remove(noSchedule);
+        UUID blocked = readyArtist();
+        schedules.put(blocked, List.of(
+            available(at(15, 12, 0), at(15, 23, 0)),
+            new ScheduleSlot(at(15, 19, 0), at(15, 21, 0), ScheduleStatus.BOOKED)
+        ));
+
+        filter.filter(EVENT, List.of(
+            candidate(noSchedule), candidate(blocked), candidate(blocked), candidate(readyArtist())
+        ));
+
+        assertThat(rejected("SCHEDULE")).isEqualTo(3.0);
+    }
+
+    @Test
+    void countsMusicRejectedForRegion() {
+        UUID otherRegion = readyArtist();
+        profiles.put(otherRegion, profileWith(Set.of("41"), 100_000L, Set.of(ArtistType.SOLO)));
+
+        filter.filter(EVENT, List.of(
+            candidate(otherRegion), candidate(otherRegion), candidate(readyArtist())
+        ));
+
+        assertThat(rejected("REGION")).isEqualTo(2.0);
+    }
+
+    @Test
+    void countsMusicRejectedForBudget() {
+        UUID expensive = readyArtist();
+        profiles.put(expensive, profileWith(Set.of("11680"), 1_000_001L, Set.of(ArtistType.SOLO)));
+        UUID noFee = readyArtist();
+        profiles.put(noFee, profileWith(Set.of("11680"), null, Set.of(ArtistType.SOLO)));
+
+        filter.filter(EVENT, List.of(
+            candidate(expensive), candidate(noFee), candidate(noFee), candidate(readyArtist())
+        ));
+
+        assertThat(rejected("BUDGET")).isEqualTo(3.0);
+    }
+
+    @Test
+    void countsMusicRejectedForPerformanceTypeOnlyWhenEventAsksType() {
+        UUID soloOnly = readyArtist();
+        profiles.put(soloOnly, profileWith(Set.of("11680"), 100_000L, Set.of(ArtistType.SOLO)));
+
+        filter.filter(EVENT, List.of(candidate(soloOnly)));
+        assertThat(rejected("PERFORMANCE_TYPE")).isZero();
+
+        filter.filter(eventAskingFor(ArtistType.BAND), List.of(candidate(soloOnly), candidate(soloOnly)));
+        assertThat(rejected("PERFORMANCE_TYPE")).isEqualTo(2.0);
+    }
+
+    @Test
+    void countsEachMusicOnceByFirstFailedConditionAndTotalsMatchCandidates() {
+        UUID failsEverything = readyArtist();
+        schedules.remove(failsEverything);
+        profiles.put(failsEverything, profileWith(Set.of("41"), 2_000_000L, Set.of(ArtistType.SOLO)));
+        UUID healthy = readyArtist();
+        profiles.put(healthy, profileWith(Set.of("11680"), 100_000L, Set.of(ArtistType.BAND)));
+        List<MusicCandidate> candidates = List.of(
+            candidate(failsEverything), candidate(failsEverything), candidate(healthy)
+        );
+
+        filter.filter(eventAskingFor(ArtistType.BAND), candidates);
+
+        assertThat(rejected("SCHEDULE")).isEqualTo(2.0);
+        assertThat(rejected("REGION") + rejected("BUDGET") + rejected("PERFORMANCE_TYPE")).isZero();
+        assertThat(counted("eligibility.passed")
+            + rejected("ACCOUNT") + rejected("COPYRIGHT") + rejected("PROFILE_MISSING")
+            + rejected("SCHEDULE") + rejected("REGION") + rejected("BUDGET")
+            + rejected("PERFORMANCE_TYPE")).isEqualTo(candidates.size());
+    }
+
+    private double counted(String name, String... tags) {
+        Counter counter = meters.find(name).tags(tags).counter();
+        return counter == null ? 0.0 : counter.count();
+    }
+
+    private double rejected(String condition) {
+        return counted("eligibility.rejected", "condition", condition);
     }
 
     private static EligibilityInput eventAskingFor(ArtistType artistType) {

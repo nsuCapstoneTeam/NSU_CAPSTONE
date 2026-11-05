@@ -10,14 +10,18 @@ import com.nsu.capstone.recommendation.eligibility.domain.EligibleMusic;
 import com.nsu.capstone.recommendation.eligibility.domain.MusicCandidate;
 import com.nsu.capstone.recommendation.eligibility.domain.ScheduleSlot;
 import com.nsu.capstone.recommendation.eligibility.domain.ScheduleStatus;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -35,24 +39,63 @@ import org.springframework.stereotype.Service;
 @Service
 public class EligibilityFilter {
 
+    private static final Logger log = LoggerFactory.getLogger(EligibilityFilter.class);
     private static final int PROVINCE_CODE_LENGTH = 2;
+    private static final String PASSED_METER = "eligibility.passed";
+    private static final String REJECTED_METER = "eligibility.rejected";
+
+    /**
+     * 탈락 사유. 이름이 eligibility.rejected 지표의 condition 태그 값이 된다. 식별자는 태그에 넣지 않는다.
+     */
+    private enum Rejection {
+        COPYRIGHT,
+        ACCOUNT,
+        PROFILE_MISSING,
+        SCHEDULE,
+        REGION,
+        BUDGET,
+        PERFORMANCE_TYPE
+    }
 
     private final ArtistAccountReader accountReader;
     private final ArtistProfileReader profileReader;
     private final ArtistScheduleReader scheduleReader;
+    private final MeterRegistry meterRegistry;
 
     public EligibilityFilter(
         ArtistAccountReader accountReader,
         ArtistProfileReader profileReader,
-        ArtistScheduleReader scheduleReader
+        ArtistScheduleReader scheduleReader,
+        MeterRegistry meterRegistry
     ) {
         this.accountReader = accountReader;
         this.profileReader = profileReader;
         this.scheduleReader = scheduleReader;
+        this.meterRegistry = meterRegistry;
     }
 
     public List<EligibleMusic> filter(EligibilityInput event, List<MusicCandidate> candidates) {
+        Map<Rejection, Long> rejected = new EnumMap<>(Rejection.class);
+        List<EligibleMusic> eligible = decide(event, candidates, rejected);
+        rejected.forEach((rejection, count) ->
+            meterRegistry.counter(REJECTED_METER, "condition", rejection.name()).increment(count));
+        meterRegistry.counter(PASSED_METER).increment(eligible.size());
+        // 식별자와 개인정보는 남기지 않는다. 창구 고장과 맞는 아티스트 없음을 구분하는 데 쓴다.
+        log.info("Eligibility 판정을 마쳤다: 후보 {}곡, 통과 {}곡, 조건별 탈락 {}",
+            candidates.size(), eligible.size(), rejected);
+        return eligible;
+    }
+
+    private List<EligibleMusic> decide(
+        EligibilityInput event, List<MusicCandidate> candidates, Map<Rejection, Long> rejected
+    ) {
         List<MusicCandidate> accountAndCopyrightPassed = filterAccountAndCopyright(candidates);
+        long copyrightPassedCount =
+            candidates.stream().filter(EligibilityFilter::isCopyrightSatisfied).count();
+        addRejected(rejected, Rejection.COPYRIGHT, candidates.size() - copyrightPassedCount);
+        addRejected(
+            rejected, Rejection.ACCOUNT, copyrightPassedCount - accountAndCopyrightPassed.size()
+        );
         if (accountAndCopyrightPassed.isEmpty()) {
             return List.of();
         }
@@ -60,16 +103,27 @@ public class EligibilityFilter {
         Map<UUID, ArtistProfile> profiles = profileReader.findByArtistIds(artistIds);
         Map<UUID, List<ScheduleSlot>> schedules =
             scheduleReader.findByArtistIds(artistIds, event.start(), event.end());
-        return accountAndCopyrightPassed.stream()
-            .filter(music -> isArtistEligible(
-                event,
-                profiles.get(music.artistId()),
-                schedules.getOrDefault(music.artistId(), List.of())
-            ))
-            .map(music -> new EligibleMusic(
-                music.musicId(), music.audioRevision(), music.artistId(), passedConditions(event)
-            ))
-            .toList();
+        List<EligibleMusic> eligible = new ArrayList<>();
+        for (MusicCandidate music : accountAndCopyrightPassed) {
+            Rejection failed = firstFailure(
+                event, profiles.get(music.artistId()), schedules.get(music.artistId())
+            );
+            if (failed == null) {
+                eligible.add(new EligibleMusic(
+                    music.musicId(), music.audioRevision(), music.artistId(),
+                    passedConditions(event)
+                ));
+            } else {
+                rejected.merge(failed, 1L, Long::sum);
+            }
+        }
+        return List.copyOf(eligible);
+    }
+
+    private static void addRejected(Map<Rejection, Long> rejected, Rejection rejection, long count) {
+        if (count > 0) {
+            rejected.put(rejection, count);
+        }
     }
 
     /**
@@ -114,14 +168,28 @@ public class EligibilityFilter {
         };
     }
 
-    private static boolean isArtistEligible(
+    /**
+     * 아티스트 단계에서 처음 실패한 조건. 모두 통과하면 null이다. 순서는 판정 순서와 같다.
+     */
+    private static Rejection firstFailure(
         EligibilityInput event, ArtistProfile profile, List<ScheduleSlot> slots
     ) {
-        return profile != null
-            && isScheduleAvailable(event, slots)
-            && isRegionReachable(event, profile)
-            && isBudgetWithinRange(event, profile)
-            && isPerformanceTypeMatched(event, profile);
+        if (profile == null) {
+            return Rejection.PROFILE_MISSING;
+        }
+        if (!isScheduleAvailable(event, slots)) {
+            return Rejection.SCHEDULE;
+        }
+        if (!isRegionReachable(event, profile)) {
+            return Rejection.REGION;
+        }
+        if (!isBudgetWithinRange(event, profile)) {
+            return Rejection.BUDGET;
+        }
+        if (!isPerformanceTypeMatched(event, profile)) {
+            return Rejection.PERFORMANCE_TYPE;
+        }
+        return null;
     }
 
     /**
