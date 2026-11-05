@@ -36,7 +36,7 @@
 필수 약관 동의는 이 준비 요청의 `agreements`로 받는다([signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1, 2026-11-05). 휴대폰 인증·성인 확인 및 필요한 이메일 인증은 기존
 `/api/v1/auth/signup/artist/session` 아래 API를 그대로 사용한다.
 약관은 서버 설정의 ID·버전 목록을 검증하고, 성인 확인은 생년월일로 만 18세 이상을 확인한다.
-필수 약관 설정에는 서비스 이용약관과 개인정보처리방침의 실제 버전이 모두 포함되어야 한다.
+필수 약관 설정에는 서비스 이용약관(`service`)과 개인정보 수집·이용(`privacy`)의 실제 버전이 모두 포함되어야 한다. 시연 서버는 `demo-notice`·`overseas-transfer`도 포함한다([signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1).
 
 ### 최종 가입
 
@@ -76,7 +76,7 @@ Profile/Trust, 외부 음악 플랫폼 연결, Refresh Token은 이번 범위에
 
 1. 브라우저에서 OAuth 인증을 완료하고 일회용 결과 코드를 `/api/v1/auth/oauth/result`에서 교환한다.
 2. `SIGNUP_REQUIRED` 응답의 `oauthSignupSessionId`로 가입 준비 API를 호출한다.
-3. 준비 응답의 `signupSessionId`로 기존 인증·동의·성인 확인 API를 호출한다. 두 세션 ID는 같은 값이다.
+3. 준비 요청에서 필수 약관 동의(`agreements`)를 함께 보낸다. 준비 응답의 `signupSessionId`로 기존 인증·성인 확인 API를 호출한다. 두 세션 ID는 같은 값이다.
 4. 필수조건 완료 후 `oauthSignupSessionId`로 최종 가입 API를 호출한다.
 5. 가입 후 같은 Provider 계정으로 기존 OAuth 로그인 흐름을 진행하여 토큰을 발급받는다.
 
