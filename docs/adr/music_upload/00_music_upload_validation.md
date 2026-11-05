@@ -53,7 +53,7 @@ flowchart TD
 | 규칙 | 설정·방법 |
 |---|---|
 | 업로드 파일을 힙에 올리지 않는다 | `spring.servlet.multipart.file-size-threshold: 0B`(기본값). `MultipartFile.getBytes()`를 쓰지 않는다 |
-| 크기 상한 | `max-file-size: 10MB`(Spring의 MB는 MiB, 10,485,760바이트), `max-request-size: 11MB`(텍스트 파트와 multipart 경계 포함) |
+| 크기 상한 | `max-file-size: 10MB`(Spring의 MB는 MiB, 10,485,760바이트), `max-request-size: 36MB`(음원 10MiB + 이용허락서 5개 × 5MiB + 텍스트 파트와 multipart 경계 1MiB). 이용허락서 한 개의 5MiB 상한은 애플리케이션이 검사한다(04 §2.2) |
 | 임시 파일 | `MultipartFile.transferTo(Path)`로 권한·용량을 제한한 임시 경로에 옮기고, 처리가 끝나면 `finally`에서 지운다 |
 | S3 전송 | `RequestBody.fromFile(Path)`로 보낸다. 파일 전체를 힙에 올리지 않는다 |
 | 앞단 | 프록시(ALB·nginx)에도 본문 크기 상한을 둔다. `Content-Length`만 믿지 않고 실제 받은 양으로도 끊는다 |
