@@ -138,7 +138,8 @@ Eligibility가 곡 목록과 AI 추천 상태까지 읽으면 맡는 일이 커�
   - NSU-63: 같은 `musicId`가 후보에 두 번 들어오면 결과에도 두 번 나온다. 필터는 중복을 거르지 않으므로 후보를 모을 때 `(music_id, audioRevision)`이 겹치지 않게 한다.
   - NSU-12·34: 실제 창구를 붙일 때 1명·100명 조회 횟수 통합 테스트(`EligibilityFilterIntegrationTest`)가 프로필·일정 창구의 조회까지 세도록 늘린다. 지금은 빈 구현이라 계정 조회만 센다.
   - NSU-12·34: 조회 횟수 통합 테스트는 Hibernate `Statistics`로 센다. 그래서 창구는 JPA(Spring Data·`EntityManager`)로 조회한다. `JdbcTemplate`·`JdbcClient`로 만들면 DataSource 수준(datasource-proxy 등)에서 세도록 테스트를 바꾼다.
-  - NSU-12·34: 일정은 `start < end`로 저장한다(DB CHECK 등). 필터는 null 값과 뒤집힌 막힌 일정을 그 아티스트의 실패로 보지만, 저장 단계에서 막는 것이 먼저다.
+  - NSU-12·34(필수): 일정 테이블에 DB `CHECK (start_at < end_at)`를 건다. 보통의 겹침 조회(`start < to AND end > from`)는 뒤집힌 행을 돌려주지 않는다. 그래서 필터가 null 값과 뒤집힌 막힌 일정을 그 아티스트의 실패(fail-closed)로 보는 것은 창구가 그 행을 돌려줄 때만 동작한다. 저장 단계에서 막아야 하고, 창구 통합 테스트에서 뒤집힌 행을 저장할 수 없음을 확인한다.
+  - 지표: `eligibility.rejected{condition}`의 condition 값은 `COPYRIGHT`, `ACCOUNT`, `PROFILE_MISSING`, `SCHEDULE_MISSING`, `SCHEDULE`, `REGION`, `BUDGET`, `PERFORMANCE_TYPE` 8개이고, 생성할 때 모두 0으로 등록한다. `SCHEDULE_MISSING`은 일정 데이터가 없거나 값이 빠진 경우(창구 고장 신호), `SCHEDULE`은 막힌 일정과 겹치거나 `AVAILABLE`로 덮지 못한 실제 충돌이다. 이 지표는 지금 프로세스 안에만 쌓인다. `micrometer-registry-*` 의존성과 actuator 노출 설정이 없기 때문이다. 내보내기와 노출 범위는 배포 설계 때 정하고, 그 전에는 INFO 로그(`Eligibility 판정을 마쳤다: …`)로 본다.
   - 입력 전제: `EligibilityInput`은 행사 검증을 거친 값이다. `start < end`(03 §3.1·§3.6, `EventRequest`가 `0 < 종료 − 시작 ≤ 24시간`을 검증)이고 `regionCode`는 5자리다. 판정 코드는 이를 다시 검사하지 않는다.
 
 ## Reused
@@ -156,7 +157,7 @@ Eligibility가 곡 목록과 AI 추천 상태까지 읽으면 맡는 일이 커�
 |---|---|
 | 아티스트 프로필·일정 테이블까지 이 이슈에서 만들기 | 마이페이지(NSU-12) 설계를 함께 해야 해 범위가 2~3배다. 저작권 데이터는 여전히 다른 이슈에 있다 |
 | NSU-12·33을 먼저 설계하고 NSU-48은 나중에 | Spring↔AI 연동(NSU-63)이 그만큼 늦어진다 |
-| 계정 조건을 `VERIFIED_ARTIST`(실명 본인확인을 마친 아티스트)로 판정 | 같은 조건을 두 번 판정하게 된다. v1.17에서 곡 업로드가 `VERIFIED_ARTIST` 전용이 되어, 곡이 있는 아티스트는 업로드 때 이미 본인확인을 마쳤다. 추천 참여와 프로필 관리는 `ACTIVE` ARTIST가 기준이다(v1.17 `AI-031`·`ART-027`). 업로드 조건의 출처는 PR #186의 ADR `music_upload/02`다 |
+| 계정 조건을 `VERIFIED_ARTIST`(실명 본인확인을 마친 아티스트)로 판정 | 같은 조건을 두 번 판정하게 된다. v1.17에서 곡 업로드가 `VERIFIED_ARTIST` 전용이 되어, 곡이 있는 아티스트는 업로드 때 이미 본인확인을 마쳤다. 추천 참여와 프로필 관리는 `ACTIVE` ARTIST가 기준이다(v1.17 `AI-031`·`ART-027`). 곡 업로드가 `VERIFIED_ARTIST` 전용이라는 근거는 SSOT v1.17 `RIGHTS-023`·`RIGHTS-024`다(보조: PR #186의 ADR `music_upload/02` 7절) |
 | `ARTIST_VERIFIED` 이름 유지 | 화면 문구가 "인증된 아티스트"가 되기 쉽고, 용어집과 어긋난다 |
 | 저작권 조건을 아티스트 단위로 두고, 권리가 취소된 곡은 곡 쪽에서 끄기 | 곡 쪽 규칙이 구현되기 전까지 취소된 곡이 남는다. NSU-89 설계에서 곡 단위로 정했다 |
 | 일정: 막힌 시간만 확인 | 일정을 관리하지 않는 아티스트가 안 되는 날에 추천된다 |
