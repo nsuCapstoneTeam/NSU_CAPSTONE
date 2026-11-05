@@ -8,6 +8,7 @@ import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.partner.profile.application.ProfileContent;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.util.EnumSet;
 import java.util.List;
 
 /**
@@ -29,6 +30,7 @@ public record EventPartnerProfileRequest(
     private static final int NAME_MAX = 40;
     private static final int ORGANIZATION_MAX = 60;
     private static final int BIO_MAX = 700;
+    private static final int MAX_LIST = 3;
 
     /** 글자 수는 앞뒤 공백을 지운 뒤 센다. 선택 문자열은 비면 null이다(05 §2). */
     public ProfileContent toContent() {
@@ -36,9 +38,36 @@ public record EventPartnerProfileRequest(
             required(name, NAME_MAX),
             optional(organization, ORGANIZATION_MAX),
             optional(bio, BIO_MAX),
-            eventTypes,
-            regionCodes
+            eventTypes(eventTypes),
+            list(regionCodes)
         );
+    }
+
+    /** 허용 목록(EventType) 밖의 값, 4개 이상, 중복은 거절하고 enum 선언 순서로 돌려준다(05 §2, 03 §3.3). */
+    private static List<String> eventTypes(List<String> values) {
+        EnumSet<EventType> types = EnumSet.noneOf(EventType.class);
+        for (String value : list(values)) {
+            EventType type = eventType(value);
+            if (!types.add(type)) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+            }
+        }
+        return types.stream().map(EventType::name).toList();
+    }
+
+    private static EventType eventType(String value) {
+        try {
+            return EventType.valueOf(value);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        }
+    }
+
+    private static List<String> list(List<String> values) {
+        if (values == null || values.size() > MAX_LIST) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        }
+        return values;
     }
 
     private static String required(String value, int max) {

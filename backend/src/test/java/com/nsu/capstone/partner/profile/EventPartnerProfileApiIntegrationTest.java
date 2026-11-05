@@ -166,6 +166,49 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
             .andExpect(jsonPath("$.bio").value((Object) null));
     }
 
+    @Test
+    void 행사_종류는_enum_선언_순서로_돌려준다() throws Exception {
+        Map<String, Object> body = validProfile();
+        body.put("eventTypes", List.of("WEDDING", "CONCERT"));
+
+        putProfile(partner, body).andExpect(status().isOk())
+            .andExpect(jsonPath("$.eventTypes[0]").value("CONCERT"))
+            .andExpect(jsonPath("$.eventTypes[1]").value("WEDDING"))
+            .andExpect(jsonPath("$.eventTypes.length()").value(2));
+        getProfile(partner)
+            .andExpect(jsonPath("$.eventTypes[0]").value("CONCERT"))
+            .andExpect(jsonPath("$.eventTypes[1]").value("WEDDING"));
+    }
+
+    @Test
+    void 없는_행사_종류_4개_중복은_VALIDATION_ERROR다() throws Exception {
+        for (List<String> invalid : List.of(
+            List.of("NOPE"),
+            List.of("concert"),
+            List.of("CONCERT", "WEDDING", "OTHER", "SMALL_VENUE"),
+            List.of("CONCERT", "CONCERT"))) {
+            Map<String, Object> body = validProfile();
+            body.put("eventTypes", invalid);
+            putProfile(partner, body).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        }
+    }
+
+    @Test
+    void 목록_키가_빠지거나_null이면_VALIDATION_ERROR이고_ProblemDetail이_아니다() throws Exception {
+        for (String key : List.of("eventTypes", "regionCodes")) {
+            Map<String, Object> missing = validProfile();
+            missing.remove(key);
+            putProfile(partner, missing).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+            Map<String, Object> nulled = validProfile();
+            nulled.put(key, null);
+            putProfile(partner, nulled).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        }
+    }
+
     private List<String> fieldNames(String json) {
         return new ArrayList<>(objectMapper.readTree(json).propertyNames());
     }
