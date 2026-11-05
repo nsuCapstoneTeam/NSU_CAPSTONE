@@ -43,7 +43,7 @@ flowchart TD
     AC2 -- "모두 통과" --> RES["출력: 통과한 곡 + 통과한 조건 목록"]
 ```
 
-- 판정 순서는 저작권 → 계정 → 프로필(없음·덜 채움) → 일정 → 지역 → 예산 → 공연 형태다. 저작권을 먼저 보면 계정·프로필·일정을 읽을 아티스트가 줄어든다. 판정 결과는 순서와 관계없이 같다.
+- 판정 순서는 저작권 → 계정 → 프로필(없음·덜 채움) → 일정(잘못된 값·막힘·덜 덮음) → 지역 → 예산 → 공연 형태다. 저작권을 먼저 보면 계정·프로필·일정을 읽을 아티스트가 줄어든다. 판정 결과는 순서와 관계없이 같다.
 - 지표(`eligibility.rejected`)는 곡마다 이 순서에서 처음 실패한 조건 하나로만 센다. 예를 들어 계정이 정지되고 곡도 중단된 경우는 `COPYRIGHT`로 센다.
 
 **구조**
@@ -146,7 +146,7 @@ Eligibility가 곡 목록과 AI 추천 상태까지 읽으면 맡는 일이 커�
   - NSU-12·34: 실제 창구를 붙일 때 1명·100명 조회 횟수 통합 테스트(`EligibilityFilterIntegrationTest`)가 프로필·일정 창구의 조회까지 세도록 늘린다. 지금은 빈 구현이라 계정 조회만 센다.
   - NSU-12·34: 조회 횟수 통합 테스트는 Hibernate `Statistics`로 센다. 그래서 창구는 JPA(Spring Data·`EntityManager`)로 조회하기를 권한다(설계 결정이 아니라 테스트 방식에서 나온 권고다). `JdbcTemplate`·`JdbcClient`로 만들면 DataSource 수준(datasource-proxy 등)에서 세도록 테스트를 바꾼다.
   - NSU-12·34(필수): 일정 테이블에 DB `CHECK (start_at < end_at)`를 건다. 보통의 겹침 조회(`start < to AND end > from`)는 뒤집힌 행을 돌려주지 않는다. 그래서 필터가 null 값과 뒤집힌 막힌 일정을 그 아티스트의 실패(fail-closed)로 보는 것은 창구가 그 행을 돌려줄 때만 동작한다. 저장 단계에서 막아야 하고, 창구 통합 테스트에서 뒤집힌 행을 저장할 수 없음을 확인한다.
-  - 지표: `eligibility.rejected{condition}`의 condition 값은 `COPYRIGHT`, `ACCOUNT`, `PROFILE_MISSING`, `PROFILE_INCOMPLETE`, `SCHEDULE_MISSING`, `SCHEDULE`, `REGION`, `BUDGET`, `PERFORMANCE_TYPE` 9개이고, 생성할 때 모두 0으로 등록한다. `PROFILE_INCOMPLETE`는 프로필은 있지만 판정에 쓰는 값이 비었거나(출연료·공연 가능지역 미입력, 행사가 형태를 지정했는데 공연 형태 미입력) 출연료가 음수인 경우다. 출연료 미입력을 `BUDGET`으로 세면 "예산이 낮은 행사가 많다"로 잘못 읽히기 때문이다. 판정은 어느 쪽이든 실패다. `SCHEDULE_MISSING`은 창구가 값을 null로 주었거나 슬롯의 시작·끝·상태가 빠진 경우(창구 계약 위반)다. `SCHEDULE`은 행사 시간대에 일정이 없거나(키 없음·빈 목록), 막힌 일정과 겹치거나, `AVAILABLE`로 덮지 못한 경우다. 창구가 조용히 빈 결과를 돌려주는 고장은 `SCHEDULE`·`PROFILE_MISSING`과 구분되지 않고, 분포가 한꺼번에 바뀌는 것으로만 드러난다. 창구 쪽 조회 오류·건수 지표는 NSU-12·34가 정한다. 이 지표는 지금 프로세스 안에만 쌓인다. `micrometer-registry-*` 의존성과 actuator 노출 설정이 없기 때문이다. 내보내기와 노출 범위는 배포 설계 때 정하고, 그 전에는 INFO 로그(`Eligibility 판정을 마쳤다: …`)로 본다.
+  - 지표: `eligibility.rejected{condition}`의 condition 값은 `COPYRIGHT`, `ACCOUNT`, `PROFILE_MISSING`, `PROFILE_INCOMPLETE`, `SCHEDULE_INVALID`, `SCHEDULE_BLOCKED`, `SCHEDULE_NOT_COVERED`, `REGION`, `BUDGET`, `PERFORMANCE_TYPE` 10개이고, 생성할 때 모두 0으로 등록한다. `PROFILE_INCOMPLETE`는 프로필은 있지만 판정에 쓰는 값이 비었거나(출연료·공연 가능지역 미입력, 행사가 형태를 지정했는데 공연 형태 미입력) 출연료가 음수인 경우다. 출연료 미입력을 `BUDGET`으로 세면 "예산이 낮은 행사가 많다"로 잘못 읽히기 때문이다. 판정은 어느 쪽이든 실패다. 일정은 세 칸으로 센다(2026-11-06 확정). `SCHEDULE_INVALID`는 창구가 값을 null로 주었거나 슬롯의 시작·끝·상태가 빠진 경우(창구 계약 위반)다. `SCHEDULE_BLOCKED`는 막힌 일정(`HOLD`·`BOOKED`·`UNAVAILABLE`, 시작≥끝인 막힌 일정 포함)과 겹친 경우, 곧 그 시간에 다른 일이 잡힌 경우다. `SCHEDULE_NOT_COVERED`는 행사 시간대에 일정이 없거나(키 없음·빈 목록) `AVAILABLE`이 시간대를 다 덮지 못한 경우, 곧 그 시간에 된다고 적지 않은 경우다. 일정 미입력과 이미 예약된 시간을 한 칸에 세면 "예약이 많다"로 잘못 읽히기 때문에 나눈다. 창구가 행사 시간대 일정만 돌려주므로, 필터 안에서는 "일정을 한 번도 적지 않은 아티스트"와 "다른 날만 적은 아티스트"를 구분할 수 없다(둘 다 `SCHEDULE_NOT_COVERED`). 이 구분이 필요하면 창구 쪽(NSU-120)에서 센다. 창구가 조용히 빈 결과를 돌려주는 고장은 `SCHEDULE_NOT_COVERED`·`PROFILE_MISSING`과 구분되지 않고, 분포가 한꺼번에 바뀌는 것으로만 드러난다. 창구 쪽 조회 오류·건수 지표는 NSU-12·34가 정한다. 이 지표는 지금 프로세스 안에만 쌓인다. `micrometer-registry-*` 의존성과 actuator 노출 설정이 없기 때문이다. 내보내기와 노출 범위는 배포 설계 때 정하고, 그 전에는 INFO 로그(`Eligibility 판정을 마쳤다: …`)로 본다.
   - NSU-63: 필터의 INFO 로그는 개수만 남겨 요청을 구분할 수 없다. 호출자가 `eventId`(검색창 즉시 추천이면 요청 ID)를 MDC에 넣어 로그를 요청 단위로 묶는다.
   - NSU-122(검색창 즉시 추천): 행사가 없어 `filter`를 부를 수 없다. 적용할 필수 조건을 NSU-122에서 정하고, 계정·저작권만 볼 때는 `filterAccountAndCopyright`를 쓴다. 평가하지 않은 조건(일정·지역·예산·공연 형태)을 `passedConditions`나 "필수 조건 통과" 문구로 통과처럼 표시하지 않는다.
   - 창구 전제: 계정·프로필·일정 창구는 지도(`Map`) 자체를 null로 돌려주지 않는다. 조회에 실패하면 예외를 던진다. null 지도는 그 아티스트가 아니라 호출 전체를 실패시킨다.

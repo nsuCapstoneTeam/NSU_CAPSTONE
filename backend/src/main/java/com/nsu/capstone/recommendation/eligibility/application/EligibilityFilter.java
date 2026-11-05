@@ -51,8 +51,9 @@ public class EligibilityFilter {
         ACCOUNT,
         PROFILE_MISSING,
         PROFILE_INCOMPLETE,
-        SCHEDULE_MISSING,
-        SCHEDULE,
+        SCHEDULE_INVALID,
+        SCHEDULE_BLOCKED,
+        SCHEDULE_NOT_COVERED,
         REGION,
         BUDGET,
         PERFORMANCE_TYPE
@@ -188,10 +189,13 @@ public class EligibilityFilter {
             return Rejection.PROFILE_INCOMPLETE;
         }
         if (hasIncompleteSchedule(slots)) {
-            return Rejection.SCHEDULE_MISSING;
+            return Rejection.SCHEDULE_INVALID;
         }
-        if (!isScheduleAvailable(event, slots)) {
-            return Rejection.SCHEDULE;
+        if (hasBlockedOverlap(event, slots)) {
+            return Rejection.SCHEDULE_BLOCKED;
+        }
+        if (!isCoveredByAvailable(event, slots)) {
+            return Rejection.SCHEDULE_NOT_COVERED;
         }
         if (!isRegionReachable(event, profile)) {
             return Rejection.REGION;
@@ -206,19 +210,22 @@ public class EligibilityFilter {
     }
 
     /**
-     * 이어지거나 겹치는 AVAILABLE 일정을 합쳐 행사 시간대 전체를 덮는지 본다. 구간은 [시작, 끝)라서
-     * 끝과 시작이 같은 두 일정은 빈틈 없이 이어지고, 끝이 맞닿기만 한 막힌 일정은 겹치지 않는다.
-     * 막힌 일정(HOLD·BOOKED·UNAVAILABLE)이 행사와 겹치면 AVAILABLE이 덮고 있어도 실패한다.
+     * 막힌 일정(HOLD·BOOKED·UNAVAILABLE)이 행사 시간대와 겹치는지 본다. 구간은 [시작, 끝)라서 끝이
+     * 맞닿기만 한 막힌 일정은 겹치지 않는다. 겹치면 AVAILABLE이 덮고 있어도 실패한다.
      */
-    private static boolean isScheduleAvailable(EligibilityInput event, List<ScheduleSlot> slots) {
+    private static boolean hasBlockedOverlap(EligibilityInput event, List<ScheduleSlot> slots) {
         // 시작이 끝보다 늦거나 같은 막힌 일정은 ADR의 [시작, 끝)와 달리 겹친다고 본다. 잘못된 데이터는 fail-closed다.
-        boolean blocked = slots.stream().anyMatch(slot ->
+        return slots.stream().anyMatch(slot ->
             slot.status() != ScheduleStatus.AVAILABLE
                 && (!slot.start().isBefore(slot.end())
                     || (slot.start().isBefore(event.end()) && slot.end().isAfter(event.start()))));
-        if (blocked) {
-            return false;
-        }
+    }
+
+    /**
+     * 이어지거나 겹치는 AVAILABLE 일정을 합쳐 행사 시간대 전체를 덮는지 본다. 끝과 시작이 같은 두 일정은
+     * 빈틈 없이 이어진다.
+     */
+    private static boolean isCoveredByAvailable(EligibilityInput event, List<ScheduleSlot> slots) {
         LocalDateTime coveredUntil = event.start();
         List<ScheduleSlot> available = slots.stream()
             .filter(slot -> slot.status() == ScheduleStatus.AVAILABLE)
@@ -237,7 +244,7 @@ public class EligibilityFilter {
 
     /**
      * 창구가 값을 null로 주었거나 값이 빠진 슬롯이 있으면 창구가 계약을 어긴 것으로 본다. 키가 없거나 빈
-     * 목록이면 행사 시간대에 일정이 없다는 뜻이라 일정 조건 실패(SCHEDULE)로 센다. 어느 쪽이든 판정은 실패다.
+     * 목록이면 행사 시간대에 일정이 없다는 뜻이라 SCHEDULE_NOT_COVERED로 센다. 어느 쪽이든 판정은 실패다.
      */
     private static boolean hasIncompleteSchedule(List<ScheduleSlot> slots) {
         return slots == null || slots.stream().anyMatch(EligibilityFilter::isIncomplete);

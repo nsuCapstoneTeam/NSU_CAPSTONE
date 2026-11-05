@@ -606,18 +606,23 @@ class EligibilityFilterTest {
     }
 
     @Test
-    void countsMusicRejectedForSchedule() {
+    void countsMusicOverlappingBlockedSlotAsScheduleBlocked() {
         UUID blocked = readyArtist();
         schedules.put(blocked, List.of(
             available(at(15, 12, 0), at(15, 23, 0)),
             new ScheduleSlot(at(15, 19, 0), at(15, 21, 0), ScheduleStatus.BOOKED)
         ));
-
-        filter.filter(EVENT, List.of(
-            candidate(blocked), candidate(blocked), candidate(readyArtist())
+        UUID invertedBlocked = readyArtist();
+        schedules.put(invertedBlocked, List.of(
+            available(at(15, 12, 0), at(15, 23, 0)),
+            new ScheduleSlot(at(15, 21, 0), at(15, 17, 0), ScheduleStatus.BOOKED)
         ));
 
-        assertThat(rejected("SCHEDULE")).isEqualTo(2.0);
+        filter.filter(EVENT, List.of(
+            candidate(blocked), candidate(blocked), candidate(invertedBlocked), candidate(readyArtist())
+        ));
+
+        assertThat(rejected("SCHEDULE_BLOCKED")).isEqualTo(3.0);
     }
 
     @Test
@@ -672,17 +677,18 @@ class EligibilityFilterTest {
 
         filter.filter(eventAskingFor(ArtistType.BAND), candidates);
 
-        assertThat(rejected("SCHEDULE")).isEqualTo(2.0);
-        assertThat(rejected("SCHEDULE_MISSING") + rejected("REGION") + rejected("BUDGET")
+        assertThat(rejected("SCHEDULE_NOT_COVERED")).isEqualTo(2.0);
+        assertThat(rejected("SCHEDULE_INVALID") + rejected("SCHEDULE_BLOCKED") + rejected("REGION") + rejected("BUDGET")
             + rejected("PERFORMANCE_TYPE")).isZero();
         assertThat(counted("eligibility.passed")
             + rejected("ACCOUNT") + rejected("COPYRIGHT") + rejected("PROFILE_MISSING")
-            + rejected("PROFILE_INCOMPLETE") + rejected("SCHEDULE_MISSING") + rejected("SCHEDULE") + rejected("REGION")
+            + rejected("PROFILE_INCOMPLETE") + rejected("SCHEDULE_INVALID")
+            + rejected("SCHEDULE_BLOCKED") + rejected("SCHEDULE_NOT_COVERED") + rejected("REGION")
             + rejected("BUDGET") + rejected("PERFORMANCE_TYPE")).isEqualTo(candidates.size());
     }
 
     @Test
-    void countsNullScheduleValueAndIncompleteSlotAsScheduleMissing() {
+    void countsNullScheduleValueAndIncompleteSlotAsScheduleInvalid() {
         UUID nullValue = readyArtist();
         schedules.put(nullValue, null);
         UUID incompleteSlot = readyArtist();
@@ -693,8 +699,8 @@ class EligibilityFilterTest {
 
         filter.filter(EVENT, List.of(candidate(nullValue), candidate(incompleteSlot)));
 
-        assertThat(rejected("SCHEDULE_MISSING")).isEqualTo(2.0);
-        assertThat(rejected("SCHEDULE")).isZero();
+        assertThat(rejected("SCHEDULE_INVALID")).isEqualTo(2.0);
+        assertThat(rejected("SCHEDULE_NOT_COVERED") + rejected("SCHEDULE_BLOCKED")).isZero();
     }
 
     @Test
@@ -717,32 +723,18 @@ class EligibilityFilterTest {
     }
 
     @Test
-    void countsArtistWithNoSlotInEventWindowAsSchedule() {
+    void countsNoSlotOrPartlyCoveredEventAsScheduleNotCovered() {
         UUID absent = readyArtist();
         schedules.remove(absent);
         UUID emptyList = readyArtist();
         schedules.put(emptyList, List.of());
+        UUID partlyCovered = readyArtist();
+        schedules.put(partlyCovered, List.of(available(at(15, 12, 0), at(15, 20, 0))));
 
-        filter.filter(EVENT, List.of(candidate(absent), candidate(emptyList)));
+        filter.filter(EVENT, List.of(candidate(absent), candidate(emptyList), candidate(partlyCovered)));
 
-        assertThat(rejected("SCHEDULE")).isEqualTo(2.0);
-        assertThat(rejected("SCHEDULE_MISSING")).isZero();
-    }
-
-    @Test
-    void countsUncoveredEventAndInvertedBlockedSlotAsSchedule() {
-        UUID uncovered = readyArtist();
-        schedules.put(uncovered, List.of(available(at(15, 12, 0), at(15, 20, 0))));
-        UUID invertedBlocked = readyArtist();
-        schedules.put(invertedBlocked, List.of(
-            available(at(15, 12, 0), at(15, 23, 0)),
-            new ScheduleSlot(at(15, 21, 0), at(15, 17, 0), ScheduleStatus.BOOKED)
-        ));
-
-        filter.filter(EVENT, List.of(candidate(uncovered), candidate(invertedBlocked)));
-
-        assertThat(rejected("SCHEDULE")).isEqualTo(2.0);
-        assertThat(rejected("SCHEDULE_MISSING")).isZero();
+        assertThat(rejected("SCHEDULE_NOT_COVERED")).isEqualTo(3.0);
+        assertThat(rejected("SCHEDULE_BLOCKED")).isZero();
     }
 
     @Test
@@ -754,8 +746,8 @@ class EligibilityFilterTest {
         assertThat(fresh.find("eligibility.passed").counter()).isNotNull().extracting(Counter::count)
             .isEqualTo(0.0);
         for (String condition : List.of(
-            "COPYRIGHT", "ACCOUNT", "PROFILE_MISSING", "PROFILE_INCOMPLETE", "SCHEDULE_MISSING",
-            "SCHEDULE", "REGION", "BUDGET", "PERFORMANCE_TYPE"
+            "COPYRIGHT", "ACCOUNT", "PROFILE_MISSING", "PROFILE_INCOMPLETE", "SCHEDULE_INVALID",
+            "SCHEDULE_BLOCKED", "SCHEDULE_NOT_COVERED", "REGION", "BUDGET", "PERFORMANCE_TYPE"
         )) {
             Counter counter = fresh.find("eligibility.rejected").tag("condition", condition).counter();
             assertThat(counter).as(condition).isNotNull();
