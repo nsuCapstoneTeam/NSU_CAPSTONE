@@ -8,7 +8,6 @@ import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -82,7 +81,7 @@ public class EventService {
         Event event = loadManageable(eventId, userId);
         requireNotCancelled(event);
         requireNotStarted(event);
-        requireStartAfterNow(content);
+        content.requireStartAfter(clock);
         event.replace(content, clock);
         return event;
     }
@@ -130,12 +129,6 @@ public class EventService {
     private void requireKnownRegion(EventContent content) {
         if (!regionRepository.existsById(content.regionCode())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
-        }
-    }
-
-    private void requireStartAfterNow(EventContent content) {
-        if (!content.start().isAfter(LocalDateTime.now(clock))) {
-            throw new BusinessException(ErrorCode.EVENT_START_IN_PAST);
         }
     }
 }

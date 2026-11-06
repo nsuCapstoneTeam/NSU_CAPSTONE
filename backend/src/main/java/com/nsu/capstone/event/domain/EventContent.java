@@ -2,6 +2,7 @@ package com.nsu.capstone.event.domain;
 
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
@@ -87,6 +88,17 @@ public record EventContent(
             .flag(details.accommodationProvided())
             .text(details.otherConditions())
             .hex();
+    }
+
+    /**
+     * 시작 ≤ 지금이면 400 EVENT_START_IN_PAST(03 §3.2). 불변식이 아니라서 생성자가 아니라 서비스가 제자리에서
+     * 부른다. 등록은 키를 INSERT·flush로 선점한 뒤 같은 쓰기 트랜잭션 안에서(ADR 03), 수정은 저장된 행사의
+     * 취소·시작 409 뒤에(03 §5.2, §9) 부른다. 시각은 Clock의 zone으로 읽는다.
+     */
+    public void requireStartAfter(Clock clock) {
+        if (!start.isAfter(LocalDateTime.now(clock))) {
+            throw new BusinessException(ErrorCode.EVENT_START_IN_PAST);
+        }
     }
 
     // 검사 도우미. 모두 VALIDATION_ERROR다(ADR-007: 어느 필드가 틀렸는지 알리지 않는다).

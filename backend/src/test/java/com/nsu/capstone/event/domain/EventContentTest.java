@@ -8,6 +8,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.nsu.capstone.event.EventContentFixtures.Builder;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
@@ -223,6 +226,26 @@ class EventContentTest {
 
         assertThat(twice).isEqualTo(once);
         assertThat(twice.requestHash()).isEqualTo(once.requestHash());
+    }
+
+    @Test
+    @DisplayName("과거 시작도 만들어진다. 시작 ≤ 지금은 requireStartAfter가 따로 본다(ADR 03)")
+    void startInThePastIsNotAnInvariantButRequireStartAfterRejectsIt() {
+        EventContent content = sample(); // 2026-11-06 18:00 KST
+        Clock oneSecondBefore = seoulClock("2026-11-06T08:59:59Z");
+        Clock atStart = seoulClock("2026-11-06T09:00:00Z");
+        Clock afterStart = seoulClock("2026-11-06T09:00:01Z");
+
+        content.requireStartAfter(oneSecondBefore);
+        for (Clock tooLate : List.of(atStart, afterStart)) {
+            assertThatThrownBy(() -> content.requireStartAfter(tooLate))
+                .isInstanceOfSatisfying(BusinessException.class,
+                    e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.EVENT_START_IN_PAST));
+        }
+    }
+
+    private static Clock seoulClock(String instant) {
+        return Clock.fixed(Instant.parse(instant), ZoneId.of("Asia/Seoul"));
     }
 
     @Test

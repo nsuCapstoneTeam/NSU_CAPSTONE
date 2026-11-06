@@ -12,7 +12,6 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.sql.SQLException;
 import java.time.Clock;
-import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -124,9 +123,7 @@ public class EventRegistrationService {
             idGenerator.generate(), eventPartnerId, content, clock, idempotencyKey, hash);
         entityManager.persist(event);
         entityManager.flush();
-        if (!content.start().isAfter(LocalDateTime.now(clock))) {
-            throw new BusinessException(ErrorCode.EVENT_START_IN_PAST);
-        }
+        content.requireStartAfter(clock);
         return event;
     }
 
