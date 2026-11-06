@@ -272,6 +272,17 @@ class EligibilityFilterTest {
     }
 
     @Test
+    void keepsMusicWhenShortAvailableSlotIsNestedInsideLongerAvailableSlot() {
+        UUID artistId = readyArtist();
+        schedules.put(artistId, List.of(
+            available(at(15, 12, 0), at(15, 23, 0)), available(at(15, 13, 0), at(15, 14, 0))
+        ));
+
+        assertThat(filter.filter(EVENT, List.of(candidate(artistId))))
+            .extracting(EligibleMusic::artistId).containsExactly(artistId);
+    }
+
+    @Test
     void dropsMusicWhenBookedSlotOverlapsEventInsideAvailableSlot() {
         UUID artistId = readyArtist();
         schedules.put(artistId, List.of(
