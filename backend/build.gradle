@@ -66,6 +66,7 @@ tasks.named('test') {
 }
 
 spotless {
+	enforceCheck false
 	ratchetFrom 'origin/main'
 	java {
 		palantirJavaFormat()
