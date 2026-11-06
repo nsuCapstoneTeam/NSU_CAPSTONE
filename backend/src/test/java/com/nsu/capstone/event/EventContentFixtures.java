@@ -60,4 +60,19 @@ public final class EventContentFixtures {
         change.accept(builder);
         return builder.build();
     }
+
+    /**
+     * {@link #sampleWithDetails()}와 컴포넌트마다(details는 하위 필드마다) 값이 다르고, 모두 null이 아니다.
+     * 한 컴포넌트만 sampleWithDetails()의 값 위에 끼워 넣어도 불변식을 지키도록 골랐다: 시작만 앞당기거나
+     * 종료만 늦추면 시간대가 70분이 되어 공연시간 40·41이 모두 안에 들고, 예산 최소·최대는 서로의 새 값에
+     * 걸리지 않는다. 컴포넌트를 하나씩 바꿔 끼우는 안전망 테스트가 쓴다.
+     */
+    public static EventContent alternate() {
+        return new EventContent("다른 이름", EventType.WEDDING,
+            LocalDateTime.of(2026, 11, 6, 17, 50), LocalDateTime.of(2026, 11, 6, 19, 10), 41,
+            "다른 장소", "11650", ArtistType.DJ, List.of(Genre.POP, Genre.JAZZ),
+            300001, 500001, 801, "다른 설명", Visibility.PRIVATE,
+            new EventDetails("다른 리허설", "다른 무대", false, "다른 마이크", "다른 악기", false, false, true, true,
+                "다른 조건"));
+    }
 }
