@@ -119,13 +119,16 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         putProfile(partner, validProfile()).andExpect(status().isOk());
         Map<String, Object> replacement = validProfile();
         replacement.remove("organization");
+        replacement.remove("bio");
         replacement.put("eventTypes", List.of());
 
         putProfile(partner, replacement).andExpect(status().isOk())
             .andExpect(jsonPath("$.organization").value((Object) null))
+            .andExpect(jsonPath("$.bio").value((Object) null))
             .andExpect(jsonPath("$.eventTypes").isEmpty());
         getProfile(partner)
             .andExpect(jsonPath("$.organization").value((Object) null))
+            .andExpect(jsonPath("$.bio").value((Object) null))
             .andExpect(jsonPath("$.eventTypes").isEmpty());
     }
 

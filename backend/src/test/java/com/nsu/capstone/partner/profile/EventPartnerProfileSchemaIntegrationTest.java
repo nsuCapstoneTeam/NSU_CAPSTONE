@@ -24,6 +24,16 @@ class EventPartnerProfileSchemaIntegrationTest extends EventPartnerProfileIntegr
     }
 
     @Test
+    void 행사_종류_CHECK는_2차원_배열을_거절한다() {
+        assertRejected("ARRAY[['CONCERT','WEDDING']]", "ARRAY[]::varchar[]");
+    }
+
+    @Test
+    void 지역_코드_CHECK는_2차원_배열을_거절한다() {
+        assertRejected("ARRAY[]::varchar[]", "ARRAY[['11','26']]");
+    }
+
+    @Test
     void CHECK는_경계값을_통과시킨다() {
         insert("ARRAY['CONCERT','WEDDING','OTHER']", "ARRAY['11','11680','36']");
         insert("ARRAY[]::varchar[]", "ARRAY[]::varchar[]");
