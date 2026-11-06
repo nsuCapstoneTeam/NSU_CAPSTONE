@@ -129,7 +129,7 @@ A를 택한 이유는 다음과 같다.
 
 ## 5. 어떤 곡을 받는가
 
-**MVP에서는 아직 어디에도 발매하지 않은, 아티스트가 직접 만든 미신탁 자작곡만 받는다**(2026-11-06 김동엽 정리, 발매 음원 조건은 SSOT v1.19 초안, 팀 확인 전). 아래 조건을 모두 갖춰야 한다.
+**MVP에서는 아직 어디에도 발매하지 않은, 아티스트가 직접 만든 미신탁 자작곡만 받는다**(2026-11-06 김동엽 정리. 2~5번은 SSOT v1.18 초안, 6번은 v1.19 초안, 모두 팀 확인 전). 아래 조건을 모두 갖춰야 한다.
 
 1. 올리는 사람이 실명 본인확인을 마친 아티스트(`VERIFIED_ARTIST`)다.
 2. 작사·작곡·편곡을 모두 아티스트가 직접 했고, 그 권리를 지금도 가지고 있다(양도·독점계약 없음).
@@ -221,6 +221,7 @@ A를 택한 이유는 다음과 같다.
 | [00 곡 업로드 검사](./00_music_upload_validation.md) | 업로드 입력에 제3자 권리 여부와 이용허락서 |
 | 권리 서식 00·01·02 | 운영자 검토 단계를 빼고 서버 검증과 신고 대응으로 바꿨다 |
 | SSOT v1.17(2026-11-05 승인) | `RIGHTS-016`·`017`·`018`·`023`, `ADMIN-095`, `STORAGE-102`에 반영. `RIGHTS-161`(곡 권리 신고·중단·재개) 신설 |
+| SSOT v1.18·v1.19 초안(팀 확인 전) | v1.18: 커버곡·남의 작곡·신탁곡 거절(`RIGHTS-016`·`017`·`023`). v1.19: 발매 음원 검사와 관리자 오탐 판정, 미발매 조건(`RIGHTS-023`·`025`, `ADMIN-095`, `AI-031`, `AI-MATCH-051`, `AUDIT-099`, `SEC-119`, [03](./03_released_recording_check.md)) |
 | Linear | NSU-89(서류 검증), NSU-103(서류 삭제·정리), NSU-104(신고 대응 다섯 가지) |
 | Eligibility·AI 추천 후보(7절 업로드 자격) | 곡 업로드가 `VERIFIED_ARTIST` 전용이 되어, 본인확인을 하지 않은 아티스트는 곡이 없으므로 Eligibility·`AI-031` 후보가 되지 못한다. `recommendation_eligibility/00`과 [01](./01_music_rights_verification.md)의 버린 안 사유에 반영한다(NSU-105 ADR PR. 그 전까지 main의 01 "AI 추천 조건에서 `VERIFIED_ARTIST`를 뺀다" 절과 버린 안 사유는 옛 근거다) |
 
@@ -251,7 +252,7 @@ A를 택한 이유는 다음과 같다.
 ## 10. 근거와 확인 범위
 
 - 논의 경위: PR #150의 권리 보증·등록부 대조 → 30초·56~60초 방안 → YouTube 분석 방안 → 아티스트 서류 제출 방안 → 운영자 검토 3단계 초안(2026-11-02) → 서버 검증만 하는 A안과 신고 대응 다섯 가지 확정, 곡 업로드를 실명 본인확인을 마친 아티스트로 한정하고 시연은 더미 계정과 Mock 본인확인으로 정했다가 같은 날 PortOne·NHN KCP 테스트 창으로 바꾸고 Mock은 등록부 대조에만 쓰기로 확정(2026-11-05, 김동엽, `identity_verification/00`).
-- 제품 요구사항: [Linear MVP SSOT](https://linear.app/nsu-capstone/document/ssot-아티스트-행사-매칭-플랫폼-mvp-요구사항-e38bb23f87b1) v1.17(2026-11-05 Human Confirm 승인). 관련 항목은 `RIGHTS-016`·`017`·`018`·`023`·`161`, `ADMIN-095`, `STORAGE-102`, `AI-030`~`038`, `AI-MATCH-051`이다.
+- 제품 요구사항: [Linear MVP SSOT](https://linear.app/nsu-capstone/document/ssot-아티스트-행사-매칭-플랫폼-mvp-요구사항-e38bb23f87b1) v1.17(2026-11-05 Human Confirm 승인)과 v1.18·v1.19 초안(팀 확인 전). 관련 항목은 `RIGHTS-016`·`017`·`018`·`023`·`161`, `ADMIN-095`, `STORAGE-102`, `AI-030`~`038`, `AI-MATCH-051`이다.
 - 용어와 기존 서버 결정: [용어집](https://linear.app/nsu-capstone/document/용어집-context-475370673105), [000 서버 협의 목록](https://linear.app/nsu-capstone/document/000-server-agreements-목록-7e0bf3793fd3), [014 재생 동의 확인](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f).
 - 법령: [저작권법 제102조](https://law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0102&lsiSeq=285693&urlMode=lsScJoRltInfoR)·[제103조](https://law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0103&lsiSeq=285693&urlMode=lsScJoRltInfoR)는 2026-10-29 시행본(법률 제21595호)을 2026-11-05 확인했다. 제35조의5·제46조와 YouTube API 정책은 2026-11-02 확인했다. KOMCA 규정 언급은 검토 경위를 설명하기 위한 것이며, 우리 서비스에 적용되는 이용허락·면제 범위를 확인한 결과가 아니다.
 
