@@ -50,11 +50,7 @@ class EventContentRequestHashTest {
                     b.genres = List.of(Genre.ELECTRONIC);
                     b.details = new EventDetails(null, null, true, null, null, false, true, false, true, null);
                 }),
-                "db385ec2c7cef8ce614f1b25b1094b26e80697c20bc01404537807a2dbc9fc3a"),
-            // 불변식을 생성자로 옮기면 빈 문자열 선택정보를 가진 EventContent는 만들어지지 않는다. 그 전까지만 고정한다.
-            Arguments.of("[생성자 정규화 전까지] rehearsal = \"\"는 0:;", with(b -> b.details =
-                    new EventDetails("", null, null, null, null, null, null, null, null, null)),
-                "c1c529d602a8646dffa64c15e528f1076dcdac422e92deda84e9f827b083e71c")
+                "db385ec2c7cef8ce614f1b25b1094b26e80697c20bc01404537807a2dbc9fc3a")
         );
     }
 
@@ -124,12 +120,11 @@ class EventContentRequestHashTest {
     }
 
     @Test
-    @DisplayName("null과 빈 문자열은 다른 해시다")
-    void nullAndEmptyStringDoNotCollide() {
-        EventContent nullRehearsal = with(b -> b.details = EventDetails.empty());
-        EventContent emptyRehearsal = with(b -> b.details =
+    @DisplayName("빈 문자열 선택정보는 정규화로 null이 되므로 해시에 0:; 가 나타나지 않는다")
+    void emptyOptionalTextNormalizesToNullBeforeHashing() {
+        EventContent withEmpty = with(b -> b.details =
             new EventDetails("", null, null, null, null, null, null, null, null, null));
 
-        assertThat(nullRehearsal.requestHash()).isNotEqualTo(emptyRehearsal.requestHash());
+        assertThat(withEmpty.requestHash()).isEqualTo(sample().requestHash());
     }
 }
