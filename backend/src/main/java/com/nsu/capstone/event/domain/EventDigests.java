@@ -23,7 +23,7 @@ public final class EventDigests {
             .text(event.getRegionCode())
             .number(event.getBudgetMin())
             .number(event.getBudgetMax())
-            .text(event.getArtistType() == null ? "" : event.getArtistType().name())
+            .code(event.getArtistType())
             .text(event.getDescription())
             .code(event.getEventType())
             .codeSet(event.getGenres())

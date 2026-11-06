@@ -24,7 +24,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 /**
  * isEventChanged 지문의 golden 값(NSU-138 0단계). 수정하지 않은 코드를 실제로 실행해 얻었다.
  * 지문은 아직 저장되지 않지만(NSU-63 전), 저장하기 시작한 뒤 값이 바뀌면 옛 추천이 모두 isEventChanged = true가 된다.
- * artistType이 null이면 지금은 빈 문자열(0:;)로 적는다. 이 표기를 -1;로 바꾸는 커밋이 이 값만 새로 정한다.
+ * artistType이 null인 벡터만 리팩터링 전과 값이 다르다. null 표기를 정규 문자열 구현의 -1;로 통일했기
+ * 때문이다(ADR event_management/04 결정 5). 이 벡터는 같은 형식을 독립적으로 계산해 얻었다.
  */
 @DisplayName("행사 지문 golden 값")
 class EventFingerprintGoldenTest {
@@ -41,8 +42,8 @@ class EventFingerprintGoldenTest {
                 "29cc7c165579801bc824c4033c9626047a77e0752ac89c5b96328ad4d80efbb0"),
             Arguments.of("details를 채워도 같다(지문 밖)", sampleWithDetails(),
                 "29cc7c165579801bc824c4033c9626047a77e0752ac89c5b96328ad4d80efbb0"),
-            Arguments.of("artistType null은 빈 문자열로 적는다", with(b -> b.artistType = null),
-                "7af0a9221f7e9c2501989475e5b0ae5da5bba9ee915d81da7d75e4067376d0a4"),
+            Arguments.of("artistType null은 -1;로 적는다", with(b -> b.artistType = null),
+                "39605a1595965c3303179ead7ccce8de9721cec81116e6b66b9f6bdb3a3cdbcd"),
             Arguments.of("장르 [ROCK, POP]은 [POP, ROCK]과 같다",
                 with(b -> b.genres = List.of(Genre.ROCK, Genre.POP)),
                 "29cc7c165579801bc824c4033c9626047a77e0752ac89c5b96328ad4d80efbb0"),
