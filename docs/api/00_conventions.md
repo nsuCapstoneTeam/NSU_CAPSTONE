@@ -118,6 +118,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 | 422 | `IDEMPOTENCY_KEY_REUSED` | 같은 `Idempotency-Key`로 먼저 처리한 요청과 다른 본문을 보냄 |
 | 429 | `TOO_MANY_REQUESTS` | 요청 제한을 넘음. `Retry-After` 헤더에 다시 시도할 수 있을 때까지 남은 초를 준다. 이미 있는 기능별 code(예: `VERIFICATION_REQUEST_LIMIT_EXCEEDED`)는 그대로 쓴다 |
 | 500 | `INTERNAL_SERVER_ERROR` | 서버 오류. 예외 메시지·스택 트레이스 등 내부 정보를 담지 않는다 |
+| 503 | `RATE_LIMIT_UNAVAILABLE` | 요청 제한 카운터(Redis)를 쓸 수 없어 요청을 막음(fail-closed). `Retry-After`는 붙이지 않는다. 어느 경로가 막는지는 [signup-terms-and-send-limits §1.6](./signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때)에 있다 |
 
 - 멱등 키(`Idempotency-Key` 헤더)는 [03 행사 등록 §5.3.1](./03_events.md#531-멱등-키)에서 처음 정했다(2026-10-18). 값은 따옴표 없는 소문자 하이픈 표기 UUID이고, 키는 호출자마다 따로다. 다른 생성 API가 멱등 키를 받게 되면 같은 헤더·값 형식과 `400 VALIDATION_ERROR`·`422 IDEMPOTENCY_KEY_REUSED` 규칙을 따른다.
 
