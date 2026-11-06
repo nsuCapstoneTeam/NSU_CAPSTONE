@@ -11,10 +11,11 @@
 PR마다 GitHub Actions에서 backend Java 코드에 Spotless 검사를 돌리고, 실패하면 머지를 막는다. lint 판정은 도구가 하고 LLM 리뷰에 맡기지 않는다.
 
 - workflow 파일은 `.github/workflows/ci.yml`이고, job 이름은 `backend-lint`다. NSU-135는 같은 파일에 테스트 job을 추가한다.
-- 트리거는 `pull_request`만이다. `pull_request_target`은 쓰지 않는다.
+- 트리거는 `pull_request`와 `main`의 `push`다. `pull_request_target`은 쓰지 않는다. `main` 실행은 모든 PR이 읽을 Gradle 캐시를 만든다.
 - 검사 명령은 `cd backend && ./gradlew spotlessCheck`다.
-- Spotless 규칙은 `palantirJavaFormat()`과 `removeUnusedImports()` 두 가지다.
+- Spotless 규칙은 `palantirJavaFormat()` 하나다. 사용하지 않는 import 제거와 import 정렬은 이 단계에 들어 있다.
 - `ratchetFrom 'origin/main'`으로 `origin/main` 대비 바뀐 Java 파일만 검사한다.
+- `enforceCheck false`로 `check`·`build`에서 `spotlessCheck`를 뺀다. ratchet은 git 저장소와 `origin/main` ref가 있어야 동작한다. 그래서 `check`에 묶으면 `.git`이 없는 곳이나 remote 이름이 다른 clone에서 형식과 관계없이 빌드가 깨진다. CI와 pre-push hook은 `spotlessCheck`를 직접 부른다.
 - branch protection에서 `backend-lint`를 required check로 지정한다. 설정 권한이 있는 사람이 PR 머지 뒤에 한다.
 - 로컬에서는 레포 루트의 `lefthook.yml`이 pre-push hook으로 같은 검사를 돌린다. 설치는 각자 한 번 한다.
 - frontend ESLint는 이번 범위에서 뺀다(아래 "뺀 것").
@@ -28,8 +29,8 @@ PR마다 GitHub Actions에서 backend Java 코드에 Spotless 검사를 돌리�
 | action 버전 | 공식 action의 release 태그(`actions/checkout@v7`, `actions/setup-java@v6`, `gradle/actions/setup-gradle@v6`) | ADR-006의 "검증된 release version, 안정화 뒤 full SHA pinning 검토"와 맞춘다 |
 | checkout | `fetch-depth: 0` | 얕은 clone에는 `origin/main`이 없어 ratchet이 `No such reference`로 실패한다 |
 | JDK | `actions/setup-java`, Temurin 25 | `build.gradle`의 toolchain(Java 25)과 같다 |
-| Gradle | `gradle/actions/setup-gradle`, `cache-read-only: false` | Gradle 의존성 캐시를 쓴다. 이 action은 기본 브랜치가 아닌 실행에서 캐시를 읽기만 한다. 이 workflow에는 `main` 실행이 없으므로 PR 실행이 캐시를 쓰게 한다. PR 캐시는 그 PR ref에만 보여, 같은 PR을 다시 push할 때만 재사용된다 |
-| `concurrency` | 같은 PR의 이전 실행 취소 | push를 이어서 하면 마지막 커밋만 검사한다 |
+| Gradle | `gradle/actions/setup-gradle`, 캐시 설정은 기본값 | `main` 실행이 캐시를 쓰고, PR 실행은 읽기만 한다. PR이 쓴 캐시는 그 PR ref에만 보여 다른 PR이 쓰지 못하고, 저장소 캐시 한도(10 GB)만 채운다 |
+| `concurrency` | 같은 PR(또는 ref)의 이전 실행 취소 | push를 이어서 하면 마지막 커밋만 검사한다. `main` push에는 PR 번호가 없으므로 그룹 키는 PR 번호가 없을 때 ref를 쓴다 |
 
 ### pre-push hook
 
@@ -46,7 +47,8 @@ pre-push:
 - push할 커밋에 Java 파일이 없으면 lefthook이 이 명령을 건너뛴다.
 - 검사할 파일은 Spotless ratchet이 정한다. lefthook의 `{push_files}`를 Gradle에 넘기지 않는다.
 - worktree는 공용 `.git/hooks`를 쓰므로 한 번만 설치하면 된다. 구현 때 확인한다.
-- 실패하면 `./gradlew spotlessApply`로 고치고 다시 push한다. Claude 세션도 push 실패 출력을 보고 같은 방법으로 고친다.
+- 실패하면 `./gradlew spotlessApply`로 고치고, 커밋한 뒤 다시 push한다. Claude 세션도 push 실패 출력을 보고 같은 방법으로 고친다.
+- 한계: Spotless는 push할 커밋이 아니라 디스크의 파일을 검사한다. 고친 파일을 커밋하지 않고 push하면 hook은 통과하지만 CI가 실패한다. 반대로 커밋하지 않은 형식 위반이 깨끗한 커밋의 push를 막을 수도 있다. 최종 판정은 CI가 하므로 hook에서 stash 같은 처리는 하지 않는다.
 
 ## Context
 
@@ -98,8 +100,7 @@ ratchet을 고른 이유는 열린 브랜치와 충돌하지 않는다는 점이
 1. Spotless `ratchetFrom`이 git worktree에서 동작한다. 이 팀은 거의 모든 작업을 worktree에서 한다.
 2. palantir-java-format이 이 레포의 Java 25 소스를 모두 파싱한다. scratchpad의 별도 사본에서 ratchet 없이 `spotlessCheck`를 돌려, 파싱 오류가 없는지만 본다.
 3. Spotless 최신 버전이 Gradle 9.7.1과 JDK 25에서 동작한다.
-4. `spotlessCheck`가 `check`에 묶여, 로컬 `./gradlew build`도 형식 오류로 실패한다. 이 동작을 README에 적는다. `./gradlew test`에는 영향이 없다.
-   - ratchet은 git 저장소와 `origin/main`이 있어야 동작한다. `.git`이 없는 곳(예: ADR-006의 Docker 이미지 빌드)에서 `./gradlew build`를 쓰면 실패한다. 그런 곳에서는 `bootJar`처럼 `check`를 거치지 않는 task를 쓴다.
+4. `spotlessCheck`가 `check`에 묶인다. 2026-11-07 Ultrareview 지적으로 `enforceCheck false`를 써서 묶지 않기로 바꿨다(Decision 참고). `./gradlew build`·`check`·`test`는 git 상태와 관계없이 돈다.
 
 ## 뺀 것
 
