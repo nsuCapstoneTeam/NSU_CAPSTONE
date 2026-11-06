@@ -3,7 +3,7 @@
 ARTIST가 추천에 쓸 곡(AI Sample)을 올리고, 저작권을 등록한 곡이면 등록 정보를 내 "등록정보 일치"를 받는 API다.
 
 - 구현 이슈: NSU-89 (새 곡 업로드, 형식·크기·길이 검사, 권리 서류 검증, 저작권 등록 정보), NSU-103 (원본·권리 서류 교체·삭제·S3 정리), NSU-104 (권리 신고 대응: 수령인 공지·즉시 중단·양쪽 통보·재개·반복 침해 계정 정지), NSU-105 (실명 본인확인)
-- 요구사항: SSOT v1.17(2026-11-05 문서 전체 최종 승인) `AI-030`~`AI-034`, `AI-038`, `RIGHTS-014`~`026`·`RIGHTS-161`, `ADMIN-095`·`096`, `STORAGE-101`~`103`, `SEC-118`
+- 요구사항: SSOT v1.17(2026-11-05 승인. 문서 전체 최종 승인 리비전은 표현 정정 v1.17.1) `AI-030`~`AI-034`, `AI-038`, `RIGHTS-014`~`026`·`RIGHTS-161`, `ADMIN-095`·`096`, `STORAGE-101`~`103`, `SEC-118`
 - 결정 기록: [music_upload/00 업로드 검사](../adr/music_upload/00_music_upload_validation.md), [music_upload/01 곡 권리 검증](../adr/music_upload/01_music_rights_verification.md), [music_upload/02 곡 권리 서류](../adr/music_upload/02_music_rights_documents.md)
 - 관련 계약: [02 추천 응답 §2.3·§2.5·§4.2](./02_recommendation_trust_and_new_artist.md), 서버 협의 [001](https://linear.app/nsu-capstone/document/001-audio-revision과-생성-버전-분리-c5c95e36f3e2)·[002](https://linear.app/nsu-capstone/document/002-revision별-벡터-보관과-active-전환-후-정리-e974a4620c8f)·[003](https://linear.app/nsu-capstone/document/003-ai-처리-상태와-backend-활성-상태-분리-3a0c0ca81f50)·[013](https://linear.app/nsu-capstone/document/013-ai-sample-업로드-형식크기와-추천-목록-재생-2a3ba45048cd)·[015](https://linear.app/nsu-capstone/document/015-audiorevision-타입이름증가-규칙과-musicid-타입-75e01dadc3f4)
 - 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
