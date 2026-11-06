@@ -3,7 +3,7 @@
 아티스트 1명의 Trust Profile(Verification, Artist Reliability, 근거 집계, Risk Signal, Activity Freshness)을 조회한다. 추천 결과에 넣을 여러 명의 Trust Profile은 HTTP가 아닌 내부 일괄 조회 계약(§7)으로 조합한다.
 
 - 구현 이슈: NSU-70, NSU-105(`verifications`의 `IDENTITY`)
-- 요구사항: SSOT `TRUST-149`~`TRUST-154` (현재 리비전 v1.14에서 확인)
+- 요구사항: SSOT `TRUST-149`~`TRUST-154` (현재 리비전 v1.14에서 확인). `IDENTITY` 항목은 `TRUST-142`(v1.18 초안 ③, 팀 확인 전)에 기댄다(2026-11-07, 확인한 현재 리비전 v1.19 초안·최종 승인 v1.17.1)
   - v1.4(2026-10-04 승인): MVP의 "근거 부족 · 관측 0건" 표시(`TRUST-149`), 위험 신호 정책(`TRUST-150`), 신뢰 정보를 순위에 쓰지 않는 원칙(`TRUST-153`)
   - v1.9(2026-10-07 승인): 추천 순위 기준이 음악 유사도로 바뀌었다(`TRUST-153`). 신뢰 정보를 순위에 쓰지 않는 원칙은 그대로다
 - 정책: `reliability-v1` — [04 D09·D39·D41·D44](../adr/artist_trust_architecture/04_final_policy_decisions.md), [05 §13](../adr/artist_trust_architecture/05_trust_event_catalog.md), [06 §10·§18](../adr/artist_trust_architecture/06_database_and_implementation_roadmap.md)
@@ -183,7 +183,7 @@ Authorization: Bearer {accessToken}
 | `performanceId`, `sourceDomain`, `sourceId`, 상대 EVENT_PARTNER 식별자 | 개별 공연·상대방 특정 방지 |
 | 확정 출처(`ADMIN_DECISION` 등), 판정 시각, 개별 결과의 날짜 | 판정 과정은 Dispute 도메인 정보 |
 | 진행 중·반려·취소된 Verification, 증빙 원본, 외부 계정 ID·URL | 검증이 아니거나 민감한 권리 문서(`ADMIN-096`) |
-| 실명 본인확인 정보(이름·생년월일·성별·휴대폰 번호·통신사·외국인 여부·CI·DI), 본인확인 시각, 본인확인 출처(`MOCK`·`SANDBOX`·`PRODUCTION`) | 개인정보다. 테스트 본인확인임은 출처 대신 시연 환경 배너로 알린다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)) |
+| 실명 본인확인 정보(이름·생년월일·성별·휴대폰 번호·통신사·외국인 여부·CI·DI), 본인확인 시각, 본인확인 출처(지금은 `MOCK`·`SANDBOX`. `PRODUCTION`은 운영 단계 ADR에서 정한다) | 개인정보다. 테스트 본인확인임은 출처 대신 시연 환경 배너로 알린다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)) |
 | Reliability 내부 값(`α`, `β`, 반올림 전 `R`) | 정책 변경 시 표시 계약이 흔들리지 않게 함 |
 
 날짜는 월 단위까지만 내보낸다. 날짜를 내보내면 공연 일정과 대조해 특정 행사나 상대방을 추정할 수 있다.

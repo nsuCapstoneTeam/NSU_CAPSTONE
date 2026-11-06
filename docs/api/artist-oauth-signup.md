@@ -33,7 +33,7 @@
 미검증 이메일은 준비 단계에서 고정한 주소에 기존 서비스 이메일 인증을 수행한다.
 입력 변경 API는 제공하지 않는다.
 
-필수 약관 동의는 이 준비 요청의 `agreements`로 받는다([signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1, 2026-11-05). 휴대폰 인증·성인 확인 및 필요한 이메일 인증은 기존
+필수 약관 동의는 이 준비 요청의 `agreements`로 받는다([signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1, 2026-11-05, SSOT `AUTH-006` v1.18 초안 ⑤ 팀 확인 전). 휴대폰 인증·성인 확인 및 필요한 이메일 인증은 기존
 `/api/v1/auth/signup/artist/session` 아래 API를 그대로 사용한다.
 약관은 서버 설정의 ID·버전 목록을 검증하고, 성인 확인은 생년월일로 만 18세 이상을 확인한다.
 필수 약관 설정에는 서비스 이용약관(`service`)과 개인정보 수집·이용(`privacy`)의 실제 버전이 모두 포함되어야 한다. 시연 서버는 `demo-notice`·`overseas-transfer`도 포함한다([signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1).
@@ -62,8 +62,12 @@
 | 조건 | code | HTTP |
 |---|---|---:|
 | 세션·연결·역할·가입 방식 불일치/만료 | SIGNUP_SESSION_INVALID | 400 |
-| 잘못된 준비 입력 | VALIDATION_ERROR | 400 |
+| 잘못된 준비 입력(숫자 정규형이 아닌 `phone` 포함) | VALIDATION_ERROR | 400 |
+| 준비 요청에 필수 약관이 빠지거나 버전이 다름 | REQUIRED_TERMS_NOT_AGREED | 400 |
+| 같은 약관 `id`가 두 번 오거나 모르는 `id` | TERMS_AGREEMENT_INVALID | 400 |
 | 필수조건 미완료 | 기존 가입 필수조건 코드 | 400 |
+| 준비 요청이 가입 세션 생성 한도를 넘음([signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.4) | TOO_MANY_REQUESTS(`Retry-After`) | 429 |
+| 한도 카운터(Redis)를 쓸 수 없음(같은 문서 §1.6) | RATE_LIMIT_UNAVAILABLE | 503 |
 | 이메일 중복 | EMAIL_ALREADY_EXISTS | 409 |
 | Provider 식별자 중복 | OAUTH_ACCOUNT_ALREADY_EXISTS | 409 |
 | 같은 세션 처리 중 | OAUTH_SIGNUP_IN_PROGRESS | 409 |

@@ -205,7 +205,7 @@ A를 택한 이유는 다음과 같다.
 | 구분 | 방식 |
 |---|---|
 | 실제 서비스 | 사업자등록 → 본인확인 서비스 계약 → 실명 본인확인을 마친 아티스트만 업로드 |
-| MVP 시연 | PortOne + NHN KCP 테스트 채널의 실제 창으로 본인확인해 `VERIFIED_ARTIST`가 되고, 출처는 `SANDBOX`다. 출처를 정하는 기준(재조회 응답의 `channel`)은 [identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md) "출처 결정"을 따른다. Mock 본인확인은 HTTP로 고르는 경로가 없고 팀이 시드 스크립트로만 만들며, 등록부 대조 시연(팀원 실명, 팀원 등록곡)에만 쓴다. `SANDBOX` 본인확인은 이름을 저장하지 않아 등록 정보를 내면 `403 IDENTITY_NAME_UNAVAILABLE`이다. 시연 방식은 ADR `identity_verification/00`(NSU-105, 2026-11-05 결정)이 정한다. 이 ADR은 아직 main에 없으며 별도 PR로 올라온다 |
+| MVP 시연 | PortOne + NHN KCP 테스트 채널의 실제 창으로 본인확인해 `VERIFIED_ARTIST`가 되고, 출처는 `SANDBOX`다. 출처를 정하는 기준(재조회 응답의 `channel`)은 [identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md) "출처 결정"을 따른다. Mock 본인확인은 HTTP로 고르는 경로가 없고 팀이 시드 스크립트로만 만들며, 등록부 대조 시연(팀원 실명, 팀원 등록곡)에만 쓴다. `SANDBOX` 본인확인은 이름을 저장하지 않아 등록 정보를 내면 `403 IDENTITY_NAME_UNAVAILABLE`이다. 시연 방식은 ADR `identity_verification/00`(NSU-105, 2026-11-05 결정)이 정한다. 이 ADR은 NSU-105 문서 PR로 올라온다 |
 
 - 서버는 업로드 때 서류의 진위와 허락 범위를 판단하지 않고(첨부 여부·개수·형식·크기만 검증한다), 권리 문제는 신고가 오면 6절 3단계로 처리한다(1절과 같다).
 - 시연용 본인확인 결과는 출처(`MOCK`·`SANDBOX`)를 남긴다. 시연 데이터는 운영으로 옮기지 않는다([identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md) "운영 단계", [01](./01_music_rights_verification.md) 본인확인 출처 안전장치 3).
@@ -233,7 +233,7 @@ A를 택한 이유는 다음과 같다.
 4. 허락 만료·철회·아티스트의 이용 종료 요청을 신고와 같은 흐름으로 멈출 때, (아티스트, 파일 SHA-256) 중단 기록을 남기는지와 반복 침해 집계에 넣는지, 그리고 서식 02 4절·5절이 약속한 원본·embedding·백업 삭제 기한을 어떻게 지킬지(AI 서버 삭제 협의 포함, NSU-104·NSU-63)
 5. 분쟁 중인 곡을 아티스트가 지울 때 이용허락서를 7일 안에 지울지, 분쟁 대응용으로 따로 보존할지(NSU-103·104)
 6. (닫음, 2026-11-05) 운영 전환 때 테스트 본인확인으로 올린 곡과 서류의 처리: 시연 데이터(테스트 본인확인과 그것으로 받은 등록정보 일치·곡·서류)는 운영 DB로 옮기지 않으므로 무효화·삭제 절차가 없다. 운영 단계는 미루고, 시작할 때 새 ADR에서 정한다([identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md) "운영 단계")
-7. 시연 서버의 공개 쓰기 제한 오류(`403 DEMO_WRITE_NOT_ALLOWED`)와 검사 순서는 NSU-129에서 곡 API에 적는다
+7. 시연 서버의 공개 쓰기 제한 오류(`403 DEMO_WRITE_NOT_ALLOWED`)와 검사 순서는 NSU-105 문서 PR이 04 §2.2·§3.2(검사 1-1)에 적었다(2026-11-07). 필터 구현은 NSU-129다
 
 ## 9. 준비한 서식과 읽는 순서
 

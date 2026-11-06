@@ -4,7 +4,7 @@
 
 - 상태: **구현 전**(2026-11-06). 지금 서버와 가입 화면은 옛 흐름(세션 생성 뒤 약관 PUT, 발송 한도 없음)이다. NSU-123 백엔드와 NSU-129 가입 화면을 같은 배포로 낼 때 이 계약으로 바뀐다(§2). 그 전까지 클라이언트는 옛 흐름을 쓴다.
 - 구현 이슈: NSU-123(백엔드), NSU-129(가입 화면)
-- 근거: ADR [identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md) "개인정보"·"인증 메시지 발송 한도"(2026-11-05 결정)
+- 근거: ADR [identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md) "개인정보"·"인증 메시지 발송 한도"(2026-11-05 결정). 약관 동의 시점과 시연 약관 2종은 SSOT `AUTH-006`의 v1.18 초안 ⑤(팀 확인 전)에 기댄다. 승인본 `AUTH-006`(v1.17.1)은 "서비스 이용약관 동의·개인정보처리방침 동의"다
 - 함께 보는 계약: [artist-oauth-signup.md](./artist-oauth-signup.md)(OAuth 가입 준비·최종 가입)
 
 ## 1. 바뀌는 API
@@ -13,7 +13,7 @@
 
 | API | 바뀌는 것 |
 |---|---|
-| `POST /api/v1/auth/signup/artist/session` | 요청 본문에 `agreements`(필수)를 더하고, `email`·`phone` 형식을 정규형으로 좁힌다(§1.3) |
+| `POST /api/v1/auth/signup/artist/session` | 요청 본문에 `agreements`(필수)를 더하고, `phone`은 숫자 정규형만 받으며 `email`은 서버가 소문자로 정규화한다(§1.3) |
 | `POST /api/v1/auth/signup/event-partner/session` | 같다 |
 | `POST /api/v1/auth/signup/artist/oauth/session` | 같다 |
 | `PUT /api/v1/auth/signup/{artist,event-partner}/session/required-terms-agreement` | 없앤다. 동의는 위 세션 생성에서만 받는다 |
@@ -37,7 +37,7 @@
 | `id` | 내용 | 환경 |
 |---|---|---|
 | `service` | 서비스 이용약관 | 모든 환경(SSOT `AUTH-006`) |
-| `privacy` | 개인정보 수집·이용(항목, 목적, 보유 기간, 처리 위탁, 동의 거부권과 불이익) | 모든 환경(SSOT `AUTH-006`) |
+| `privacy` | 개인정보 수집·이용(항목, 목적, 보유 기간, 처리 위탁, 동의 거부권과 불이익). 승인본 `AUTH-006`의 "개인정보처리방침 동의"를 개인정보보호법 §15·§22에 맞춰 수집·이용 동의로 받는다. SSOT 문구 반영은 팀 확인 전이다 | 모든 환경(SSOT `AUTH-006`) |
 | `demo-notice` | 시연 서버 안내(실제 섭외에 쓰지 않음, 초기화 날짜, 테스트 본인확인) | `DEMO`만 |
 | `overseas-transfer` | 개인정보 국외 이전(Resend, 미국) | 국외 이전이 있는 환경. 지금은 `DEMO` |
 
@@ -110,7 +110,7 @@
 
 ### 1.3 번호와 이메일 정규화
 
-한도가 대소문자·하이픈 같은 형식 변형으로 우회되지 않도록, 세션 생성 때 정규형만 받는다. `+`·점을 바꾼 이메일 주소는 다른 받는 곳이다. 이 경우는 요청 IP의 이메일 발송 한도가 막는다(§1.2).
+한도가 대소문자·하이픈 같은 형식 변형으로 우회되지 않도록, 세션 생성 때 `phone`은 정규형만 받고 `email`은 서버가 정규화한다. `+`·점을 바꾼 이메일 주소는 다른 받는 곳이다. 이 경우는 요청 IP의 이메일 발송 한도가 막는다(§1.2).
 
 - `phone`: 숫자만, `^01[016789][0-9]{7,8}$`. 하이픈·공백·`+82`가 섞인 값은 `400 VALIDATION_ERROR`다. 화면이 보내기 전에 숫자만 남긴다.
 - `email`: 앞뒤 공백을 지우고 전체를 소문자로 바꾼 값을 저장·발송·digest에 쓴다.
@@ -174,10 +174,11 @@
 | 바뀌는 것 | 전 | 후 | 화면이 할 일 |
 |---|---|---|---|
 | 약관 동의 시점 | 세션을 만든 뒤 `PUT …/required-terms-agreement` | 세션 생성 본문의 `agreements` | 이메일·휴대폰 입력과 함께 약관 동의를 받아 세션 생성에 보낸다. 약관 PUT을 부르지 않는다 |
-| 약관 PUT | 있음 | 없음. 공개 경로와 CSRF 예외 목록(`SecurityConfig`의 같은 matcher)에서 함께 빠진다. 그래서 토큰 없는 요청은 인증보다 먼저 도는 CSRF 검사에서 `403 ACCESS_DENIED`가 된다 | 부르지 않는다 |
+| 약관 PUT | 있음 | 없음. 공개 경로와 CSRF 예외 목록(`SecurityConfig`의 같은 matcher)에서 함께 빠진다. 토큰 없는 요청은 성공하지 않는다. 지금 보안 설정에서는 인증보다 먼저 도는 CSRF 검사에서 `403 ACCESS_DENIED`다. Bearer API의 CSRF 보호를 끄는 작업(NSU-96)이 먼저 들어가면 `401 AUTHENTICATION_REQUIRED`다 | 부르지 않는다 |
 | 필수 약관 | `service`·`privacy` | §1.1 표(`DEMO`는 `demo-notice`·`overseas-transfer` 추가) | 체크박스를 표대로 두고 상수를 맞춘다 |
 | 번호 형식 | 무엇이든 받음 | 숫자만(§1.3) | 보내기 전에 숫자만 남긴다 |
 | 발송 `429` | 60초 쿨다운만 | 하루·1시간 한도도 같은 `code` | "60초 뒤" 고정 문구 대신 `Retry-After`로 남은 시간을 보여 준다 |
+| 발송 `503 VERIFICATION_DELIVERY_FAILED` | `Retry-After` 없음 | 제공자 확정 실패면 `Retry-After`(남은 쿨다운 초)가 있고, Redis 장애(§1.6)면 없다 | `Retry-After`가 있으면 그 시간 뒤 다시 받기를, 없으면 "잠시 후 다시"를 보여 준다 |
 | 확인 `429 VERIFICATION_ATTEMPT_LIMIT_EXCEEDED` | challenge별 5회만, "인증번호를 다시 받아 주세요" | 받는 곳 하루 10회도 같은 `code`, 이때는 `Retry-After`가 있고 발송도 같은 `429`다 | `Retry-After`가 있으면 "오늘 확인 횟수를 다 썼어요"와 남은 시간을 보여 주고 다시 받기를 권하지 않는다. 없으면 지금 문구 |
 | 세션 생성 `429 TOO_MANY_REQUESTS`, `503 RATE_LIMIT_UNAVAILABLE` | 없음 | §1.4·§1.6 | `429`는 `Retry-After`로 남은 시간을, `503`은 "잠시 후 다시"를 보여 준다 |
 | OAuth 시작·콜백 한도 초과 | 없음 | 프론트 주소로 `302`, `error=TOO_MANY_REQUESTS`·`retryAfter=<초>` 또는 `error=RATE_LIMIT_UNAVAILABLE`(§1.4·§1.6) | 리다이렉트 화면이 이 `error`를 읽어 남은 시간이나 "잠시 후 다시"를 보여 준다 |
@@ -201,9 +202,9 @@ Redis 카운터와 Lua 스크립트의 원자성은 Testcontainers Redis로 시�
 | 60초 안에 같은 받는 곳으로 다시 발송(같은 세션, 또는 세션을 새로 만들어) | `429`, `Retry-After`는 남은 쿨다운 초. 하루 카운터는 늘지 않고 기존 코드는 그대로 유효하다 |
 | 하루 한도에 걸린 발송 요청 | `429`. 어느 카운터도 늘지 않고 기존 코드는 그대로 유효하다 |
 | 같은 IP(IPv6는 같은 /64)에서 1시간 안 21번째, SMS 하루 301번째, 이메일 하루 81번째 | `429 VERIFICATION_REQUEST_LIMIT_EXCEEDED`, `Retry-After`는 그 창이 끝날 때까지 |
-| 같은 받는 곳으로 세션을 바꿔 가며 살아 있는 challenge에 하루 11번째 오답 | `429 VERIFICATION_ATTEMPT_LIMIT_EXCEEDED` |
+| 같은 받는 곳으로 세션을 바꿔 가며 살아 있는 challenge에 하루 10번째 오답, 그 뒤의 확인 요청 | 10번째 오답부터 `429 VERIFICATION_ATTEMPT_LIMIT_EXCEEDED`, `Retry-After`는 다음 자정까지(지금의 challenge별 한도처럼 한도에 닿는 오답에서 바로 걸린다) |
 | challenge가 없는 세션에서 확인 요청을 반복 | 지금의 응답(`VERIFICATION_CODE_EXPIRED` 등)이고, 받는 곳 하루 확인 카운터가 늘지 않는다 |
-| 제공자가 `4xx`로 거절 | `503 VERIFICATION_DELIVERY_FAILED`, `Retry-After`는 남은 쿨다운 초. 대기 challenge는 지우고, 받는 곳 카운터만 되돌린다. 요청 IP·서버 전체 카운터와 쿨다운은 남는다 |
+| 제공자가 `4xx`로 거절(제공자에 닿은 확정 실패) | `503 VERIFICATION_DELIVERY_FAILED`, `Retry-After`는 남은 쿨다운 초. 대기 challenge는 지우고, 받는 곳 카운터만 되돌린다. 요청 IP·서버 전체 카운터와 쿨다운은 남는다 |
 | 코드 A를 받은 뒤 재전송이 확정 실패하고 A로 확인 | 확인에 성공한다 |
 | 재전송이 보냄·결과 모름이 된 뒤 이전 코드 A로 확인 | `VERIFICATION_CODE_INVALID`. 새 코드만 유효하다 |
 | 요청을 보내기 전에 분류 밖 런타임 예외 | `500 INTERNAL_SERVER_ERROR`. 대기 challenge가 남지 않고 기존 코드는 유효하다. 받는 곳·요청 IP·서버 전체 카운터를 되돌린다 |
@@ -212,10 +213,9 @@ Redis 카운터와 Lua 스크립트의 원자성은 Testcontainers Redis로 시�
 | 하루 10번째 오답이 그 challenge의 5번째 오답 | `429 VERIFICATION_ATTEMPT_LIMIT_EXCEEDED`, `Retry-After`는 다음 자정까지(하루 한도로 응답) |
 | 서버 전체 SMS 240번째(80%) 발송 | `WARN` 로그와 Slack `#dev` 알림 한 번. 241번째에는 다시 알리지 않는다. 알림에 번호·이메일·IP가 없다 |
 | Slack Webhook이 timeout·오류 | 발송 결과에 영향이 없고 `WARN` 로그만 남는다 |
-| 같은 IP에서 OAuth 시작 1시간 안 31번째 | `429 TOO_MANY_REQUESTS`, `Retry-After`, 인가 요청 키가 생기지 않는다 |
 | 같은 IP에서 로그인 1시간 안 31번째, 같은 이메일·같은 IP로 로그인 1시간 안 11번째 실패 시도 | `429 TOO_MANY_REQUESTS`, `Retry-After`, 비밀번호를 확인하지 않는다 |
 | 받는 곳의 확인 시도 하루 10회를 다 쓴 뒤 발송 요청 | `429 VERIFICATION_ATTEMPT_LIMIT_EXCEEDED`, `Retry-After`는 다음 자정까지. 제공자를 부르지 않고 카운터가 늘지 않는다 |
-| challenge별 확인 5회를 넘김 | `429 VERIFICATION_ATTEMPT_LIMIT_EXCEEDED`, `Retry-After` 없음 |
+| 한 challenge에 5번째 오답(하루 한도에는 닿지 않음) | `429 VERIFICATION_ATTEMPT_LIMIT_EXCEEDED`, `Retry-After` 없음 |
 | 어댑터 분류표의 각 행(SMS·이메일) | 표의 결과로 나뉜다. 위의 시험 방법으로 행마다 만든다(포트를 mock한 테스트로는 분류를 확인할 수 없다) |
 | 제공자가 읽기 timeout(10초)보다 늦게 응답 | 10초 안에 결과 모름으로 끝난다 |
 | 발송 실패 로그 | 제공자 응답 본문 원문, 번호, 이메일이 없다 |
@@ -230,7 +230,7 @@ Redis 카운터와 Lua 스크립트의 원자성은 Testcontainers Redis로 시�
 | 23:59:59(Asia/Seoul)에 예약하고 00:00:01에 확정 실패 | 전날 받는 곳 키를 줄인다. 새 날짜의 카운터는 그대로다 |
 | 키가 사라진 뒤 확정 실패 | 키를 새로 만들지 않는다 |
 | Redis 카운터 키 | 번호·이메일·IP 원문이 없고, 모두 TTL이 있다 |
-| 토큰 없이 옛 약관 PUT 요청 | `403 ACCESS_DENIED`(CSRF 검사). 세션 상태가 바뀌지 않는다 |
+| 토큰 없이 옛 약관 PUT 요청 | `2xx`가 아니고 세션 상태가 바뀌지 않는다. 지금 설정에서는 `403 ACCESS_DENIED`(CSRF 검사), NSU-96 뒤에는 `401 AUTHENTICATION_REQUIRED` |
 | 같은 IP에서 OAuth 시작 1시간 안 31번째 | 프론트 주소로 `302`, `error=TOO_MANY_REQUESTS`·`retryAfter`. 인가 요청 키·결과 키가 생기지 않는다 |
 | 다른 IP에서 팀 이메일로 로그인 실패 10회 뒤 팀이 자기 IP에서 맞는 비밀번호로 로그인 | 로그인된다(실패는 (이메일, IP) 쌍으로 센다) |
 | 연결 거부·이름 풀이 실패·보내기 전 예외로 확정 실패 | 받는 곳·요청 IP·서버 전체 카운터를 모두 되돌린다. 쿨다운은 남는다 |

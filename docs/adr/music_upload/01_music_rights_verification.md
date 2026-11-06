@@ -194,7 +194,7 @@ KOMCA 신탁 여부를 자동으로 확인할 공개 API가 없다. 등록부와
 
 `VERIFIED_ARTIST`(실명 본인확인)를 AI 추천 조건에 그대로 쓰면, 본인확인을 하지 않은 아티스트는 AI 추천을 켤 수 없다. 본인확인은 MVP에서 Mock·테스트 연동뿐이고(NSU-105), 보증만 한 곡도 후보로 받기로 했다(질문 10). 그래서 AI 참여 조건과 PRIVATE 열람·댓글 권한을 나눈다.
 
-2026-11-05에 곡 업로드를 `VERIFIED_ARTIST`로 한정했다(ADR `music_upload/02` §7). 그 뒤로는 본인확인을 하지 않은 아티스트는 곡이 없어 AI 추천에 참여하지 못한다. 실명 본인확인은 추천 조건이 아니지만, 곡 업로드를 거쳐 사실상 필요하다([identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md)).
+2026-11-05에 곡 업로드를 `VERIFIED_ARTIST`로 한정했다(ADR `music_upload/02` §7). 그 뒤로는 본인확인을 하지 않은 아티스트는 곡이 없어 AI 추천에 참여하지 못한다. 실명 본인확인은 추천 조건이 아니지만, 곡 업로드를 거쳐 사실상 필요하다([identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md)). 이 간접 조건을 SSOT `RIGHTS-024`·`ART-027`에 적은 문장은 v1.18 초안 ②(팀 확인 전)다.
 
 ### JEV·Spring AI·관리자 심사를 들이지 않는다
 
