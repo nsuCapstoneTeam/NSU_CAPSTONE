@@ -172,6 +172,29 @@ src/main/java/com/nsu/capstone/NsuCapstoneApplication.java
 
 애플리케이션 종료에는 `Ctrl+C`를 사용한다.
 
+## 코드 형식 검사 (Spotless)
+
+PR마다 CI의 `backend-lint` job이 `./gradlew spotlessCheck`를 실행한다. 형식이 맞지 않으면 PR을 머지할 수 없다.
+
+- 검사 규칙은 palantir-java-format과 사용하지 않는 import 제거이다.
+- `origin/main` 대비 바뀐 Java 파일만 검사한다. 건드리지 않은 파일은 형식이 달라도 통과한다.
+- 로컬 `./gradlew build`도 `check`에 묶인 `spotlessCheck` 때문에 형식 오류로 실패한다. `./gradlew test`에는 영향이 없다.
+
+push 전에 같은 검사를 돌리려면 레포를 clone한 뒤 한 번만 설치한다. worktree는 `.git/hooks`를 공유하므로 worktree마다 다시 설치하지 않는다.
+
+```bash
+brew install lefthook
+lefthook install
+```
+
+검사에 실패하면 `backend` 디렉터리에서 다음 명령으로 고치고 다시 push한다.
+
+```bash
+./gradlew spotlessApply
+```
+
+처음 고치는 파일은 파일 전체가 다시 포맷되어 diff가 커진다. 형식만 바꾼 변경은 `style:` 커밋으로 나눠 리뷰하기 쉽게 한다.
+
 ## 개발 환경 종료
 
 컨테이너를 종료하고 로컬 데이터를 유지하려면 다음 명령을 사용한다.
