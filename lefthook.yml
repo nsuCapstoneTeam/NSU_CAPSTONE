@@ -1,0 +1,6 @@
+pre-push:
+  commands:
+    backend-spotless:
+      root: "backend/"
+      glob: "backend/**/*.java"
+      run: ./gradlew spotlessCheck
