@@ -5,6 +5,7 @@ import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.trust.profile.application.TrustProfileQueryService;
 import com.nsu.capstone.trust.profile.domain.TrustProfile;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "Trust Profile")
 @RestController
 @RequestMapping("/api/v1/artists/{artistId}/trust-profile")
 public class TrustProfileController {
