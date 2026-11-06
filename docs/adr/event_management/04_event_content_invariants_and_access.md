@@ -199,7 +199,7 @@ NSU-138 AC의 "행사 취소도 같은 순서를 따른다"는 03 §9 취소 행
   - 다른 길은 "값이 없으면 쓰지 않는다"는 표기다. 단, 필드 이름 태그를 함께 써야 한다. 태그 없이 생략하면 nullable 필드 둘의 값이 서로 바뀐 본문이 같은 해시가 되어, `422` 대신 `201`이 나간다. 지문 버전을 두는 길도 있다.
   - 집합 필드는 null(선택하지 않음)과 빈 집합(`[]`)의 표기가 다르다(`-1;`와 `0:;`). 선택값이 없는 기존 행(`NULL`)을 화면이 `[]`로 다시 저장하면, 추천 입력은 같은데 지문만 바뀔 수 있다. 016이 Genre null·미선택 정책을 정하지 않았으므로, NSU-121이 둘을 같은 값으로 정규화할지 정한다.
 - NSU-127이 `CanViewPrivateEvent`를 채우면, 등록자가 아닌 사람의 PUT·DELETE에서는 그 판정(본인확인·프로필·일정 조회)이 `FOR UPDATE` 행 잠금을 쥔 채 돈다. 잠금 대기 상한이 없어서 반복 요청이 등록자의 수정·취소를 기다리게 만들 수 있다. 판정을 잠그지 않은 조회에서 먼저 할지, 잠금 상한을 둘지는 NSU-127의 전제로 남긴다.
-- 열린 PR #187(NSU-48)의 `docs/adr/recommendation_eligibility/00_eligibility_rules.md`는 입력 전제의 근거로 "`EventRequest`가 `0 < 종료 − 시작 ≤ 24시간`을 검증"을 든다. 이 ADR 뒤로는 `EventContent`가 검증한다. 두 PR 중 나중에 머지하는 쪽이 그 문장을 `EventContent`로 고친다.
+- PR #187(NSU-48)의 `docs/adr/recommendation_eligibility/00_eligibility_rules.md`는 입력 전제의 근거로 "`EventRequest`가 `0 < 종료 − 시작 ≤ 24시간`을 검증"을 들었다. #187이 먼저 머지됐으므로, 이 브랜치에서 그 문장을 `EventContent`로 고쳤다.
 - 기존 단위 테스트 두 개의 전제가 바뀐다. HTTP 통합 테스트는 그대로 통과해야 한다.
   - `EventSnapshotTest`의 25시간 시간대 픽스처 두 줄은 이제 유효하지 않은 내용이라 고친다.
   - `nullAndEmptyStringDoNotCollide`는 빈 문자열 선택정보가 생성자에서 `null`이 되므로, 같은 성질을 정규 문자열 테스트로 옮긴다.
