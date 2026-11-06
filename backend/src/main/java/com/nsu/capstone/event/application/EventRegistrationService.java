@@ -79,7 +79,7 @@ public class EventRegistrationService {
     }
 
     private Event registerWithKey(UUID eventPartnerId, UUID idempotencyKey, EventContent content) {
-        String hash = EventContentHash.of(content);
+        String hash = content.requestHash();
 
         Optional<Event> existing = find(eventPartnerId, idempotencyKey);
         if (existing.isPresent()) {
