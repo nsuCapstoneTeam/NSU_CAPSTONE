@@ -25,10 +25,10 @@ PR마다 GitHub Actions에서 backend Java 코드에 Spotless 검사를 돌리�
 |---|---|---|
 | `permissions` | `contents: read`만 | lint는 코드를 읽기만 한다. PR 코드가 토큰으로 레포에 쓸 수 없게 한다 |
 | secret | 쓰지 않는다 | 외부 PR에서도 같은 job이 안전하게 돈다 |
-| action 버전 | 공식 action의 release 태그(`actions/checkout@v5` 등) | ADR-006의 "검증된 release version, 안정화 뒤 full SHA pinning 검토"와 맞춘다 |
+| action 버전 | 공식 action의 release 태그(`actions/checkout@v7`, `actions/setup-java@v6`, `gradle/actions/setup-gradle@v6`) | ADR-006의 "검증된 release version, 안정화 뒤 full SHA pinning 검토"와 맞춘다 |
 | checkout | `fetch-depth: 0` | 얕은 clone에는 `origin/main`이 없어 ratchet이 `No such reference`로 실패한다 |
 | JDK | `actions/setup-java`, Temurin 25 | `build.gradle`의 toolchain(Java 25)과 같다 |
-| Gradle | `gradle/actions/setup-gradle` | Gradle 의존성 캐시를 쓴다 |
+| Gradle | `gradle/actions/setup-gradle`, `cache-read-only: false` | Gradle 의존성 캐시를 쓴다. 이 action은 기본 브랜치가 아닌 실행에서 캐시를 읽기만 한다. 이 workflow에는 `main` 실행이 없으므로 PR 실행이 캐시를 쓰게 한다. PR 캐시는 그 PR ref에만 보여, 같은 PR을 다시 push할 때만 재사용된다 |
 | `concurrency` | 같은 PR의 이전 실행 취소 | push를 이어서 하면 마지막 커밋만 검사한다 |
 
 ### pre-push hook
@@ -89,10 +89,17 @@ ratchet을 고른 이유는 열린 브랜치와 충돌하지 않는다는 점이
 
 추측으로 정하지 않고 실행해서 확인한다. 하나라도 실패하면 구현을 멈추고 설계 세션에 알린다.
 
+2026-11-06 구현 세션에서 4개 모두 확인했다(Spotless `8.11.0`).
+
+- worktree에서 ratchet은 바뀐 파일만 검사했다.
+- palantir는 Java 25 소스를 파싱 오류 없이 처리했다.
+- ratchet 없이 검사하면 Java 파일 243개 중 183개가 palantir 형식과 다르다. 전체 1회 포맷을 다시 볼 때 이 숫자를 쓴다.
+
 1. Spotless `ratchetFrom`이 git worktree에서 동작한다. 이 팀은 거의 모든 작업을 worktree에서 한다.
 2. palantir-java-format이 이 레포의 Java 25 소스를 모두 파싱한다. scratchpad의 별도 사본에서 ratchet 없이 `spotlessCheck`를 돌려, 파싱 오류가 없는지만 본다.
 3. Spotless 최신 버전이 Gradle 9.7.1과 JDK 25에서 동작한다.
 4. `spotlessCheck`가 `check`에 묶여, 로컬 `./gradlew build`도 형식 오류로 실패한다. 이 동작을 README에 적는다. `./gradlew test`에는 영향이 없다.
+   - ratchet은 git 저장소와 `origin/main`이 있어야 동작한다. `.git`이 없는 곳(예: ADR-006의 Docker 이미지 빌드)에서 `./gradlew build`를 쓰면 실패한다. 그런 곳에서는 `bootJar`처럼 `check`를 거치지 않는 task를 쓴다.
 
 ## 뺀 것
 
