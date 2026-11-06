@@ -1,11 +1,7 @@
 package com.nsu.capstone.event.recommendation;
 
-import com.nsu.capstone.event.application.EventAccessPolicy;
-import com.nsu.capstone.event.domain.Event;
-import com.nsu.capstone.event.repository.EventRepository;
-import com.nsu.capstone.global.exception.BusinessException;
-import com.nsu.capstone.global.exception.ErrorCode;
-import java.time.Clock;
+import com.nsu.capstone.event.application.EventAccess;
+import com.nsu.capstone.event.application.EventAccess.Operation;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,18 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class EventRecommendationInputService {
 
-    private final EventRepository eventRepository;
-    private final EventAccessPolicy accessPolicy;
-    private final Clock clock;
+    private final EventAccess access;
 
-    EventRecommendationInputService(
-        EventRepository eventRepository,
-        EventAccessPolicy accessPolicy,
-        Clock clock
-    ) {
-        this.eventRepository = eventRepository;
-        this.accessPolicy = accessPolicy;
-        this.clock = clock;
+    EventRecommendationInputService(EventAccess access) {
+        this.access = access;
     }
 
     /**
@@ -37,20 +25,6 @@ public class EventRecommendationInputService {
      */
     @Transactional(readOnly = true)
     public EventSnapshot snapshotForRecommendation(UUID eventId, UUID userId) {
-        Event event = eventRepository.findByIdAndDeletedAtIsNull(eventId)
-            .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
-        if (!accessPolicy.canView(event, userId)) {
-            throw new BusinessException(ErrorCode.EVENT_NOT_FOUND);
-        }
-        if (!accessPolicy.isOwner(event, userId)) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED);
-        }
-        if (event.isCancelled()) {
-            throw new BusinessException(ErrorCode.EVENT_CANCELLED);
-        }
-        if (event.hasStarted(clock)) {
-            throw new BusinessException(ErrorCode.EVENT_ALREADY_STARTED);
-        }
-        return EventSnapshot.of(event);
+        return EventSnapshot.of(access.load(eventId, userId, Operation.RECOMMEND));
     }
 }

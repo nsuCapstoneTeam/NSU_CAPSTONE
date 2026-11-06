@@ -1,62 +1,70 @@
-package com.nsu.capstone.event.application;
+package com.nsu.capstone.event.domain;
 
+import static com.nsu.capstone.event.EventContentFixtures.sample;
+import static com.nsu.capstone.event.EventContentFixtures.sampleWithDetails;
+import static com.nsu.capstone.event.EventContentFixtures.with;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.nsu.capstone.event.domain.ArtistType;
-import com.nsu.capstone.event.domain.EventContent;
-import com.nsu.capstone.event.domain.EventDetails;
-import com.nsu.capstone.event.domain.EventType;
-import com.nsu.capstone.event.domain.Genre;
-import com.nsu.capstone.event.domain.Visibility;
+import com.nsu.capstone.event.EventContentFixtures.Builder;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-/** 등록 본문 해시(ADR event_management/03): 정규화한 EventContent의 모든 필드로 만든다. */
-class EventContentHashTest {
+/**
+ * 등록 본문 해시(ADR event_management/03·04): 정규화한 EventContent의 모든 필드로 만든다. 저장된
+ * events.request_hash와 바이트 단위로 같은 값을 만드는지 golden 값으로 고정한다. 값은 리팩터링 전
+ * EventContentHash.of를 실제로 실행해 얻었다. 이 값이 바뀌면 이미 등록한 멱등 키의 재전송이 모두 422가 된다.
+ */
+@DisplayName("등록 본문 해시(request_hash)")
+class EventContentRequestHashTest {
 
-    /** 값을 하나씩 바꿔 가며 쓰는 테스트용 행사 내용. 기본값은 03 §10.1의 예시다. */
-    static final class Builder {
-        String name = "2026 가을 축제 1일차 밴드 공연";
-        EventType eventType = EventType.UNIVERSITY_FESTIVAL;
-        LocalDateTime start = LocalDateTime.of(2026, 11, 6, 18, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 6, 19, 0);
-        int performanceMinutes = 40;
-        String venue = "대운동장 특설 무대";
-        String regionCode = "11680";
-        ArtistType artistType = ArtistType.BAND;
-        List<Genre> genres = List.of(Genre.POP, Genre.ROCK);
-        long budgetMin = 300000;
-        long budgetMax = 500000;
-        int expectedAudience = 800;
-        String description = "축제 첫날 저녁 무대를 여는 밴드 공연이에요.";
-        Visibility visibility = Visibility.PUBLIC;
-        EventDetails details = EventDetails.empty();
-
-        EventContent build() {
-            return new EventContent(name, eventType, start, end, performanceMinutes, venue,
-                regionCode, artistType, genres, budgetMin, budgetMax, expectedAudience,
-                description, visibility, details);
-        }
+    static Stream<Arguments> golden() {
+        return Stream.of(
+            Arguments.of("03 §10.1 기본값, details 없음", sample(),
+                "d630350efbf192897b58adc50615bb0a6c609f9a8c1c1716fb5072ca4e10a84a"),
+            Arguments.of("validBody()와 같은 내용(details 포함)", sampleWithDetails(),
+                "e15358b78af180c845c0701352126e8e69109d70a64b70c35c342a3c0922371f"),
+            Arguments.of("artistType null은 -1;", with(b -> b.artistType = null),
+                "5045d036aa9564a570b4b005152f00347d5b37def447c2cdcc6601bcd2f07ff1"),
+            Arguments.of("장르 [ROCK, POP]은 [POP, ROCK]과 같다",
+                with(b -> b.genres = List.of(Genre.ROCK, Genre.POP)),
+                "d630350efbf192897b58adc50615bb0a6c609f9a8c1c1716fb5072ca4e10a84a"),
+            Arguments.of("장르 3개, 입력 순서 [TROT, ROCK, POP]",
+                with(b -> b.genres = List.of(Genre.TROT, Genre.ROCK, Genre.POP)),
+                "2c70f80230daf218341cbe32d50f30d7f4665fa87f2bae44fce4d0cea4a2c82a"),
+            Arguments.of("장르 1개 [JAZZ]는 앞쉼표", with(b -> b.genres = List.of(Genre.JAZZ)),
+                "0f670330f47d2ab0d74c260a5eaef635aaaca966c1e4c92b4484847faebcc285"),
+            Arguments.of("설명에 이모지(UTF-16 길이)", with(b -> b.description = "무대 🎵 공연"),
+                "a5c0ee2dbef2ec9d30c8b16500e5f86dd28569a48128ca876af59e929597f501"),
+            Arguments.of("선택정보 값에 구분자 ';'", with(b -> b.details =
+                    new EventDetails("가;나", "다", null, null, null, null, null, null, null, null)),
+                "3fb7e5ca2da2be09b849c135f5cf924ee17f42225655437dfc0cadd6350dcd7f"),
+            Arguments.of("불리언 true/false/null 섞음", with(b -> {
+                    b.artistType = ArtistType.DJ;
+                    b.genres = List.of(Genre.ELECTRONIC);
+                    b.details = new EventDetails(null, null, true, null, null, false, true, false, true, null);
+                }),
+                "db385ec2c7cef8ce614f1b25b1094b26e80697c20bc01404537807a2dbc9fc3a")
+        );
     }
 
-    static EventContent with(Consumer<Builder> change) {
-        Builder builder = new Builder();
-        change.accept(builder);
-        return builder.build();
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("golden")
+    @DisplayName("저장 형식이 바뀌지 않았다")
+    void producesTheStoredValue(String label, EventContent content, String expected) {
+        assertThat(content.requestHash()).isEqualTo(expected);
     }
 
     @Test
+    @DisplayName("같은 본문은 같은 해시다")
     void sameContentGivesSameHash() {
-        assertThat(EventContentHash.of(with(b -> { })))
-            .isEqualTo(EventContentHash.of(with(b -> { })))
-            .hasSize(64)
-            .matches("[0-9a-f]{64}");
+        assertThat(sample().requestHash()).isEqualTo(sample().requestHash()).matches("[0-9a-f]{64}");
     }
 
     static Stream<Arguments> everyField() {
@@ -95,28 +103,28 @@ class EventContentHashTest {
 
     @ParameterizedTest(name = "{0}이 바뀌면 해시가 달라진다")
     @MethodSource("everyField")
+    @DisplayName("필드 하나가 바뀌면 해시가 달라진다")
     void changingAnyFieldChangesTheHash(String field, Consumer<Builder> change) {
-        assertThat(EventContentHash.of(with(change)))
-            .isNotEqualTo(EventContentHash.of(with(b -> { })));
+        assertThat(with(change).requestHash()).isNotEqualTo(sample().requestHash());
     }
 
     @Test
+    @DisplayName("값이 필드 경계를 넘어도 충돌하지 않는다")
     void valueSplitsAcrossFieldsDoNotCollide() {
         EventContent first = with(b -> b.details =
             new EventDetails("가;나", "다", null, null, null, null, null, null, null, null));
         EventContent second = with(b -> b.details =
             new EventDetails("가", "나;다", null, null, null, null, null, null, null, null));
 
-        assertThat(EventContentHash.of(first)).isNotEqualTo(EventContentHash.of(second));
+        assertThat(first.requestHash()).isNotEqualTo(second.requestHash());
     }
 
     @Test
-    void nullAndEmptyStringDoNotCollide() {
-        EventContent nullRehearsal = with(b -> b.details = EventDetails.empty());
-        EventContent emptyRehearsal = with(b -> b.details =
+    @DisplayName("빈 문자열 선택정보는 정규화로 null이 되므로 해시에 0:; 가 나타나지 않는다")
+    void emptyOptionalTextNormalizesToNullBeforeHashing() {
+        EventContent withEmpty = with(b -> b.details =
             new EventDetails("", null, null, null, null, null, null, null, null, null));
 
-        assertThat(EventContentHash.of(nullRehearsal))
-            .isNotEqualTo(EventContentHash.of(emptyRehearsal));
+        assertThat(withEmpty.requestHash()).isEqualTo(sample().requestHash());
     }
 }

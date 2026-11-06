@@ -151,7 +151,7 @@ Eligibility가 곡 목록과 AI 추천 상태까지 읽으면 맡는 일이 커�
   - NSU-63: 필터의 INFO 로그는 개수만 남겨 요청을 구분할 수 없다. 호출자가 `eventId`(검색창 즉시 추천이면 요청 ID)를 MDC에 넣어 로그를 요청 단위로 묶는다.
   - NSU-122(검색창 즉시 추천): 행사가 없어 `filter`를 부를 수 없다. 적용할 필수 조건을 NSU-122에서 정하고, 계정·저작권만 볼 때는 `filterAccountAndCopyright`를 쓴다. 평가하지 않은 조건(일정·지역·예산·공연 형태)을 `passedConditions`나 "필수 조건 통과" 문구로 통과처럼 표시하지 않는다.
   - 창구 전제: 계정·프로필·일정 창구는 지도(`Map`) 자체를 null로 돌려주지 않는다. 조회에 실패하면 예외를 던진다. null 지도는 그 아티스트가 아니라 호출 전체를 실패시킨다.
-  - 입력 전제: `EligibilityInput`은 행사 검증을 거친 값이다. `start < end`(03 §3.1·§3.6, `EventRequest`가 `0 < 종료 − 시작 ≤ 24시간`을 검증)이고 `regionCode`는 5자리다. 판정 코드는 이를 다시 검사하지 않는다.
+  - 입력 전제: `EligibilityInput`은 행사 검증을 거친 값이다. `start < end`(03 §3.1·§3.6, `EventContent` 생성자가 `0 < 종료 − 시작 ≤ 24시간`을 검증, [event_management/04](../event_management/04_event_content_invariants_and_access.md))이고 `regionCode`는 5자리다. 판정 코드는 이를 다시 검사하지 않는다.
 
 ## Reused
 
