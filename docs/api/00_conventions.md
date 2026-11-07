@@ -170,7 +170,7 @@ API를 새로 만들거나 바꿀 때 아래를 지킨다.
 )
 ```
 
-지금 쓰는 태그 이름: 로그인, OAuth, 아티스트 가입, EVENT_PARTNER 가입, 행사, 지역
+지금 쓰는 태그 이름: 로그인, OAuth, 아티스트 가입, EVENT_PARTNER 가입, 행사, 지역, EVENT_PARTNER 프로필, Trust Profile
 
 - 계약을 바꾸는 PR은 md 에러 표와 `@ApiResponse`를 함께 고친다. 둘이 같은지 검사하는 테스트는 없으므로 PR 리뷰에서 확인한다.
 - 2026-10-20 기준 identity API(가입·로그인·OAuth)는 `@ApiResponse`가 없다. 병합 뒤 identity 담당자에게 handoff로 넘긴다.
