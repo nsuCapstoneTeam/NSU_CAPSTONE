@@ -7,7 +7,8 @@ public record OAuthResult(
     Type type,
     UUID userId,
     String oauthSignupSessionId,
-    ErrorCode errorCode
+    ErrorCode errorCode,
+    String bindingDigest
 ) {
 
     public enum Type {
@@ -16,15 +17,15 @@ public record OAuthResult(
         ERROR
     }
 
-    public static OAuthResult login(UUID userId) {
-        return new OAuthResult(Type.LOGIN, userId, null, null);
+    public static OAuthResult login(UUID userId, String bindingDigest) {
+        return new OAuthResult(Type.LOGIN, userId, null, null, bindingDigest);
     }
 
-    public static OAuthResult signupRequired(String oauthSignupSessionId) {
-        return new OAuthResult(Type.SIGNUP_REQUIRED, null, oauthSignupSessionId, null);
+    public static OAuthResult signupRequired(String oauthSignupSessionId, String bindingDigest) {
+        return new OAuthResult(Type.SIGNUP_REQUIRED, null, oauthSignupSessionId, null, bindingDigest);
     }
 
-    public static OAuthResult error(ErrorCode errorCode) {
-        return new OAuthResult(Type.ERROR, null, null, errorCode);
+    public static OAuthResult error(ErrorCode errorCode, String bindingDigest) {
+        return new OAuthResult(Type.ERROR, null, null, errorCode, bindingDigest);
     }
 }

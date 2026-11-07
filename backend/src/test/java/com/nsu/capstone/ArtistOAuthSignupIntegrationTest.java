@@ -40,6 +40,12 @@ class ArtistOAuthSignupIntegrationTest {
     @Autowired OAuthAccountRepository accounts;
     @Autowired OAuthLoginService login;
     @Autowired OAuthResultService results;
+    @Autowired com.nsu.capstone.identity.oauth.OAuthOpaqueValueService opaqueValues;
+    private static final String BINDING_NONCE = "binding-nonce";
+
+    private String bindingDigest() {
+        return opaqueValues.digest(BINDING_NONCE);
+    }
     @Autowired ArtistSignupService localArtist;
     @Autowired EventPartnerSignupService localPartner;
     @Autowired SignupVerificationService verification;
@@ -99,7 +105,7 @@ class ArtistOAuthSignupIntegrationTest {
         assertTrue(users.existsById(response.userId()));
         assertTrue(redis.hasKey(SignupRedisKeys.session(id)));
         var result = results.exchange(login.completeAuthentication(new OAuthUserIdentity(
-            OAuthProvider.GOOGLE, id, email(id), true)));
+            OAuthProvider.GOOGLE, id, email(id), true), bindingDigest()), BINDING_NONCE);
         assertEquals(response.userId(), result.userId());
         // A retry after lease expiry reports the existing identity; it never creates another User.
         redis.delete(claimKey(id));
@@ -149,7 +155,8 @@ class ArtistOAuthSignupIntegrationTest {
             assertFalse(redis.hasKey(SignupRedisKeys.cooldown(id, channel)));
         }
         var result = results.exchange(login.completeAuthentication(new OAuthUserIdentity(
-            OAuthProvider.GOOGLE, id, "changed-provider@example.com", false)));
+            OAuthProvider.GOOGLE, id, "changed-provider@example.com", false), bindingDigest()),
+            BINDING_NONCE);
         assertEquals("LOGIN", result.type());
         assertEquals(user.getId(), result.userId());
         assertNotNull(result.accessToken());

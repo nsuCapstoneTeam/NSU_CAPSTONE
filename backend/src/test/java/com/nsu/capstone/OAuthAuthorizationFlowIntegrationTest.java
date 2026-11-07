@@ -289,6 +289,51 @@ class OAuthAuthorizationFlowIntegrationTest {
     }
 
     @Test
+    void resultExchangeWithoutBindingCookieIsRejectedAndConsumesTheResult() throws Exception {
+        Flow flow = startFlow("google");
+        String code = completeCallback(flow);
+
+        exchange(code)
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code", equalTo("OAUTH_RESULT_INVALID")))
+            .andExpect(jsonPath("$.oauthSignupSessionId").doesNotExist())
+            .andExpect(jsonPath("$.accessToken").doesNotExist())
+            .andExpect(header().doesNotExist("Set-Cookie"));
+        exchange(code, flow.bindingCookie())
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code", equalTo("OAUTH_RESULT_INVALID")));
+    }
+
+    @Test
+    void resultExchangeWithAnotherBrowsersCookieIsRejected() throws Exception {
+        Flow victim = startFlow("google");
+        Flow attacker = startFlow("google");
+        String code = completeCallback(victim);
+
+        exchange(code, attacker.bindingCookie())
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code", equalTo("OAUTH_RESULT_INVALID")))
+            .andExpect(jsonPath("$.oauthSignupSessionId").doesNotExist())
+            .andExpect(header().doesNotExist("Set-Cookie"));
+    }
+
+    @Test
+    void lateExchangeOfAnEarlierFlowDoesNotBreakTheNewerFlow() throws Exception {
+        Flow earlier = startFlow("google");
+        String earlierCode = completeCallback(earlier);
+        Flow later = startFlow("google");
+        String laterCode = completeCallback(later);
+
+        exchange(earlierCode, later.bindingCookie())
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code", equalTo("OAUTH_RESULT_INVALID")));
+        exchange(laterCode, later.bindingCookie())
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.type", equalTo("SIGNUP_REQUIRED")))
+            .andExpect(header().doesNotExist("Set-Cookie"));
+    }
+
+    @Test
     void productionRejectsTheDevelopmentCookieName() throws Exception {
         Flow flow = startFlow("google");
         jakarta.servlet.http.Cookie devCookie = new jakarta.servlet.http.Cookie(
@@ -329,8 +374,10 @@ class OAuthAuthorizationFlowIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/oauth/result")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"code\":\"" + resultCode + "\"}"))
+                .content("{\"code\":\"" + resultCode + "\"}")
+                .cookie(authorization.getResponse().getCookie(BINDING_COOKIE)))
             .andExpect(status().isOk())
+            .andExpect(header().doesNotExist("Set-Cookie"))
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$.type", equalTo("SIGNUP_REQUIRED")))
             .andExpect(jsonPath("$.oauthSignupSessionId").isNotEmpty())
@@ -338,7 +385,8 @@ class OAuthAuthorizationFlowIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/oauth/result")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"code\":\"" + resultCode + "\"}"))
+                .content("{\"code\":\"" + resultCode + "\"}")
+                .cookie(authorization.getResponse().getCookie(BINDING_COOKIE)))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code", equalTo("OAUTH_RESULT_INVALID")));
     }
@@ -369,7 +417,8 @@ class OAuthAuthorizationFlowIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/oauth/result")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"code\":\"" + resultCode + "\"}"))
+                .content("{\"code\":\"" + resultCode + "\"}")
+                .cookie(authorization.getResponse().getCookie(BINDING_COOKIE)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.type", equalTo("SIGNUP_REQUIRED")))
             .andExpect(jsonPath("$.oauthSignupSessionId").isNotEmpty())
@@ -439,6 +488,26 @@ class OAuthAuthorizationFlowIntegrationTest {
             .andExpect(header().doesNotExist("Set-Cookie"))
             .andReturn();
         return callback.getResponse().getHeader("Location");
+    }
+
+    private String completeCallback(Flow flow) throws Exception {
+        String location = callbackLocation(flow, flow.state(), flow.bindingCookie());
+        String code = queryParameters(location).getFirst("code");
+        org.junit.jupiter.api.Assertions.assertNotNull(code, location);
+        return code;
+    }
+
+    private org.springframework.test.web.servlet.ResultActions exchange(
+        String code,
+        jakarta.servlet.http.Cookie... cookies
+    ) throws Exception {
+        var request = post("/api/v1/auth/oauth/result")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"code\":\"" + code + "\"}");
+        if (cookies.length > 0) {
+            request.cookie(cookies);
+        }
+        return mockMvc.perform(request);
     }
 
     private boolean authorizationRequestExists(String state) {

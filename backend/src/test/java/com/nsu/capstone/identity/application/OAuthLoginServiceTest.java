@@ -37,6 +37,8 @@ import org.mockito.ArgumentCaptor;
 
 class OAuthLoginServiceTest {
 
+    private static final String DIGEST = "binding-digest";
+
     private final OAuthAccountRepository accountRepository = mock(OAuthAccountRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final OAuthSignupSessionStore signupSessionStore = mock(OAuthSignupSessionStore.class);
@@ -69,9 +71,9 @@ class OAuthLoginServiceTest {
         when(account.getUser()).thenReturn(user);
         when(accountRepository.findByProviderAndProviderUserId(OAuthProvider.GOOGLE, "subject"))
             .thenReturn(Optional.of(account));
-        when(resultStore.saveLogin(userId)).thenReturn("result-code");
+        when(resultStore.saveLogin(userId, DIGEST)).thenReturn("result-code");
 
-        String result = service.completeAuthentication(identity("oauth@example.com", true));
+        String result = service.completeAuthentication(identity("oauth@example.com", true), DIGEST);
 
         assertEquals("result-code", result);
         verify(signupSessionStore, never()).save(any());
@@ -88,11 +90,11 @@ class OAuthLoginServiceTest {
 
         BusinessException exception = assertThrows(
             BusinessException.class,
-            () -> service.completeAuthentication(identity("oauth@example.com", true))
+            () -> service.completeAuthentication(identity("oauth@example.com", true), DIGEST)
         );
 
         assertEquals(ErrorCode.OAUTH_AUTHENTICATION_FAILED, exception.getErrorCode());
-        verify(resultStore, never()).saveLogin(any());
+        verify(resultStore, never()).saveLogin(any(), any());
     }
 
     @Test
@@ -101,9 +103,10 @@ class OAuthLoginServiceTest {
             .thenReturn(Optional.empty());
         when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
         when(opaqueValueService.generate()).thenReturn("signup-session-id");
-        when(resultStore.saveSignupRequired("signup-session-id")).thenReturn("result-code");
+        when(resultStore.saveSignupRequired("signup-session-id", DIGEST))
+            .thenReturn("result-code");
 
-        String result = service.completeAuthentication(identity("new@example.com", false));
+        String result = service.completeAuthentication(identity("new@example.com", false), DIGEST);
 
         assertEquals("result-code", result);
         ArgumentCaptor<OAuthSignupSession> sessionCaptor =
@@ -126,7 +129,7 @@ class OAuthLoginServiceTest {
             "kakao-subject"
         )).thenReturn(Optional.empty());
         when(opaqueValueService.generate()).thenReturn("kakao-signup-session");
-        when(resultStore.saveSignupRequired("kakao-signup-session"))
+        when(resultStore.saveSignupRequired("kakao-signup-session", DIGEST))
             .thenReturn("result-code");
 
         String result = service.completeAuthentication(new OAuthUserIdentity(
@@ -134,7 +137,7 @@ class OAuthLoginServiceTest {
             "kakao-subject",
             null,
             false
-        ));
+        ), DIGEST);
 
         assertEquals("result-code", result);
         ArgumentCaptor<OAuthSignupSession> sessionCaptor =
@@ -158,12 +161,12 @@ class OAuthLoginServiceTest {
 
         BusinessException exception = assertThrows(
             BusinessException.class,
-            () -> service.completeAuthentication(identity("existing@example.com", true))
+            () -> service.completeAuthentication(identity("existing@example.com", true), DIGEST)
         );
 
         assertEquals(ErrorCode.EMAIL_ALREADY_EXISTS, exception.getErrorCode());
         verify(signupSessionStore, never()).save(any());
-        verify(resultStore, never()).saveSignupRequired(any());
+        verify(resultStore, never()).saveSignupRequired(any(), any());
     }
 
     @Test
@@ -172,10 +175,10 @@ class OAuthLoginServiceTest {
             .thenReturn(Optional.empty());
         when(userRepository.existsByEmail("verified@example.com")).thenReturn(false);
         when(opaqueValueService.generate()).thenReturn("verified-signup-session");
-        when(resultStore.saveSignupRequired("verified-signup-session"))
+        when(resultStore.saveSignupRequired("verified-signup-session", DIGEST))
             .thenReturn("result-code");
 
-        service.completeAuthentication(identity("verified@example.com", true));
+        service.completeAuthentication(identity("verified@example.com", true), DIGEST);
 
         ArgumentCaptor<OAuthSignupSession> sessionCaptor =
             ArgumentCaptor.forClass(OAuthSignupSession.class);

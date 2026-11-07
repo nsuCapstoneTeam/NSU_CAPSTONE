@@ -38,7 +38,7 @@ class OAuthAuthenticationFailureHandlerTest {
             "provider authentication failed",
             new RestClientException("provider unavailable")
         );
-        when(resultStore.saveError(ErrorCode.OAUTH_PROVIDER_UNAVAILABLE))
+        when(resultStore.saveError(ErrorCode.OAUTH_PROVIDER_UNAVAILABLE, "confirmed-digest"))
             .thenReturn("safe-result-code");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -73,7 +73,8 @@ class OAuthAuthenticationFailureHandlerTest {
         AuthenticationException failure = new AuthenticationServiceException(
             "authentication failed"
         );
-        when(resultStore.saveError(ErrorCode.OAUTH_AUTHENTICATION_FAILED)).thenThrow(
+        when(resultStore.saveError(ErrorCode.OAUTH_AUTHENTICATION_FAILED, "confirmed-digest"))
+            .thenThrow(
             new DataAccessResourceFailureException("redis unavailable")
         );
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -90,7 +91,8 @@ class OAuthAuthenticationFailureHandlerTest {
         AuthenticationException failure = new AuthenticationServiceException(
             "authentication failed"
         );
-        when(resultStore.saveError(ErrorCode.OAUTH_AUTHENTICATION_FAILED)).thenThrow(
+        when(resultStore.saveError(ErrorCode.OAUTH_AUTHENTICATION_FAILED, "confirmed-digest"))
+            .thenThrow(
             new IllegalStateException("unexpected bug")
         );
         MockHttpServletResponse response = new MockHttpServletResponse();

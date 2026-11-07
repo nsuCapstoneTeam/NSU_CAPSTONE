@@ -43,11 +43,11 @@ public class OAuthLoginService {
         this.clock = clock;
     }
 
-    public String completeAuthentication(OAuthUserIdentity identity) {
+    public String completeAuthentication(OAuthUserIdentity identity, String bindingDigest) {
         Optional<OAuthAccount> existingAccount = oauthAccountRepository
             .findByProviderAndProviderUserId(identity.provider(), identity.providerUserId());
         if (existingAccount.isPresent()) {
-            return existingLogin(existingAccount.orElseThrow().getUser());
+            return existingLogin(existingAccount.orElseThrow().getUser(), bindingDigest);
         }
 
         if (identity.email() != null && userRepository.existsByEmail(identity.email())) {
@@ -63,13 +63,13 @@ public class OAuthLoginService {
             identity.emailVerified(),
             Instant.now(clock)
         ));
-        return resultStore.saveSignupRequired(signupSessionId);
+        return resultStore.saveSignupRequired(signupSessionId, bindingDigest);
     }
 
-    private String existingLogin(User user) {
+    private String existingLogin(User user, String bindingDigest) {
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new BusinessException(ErrorCode.OAUTH_AUTHENTICATION_FAILED);
         }
-        return resultStore.saveLogin(user.getId());
+        return resultStore.saveLogin(user.getId(), bindingDigest);
     }
 }

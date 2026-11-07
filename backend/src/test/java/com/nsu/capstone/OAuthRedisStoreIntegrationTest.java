@@ -115,7 +115,7 @@ class OAuthRedisStoreIntegrationTest {
     @Test
     void oauthResultHasOneMinuteTtlAndIsConsumedOnce() {
         UUID userId = UUID.randomUUID();
-        String code = resultStore.saveLogin(userId);
+        String code = resultStore.saveLogin(userId, "binding-digest");
         String key = OAuthRedisKeys.result(opaqueValueService.digest(code));
 
         long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
@@ -123,12 +123,13 @@ class OAuthRedisStoreIntegrationTest {
         OAuthResult result = resultStore.consume(code).orElseThrow();
         assertEquals(OAuthResult.Type.LOGIN, result.type());
         assertEquals(userId, result.userId());
+        assertEquals("binding-digest", result.bindingDigest());
         assertTrue(resultStore.consume(code).isEmpty());
     }
 
     @Test
     void concurrentOAuthResultConsumptionHasSingleWinner() throws Exception {
-        String code = resultStore.saveSignupRequired("signup-session");
+        String code = resultStore.saveSignupRequired("signup-session", "binding-digest");
         int workers = 8;
         AtomicInteger successes = new AtomicInteger();
         CountDownLatch ready = new CountDownLatch(workers);

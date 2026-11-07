@@ -45,6 +45,7 @@ class LoginFlowIntegrationTest {
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired UuidV7Generator uuidV7Generator;
     @Autowired OAuthLoginService oauthLoginService;
+    @Autowired com.nsu.capstone.identity.oauth.OAuthOpaqueValueService opaqueValueService;
     @Autowired JdbcTemplate jdbcTemplate;
     @Autowired SecurityFilterChain securityFilterChain;
 
@@ -104,10 +105,11 @@ class LoginFlowIntegrationTest {
             "oauth-subject",
             "oauth-login@example.com",
             true
-        ));
+        ), opaqueValueService.digest("binding-nonce"));
 
         MvcResult exchangeResult = mockMvc.perform(post("/api/v1/auth/oauth/result")
                 .contentType(APPLICATION_JSON)
+                .cookie(new jakarta.servlet.http.Cookie("__Host-NSU_OAUTH_BINDING", "binding-nonce"))
                 .content("{\"code\":\"" + resultCode + "\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.type").value("LOGIN"))

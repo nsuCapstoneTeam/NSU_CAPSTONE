@@ -7,6 +7,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Optional;
 import org.springframework.dao.DataAccessException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
@@ -35,7 +36,8 @@ public class OAuthAuthenticationFailureHandler implements AuthenticationFailureH
     ) throws IOException, ServletException {
         // 결합이 확인되지 않은 흐름(인가 요청 없음, nonce 불일치, 쿠키 없음, 위조 콜백)에는
         // 결과 코드를 만들지 않는다. ADR authentication/01 Decision 3.
-        if (OAuthBindingCookie.confirmedDigest(request).isEmpty()) {
+        Optional<String> bindingDigest = OAuthBindingCookie.confirmedDigest(request);
+        if (bindingDigest.isEmpty()) {
             redirectService.redirectWithFallbackError(response);
             return;
         }
@@ -43,7 +45,7 @@ public class OAuthAuthenticationFailureHandler implements AuthenticationFailureH
             ? ErrorCode.OAUTH_PROVIDER_UNAVAILABLE
             : ErrorCode.OAUTH_AUTHENTICATION_FAILED;
         try {
-            redirectService.redirect(response, resultStore.saveError(errorCode));
+            redirectService.redirect(response, resultStore.saveError(errorCode, bindingDigest.get()));
         } catch (DataAccessException dataAccessException) {
             redirectService.redirectWithFallbackError(response);
         }
