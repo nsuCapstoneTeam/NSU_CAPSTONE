@@ -137,6 +137,7 @@
 - 세션 생성 한도를 넘으면 `429 TOO_MANY_REQUESTS`와 `Retry-After`다(00 §8, 인증 코드 발송이 아니므로 공통 code). 세션을 만들지 않는다.
 - OAuth 시작·콜백은 브라우저가 직접 여는 주소라 화면 코드가 `429` 본문을 읽지 못한다. 그래서 한도를 넘으면 지금의 OAuth 오류 처리(`OAuthFrontendRedirectService`)처럼 프론트 주소로 `302` 리다이렉트하고 `error=TOO_MANY_REQUESTS`와 `retryAfter=<초>`를 쿼리로 붙인다. 이 리다이렉트는 결과 키(`saveError`)를 거치지 않으므로 Redis 키를 만들지 않는다. 인가 요청 키도 만들지 않는다.
 - 카운터 키와 TTL은 §1.2와 같은 방식이다. 기본값은 설정값이다.
+- 검사 순서: OAuth 시작·콜백 제한은 `GET` 요청에만 건다. 시연 쓰기 차단(`403 DEMO_WRITE_NOT_ALLOWED`, 00 §8)은 인증 다음이다. 그래서 토큰 없는 쓰기 요청은 이 필터들보다 먼저 `401`을 받는다(ADR `authentication/00` Decision 6, [PR #206](https://github.com/nsuCapstoneTeam/NSU_CAPSTONE/pull/206)). 세션 생성·로그인 제한은 원래 공개 경로(토큰 없이 부르는 `POST`)에 건다. 이 필터들을 구현할 때 #206이 넣는 필터 목록 테스트를 함께 갱신한다.
 - Redis는 `maxmemory 256mb`(설정값, 호스트 메모리 안에서 Redis·JVM·PostgreSQL 몫을 나눈 값)와 `maxmemory-policy noeviction`으로 둔다. `maxmemory`가 없으면(Redis 기본값 0) `noeviction`은 효과가 없고, Redis가 호스트 메모리를 다 써 커널이 Redis·JVM·PostgreSQL 중 하나를 종료할 수 있다. `noeviction`은 메모리가 차도 한도 카운터를 지우지 않고 쓰기를 거절하게 한다. 다른 정책이면 카운터가 지워져 한도가 풀린다.
 
 ### 1.5 로그인 요청 제한
