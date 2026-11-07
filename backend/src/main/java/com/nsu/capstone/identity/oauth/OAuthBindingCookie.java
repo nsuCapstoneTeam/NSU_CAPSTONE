@@ -1,0 +1,63 @@
+package com.nsu.capstone.identity.oauth;
+
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.Arrays;
+import java.util.Optional;
+import org.springframework.http.ResponseCookie;
+import org.springframework.stereotype.Component;
+
+/**
+ * OAuth 흐름을 시작한 브라우저를 식별하는 결합 쿠키의 이름과 속성을 한 곳에서 정한다.
+ * ADR authentication/01 Decision 1.
+ */
+@Component
+public class OAuthBindingCookie {
+
+    private static final String HOST_PREFIXED_NAME = "__Host-NSU_OAUTH_BINDING";
+
+    private final OAuthProperties properties;
+
+    public OAuthBindingCookie(OAuthProperties properties) {
+        this.properties = properties;
+    }
+
+    private static final String CONFIRMED_DIGEST_ATTRIBUTE =
+        OAuthBindingCookie.class.getName() + ".CONFIRMED_DIGEST";
+
+    /** 인가 요청 저장소가 결합을 확인한 뒤 digest를 요청에 남긴다. 결과 저장은 쿠키를 다시 읽지 않는다. */
+    public static void confirm(HttpServletRequest request, String digest) {
+        request.setAttribute(CONFIRMED_DIGEST_ATTRIBUTE, digest);
+    }
+
+    public static Optional<String> confirmedDigest(HttpServletRequest request) {
+        return Optional.ofNullable(request.getAttribute(CONFIRMED_DIGEST_ATTRIBUTE))
+            .map(String.class::cast);
+    }
+
+    public Optional<String> nonce(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return Optional.empty();
+        }
+        return Arrays.stream(cookies)
+            .filter(cookie -> name().equals(cookie.getName()))
+            .map(Cookie::getValue)
+            .filter(value -> value != null && !value.isBlank())
+            .findFirst();
+    }
+
+    public String name() {
+        return HOST_PREFIXED_NAME;
+    }
+
+    public ResponseCookie issue(String nonce) {
+        return ResponseCookie.from(name(), nonce)
+            .httpOnly(true)
+            .secure(true)
+            .sameSite("Lax")
+            .path("/")
+            .maxAge(properties.getAuthorizationRequestTtl().plus(properties.getResultTtl()))
+            .build();
+    }
+}

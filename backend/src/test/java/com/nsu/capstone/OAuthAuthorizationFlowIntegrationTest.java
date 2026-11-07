@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nimbusds.jose.JWSAlgorithm;
+import com.nsu.capstone.identity.oauth.OAuthRedisKeys;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.jwk.RSAKey;
@@ -78,6 +79,7 @@ class OAuthAuthorizationFlowIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired org.springframework.security.web.SecurityFilterChain securityFilterChain;
     @Autowired org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
+    @Autowired com.nsu.capstone.identity.oauth.OAuthOpaqueValueService opaqueValueService;
 
     @DynamicPropertySource
     static void providerProperties(DynamicPropertyRegistry registry) {
@@ -156,6 +158,41 @@ class OAuthAuthorizationFlowIntegrationTest {
     }
 
     @Test
+    void authorizationStartSetsBindingCookieAndStoresOnlyItsDigest() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/auth/oauth/authorization/google"))
+            .andExpect(status().is3xxRedirection())
+            .andReturn();
+
+        java.util.List<String> setCookies = result.getResponse().getHeaders("Set-Cookie");
+        org.junit.jupiter.api.Assertions.assertEquals(1, setCookies.size());
+        String setCookie = setCookies.getFirst();
+        org.junit.jupiter.api.Assertions.assertTrue(
+            setCookie.startsWith("__Host-NSU_OAUTH_BINDING="), setCookie
+        );
+        for (String attribute : java.util.List.of(
+            "HttpOnly", "Secure", "SameSite=Lax", "Path=/", "Max-Age=360"
+        )) {
+            org.junit.jupiter.api.Assertions.assertTrue(
+                setCookie.contains(attribute), attribute + " 없음: " + setCookie
+            );
+        }
+        org.junit.jupiter.api.Assertions.assertFalse(setCookie.contains("Domain"), setCookie);
+
+        String nonce = result.getResponse().getCookie("__Host-NSU_OAUTH_BINDING").getValue();
+        String state = queryParameters(result.getResponse().getHeader("Location"))
+            .getFirst("state");
+        String stored = redisTemplate.opsForValue().get(
+            OAuthRedisKeys.authorization(opaqueValueService.digest(state))
+        );
+        org.junit.jupiter.api.Assertions.assertTrue(
+            stored.contains(opaqueValueService.digest(nonce)), "스냅샷에 nonce digest가 없다"
+        );
+        org.junit.jupiter.api.Assertions.assertFalse(
+            stored.contains(nonce), "원문 nonce가 저장됐다"
+        );
+    }
+
+    @Test
     void nonGetAuthorizationRequestIsUnauthorizedAndLeavesNoStoredRequest() throws Exception {
         int before = storedAuthorizationRequestCount();
 
@@ -199,19 +236,70 @@ class OAuthAuthorizationFlowIntegrationTest {
     }
 
     @Test
-    void callbackWithUnknownStateUsesSanitizedOneTimeResultWithoutSession() throws Exception {
+    void callbackWithUnknownStateRedirectsToFallbackWithoutResultCodeOrSession()
+        throws Exception {
         mockMvc.perform(get("/api/v1/auth/oauth/callback/google")
                 .queryParam("code", "provider-code")
                 .queryParam("state", "unknown-state"))
             .andExpect(status().is3xxRedirection())
-            .andExpect(header().string("Location", containsString(
-                "https://frontend.test/oauth/result?code="
-            )))
-            .andExpect(header().string("Location", not(containsString("provider-code"))))
+            .andExpect(header().string("Location", equalTo(FALLBACK_LOCATION)))
             .andExpect(header().doesNotExist("Set-Cookie"))
             .andExpect(result -> org.junit.jupiter.api.Assertions.assertNull(
                 result.getRequest().getSession(false)
             ));
+    }
+
+    @Test
+    void callbackWithoutBindingCookieFallsBackAndKeepsAuthorizationRequest() throws Exception {
+        Flow flow = startFlow("google");
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+            FALLBACK_LOCATION,
+            callbackLocation(flow, flow.state())
+        );
+        org.junit.jupiter.api.Assertions.assertTrue(authorizationRequestExists(flow.state()));
+    }
+
+    @Test
+    void callbackWithAnotherBrowsersCookieFallsBackAndKeepsAuthorizationRequest()
+        throws Exception {
+        Flow victim = startFlow("google");
+        Flow attacker = startFlow("google");
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+            FALLBACK_LOCATION,
+            callbackLocation(attacker, victim.state(), attacker.bindingCookie())
+        );
+        org.junit.jupiter.api.Assertions.assertTrue(authorizationRequestExists(victim.state()));
+    }
+
+    @Test
+    void forgedCallbackDoesNotDisturbTheFlowInProgress() throws Exception {
+        Flow flow = startFlow("google");
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+            FALLBACK_LOCATION,
+            callbackLocation(flow, "x", flow.bindingCookie())
+        );
+        org.junit.jupiter.api.Assertions.assertTrue(authorizationRequestExists(flow.state()));
+        org.junit.jupiter.api.Assertions.assertTrue(
+            callbackLocation(flow, flow.state(), flow.bindingCookie())
+                .startsWith("https://frontend.test/oauth/result?code=")
+        );
+    }
+
+    @Test
+    void productionRejectsTheDevelopmentCookieName() throws Exception {
+        Flow flow = startFlow("google");
+        jakarta.servlet.http.Cookie devCookie = new jakarta.servlet.http.Cookie(
+            "NSU_OAUTH_BINDING_DEV", flow.bindingNonce()
+        );
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+            FALLBACK_LOCATION,
+            callbackLocation(flow, flow.state(), devCookie)
+        );
+        org.junit.jupiter.api.Assertions.assertTrue(authorizationRequestExists(flow.state()));
     }
 
     @Test
@@ -230,7 +318,8 @@ class OAuthAuthorizationFlowIntegrationTest {
 
         MvcResult callback = mockMvc.perform(get("/api/v1/auth/oauth/callback/google")
                 .queryParam("code", "provider-code")
-                .queryParam("state", state))
+                .queryParam("state", state)
+                .cookie(authorization.getResponse().getCookie(BINDING_COOKIE)))
             .andExpect(status().is3xxRedirection())
             .andExpect(header().doesNotExist("Set-Cookie"))
             .andReturn();
@@ -269,7 +358,8 @@ class OAuthAuthorizationFlowIntegrationTest {
 
         MvcResult callback = mockMvc.perform(get("/api/v1/auth/oauth/callback/kakao")
                 .queryParam("code", "provider-code")
-                .queryParam("state", state))
+                .queryParam("state", state)
+                .cookie(authorization.getResponse().getCookie(BINDING_COOKIE)))
             .andExpect(status().is3xxRedirection())
             .andExpect(header().doesNotExist("Set-Cookie"))
             .andReturn();
@@ -295,10 +385,66 @@ class OAuthAuthorizationFlowIntegrationTest {
             .andExpect(header().string("Location", containsString(
                 "/api/v1/auth/oauth/callback/" + provider
             )))
-            .andExpect(header().doesNotExist("Set-Cookie"))
             .andExpect(result -> org.junit.jupiter.api.Assertions.assertNull(
                 result.getRequest().getSession(false)
             ));
+    }
+
+    private static final String BINDING_COOKIE = "__Host-NSU_OAUTH_BINDING";
+    private static final String FALLBACK_LOCATION =
+        "https://frontend.test/oauth/result?error=OAUTH_AUTHENTICATION_FAILED";
+
+    private record Flow(String provider, String state, String providerNonce, String bindingNonce) {
+
+        jakarta.servlet.http.Cookie bindingCookie() {
+            return new jakarta.servlet.http.Cookie(BINDING_COOKIE, bindingNonce);
+        }
+    }
+
+    private Flow startFlow(String provider) throws Exception {
+        MvcResult authorization = mockMvc.perform(
+                get("/api/v1/auth/oauth/authorization/" + provider)
+            )
+            .andExpect(status().is3xxRedirection())
+            .andReturn();
+        MultiValueMap<String, String> parameters = queryParameters(
+            authorization.getResponse().getHeader("Location")
+        );
+        return new Flow(
+            provider,
+            parameters.getFirst("state"),
+            parameters.getFirst("nonce"),
+            authorization.getResponse().getCookie(BINDING_COOKIE).getValue()
+        );
+    }
+
+    private String callbackLocation(
+        Flow flow,
+        String state,
+        jakarta.servlet.http.Cookie... cookies
+    ) throws Exception {
+        if ("google".equals(flow.provider())) {
+            GOOGLE_NONCE.set(flow.providerNonce());
+        } else {
+            KAKAO_NONCE.set(flow.providerNonce());
+        }
+        var request = get("/api/v1/auth/oauth/callback/" + flow.provider())
+            .queryParam("code", "provider-code")
+            .queryParam("state", state);
+        if (cookies.length > 0) {
+            request.cookie(cookies);
+        }
+        MvcResult callback = mockMvc.perform(request)
+            .andExpect(status().is3xxRedirection())
+            .andExpect(header().doesNotExist("Set-Cookie"))
+            .andReturn();
+        return callback.getResponse().getHeader("Location");
+    }
+
+    private boolean authorizationRequestExists(String state) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(
+            OAuthRedisKeys.authorization(opaqueValueService.digest(state))
+        ));
     }
 
     private static MultiValueMap<String, String> queryParameters(String location) {

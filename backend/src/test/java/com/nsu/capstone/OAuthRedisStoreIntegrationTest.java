@@ -75,6 +75,7 @@ class OAuthRedisStoreIntegrationTest {
 
         MockHttpServletRequest callback = new MockHttpServletRequest();
         callback.setParameter("state", state);
+        callback.setCookies(response.getCookie("__Host-NSU_OAUTH_BINDING"));
         OAuth2AuthorizationRequest consumed = authorizationRequestRepository
             .removeAuthorizationRequest(callback, response);
         assertNotNull(consumed);

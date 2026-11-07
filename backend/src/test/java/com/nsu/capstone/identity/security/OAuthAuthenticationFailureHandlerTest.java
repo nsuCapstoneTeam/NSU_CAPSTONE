@@ -1,12 +1,15 @@
 package com.nsu.capstone.identity.security;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.nsu.capstone.global.exception.ErrorCode;
+import com.nsu.capstone.identity.oauth.OAuthBindingCookie;
 import com.nsu.capstone.identity.oauth.OAuthResultStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,10 +42,30 @@ class OAuthAuthenticationFailureHandlerTest {
             .thenReturn("safe-result-code");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        handler.onAuthenticationFailure(new MockHttpServletRequest(), response, failure);
+        handler.onAuthenticationFailure(confirmedRequest(), response, failure);
 
         verify(redirectService).redirect(response, "safe-result-code");
         verify(redirectService, never()).redirectWithFallbackError(response);
+    }
+
+    @Test
+    void redirectsToFallbackWithoutResultCodeWhenBindingWasNotConfirmed() throws Exception {
+        AuthenticationException failure = new AuthenticationServiceException(
+            "authorization_request_not_found"
+        );
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        handler.onAuthenticationFailure(new MockHttpServletRequest(), response, failure);
+
+        verify(redirectService).redirectWithFallbackError(response);
+        verify(redirectService, never()).redirect(any(), any());
+        verifyNoInteractions(resultStore);
+    }
+
+    private MockHttpServletRequest confirmedRequest() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        OAuthBindingCookie.confirm(request, "confirmed-digest");
+        return request;
     }
 
     @Test
@@ -55,7 +78,7 @@ class OAuthAuthenticationFailureHandlerTest {
         );
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        handler.onAuthenticationFailure(new MockHttpServletRequest(), response, failure);
+        handler.onAuthenticationFailure(confirmedRequest(), response, failure);
 
         verify(redirectService).redirectWithFallbackError(response);
         verify(redirectService, never()).redirect(response, "authentication failed");
@@ -75,7 +98,7 @@ class OAuthAuthenticationFailureHandlerTest {
         assertThrows(
             IllegalStateException.class,
             () -> handler.onAuthenticationFailure(
-                new MockHttpServletRequest(),
+                confirmedRequest(),
                 response,
                 failure
             )
