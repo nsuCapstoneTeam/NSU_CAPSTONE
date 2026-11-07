@@ -44,7 +44,7 @@
 | 스타일 | 일반 CSS (기능별 CSS 파일 + `src/app.css` 공통 스타일) |
 | 저장 | 브라우저 localStorage (체험용) |
 
-라우터·상태관리·UI 라이브러리는 사용하지 않습니다. 화면 전환은 `app.jsx`의 `page` 상태로 처리합니다.
+라우터·상태관리·UI 라이브러리는 사용하지 않습니다. 화면 전환은 `app.jsx`의 `page` 상태로 처리하고, 화면마다 주소(`/match`, `/events` 등)를 붙여 브라우저 뒤로 가기·새로고침이 되게 합니다(`src/routes.js`).
 
 ## 시작하기
 
@@ -92,6 +92,7 @@ frontend/
 └─ src/
    ├─ main.jsx                # React 시작점
    ├─ app.jsx                 # 헤더·푸터, 화면 전환, 공유 상태
+   ├─ routes.js               # 화면 이름 ↔ 주소 (브라우저 뒤로 가기)
    ├─ app.css                 # 전체 색상·레이아웃·다크 모드
    ├─ code-guide.md           # 상세 코드 안내 (파일별 역할·이름 규칙)
    ├─ assets/                 # 로고·이미지
@@ -117,10 +118,12 @@ frontend/
 ## 코드 흐름
 
 ```text
-index.html → src/main.jsx → App(app.jsx) → page 상태에 맞는 화면
+index.html → src/main.jsx → App(app.jsx) → 주소(routes.js) → page 상태에 맞는 화면
 ```
 
-- **화면 전환**: `App`의 `navigate('match')`처럼 페이지 키를 바꿉니다. (`home`, `match`, `board`, `mypage`, `artist-login`, `organizer-login`, `signup-role`, `artist-signup`, `organizer-signup`, `signup-complete`, `auth-required`)
+- **화면 전환**: `App`의 `navigate('match')`처럼 페이지 키를 바꾸면 주소도 함께 바뀝니다(`/match`). 페이지 키와 주소의 짝은 `src/routes.js`의 `ROUTES`에 있습니다. (`home`, `match`, `events`, `board`, `mypage`, `artist-login`, `organizer-login`, `signup-role`, `artist-signup`, `organizer-signup`, `signup-complete`, `auth-required`)
+- **뒤로 가기**: 브라우저 뒤로·앞으로 가기를 누르면 `popstate`로 그 주소의 화면을 보여 줍니다. 새로고침하거나 주소를 직접 열어도 같은 화면이 열립니다. 지금은 메뉴 화면 사이만 해당하고, 화면 안의 단계(행사 찾기 장소·상세, 마이페이지 탭)는 아직 기록하지 않습니다.
+- **배포할 때**: `/events`처럼 주소로 바로 들어와도 열리도록, 배포 서버는 모르는 주소에 `index.html`을 돌려주게 설정해야 합니다(팀 확정 필요). 개발 서버(`npm run dev`)와 `npm run preview`는 설정 없이 됩니다.
 - **매칭**: `Matching` → `validateEvent` → `matchArtists` → `checkArtist`(필수 조건 필터) → `scoreArtist`(점수) → `ArtistResult`(카드 표시)
 - **저장**: `App` → `useStoredState` → `local-demo-store` → localStorage
 - **로그인 역할 전환**: `RoleCd`(CD) 클릭 → 회전 애니메이션 → `onChangeRole` → `App`이 `artist-login` ↔ `organizer-login` 전환

@@ -6,6 +6,7 @@
 | --- | --- |
 | 앱 시작 | `src/main.jsx` |
 | 메뉴, 로고, 화면 전환, 테마, 전체 상태 | `src/app.jsx` → `App` |
+| 화면 주소·브라우저 뒤로 가기 (페이지 키 ↔ 주소, 탭 제목) | `src/routes.js`, `app.jsx`의 `navigate()`·`popstate` |
 | 홈 소개와 이용 순서 | `src/features/home/home-page.jsx` |
 | 홈 CLAP 설명·경량 시각 요소·비교 그래픽 | `src/features/home/components/` |
 | 로그인 화면(아티스트·행사 관계자) | `src/features/auth/components/artist-login.jsx`, `organizer-login.jsx` |
