@@ -4,6 +4,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.identity.application.ArtistSignupService;
@@ -66,8 +67,10 @@ class ArtistSignupSecurityConfigTest {
             .andExpect(status().isCreated());
         mockMvc.perform(get("/api/v1/auth/signup/artist/oauth")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/auth/signup/artist/oauth/session")).andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/v1/auth/signup/event-partner/oauth")).andExpect(status().isForbidden());
-        mockMvc.perform(post("/api/v1/auth/signup/artist/oauth/other")).andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/auth/signup/event-partner/oauth")).andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        mockMvc.perform(post("/api/v1/auth/signup/artist/oauth/other")).andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
     }
 
     @Test

@@ -9,6 +9,7 @@ import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -118,11 +119,12 @@ public class SecurityConfig {
                 .requestMatchers(EVENT_PARTNER_PROFILE_ENDPOINT).hasRole("EVENT_PARTNER")
                 .anyRequest().authenticated()
             )
-            .csrf(csrf -> csrf.ignoringRequestMatchers(
-                PRE_LOGIN_SIGNUP_ENDPOINTS,
-                LOGIN_ENDPOINT,
-                OAUTH_RESULT_ENDPOINT
-            ))
+            // CSRF는 브라우저가 쿠키·세션 같은 자격 증명을 자동으로 붙일 때만 의미가 있다.
+            // 이 서버는 Authorization 헤더의 Bearer 토큰으로만 인증한다.
+            // 쿠키·세션·폼 로그인·HTTP Basic을 도입하면 다시 판단한다(ADR authentication/00).
+            .csrf(AbstractHttpConfigurer::disable)
+            // 세션이 없어 지울 것이 없다. CSRF를 끄면 기본 logout이 모든 메서드의 /logout을 302로 받는다(ADR Decision 4)
+            .logout(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )

@@ -64,11 +64,13 @@ class OAuthSecurityConfigTest {
             .andExpect(jsonPath("$.type").value("SIGNUP_REQUIRED"));
 
         mockMvc.perform(post("/api/v1/auth/oauth/authorization/google"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
         mockMvc.perform(put("/api/v1/auth/oauth/result")
                 .contentType(APPLICATION_JSON)
                 .content("{}"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
         mockMvc.perform(get("/api/v1/auth/oauth/undeclared"))
             .andExpect(status().isUnauthorized());
     }

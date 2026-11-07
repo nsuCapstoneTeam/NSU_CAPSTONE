@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -25,6 +26,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 @WebMvcTest(controllers = RoleAuthorizationSecurityTest.RoleTestController.class)
@@ -89,6 +94,37 @@ class RoleAuthorizationSecurityTest {
             .andExpect(content().string(not(containsString("sensitive"))));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"POST", "PUT", "PATCH", "DELETE"})
+    void returnsAuthenticationRequiredForWriteWithoutToken(String method) throws Exception {
+        mockMvc.perform(request(HttpMethod.valueOf(method), "/test/security/write"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.*", hasSize(2)))
+            .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"))
+            .andExpect(jsonPath("$.message").isString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"POST", "PUT", "DELETE"})
+    void returnsAuthenticationRequiredForLogoutWithoutToken(String method) throws Exception {
+        mockMvc.perform(request(HttpMethod.valueOf(method), "/logout"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"POST", "PUT", "PATCH", "DELETE"})
+    void processesWriteWithValidBearerToken(String method) throws Exception {
+        when(jwtDecoder.decode("artist-token")).thenReturn(jwt("artist-token", "ARTIST"));
+
+        mockMvc.perform(request(HttpMethod.valueOf(method), "/test/security/write")
+                .header("Authorization", "Bearer artist-token"))
+            .andExpect(status().isOk())
+            .andExpect(result -> org.junit.jupiter.api.Assertions.assertNull(
+                result.getRequest().getSession(false)
+            ));
+    }
+
     private Jwt jwt(String tokenValue, String role) {
         Instant now = Instant.parse("2026-10-07T10:00:00Z");
         return Jwt.withTokenValue(tokenValue)
@@ -108,6 +144,15 @@ class RoleAuthorizationSecurityTest {
         @PreAuthorize("hasRole('ARTIST')")
         String artist() {
             return "artist";
+        }
+
+        @RequestMapping(
+            path = "/write",
+            method = {RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH,
+                RequestMethod.DELETE}
+        )
+        String write() {
+            return "write";
         }
 
         @GetMapping("/event-partner")
