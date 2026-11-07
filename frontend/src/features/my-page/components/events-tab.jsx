@@ -25,7 +25,7 @@ export default function EventsTab({ events, setEvents, notify }) {
   // 삭제를 한 번 더 확인 중인 행사 id
   const [confirmId, setConfirmId] = useState(null);
   // 폼을 닫은 뒤 포커스를 돌려줄 대상 id ('new' = 새 행사 등록 버튼)
-  const [focusTarget, setFocusTarget] = useState(null);
+  const focusTarget = useRef(null);
   const newButtonRef = useRef(null);
 
   const today = toDateKey(new Date());
@@ -34,11 +34,12 @@ export default function EventsTab({ events, setEvents, notify }) {
 
   // 폼을 닫거나 저장한 뒤 포커스를 알맞은 곳으로 (키보드 사용자가 길을 잃지 않게)
   useEffect(() => {
-    if (!focusTarget) return;
-    if (focusTarget === 'new') newButtonRef.current?.focus();
-    else document.getElementById(`event-card-${focusTarget}`)?.focus();
-    setFocusTarget(null);
-  }, [focusTarget]);
+    const target = focusTarget.current;
+    if (!target) return;
+    focusTarget.current = null;
+    if (target === 'new') newButtonRef.current?.focus();
+    else document.getElementById(`event-card-${target}`)?.focus();
+  });
 
   // 삭제 확인이 열리면 '취소'에 포커스 (실수로 바로 삭제되지 않게)
   useEffect(() => {
@@ -64,11 +65,11 @@ export default function EventsTab({ events, setEvents, notify }) {
         : '화면에는 반영됐지만 브라우저 저장에 실패했어요.',
     );
     setEditing(null);
-    setFocusTarget(id);
+    focusTarget.current = id;
   }
 
   function cancel() {
-    setFocusTarget(editing.id || 'new');
+    focusTarget.current = editing.id || 'new';
     setEditing(null);
   }
 
@@ -76,7 +77,7 @@ export default function EventsTab({ events, setEvents, notify }) {
     const ok = setEvents(events.filter((e) => e.id !== event.id));
     notify(ok ? `'${event.name}' 행사를 삭제했어요.` : '화면에는 반영됐지만 브라우저 저장에 실패했어요.');
     setConfirmId(null);
-    setFocusTarget('new');
+    focusTarget.current = 'new';
   }
 
   return (
@@ -188,7 +189,7 @@ export default function EventsTab({ events, setEvents, notify }) {
                           id={`event-confirm-cancel-${event.id}`}
                           onClick={() => {
                             setConfirmId(null);
-                            setFocusTarget(event.id);
+                            focusTarget.current = event.id;
                           }}
                         >
                           취소
