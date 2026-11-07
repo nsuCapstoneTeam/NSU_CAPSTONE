@@ -76,6 +76,7 @@ class OAuthAuthorizationFlowIntegrationTest {
     private static String providerBaseUri;
 
     @Autowired MockMvc mockMvc;
+    @Autowired org.springframework.security.web.SecurityFilterChain securityFilterChain;
     @Autowired org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 
     @DynamicPropertySource
@@ -109,6 +110,41 @@ class OAuthAuthorizationFlowIntegrationTest {
     static void stopFakeProvider() {
         if (providerServer != null) {
             providerServer.stop(0);
+        }
+    }
+
+    @Test
+    void oauthFilterChainKeepsOnlyTheFiltersTheCsrfDecisionAssumes() {
+        java.util.List<String> filters = securityFilterChain.getFilters().stream()
+            .map(filter -> filter.getClass().getSimpleName())
+            .toList();
+        String message = "보안 필터 목록이 바뀌었다. ADR authentication/00 Decision 6을 다시 본다";
+
+        org.junit.jupiter.api.Assertions.assertEquals(java.util.List.of(
+            "DisableEncodeUrlFilter",
+            "WebAsyncManagerIntegrationFilter",
+            "SecurityContextHolderFilter",
+            "HeaderWriterFilter",
+            "OAuth2AuthorizationRequestRedirectFilter",
+            "OAuth2ProtectedResourceMetadataFilter",
+            "OAuth2LoginAuthenticationFilter",
+            "BearerTokenAuthenticationFilter",
+            "RequestCacheAwareFilter",
+            "SecurityContextHolderAwareRequestFilter",
+            "AnonymousAuthenticationFilter",
+            "SessionManagementFilter",
+            "ExceptionTranslationFilter",
+            "AuthorizationFilter"
+        ), filters, message);
+        for (String forbidden : java.util.List.of(
+            "CsrfFilter",
+            "LogoutFilter",
+            "BasicAuthenticationFilter",
+            "UsernamePasswordAuthenticationFilter",
+            "DefaultLoginPageGeneratingFilter",
+            "RememberMeAuthenticationFilter"
+        )) {
+            org.junit.jupiter.api.Assertions.assertFalse(filters.contains(forbidden), message);
         }
     }
 
