@@ -20,9 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/artists/{artistId}/trust-profile")
 public class TrustProfileController {
 
-    private static final Pattern CANONICAL_UUID = Pattern.compile(
-        "\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12}"
-    );
+    private static final Pattern CANONICAL_UUID =
+            Pattern.compile("\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12}");
 
     private final TrustProfileQueryService queryService;
 
@@ -31,15 +30,11 @@ public class TrustProfileController {
     }
 
     @GetMapping
-    public TrustProfile getTrustProfile(
-        @PathVariable String artistId,
-        @AuthenticationPrincipal Jwt caller
-    ) {
+    public TrustProfile getTrustProfile(@PathVariable String artistId, @AuthenticationPrincipal Jwt caller) {
         return queryService.getTrustProfile(
-            UUID.fromString(caller.getSubject()),
-            UserRole.valueOf(caller.getClaimAsString("role")),
-            parseArtistId(artistId)
-        );
+                UUID.fromString(caller.getSubject()),
+                UserRole.valueOf(caller.getClaimAsString("role")),
+                parseArtistId(artistId));
     }
 
     private static UUID parseArtistId(String artistId) {
