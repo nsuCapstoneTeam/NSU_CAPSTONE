@@ -28,11 +28,10 @@ public class OAuthAuthenticationSuccessHandler implements AuthenticationSuccessH
     private final OAuthFrontendRedirectService redirectService;
 
     public OAuthAuthenticationSuccessHandler(
-        OAuthUserIdentityNormalizerRegistry normalizerRegistry,
-        OAuthLoginService loginService,
-        OAuthResultStore resultStore,
-        OAuthFrontendRedirectService redirectService
-    ) {
+            OAuthUserIdentityNormalizerRegistry normalizerRegistry,
+            OAuthLoginService loginService,
+            OAuthResultStore resultStore,
+            OAuthFrontendRedirectService redirectService) {
         this.normalizerRegistry = normalizerRegistry;
         this.loginService = loginService;
         this.resultStore = resultStore;
@@ -41,10 +40,8 @@ public class OAuthAuthenticationSuccessHandler implements AuthenticationSuccessH
 
     @Override
     public void onAuthenticationSuccess(
-        HttpServletRequest request,
-        HttpServletResponse response,
-        Authentication authentication
-    ) throws IOException, ServletException {
+            HttpServletRequest request, HttpServletResponse response, Authentication authentication)
+            throws IOException, ServletException {
         // 저장소가 결합을 확인해야 인증까지 온다. 없으면 결과 코드를 만들지 않는다.
         Optional<String> confirmedDigest = OAuthBindingCookie.confirmedDigest(request);
         if (confirmedDigest.isEmpty()) {
@@ -54,17 +51,12 @@ public class OAuthAuthenticationSuccessHandler implements AuthenticationSuccessH
         String bindingDigest = confirmedDigest.get();
         try {
             if (!(authentication instanceof OAuth2AuthenticationToken oauthToken)
-                || !(oauthToken.getPrincipal() instanceof OidcUser oidcUser)) {
+                    || !(oauthToken.getPrincipal() instanceof OidcUser oidcUser)) {
                 throw new BusinessException(ErrorCode.OAUTH_AUTHENTICATION_FAILED);
             }
-            OAuthUserIdentity identity = normalizerRegistry.normalize(
-                oauthToken.getAuthorizedClientRegistrationId(),
-                oidcUser
-            );
-            redirectService.redirect(
-                response,
-                loginService.completeAuthentication(identity, bindingDigest)
-            );
+            OAuthUserIdentity identity =
+                    normalizerRegistry.normalize(oauthToken.getAuthorizedClientRegistrationId(), oidcUser);
+            redirectService.redirect(response, loginService.completeAuthentication(identity, bindingDigest));
         } catch (BusinessException exception) {
             redirectWithErrorResult(response, exception.getErrorCode(), bindingDigest);
         } catch (DataAccessException exception) {
@@ -72,11 +64,8 @@ public class OAuthAuthenticationSuccessHandler implements AuthenticationSuccessH
         }
     }
 
-    private void redirectWithErrorResult(
-        HttpServletResponse response,
-        ErrorCode errorCode,
-        String bindingDigest
-    ) throws IOException {
+    private void redirectWithErrorResult(HttpServletResponse response, ErrorCode errorCode, String bindingDigest)
+            throws IOException {
         try {
             redirectService.redirect(response, resultStore.saveError(errorCode, bindingDigest));
         } catch (DataAccessException exception) {

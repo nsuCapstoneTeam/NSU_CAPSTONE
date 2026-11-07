@@ -16,10 +16,7 @@ public class RedisOAuthResultStore implements OAuthResultStore {
     private final OAuthProperties properties;
 
     public RedisOAuthResultStore(
-        StringRedisTemplate redisTemplate,
-        OAuthOpaqueValueService opaqueValueService,
-        OAuthProperties properties
-    ) {
+            StringRedisTemplate redisTemplate, OAuthOpaqueValueService opaqueValueService, OAuthProperties properties) {
         this.redisTemplate = redisTemplate;
         this.opaqueValueService = opaqueValueService;
         this.properties = properties;
@@ -46,9 +43,7 @@ public class RedisOAuthResultStore implements OAuthResultStore {
         if (code == null || code.isBlank()) {
             return Optional.empty();
         }
-        String value = redisTemplate.opsForValue().getAndDelete(
-            OAuthRedisKeys.result(opaqueValueService.digest(code))
-        );
+        String value = redisTemplate.opsForValue().getAndDelete(OAuthRedisKeys.result(opaqueValueService.digest(code)));
         if (value == null) {
             return Optional.empty();
         }
@@ -60,11 +55,12 @@ public class RedisOAuthResultStore implements OAuthResultStore {
             throw new IllegalArgumentException("결합 digest가 필요하다");
         }
         String code = opaqueValueService.generate();
-        redisTemplate.opsForValue().set(
-            OAuthRedisKeys.result(opaqueValueService.digest(code)),
-            type + SEPARATOR + bindingDigest + SEPARATOR + payload,
-            properties.getResultTtl()
-        );
+        redisTemplate
+                .opsForValue()
+                .set(
+                        OAuthRedisKeys.result(opaqueValueService.digest(code)),
+                        type + SEPARATOR + bindingDigest + SEPARATOR + payload,
+                        properties.getResultTtl());
         return code;
     }
 

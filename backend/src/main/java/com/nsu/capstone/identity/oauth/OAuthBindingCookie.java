@@ -23,8 +23,7 @@ public class OAuthBindingCookie {
         this.properties = properties;
     }
 
-    private static final String CONFIRMED_DIGEST_ATTRIBUTE =
-        OAuthBindingCookie.class.getName() + ".CONFIRMED_DIGEST";
+    private static final String CONFIRMED_DIGEST_ATTRIBUTE = OAuthBindingCookie.class.getName() + ".CONFIRMED_DIGEST";
 
     /** 인가 요청 저장소가 결합을 확인한 뒤 digest를 요청에 남긴다. 결과 저장은 쿠키를 다시 읽지 않는다. */
     public static void confirm(HttpServletRequest request, String digest) {
@@ -33,7 +32,7 @@ public class OAuthBindingCookie {
 
     public static Optional<String> confirmedDigest(HttpServletRequest request) {
         return Optional.ofNullable(request.getAttribute(CONFIRMED_DIGEST_ATTRIBUTE))
-            .map(String.class::cast);
+                .map(String.class::cast);
     }
 
     public Optional<String> nonce(HttpServletRequest request) {
@@ -42,10 +41,10 @@ public class OAuthBindingCookie {
             return Optional.empty();
         }
         return Arrays.stream(cookies)
-            .filter(cookie -> name().equals(cookie.getName()))
-            .map(Cookie::getValue)
-            .filter(value -> value != null && !value.isBlank())
-            .findFirst();
+                .filter(cookie -> name().equals(cookie.getName()))
+                .map(Cookie::getValue)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst();
     }
 
     /** 서버는 설정에 맞는 이름 하나만 읽고 쓴다. 운영에서는 접두사 없는 이름을 받지 않는다. */
@@ -55,11 +54,11 @@ public class OAuthBindingCookie {
 
     public ResponseCookie issue(String nonce) {
         return ResponseCookie.from(name(), nonce)
-            .httpOnly(true)
-            .secure(properties.isBindingCookieSecure())
-            .sameSite("Lax")
-            .path("/")
-            .maxAge(properties.getAuthorizationRequestTtl().plus(properties.getResultTtl()))
-            .build();
+                .httpOnly(true)
+                .secure(properties.isBindingCookieSecure())
+                .sameSite("Lax")
+                .path("/")
+                .maxAge(properties.getAuthorizationRequestTtl().plus(properties.getResultTtl()))
+                .build();
     }
 }

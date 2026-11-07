@@ -28,13 +28,12 @@ public class OAuthLoginService {
     private final Clock clock;
 
     public OAuthLoginService(
-        OAuthAccountRepository oauthAccountRepository,
-        UserRepository userRepository,
-        OAuthSignupSessionStore signupSessionStore,
-        OAuthResultStore resultStore,
-        OAuthOpaqueValueService opaqueValueService,
-        Clock clock
-    ) {
+            OAuthAccountRepository oauthAccountRepository,
+            UserRepository userRepository,
+            OAuthSignupSessionStore signupSessionStore,
+            OAuthResultStore resultStore,
+            OAuthOpaqueValueService opaqueValueService,
+            Clock clock) {
         this.oauthAccountRepository = oauthAccountRepository;
         this.userRepository = userRepository;
         this.signupSessionStore = signupSessionStore;
@@ -44,8 +43,8 @@ public class OAuthLoginService {
     }
 
     public String completeAuthentication(OAuthUserIdentity identity, String bindingDigest) {
-        Optional<OAuthAccount> existingAccount = oauthAccountRepository
-            .findByProviderAndProviderUserId(identity.provider(), identity.providerUserId());
+        Optional<OAuthAccount> existingAccount =
+                oauthAccountRepository.findByProviderAndProviderUserId(identity.provider(), identity.providerUserId());
         if (existingAccount.isPresent()) {
             return existingLogin(existingAccount.orElseThrow().getUser(), bindingDigest);
         }
@@ -56,13 +55,12 @@ public class OAuthLoginService {
 
         String signupSessionId = opaqueValueService.generate();
         signupSessionStore.save(new OAuthSignupSession(
-            signupSessionId,
-            identity.provider(),
-            identity.providerUserId(),
-            identity.email(),
-            identity.emailVerified(),
-            Instant.now(clock)
-        ));
+                signupSessionId,
+                identity.provider(),
+                identity.providerUserId(),
+                identity.email(),
+                identity.emailVerified(),
+                Instant.now(clock)));
         return resultStore.saveSignupRequired(signupSessionId, bindingDigest);
     }
 

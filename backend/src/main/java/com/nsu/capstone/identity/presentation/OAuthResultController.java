@@ -22,22 +22,15 @@ public class OAuthResultController {
     private final OAuthResultService resultService;
     private final OAuthBindingCookie bindingCookie;
 
-    public OAuthResultController(
-        OAuthResultService resultService,
-        OAuthBindingCookie bindingCookie
-    ) {
+    public OAuthResultController(OAuthResultService resultService, OAuthBindingCookie bindingCookie) {
         this.resultService = resultService;
         this.bindingCookie = bindingCookie;
     }
 
     @PostMapping
     public OAuthResultResponse exchange(
-        @Valid @RequestBody OAuthResultExchangeRequest request,
-        HttpServletRequest httpRequest
-    ) {
+            @Valid @RequestBody OAuthResultExchangeRequest request, HttpServletRequest httpRequest) {
         return resultService.exchange(
-            request.code(),
-            bindingCookie.nonce(httpRequest).orElse(null)
-        );
+                request.code(), bindingCookie.nonce(httpRequest).orElse(null));
     }
 }

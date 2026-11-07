@@ -55,12 +55,20 @@ class OAuthBindingCookieTest {
     @Test
     void readsOnlyTheCookieNameMatchingTheConfiguration() {
         assertTrue(cookie(true)
-            .nonce(requestWith("NSU_OAUTH_BINDING_DEV", "nonce")).isEmpty());
+                .nonce(requestWith("NSU_OAUTH_BINDING_DEV", "nonce"))
+                .isEmpty());
         assertTrue(cookie(false)
-            .nonce(requestWith("__Host-NSU_OAUTH_BINDING", "nonce")).isEmpty());
-        assertEquals("nonce", cookie(true)
-            .nonce(requestWith("__Host-NSU_OAUTH_BINDING", "nonce")).orElseThrow());
-        assertEquals("nonce", cookie(false)
-            .nonce(requestWith("NSU_OAUTH_BINDING_DEV", "nonce")).orElseThrow());
+                .nonce(requestWith("__Host-NSU_OAUTH_BINDING", "nonce"))
+                .isEmpty());
+        assertEquals(
+                "nonce",
+                cookie(true)
+                        .nonce(requestWith("__Host-NSU_OAUTH_BINDING", "nonce"))
+                        .orElseThrow());
+        assertEquals(
+                "nonce",
+                cookie(false)
+                        .nonce(requestWith("NSU_OAUTH_BINDING_DEV", "nonce"))
+                        .orElseThrow());
     }
 }

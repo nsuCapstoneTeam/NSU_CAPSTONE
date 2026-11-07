@@ -4,12 +4,7 @@ import com.nsu.capstone.global.exception.ErrorCode;
 import java.util.UUID;
 
 public record OAuthResult(
-    Type type,
-    UUID userId,
-    String oauthSignupSessionId,
-    ErrorCode errorCode,
-    String bindingDigest
-) {
+        Type type, UUID userId, String oauthSignupSessionId, ErrorCode errorCode, String bindingDigest) {
 
     public enum Type {
         LOGIN,

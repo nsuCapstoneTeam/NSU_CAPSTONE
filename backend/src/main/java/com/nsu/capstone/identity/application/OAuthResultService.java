@@ -27,12 +27,11 @@ public class OAuthResultService {
     private final OAuthOpaqueValueService opaqueValueService;
 
     public OAuthResultService(
-        OAuthResultStore resultStore,
-        OAuthSignupSessionStore signupSessionStore,
-        UserRepository userRepository,
-        JwtAccessTokenService accessTokenService,
-        OAuthOpaqueValueService opaqueValueService
-    ) {
+            OAuthResultStore resultStore,
+            OAuthSignupSessionStore signupSessionStore,
+            UserRepository userRepository,
+            JwtAccessTokenService accessTokenService,
+            OAuthOpaqueValueService opaqueValueService) {
         this.resultStore = resultStore;
         this.signupSessionStore = signupSessionStore;
         this.userRepository = userRepository;
@@ -45,8 +44,8 @@ public class OAuthResultService {
      * 맞지 않거나 쿠키가 없으면 결과가 없을 때와 같은 오류다. 결과는 이미 지워졌다.
      */
     public OAuthResultResponse exchange(String code, String bindingNonce) {
-        OAuthResult result = resultStore.consume(code)
-            .orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_RESULT_INVALID));
+        OAuthResult result =
+                resultStore.consume(code).orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_RESULT_INVALID));
         if (!bindingMatches(result, bindingNonce)) {
             throw new BusinessException(ErrorCode.OAUTH_RESULT_INVALID);
         }
@@ -62,14 +61,14 @@ public class OAuthResultService {
             return false;
         }
         return MessageDigest.isEqual(
-            opaqueValueService.digest(bindingNonce).getBytes(StandardCharsets.UTF_8),
-            result.bindingDigest().getBytes(StandardCharsets.UTF_8)
-        );
+                opaqueValueService.digest(bindingNonce).getBytes(StandardCharsets.UTF_8),
+                result.bindingDigest().getBytes(StandardCharsets.UTF_8));
     }
 
     private OAuthResultResponse login(OAuthResult result) {
-        User user = userRepository.findById(result.userId())
-            .orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_AUTHENTICATION_FAILED));
+        User user = userRepository
+                .findById(result.userId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_AUTHENTICATION_FAILED));
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new BusinessException(ErrorCode.OAUTH_AUTHENTICATION_FAILED);
         }
@@ -79,11 +78,8 @@ public class OAuthResultService {
 
     private OAuthResultResponse signupRequired(OAuthResult result) {
         OAuthSignupSession session = signupSessionStore
-            .findById(result.oauthSignupSessionId())
-            .orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_RESULT_INVALID));
-        return OAuthResultResponse.signupRequired(
-            session.oauthSignupSessionId(),
-            session.emailVerified()
-        );
+                .findById(result.oauthSignupSessionId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_RESULT_INVALID));
+        return OAuthResultResponse.signupRequired(session.oauthSignupSessionId(), session.emailVerified());
     }
 }

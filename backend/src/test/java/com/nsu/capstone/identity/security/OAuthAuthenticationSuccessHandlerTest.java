@@ -29,23 +29,17 @@ class OAuthAuthenticationSuccessHandlerTest {
     private static final String DIGEST = "confirmed-digest";
 
     private final OAuthUserIdentityNormalizerRegistry normalizerRegistry =
-        mock(OAuthUserIdentityNormalizerRegistry.class);
+            mock(OAuthUserIdentityNormalizerRegistry.class);
     private final OAuthLoginService loginService = mock(OAuthLoginService.class);
     private final OAuthResultStore resultStore = mock(OAuthResultStore.class);
-    private final OAuthFrontendRedirectService redirectService =
-        mock(OAuthFrontendRedirectService.class);
+    private final OAuthFrontendRedirectService redirectService = mock(OAuthFrontendRedirectService.class);
     private OAuthAuthenticationSuccessHandler handler;
     private OAuth2AuthenticationToken authentication;
     private OAuthUserIdentity identity;
 
     @BeforeEach
     void setUp() {
-        handler = new OAuthAuthenticationSuccessHandler(
-            normalizerRegistry,
-            loginService,
-            resultStore,
-            redirectService
-        );
+        handler = new OAuthAuthenticationSuccessHandler(normalizerRegistry, loginService, resultStore, redirectService);
         authentication = mock(OAuth2AuthenticationToken.class);
         OidcUser oidcUser = mock(OidcUser.class);
         identity = new OAuthUserIdentity(OAuthProvider.GOOGLE, "subject", null, false);
@@ -83,11 +77,10 @@ class OAuthAuthenticationSuccessHandlerTest {
 
     @Test
     void convertsExpectedDataAccessFailureToOneTimeErrorResult() throws Exception {
-        when(loginService.completeAuthentication(identity, DIGEST)).thenThrow(
-            new DataAccessResourceFailureException("database unavailable")
-        );
+        when(loginService.completeAuthentication(identity, DIGEST))
+                .thenThrow(new DataAccessResourceFailureException("database unavailable"));
         when(resultStore.saveError(ErrorCode.OAUTH_AUTHENTICATION_FAILED, DIGEST))
-            .thenReturn("safe-result-code");
+                .thenReturn("safe-result-code");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         handler.onAuthenticationSuccess(confirmedRequest(), response, authentication);
@@ -98,12 +91,10 @@ class OAuthAuthenticationSuccessHandlerTest {
 
     @Test
     void usesFixedFallbackRedirectWhenRedisCannotSaveErrorResult() throws Exception {
-        when(loginService.completeAuthentication(identity, DIGEST)).thenThrow(
-            new DataAccessResourceFailureException("database unavailable")
-        );
-        when(resultStore.saveError(ErrorCode.OAUTH_AUTHENTICATION_FAILED, DIGEST)).thenThrow(
-            new DataAccessResourceFailureException("redis unavailable")
-        );
+        when(loginService.completeAuthentication(identity, DIGEST))
+                .thenThrow(new DataAccessResourceFailureException("database unavailable"));
+        when(resultStore.saveError(ErrorCode.OAUTH_AUTHENTICATION_FAILED, DIGEST))
+                .thenThrow(new DataAccessResourceFailureException("redis unavailable"));
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         handler.onAuthenticationSuccess(confirmedRequest(), response, authentication);
@@ -115,11 +106,9 @@ class OAuthAuthenticationSuccessHandlerTest {
 
     @Test
     void preservesBusinessErrorResultHandling() throws Exception {
-        when(loginService.completeAuthentication(identity, DIGEST)).thenThrow(
-            new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS)
-        );
-        when(resultStore.saveError(ErrorCode.EMAIL_ALREADY_EXISTS, DIGEST))
-            .thenReturn("business-error-code");
+        when(loginService.completeAuthentication(identity, DIGEST))
+                .thenThrow(new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS));
+        when(resultStore.saveError(ErrorCode.EMAIL_ALREADY_EXISTS, DIGEST)).thenReturn("business-error-code");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         handler.onAuthenticationSuccess(confirmedRequest(), response, authentication);
@@ -133,13 +122,9 @@ class OAuthAuthenticationSuccessHandlerTest {
         when(loginService.completeAuthentication(identity, DIGEST)).thenThrow(programmingError);
 
         assertThrows(
-            IllegalStateException.class,
-            () -> handler.onAuthenticationSuccess(
-                confirmedRequest(),
-                new MockHttpServletResponse(),
-                authentication
-            )
-        );
+                IllegalStateException.class,
+                () -> handler.onAuthenticationSuccess(
+                        confirmedRequest(), new MockHttpServletResponse(), authentication));
 
         verify(resultStore, never()).saveError(ErrorCode.OAUTH_AUTHENTICATION_FAILED, DIGEST);
     }

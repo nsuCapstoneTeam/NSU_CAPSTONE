@@ -1,8 +1,8 @@
 package com.nsu.capstone.identity.oauth;
 
 import java.time.Duration;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.StringUtils;
 
 @ConfigurationProperties(prefix = "auth.oauth")
@@ -234,6 +234,5 @@ public class OAuthProperties implements InitializingBean {
         public void setClientAuthenticationMethod(String clientAuthenticationMethod) {
             this.clientAuthenticationMethod = clientAuthenticationMethod;
         }
-
     }
 }
