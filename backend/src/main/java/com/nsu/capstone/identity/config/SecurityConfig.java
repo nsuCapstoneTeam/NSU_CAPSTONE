@@ -1,14 +1,15 @@
 package com.nsu.capstone.identity.config;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,120 +26,84 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 public class SecurityConfig {
 
     private static final RequestMatcher LOGIN_ENDPOINT =
-        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login");
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login");
 
     private static final RequestMatcher OAUTH_AUTHORIZATION_ENDPOINT =
-        PathPatternRequestMatcher.pathPattern(
-            HttpMethod.GET,
-            "/api/v1/auth/oauth/authorization/{provider}"
-        );
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/auth/oauth/authorization/{provider}");
 
     private static final RequestMatcher OAUTH_CALLBACK_ENDPOINT =
-        PathPatternRequestMatcher.pathPattern(
-            HttpMethod.GET,
-            "/api/v1/auth/oauth/callback/{registrationId}"
-        );
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/auth/oauth/callback/{registrationId}");
 
     private static final RequestMatcher OAUTH_RESULT_ENDPOINT =
-        PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/oauth/result");
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/oauth/result");
 
-    private static final RequestMatcher OAUTH_PUBLIC_ENDPOINTS = new OrRequestMatcher(
-        OAUTH_AUTHORIZATION_ENDPOINT,
-        OAUTH_CALLBACK_ENDPOINT,
-        OAUTH_RESULT_ENDPOINT
-    );
+    private static final RequestMatcher OAUTH_PUBLIC_ENDPOINTS =
+            new OrRequestMatcher(OAUTH_AUTHORIZATION_ENDPOINT, OAUTH_CALLBACK_ENDPOINT, OAUTH_RESULT_ENDPOINT);
 
     // 역할 검사를 본문 파싱보다 먼저 한다. @PreAuthorize만 두면 깨진 JSON을 보낸 ARTIST가 403이 아니라 400을 받는다(05 §4 검사 순서)
     private static final RequestMatcher EVENT_PARTNER_PROFILE_ENDPOINT =
-        PathPatternRequestMatcher.pathPattern("/api/v1/me/event-partner-profile");
+            PathPatternRequestMatcher.pathPattern("/api/v1/me/event-partner-profile");
 
     // shortcut: API 문서 경로를 로그인 없이 연다(배포 서버 없음), 배포 설계(ADR-006) 때 막거나 끈다
     private static final RequestMatcher API_DOCS_ENDPOINTS = new OrRequestMatcher(
-        PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/v3/api-docs/**"),
-        PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/scalar/**")
-    );
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/v3/api-docs/**"),
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/scalar/**"));
 
     private static final RequestMatcher PRE_LOGIN_SIGNUP_ENDPOINTS = new OrRequestMatcher(
-        PathPatternRequestMatcher.pathPattern(
-            HttpMethod.POST, "/api/v1/auth/signup/artist/oauth/session"),
-        PathPatternRequestMatcher.pathPattern(
-            HttpMethod.POST, "/api/v1/auth/signup/artist/oauth"),
-        signupEndpoints("artist"),
-        signupEndpoints("event-partner")
-    );
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/signup/artist/oauth/session"),
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/signup/artist/oauth"),
+            signupEndpoints("artist"),
+            signupEndpoints("event-partner"));
 
     private static RequestMatcher signupEndpoints(String rolePath) {
         String basePath = "/api/v1/auth/signup/" + rolePath;
         return new OrRequestMatcher(
-            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, basePath),
-            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, basePath + "/session"),
-            PathPatternRequestMatcher.pathPattern(
-                HttpMethod.POST,
-                basePath + "/session/email-verification/send"
-            ),
-            PathPatternRequestMatcher.pathPattern(
-                HttpMethod.POST,
-                basePath + "/session/email-verification/confirm"
-            ),
-            PathPatternRequestMatcher.pathPattern(
-                HttpMethod.POST,
-                basePath + "/session/phone-verification/send"
-            ),
-            PathPatternRequestMatcher.pathPattern(
-                HttpMethod.POST,
-                basePath + "/session/phone-verification/confirm"
-            ),
-            PathPatternRequestMatcher.pathPattern(
-                HttpMethod.PUT,
-                basePath + "/session/required-terms-agreement"
-            ),
-            PathPatternRequestMatcher.pathPattern(
-                HttpMethod.POST,
-                basePath + "/session/adult-confirmation"
-            )
-        );
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, basePath),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, basePath + "/session"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, basePath + "/session/email-verification/send"),
+                PathPatternRequestMatcher.pathPattern(
+                        HttpMethod.POST, basePath + "/session/email-verification/confirm"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, basePath + "/session/phone-verification/send"),
+                PathPatternRequestMatcher.pathPattern(
+                        HttpMethod.POST, basePath + "/session/phone-verification/confirm"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, basePath + "/session/required-terms-agreement"),
+                PathPatternRequestMatcher.pathPattern(HttpMethod.POST, basePath + "/session/adult-confirmation"));
     }
 
     @Bean
     SecurityFilterChain securityFilterChain(
-        HttpSecurity http,
-        JwtAuthenticationConverter jwtAuthenticationConverter,
-        JsonAuthenticationEntryPoint authenticationEntryPoint,
-        JsonAccessDeniedHandler accessDeniedHandler,
-        ObjectProvider<OAuthSecurityConfigurer> oauthSecurityConfigurerProvider
-    ) throws Exception {
-        http
-            .authorizeHttpRequests(authorize -> authorize
-                .requestMatchers(
-                    PRE_LOGIN_SIGNUP_ENDPOINTS,
-                    LOGIN_ENDPOINT,
-                    OAUTH_PUBLIC_ENDPOINTS,
-                    API_DOCS_ENDPOINTS
-                ).permitAll()
-                .requestMatchers(EVENT_PARTNER_PROFILE_ENDPOINT).hasRole("EVENT_PARTNER")
-                .anyRequest().authenticated()
-            )
-            .csrf(csrf -> csrf.ignoringRequestMatchers(
-                PRE_LOGIN_SIGNUP_ENDPOINTS,
-                LOGIN_ENDPOINT,
-                OAUTH_RESULT_ENDPOINT
-            ))
-            .sessionManagement(session -> session
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            )
-            .requestCache(cache -> cache.requestCache(new NullRequestCache()))
-            .exceptionHandling(exceptions -> exceptions
-                .authenticationEntryPoint(authenticationEntryPoint)
-                .accessDeniedHandler(accessDeniedHandler)
-            )
-            .oauth2ResourceServer(resourceServer -> resourceServer
-                .authenticationEntryPoint(authenticationEntryPoint)
-                .accessDeniedHandler(accessDeniedHandler)
-                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))
-            );
+            HttpSecurity http,
+            JwtAuthenticationConverter jwtAuthenticationConverter,
+            JsonAuthenticationEntryPoint authenticationEntryPoint,
+            JsonAccessDeniedHandler accessDeniedHandler,
+            ObjectProvider<OAuthSecurityConfigurer> oauthSecurityConfigurerProvider)
+            throws Exception {
+        http.authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(
+                                PRE_LOGIN_SIGNUP_ENDPOINTS, LOGIN_ENDPOINT, OAUTH_PUBLIC_ENDPOINTS, API_DOCS_ENDPOINTS)
+                        .permitAll()
+                        .requestMatchers(EVENT_PARTNER_PROFILE_ENDPOINT)
+                        .hasRole("EVENT_PARTNER")
+                        .anyRequest()
+                        .authenticated())
+                // CSRF는 브라우저가 쿠키·세션 같은 자격 증명을 자동으로 붙일 때만 의미가 있다.
+                // 이 서버는 Authorization 헤더의 Bearer 토큰으로만 인증한다.
+                // 쿠키·세션·폼 로그인·HTTP Basic을 도입하면 다시 판단한다(ADR authentication/00).
+                // 인가 검사보다 먼저 쓰기 요청에 응답하는 필터(요청 제한 등)를 추가할 때도 다시 판단한다.
+                .csrf(AbstractHttpConfigurer::disable)
+                // 세션이 없어 지울 것이 없다. CSRF를 끄면 기본 logout이 모든 메서드의 /logout을 302로 받는다(ADR Decision 4)
+                .logout(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .requestCache(cache -> cache.requestCache(new NullRequestCache()))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
+                .oauth2ResourceServer(resourceServer -> resourceServer
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
 
-        OAuthSecurityConfigurer oauthSecurityConfigurer =
-            oauthSecurityConfigurerProvider.getIfAvailable();
+        OAuthSecurityConfigurer oauthSecurityConfigurer = oauthSecurityConfigurerProvider.getIfAvailable();
         if (oauthSecurityConfigurer != null) {
             oauthSecurityConfigurer.configure(http);
         }
@@ -148,9 +113,7 @@ public class SecurityConfig {
 
     @Bean
     AuthenticationManager authenticationManager(
-        UserDetailsService userDetailsService,
-        PasswordEncoder passwordEncoder
-    ) {
+            UserDetailsService userDetailsService, PasswordEncoder passwordEncoder) {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
         return new ProviderManager(provider);
@@ -158,8 +121,7 @@ public class SecurityConfig {
 
     @Bean
     JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtGrantedAuthoritiesConverter authoritiesConverter =
-            new JwtGrantedAuthoritiesConverter();
+        JwtGrantedAuthoritiesConverter authoritiesConverter = new JwtGrantedAuthoritiesConverter();
         authoritiesConverter.setAuthoritiesClaimName("role");
         authoritiesConverter.setAuthorityPrefix("ROLE_");
 
