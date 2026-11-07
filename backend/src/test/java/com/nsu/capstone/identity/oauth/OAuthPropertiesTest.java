@@ -88,6 +88,26 @@ class OAuthPropertiesTest {
         org.junit.jupiter.api.Assertions.assertTrue(exception.getMessage().contains("provider-read-timeout"));
     }
 
+    @Test
+    void rejectsProviderTimeoutsWhoseWorstCaseReachesCallbackProcessingMargin() {
+        OAuthProperties properties = new OAuthProperties();
+        properties.setProviderConnectTimeout(java.time.Duration.ofSeconds(10));
+        properties.setProviderReadTimeout(java.time.Duration.ofSeconds(10));
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, properties::afterPropertiesSet);
+        org.junit.jupiter.api.Assertions.assertTrue(exception.getMessage().contains("provider-connect-timeout"));
+        org.junit.jupiter.api.Assertions.assertTrue(exception.getMessage().contains("provider-read-timeout"));
+    }
+
+    @Test
+    void acceptsProviderTimeoutsJustBelowCallbackProcessingMargin() {
+        OAuthProperties properties = new OAuthProperties();
+        properties.setProviderConnectTimeout(java.time.Duration.ofSeconds(10));
+        properties.setProviderReadTimeout(java.time.Duration.ofMillis(9_999));
+
+        assertDoesNotThrow(properties::afterPropertiesSet);
+    }
+
     private OAuthProperties enabledProperties() {
         OAuthProperties properties = new OAuthProperties();
         properties.setEnabled(true);

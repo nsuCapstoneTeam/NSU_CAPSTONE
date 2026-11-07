@@ -2,7 +2,6 @@ package com.nsu.capstone.identity.oauth;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;
 import org.springframework.http.ResponseCookie;
@@ -17,9 +16,6 @@ public class OAuthBindingCookie {
 
     private static final String HOST_PREFIXED_NAME = "__Host-NSU_OAUTH_BINDING";
     private static final String DEVELOPMENT_NAME = "NSU_OAUTH_BINDING_DEV";
-
-    /** 결과 TTL은 Provider 호출 뒤부터 세므로, 인가 요청 만료 직전 콜백도 결과를 교환할 수 있게 쿠키에 더하는 여유. */
-    private static final Duration CALLBACK_PROCESSING_MARGIN = Duration.ofMinutes(1);
 
     private final OAuthProperties properties;
 
@@ -65,7 +61,7 @@ public class OAuthBindingCookie {
                 .maxAge(properties
                         .getAuthorizationRequestTtl()
                         .plus(properties.getResultTtl())
-                        .plus(CALLBACK_PROCESSING_MARGIN))
+                        .plus(OAuthProperties.CALLBACK_PROCESSING_MARGIN))
                 .build();
     }
 }
