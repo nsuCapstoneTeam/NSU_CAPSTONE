@@ -79,6 +79,20 @@ npm run dev
 
 > 체험 데이터를 처음 상태로 되돌리려면 브라우저 개발자 도구 → Application → Local Storage에서 `hm-mvp-`로 시작하는 항목과 `hallaemallae-theme`를 지우세요.
 
+### 코드 검사 (ESLint)
+
+PR마다 CI의 `frontend-lint` job이 `npm ci --ignore-scripts` 뒤 `npm run lint -- --max-warnings=0`을 실행한다. 경고도 오류로 보므로 하나라도 있으면 PR을 머지할 수 없다.
+
+- 검사 대상은 `frontend/` 전체다. 바뀐 파일만 검사하지 않는다.
+- CI는 Node 24를 쓴다. 로컬에서도 같은 명령으로 확인한다: `npm run lint -- --max-warnings=0`
+
+push 전에 같은 검사를 돌리려면 레포를 clone한 뒤 한 번만 설치한다. 설치 방법은 [`backend/README.md`](../backend/README.md)의 "코드 형식 검사 (Spotless)"와 같다. `frontend/` 안의 `.js`·`.jsx` 파일이 바뀌었을 때만 pre-push에서 ESLint가 실행된다.
+
+```sh
+brew install lefthook
+lefthook install
+```
+
 ## 폴더 구조
 
 ```text
