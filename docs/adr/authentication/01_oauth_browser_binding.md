@@ -3,7 +3,7 @@
 - 상태: **Proposed** (PR 리뷰에서 확정)
 - 결정일: **2026-11-07** (NSU-142). 사람 결정(김동엽): 미루지 않고 지금 고친다. 방식은 HttpOnly 쿠키 nonce다
 - 요구사항: SSOT 최종 승인 v1.17.1(현재 리비전 v1.19 초안)의 `SEC-118`("OAuth State Validation", "CSRF 방어"). 리비전 사이에 바뀌지 않았다
-- 설계 리뷰: Codex adversarial review(grill `20261107T043427Z-a1099d9a`) 1회차 지적(실패한 흐름이 다른 흐름의 쿠키를 지움)과 2회차 지적(늦게 도착한 삭제 응답이 새 흐름의 쿠키를 지움)을 Decision 2~4에 반영했다. 결과: 결합 쿠키는 인가 시작에서만 쓰고 지우지 않는다
+- 설계 리뷰: Codex adversarial review(grill `20261107T043427Z-a1099d9a`) 1회차 지적(실패한 흐름이 다른 흐름의 쿠키를 지움)과 2회차 지적(늦게 도착한 삭제 응답이 새 흐름의 쿠키를 지움)을 Decision 2~4에 반영했다. 결과: 결합 쿠키는 인가 시작에서만 쓰고 지우지 않는다. 3회차 지적(쿠키 주입)으로 `__Host-` 접두사와 HSTS를 더했다
 - 관련: [ADR authentication/00](./00_csrf_protection_for_bearer_api.md) Decision 6·7, [아티스트 OAuth 가입 API §OAuth 브라우저 결합](../../api/artist-oauth-signup.md), NSU-142, NSU-96, NSU-37(외부 계정 연결), NSU-129·PR #205(시연 서버 공개 조건), [RFC 9700 §4.7.1](https://www.rfc-editor.org/rfc/rfc9700.html#section-4.7.1)
 
 ---
@@ -11,8 +11,10 @@
 ## Decision
 
 1. **OAuth 인가를 시작할 때 브라우저 결합 nonce를 쿠키로 내린다.**
-   - 서버가 무작위 nonce(32바이트 이상, `SecureRandom`)를 만들어 쿠키 `NSU_OAUTH_BINDING`으로 내린다.
-   - 속성: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/api/v1/auth/oauth`, `Max-Age`는 인가 요청 TTL + 결과 코드 TTL(기본 6분). `Domain`은 두지 않는다.
+   - 서버가 무작위 nonce(32바이트 이상, `SecureRandom`)를 만들어 쿠키 `__Host-NSU_OAUTH_BINDING`으로 내린다.
+   - 속성: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, `Domain` 없음, `Max-Age`는 인가 요청 TTL + 결과 코드 TTL(기본 6분).
+   - `__Host-` 접두사를 쓰는 이유: 브라우저는 이 접두사 쿠키를 HTTPS로, 같은 호스트가, `Path=/`·`Domain` 없이 내린 것만 받는다. 그래서 HTTPS 강제 전의 HTTP 응답을 조작하는 공격자나 다른 서브도메인이 공격자 nonce를 피해자 브라우저에 심을 수 없다(쿠키 주입, rfc6265bis §8.6, 설계 리뷰 3회차 지적). 받은 `Cookie` 헤더에는 속성이 없어 서버가 출처를 구별할 수 없으므로, 접두사가 유일한 보장이다. `Path=/`라 모든 요청에 실리지만 인증 수단이 아니고 `HttpOnly`다.
+   - 개발 환경(HTTP)만 설정 `auth.oauth.binding-cookie-secure=false`로 이름 `NSU_OAUTH_BINDING_DEV`(접두사·`Secure` 없음)를 쓴다. 서버는 설정에 맞는 이름 하나만 읽는다. 운영(`true`, 기본값)에서는 접두사 없는 이름을 받지 않는다.
    - nonce의 digest(기존 `OAuthOpaqueValueService.digest`)를 Redis 인가 요청(`RedisOAuth2AuthorizationRequestRepository`)에 함께 저장한다. 원문 nonce는 저장하지 않는다.
 2. **콜백은 쿠키 nonce가 맞을 때만 처리한다.**
    - 콜백의 `state`로 인가 요청을 찾은 뒤, 요청의 쿠키 nonce digest가 저장된 digest와 같은지 상수 시간으로 비교한다.
@@ -28,8 +30,8 @@
    - 검증 시나리오: 흐름 A 시작 → B 시작 → (A 콜백 불일치 | 위조 콜백 `?code=x&state=x` | A 결과의 늦은 교환 | A 교환 응답 지연 → B 시작 응답 수신 → A 교환 응답 수신) 중 무엇이 일어나도 B는 끝까지 성공한다.
 5. **배포 전제**: 프런트와 API는 같은 출처다. nginx가 `https://<도메인>/`에서 React를, `https://<도메인>/api/`에서 Spring을 제공한다.
    - 그래서 결과 교환 `fetch`에 쿠키가 기본으로 실리고 CORS credentials 설정이 필요 없다.
-   - HTTPS가 필요하다(`Secure`). nginx는 `X-Forwarded-Proto`·`X-Forwarded-Host`를 넘기고 Spring은 `server.forward-headers-strategy=framework`를 쓴다. 이것이 없으면 OAuth `redirect_uri`와 쿠키 판단이 틀어진다.
-   - 로컬 개발은 Vite 프록시로 `/api`를 Spring에 넘겨 같은 출처로 만든다. `Secure`는 설정(`auth.oauth.binding-cookie-secure`, 기본 `true`)으로 개발에서만 끌 수 있다.
+   - HTTPS가 필요하다(`Secure`, `__Host-`). nginx는 HTTP를 HTTPS로 넘기고 `Strict-Transport-Security`(HSTS)를 보낸다. nginx는 `X-Forwarded-Proto`·`X-Forwarded-Host`를 넘기고 Spring은 `server.forward-headers-strategy=framework`를 쓴다. 이것이 없으면 OAuth `redirect_uri`와 쿠키 판단이 틀어진다.
+   - 로컬 개발은 Vite 프록시로 `/api`를 Spring에 넘겨 같은 출처로 만든다. HTTP 개발에서만 `auth.oauth.binding-cookie-secure=false`로 개발용 쿠키 이름을 쓴다(Decision 1).
 
 ## Context
 
@@ -82,7 +84,7 @@ ADR 00은 쿠키를 도입하면 CSRF 보호를 다시 판단하라고 한다. �
 ## Excluded
 
 - 프런트 변경: 없다(같은 출처 전제).
-- 쿠키 `__Host-`·`__Secure-` 접두사: 경로를 좁히면 `__Host-`를 쓸 수 없고, 개발에서 `Secure`를 끄면 `__Secure-`가 거절된다. 이름 없이 속성으로 같은 효과를 낸다.
+- 좁은 쿠키 경로(`Path=/api/v1/auth/oauth`): `__Host-`는 `Path=/`를 요구한다. 쿠키 주입 방지가 경로를 좁히는 것보다 중요하다(Decision 1).
 - 외부 계정 연결(NSU-37) 구현: 그 이슈에서 한다.
 
 ## Reused
