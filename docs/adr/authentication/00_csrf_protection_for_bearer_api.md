@@ -20,7 +20,9 @@
    - 쿠키로 인증하는 경로(Refresh Token 쿠키 등), 쿠키 세션, 폼 로그인, HTTP Basic
    - 인가 검사보다 먼저 쓰기 요청에 응답하는 필터(요청 제한, 시연 쓰기 차단 등. PR #205가 계획한다). 이런 필터가 경로만 보고 응답하면 토큰 없는 쓰기 요청이 `401`이 아닌 응답을 받는다
    - 이 조건을 테스트로도 지킨다: 필터 체인의 필터 목록, 그리고 로그인·OAuth 결과 응답과 `401` 응답에 `Set-Cookie`가 없음을 단언한다
-7. **이 ADR이 해결하지 않는 것**: OAuth를 통한 login CSRF. 기존 결함이며 이 변경으로 나빠지지도 좋아지지도 않는다(아래 "SEC-118 'CSRF 방어'와의 관계"). 피해가 커서(가입 탈취) 별도 이슈로 추적하고, 고치기 전에는 공개 환경에서 OAuth 가입·로그인을 켜지 않는 것을 권장한다. 이슈 생성과 이 조건은 사람이 정한다.
+7. **이 ADR이 해결하지 않는 것**: OAuth를 통한 login CSRF. 기존 결함이며 이 변경으로 나빠지지도 좋아지지도 않는다(아래 "SEC-118 'CSRF 방어'와의 관계").
+   - 2026-11-07 사람 결정(김동엽): 미루지 않고 지금 고친다. NSU-142와 [ADR authentication/01](./01_oauth_browser_binding.md)이 HttpOnly 쿠키 nonce로 콜백과 결과 교환을 시작 브라우저에 묶는다.
+   - 01의 쿠키는 인증 수단이 아니라 확인용 일회용 값이라 Decision 6에 따른 판단은 "CSRF 보호를 다시 켜지 않는다"다(01 "ADR 00 Decision 6과의 관계").
 
 ## Context
 
@@ -39,7 +41,7 @@ CSRF는 브라우저가 자격 증명(쿠키, 세션, HTTP Basic)을 요청에 �
 | 프런트는 accessToken을 sessionStorage에 두고 헤더로 보낸다 | `frontend/src/features/auth/api/auth-token.js`. `credentials: 'include'`·`withCredentials` 사용 없음 |
 | 인증 세션을 만들지 않는다 | `SessionCreationPolicy.STATELESS`, `NullRequestCache`. `OAuthSecurityConfigTest`가 세션 없음을 단언한다. 단 지금은 `CsrfFilter`가 토큰 없는 쓰기 요청마다 CSRF 토큰을 담을 세션을 만든다(`HttpSessionCsrfTokenRepository`). 이 변경으로 그 세션도 사라진다 |
 | OAuth 인가 요청 상태는 세션이 아니라 Redis에 둔다 | `RedisOAuth2AuthorizationRequestRepository` |
-| 서버 코드에 `Cookie`·`HttpSession` 사용이 없다 | `backend/src/main/java` 검색 결과 없음 |
+| 서버 코드에 `Cookie`·`HttpSession` 사용이 없다(이 ADR 결정 시점) | `backend/src/main/java` 검색 결과 없음. 이후 [01](./01_oauth_browser_binding.md)이 OAuth 경로에만 인증 수단이 아닌 결합 쿠키를 더한다 |
 | OAuth `state`는 Redis의 인가 요청을 찾는 키로만 쓰인다. 시작한 브라우저와 묶이지 않는다 | `RedisOAuth2AuthorizationRequestRepository.loadAuthorizationRequest`가 콜백의 `state`만으로 조회한다 |
 
 Spring Security 문서도 CSRF 보호를 끄기 전에 그것이 앱에 맞는지 판단하라고만 하고, 판단 기준은 브라우저가 자격 증명을 자동으로 보내는지다([CSRF 문서 7.1](https://docs.spring.io/spring-security/reference/7.0/servlet/exploits/csrf.html)).
@@ -105,7 +107,7 @@ A를 고른 이유: 계약(`401`)과 OAuth 동작 유지를 모두 만족하는 
 - 토큰 없는 쓰기 요청의 응답이 `403 ACCESS_DENIED`에서 `401 AUTHENTICATION_REQUIRED`로 바뀐다. 계약과 맞추는 변경이라 계약 문서는 바뀌지 않는다. 지금까지 `403`을 기대한 테스트는 `401`로 고친다.
 - 프런트는 쓰기 요청에서도 `401`을 받으면 로그인으로 보내는 처리 하나로 충분하다.
 - 쿠키·세션·폼 로그인·HTTP Basic을 도입하는 변경은 이 ADR을 다시 연다(Decision 6).
-- OAuth login CSRF는 남는다(Decision 7). 이 ADR 이전부터 있던 결함이다. 별도 이슈에서 콜백·결과 교환·외부 계정 연결의 시작 브라우저 결합을 설계한다. 그전에는 공개 환경에서 OAuth를 켜지 않는 것을 권장한다.
+- OAuth login CSRF는 이 ADR로는 남는다(Decision 7). 이 ADR 이전부터 있던 결함이며, NSU-142(ADR 01)가 콜백·결과 교환을 시작 브라우저에 묶어 고친다. 외부 계정 연결(NSU-37)도 같은 결합을 따른다.
 - 로그아웃·토큰 재발급(NSU-74), 인가 전 필터(PR #205)를 만드는 작업은 Decision 4·6을 따른다.
 - 검증: 실제 `SecurityFilterChain`에서 토큰 없는 `POST`·`PUT`·`DELETE /logout`과 OAuth 두 경로의 GET 외 요청이 `401 AUTHENTICATION_REQUIRED`인지 테스트한다. 필터 목록과 `Set-Cookie` 없음도 테스트한다(Decision 6).
 - 롤백: 이 변경은 설정과 클래스 하나라 커밋을 되돌리면 된다. DB·데이터 변경은 없다.
@@ -113,7 +115,7 @@ A를 고른 이유: 계약(`401`)과 OAuth 동작 유지를 모두 만족하는 
 ## Excluded
 
 - Refresh Token 쿠키 도입, CORS 설정 변경: 범위 밖이다. 도입하면 Decision 6에 따라 다시 판단한다.
-- OAuth 콜백 login CSRF 방어(시작 브라우저 결합): OAuth 흐름과 프런트를 함께 바꾸는 설계라 별도 이슈로 다룬다(Decision 7).
+- OAuth 콜백 login CSRF 방어(시작 브라우저 결합): NSU-142·ADR 01에서 다룬다(Decision 7).
 - 로그인·가입 API의 동작 변경: 없다.
 
 ## Reused

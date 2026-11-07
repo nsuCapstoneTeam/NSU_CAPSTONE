@@ -36,38 +36,46 @@ import org.springframework.security.oauth2.core.endpoint.PkceParameterNames;
 @Import(TestcontainersConfiguration.class)
 class OAuthRedisStoreIntegrationTest {
 
-    @Autowired RedisOAuth2AuthorizationRequestRepository authorizationRequestRepository;
-    @Autowired OAuthSignupSessionStore signupSessionStore;
-    @Autowired OAuthResultStore resultStore;
-    @Autowired OAuthOpaqueValueService opaqueValueService;
-    @Autowired OAuthProperties properties;
-    @Autowired StringRedisTemplate redisTemplate;
+    @Autowired
+    RedisOAuth2AuthorizationRequestRepository authorizationRequestRepository;
+
+    @Autowired
+    OAuthSignupSessionStore signupSessionStore;
+
+    @Autowired
+    OAuthResultStore resultStore;
+
+    @Autowired
+    OAuthOpaqueValueService opaqueValueService;
+
+    @Autowired
+    OAuthProperties properties;
+
+    @Autowired
+    StringRedisTemplate redisTemplate;
 
     @Test
     void authorizationRequestHasFiveMinuteTtlAndIsConsumedOnce() {
         String state = "state-" + UUID.randomUUID();
-        OAuth2AuthorizationRequest authorizationRequest = OAuth2AuthorizationRequest
-            .authorizationCode()
-            .authorizationUri("https://provider.test/authorize")
-            .clientId("client")
-            .redirectUri("https://backend.test/api/v1/auth/oauth/callback/google")
-            .scopes(java.util.Set.of("openid", "email"))
-            .state(state)
-            .additionalParameters(Map.of("nonce", "nonce-value"))
-            .attributes(Map.of(
-                "registration_id", "google",
-                "nonce", "nonce-value",
-                PkceParameterNames.CODE_VERIFIER, "pkce-code-verifier"
-            ))
-            .build();
+        OAuth2AuthorizationRequest authorizationRequest = OAuth2AuthorizationRequest.authorizationCode()
+                .authorizationUri("https://provider.test/authorize")
+                .clientId("client")
+                .redirectUri("https://backend.test/api/v1/auth/oauth/callback/google")
+                .scopes(java.util.Set.of("openid", "email"))
+                .state(state)
+                .additionalParameters(Map.of("nonce", "nonce-value"))
+                .attributes(Map.of(
+                        "registration_id",
+                        "google",
+                        "nonce",
+                        "nonce-value",
+                        PkceParameterNames.CODE_VERIFIER,
+                        "pkce-code-verifier"))
+                .build();
         MockHttpServletRequest saveRequest = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        authorizationRequestRepository.saveAuthorizationRequest(
-            authorizationRequest,
-            saveRequest,
-            response
-        );
+        authorizationRequestRepository.saveAuthorizationRequest(authorizationRequest, saveRequest, response);
 
         String key = OAuthRedisKeys.authorization(opaqueValueService.digest(state));
         long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
@@ -75,15 +83,13 @@ class OAuthRedisStoreIntegrationTest {
 
         MockHttpServletRequest callback = new MockHttpServletRequest();
         callback.setParameter("state", state);
-        OAuth2AuthorizationRequest consumed = authorizationRequestRepository
-            .removeAuthorizationRequest(callback, response);
+        callback.setCookies(response.getCookie("__Host-NSU_OAUTH_BINDING"));
+        OAuth2AuthorizationRequest consumed =
+                authorizationRequestRepository.removeAuthorizationRequest(callback, response);
         assertNotNull(consumed);
         assertEquals(state, consumed.getState());
         assertEquals("nonce-value", consumed.getAdditionalParameters().get("nonce"));
-        assertEquals(
-            "pkce-code-verifier",
-            consumed.getAttribute(PkceParameterNames.CODE_VERIFIER)
-        );
+        assertEquals("pkce-code-verifier", consumed.getAttribute(PkceParameterNames.CODE_VERIFIER));
         assertNull(authorizationRequestRepository.removeAuthorizationRequest(callback, response));
     }
 
@@ -91,13 +97,12 @@ class OAuthRedisStoreIntegrationTest {
     void oauthSignupSessionHasThirtyMinuteTtlAndPreservesVerificationState() {
         String sessionId = opaqueValueService.generate();
         OAuthSignupSession session = new OAuthSignupSession(
-            sessionId,
-            OAuthProvider.NAVER,
-            "provider-user-id",
-            "oauth@example.com",
-            false,
-            Instant.parse("2026-10-07T00:00:00Z")
-        );
+                sessionId,
+                OAuthProvider.NAVER,
+                "provider-user-id",
+                "oauth@example.com",
+                false,
+                Instant.parse("2026-10-07T00:00:00Z"));
 
         signupSessionStore.save(session);
 
@@ -114,7 +119,7 @@ class OAuthRedisStoreIntegrationTest {
     @Test
     void oauthResultHasOneMinuteTtlAndIsConsumedOnce() {
         UUID userId = UUID.randomUUID();
-        String code = resultStore.saveLogin(userId);
+        String code = resultStore.saveLogin(userId, "binding-digest");
         String key = OAuthRedisKeys.result(opaqueValueService.digest(code));
 
         long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
@@ -122,12 +127,13 @@ class OAuthRedisStoreIntegrationTest {
         OAuthResult result = resultStore.consume(code).orElseThrow();
         assertEquals(OAuthResult.Type.LOGIN, result.type());
         assertEquals(userId, result.userId());
+        assertEquals("binding-digest", result.bindingDigest());
         assertTrue(resultStore.consume(code).isEmpty());
     }
 
     @Test
     void concurrentOAuthResultConsumptionHasSingleWinner() throws Exception {
-        String code = resultStore.saveSignupRequired("signup-session");
+        String code = resultStore.saveSignupRequired("signup-session", "binding-digest");
         int workers = 8;
         AtomicInteger successes = new AtomicInteger();
         CountDownLatch ready = new CountDownLatch(workers);
