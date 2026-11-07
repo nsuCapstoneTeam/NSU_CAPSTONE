@@ -1,26 +1,19 @@
 package com.nsu.capstone.event;
 
+import static com.nsu.capstone.event.EventContentFixtures.sampleWithDetails;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.event.application.EventRegistrationService;
-import com.nsu.capstone.event.domain.ArtistType;
 import com.nsu.capstone.event.domain.Event;
-import com.nsu.capstone.event.domain.EventContent;
-import com.nsu.capstone.event.domain.EventDetails;
-import com.nsu.capstone.event.domain.EventType;
-import com.nsu.capstone.event.domain.Genre;
-import com.nsu.capstone.event.domain.Visibility;
 import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.time.LocalDateTime;
 import javax.sql.DataSource;
-import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -47,19 +40,9 @@ class EventRegistrationTimeoutIntegrationTest extends EventIntegrationTestBase {
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired DataSource dataSource;
 
-    EventContent sampleContent() {
-        return new EventContent(
-            "2026 가을 축제 1일차 밴드 공연", EventType.UNIVERSITY_FESTIVAL,
-            LocalDateTime.of(2026, 11, 6, 18, 0), LocalDateTime.of(2026, 11, 6, 19, 0), 40,
-            "대운동장 특설 무대", "11680", ArtistType.BAND, List.of(Genre.POP, Genre.ROCK),
-            300000, 500000, 800, "축제 첫날 저녁 무대를 여는 밴드 공연이에요.", Visibility.PUBLIC,
-            new EventDetails("공연 2시간 전 30분", "8m × 6m", true, "무선 2개, 유선 4개", "드럼 세트, 베이스 앰프",
-                true, true, false, null, null));
-    }
-
     HeldRegistration hold(String key) throws Exception {
         return new HeldRegistration(
-            transactionManager, registrationService, partner.getId(), UUID.fromString(key), sampleContent());
+            transactionManager, registrationService, partner.getId(), UUID.fromString(key), sampleWithDetails());
     }
 
     @Test

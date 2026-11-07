@@ -1,7 +1,10 @@
 package com.nsu.capstone.event.recommendation;
 
+import static com.nsu.capstone.event.EventContentFixtures.sample;
+import static com.nsu.capstone.event.EventContentFixtures.with;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.nsu.capstone.event.EventContentFixtures.Builder;
 import com.nsu.capstone.event.domain.ArtistType;
 import com.nsu.capstone.event.domain.Event;
 import com.nsu.capstone.event.domain.EventContent;
@@ -31,49 +34,14 @@ class EventSnapshotTest {
     static final Clock CLOCK =
         Clock.fixed(Instant.parse("2026-10-18T01:00:00Z"), ZoneId.of("Asia/Seoul"));
 
-    /** 값을 하나씩 바꿔 가며 쓰는 테스트용 행사 내용. 기본값은 03 §10.1의 예시다. */
-    static final class Builder {
-        String name = "2026 가을 축제 1일차 밴드 공연";
-        EventType eventType = EventType.UNIVERSITY_FESTIVAL;
-        LocalDateTime start = LocalDateTime.of(2026, 11, 6, 18, 0);
-        LocalDateTime end = LocalDateTime.of(2026, 11, 6, 19, 0);
-        int performanceMinutes = 40;
-        String venue = "대운동장 특설 무대";
-        String regionCode = "11680";
-        ArtistType artistType = ArtistType.BAND;
-        List<Genre> genres = List.of(Genre.POP, Genre.ROCK);
-        long budgetMin = 300000;
-        long budgetMax = 500000;
-        int expectedAudience = 800;
-        String description = "축제 첫날 저녁 무대를 여는 밴드 공연이에요.";
-        Visibility visibility = Visibility.PUBLIC;
-        EventDetails details = EventDetails.empty();
-
-        EventContent build() {
-            return new EventContent(name, eventType, start, end, performanceMinutes, venue,
-                regionCode, artistType, genres, budgetMin, budgetMax, expectedAudience,
-                description, visibility, details);
-        }
-    }
-
-    static EventContent content() {
-        return new Builder().build();
-    }
-
     static Event event(EventContent content) {
         return Event.register(UUID.randomUUID(), UUID.randomUUID(), content, CLOCK);
-    }
-
-    static EventContent with(Consumer<Builder> change) {
-        Builder builder = new Builder();
-        change.accept(builder);
-        return builder.build();
     }
 
     @Test
     @DisplayName("자격 판단 입력에 시간대·지역·예산·artistType을 담는다")
     void eligibilityInputCarriesTimeWindowRegionBudgetAndArtistType() {
-        EligibilityInput input = EventSnapshot.of(event(content())).eligibility();
+        EligibilityInput input = EventSnapshot.of(event(sample())).eligibility();
 
         assertThat(input.start()).isEqualTo(LocalDateTime.of(2026, 11, 6, 18, 0));
         assertThat(input.end()).isEqualTo(LocalDateTime.of(2026, 11, 6, 19, 0));
@@ -133,16 +101,16 @@ class EventSnapshotTest {
     @MethodSource("fieldsOutsideTheFingerprint")
     @DisplayName("추천에 쓰지 않는 필드는 바꿔도 지문이 같다")
     void fingerprintIgnoresFieldsThatDoNotFeedRecommendation(String field, Consumer<Builder> change) {
-        EventFingerprint before = EventFingerprint.of(event(content()));
+        EventFingerprint before = EventFingerprint.of(event(sample()));
 
         assertThat(EventFingerprint.of(event(with(change)))).isEqualTo(before);
     }
 
     static Stream<Arguments> fieldsInsideTheFingerprint() {
         return Stream.of(
-            Arguments.of("startDate", (Consumer<Builder>) b -> b.start = LocalDateTime.of(2026, 11, 5, 18, 0)),
+            Arguments.of("startDate", (Consumer<Builder>) b -> b.start = LocalDateTime.of(2026, 11, 5, 19, 30)),
             Arguments.of("startTime", (Consumer<Builder>) b -> b.start = LocalDateTime.of(2026, 11, 6, 17, 30)),
-            Arguments.of("endDate", (Consumer<Builder>) b -> b.end = LocalDateTime.of(2026, 11, 7, 19, 0)),
+            Arguments.of("endDate", (Consumer<Builder>) b -> b.end = LocalDateTime.of(2026, 11, 7, 17, 0)),
             Arguments.of("endTime", (Consumer<Builder>) b -> b.end = LocalDateTime.of(2026, 11, 6, 19, 30)),
             Arguments.of("performanceMinutes", (Consumer<Builder>) b -> b.performanceMinutes = 41),
             Arguments.of("regionCode", (Consumer<Builder>) b -> b.regionCode = "11650"),
@@ -160,7 +128,7 @@ class EventSnapshotTest {
     @MethodSource("fieldsInsideTheFingerprint")
     @DisplayName("추천에 쓰는 필드를 바꾸면 지문이 달라진다")
     void fingerprintChangesWhenAFieldThatFeedsRecommendationChanges(String field, Consumer<Builder> change) {
-        EventFingerprint before = EventFingerprint.of(event(content()));
+        EventFingerprint before = EventFingerprint.of(event(sample()));
 
         assertThat(EventFingerprint.of(event(with(change)))).isNotEqualTo(before);
     }
@@ -168,7 +136,7 @@ class EventSnapshotTest {
     @Test
     @DisplayName("지문은 장르 순서를 무시하고, 값을 되돌리면 원래 지문으로 돌아온다")
     void fingerprintIgnoresGenreOrderAndSurvivesRevertingAChange() {
-        EventFingerprint original = EventFingerprint.of(event(content()));
+        EventFingerprint original = EventFingerprint.of(event(sample()));
 
         assertThat(EventFingerprint.of(event(with(b -> b.genres = List.of(Genre.ROCK, Genre.POP)))))
             .isEqualTo(original);
@@ -180,7 +148,7 @@ class EventSnapshotTest {
     @Test
     @DisplayName("snapshot의 지문은 같은 행사로 만든 지문과 같다")
     void snapshotFingerprintMatchesFingerprintOfSameEvent() {
-        Event event = event(content());
+        Event event = event(sample());
 
         assertThat(EventSnapshot.of(event).fingerprint()).isEqualTo(EventFingerprint.of(event));
     }

@@ -85,6 +85,9 @@ SOLAPI_FROM_NUMBER=
 RESEND_ENABLED=false
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=
+
+AUDD_ENABLED=false
+AUDD_API_TOKEN=
 ```
 
 `POSTGRES_PASSWORD`에는 팀원별로 사용할 로컬 비밀번호를 직접 입력한다.
@@ -171,6 +174,36 @@ src/main/java/com/nsu/capstone/NsuCapstoneApplication.java
 ```
 
 애플리케이션 종료에는 `Ctrl+C`를 사용한다.
+
+## 코드 형식 검사 (Spotless)
+
+PR마다 CI의 `backend-lint` job이 `./gradlew spotlessCheck`를 실행한다. 형식이 맞지 않으면 이 검사가 실패한다. branch protection에서 `backend-lint`를 required check로 지정한 뒤부터는 검사가 실패한 PR을 머지할 수 없다.
+
+- 검사 규칙은 palantir-java-format이다. 사용하지 않는 import 제거와 import 정렬도 이 형식에 들어 있다.
+- `origin/main` 대비 바뀐 Java 파일만 검사한다. 건드리지 않은 파일은 형식이 달라도 통과한다.
+- 검사에는 git 저장소와 `origin/main` ref가 필요하다. 로컬 `origin/main`이 오래됐으면 `git fetch origin main`을 먼저 한다.
+- `./gradlew build`·`check`·`test`는 형식을 검사하지 않는다. 그래서 git이 없는 곳에서도 빌드할 수 있다. 형식 검사는 `./gradlew spotlessCheck`로 따로 실행한다.
+
+push 전에 같은 검사를 돌리려면 레포를 clone한 뒤 한 번만 설치한다. worktree는 `.git/hooks`를 공유하므로 worktree마다 다시 설치하지 않는다.
+
+```bash
+brew install lefthook
+lefthook install
+```
+
+Homebrew를 쓸 수 없으면 [lefthook 공식 설치 안내](https://github.com/evilmartians/lefthook/blob/master/docs/install.md)의 다른 방법(패키지 매니저, 바이너리)으로 설치한 뒤 `lefthook install`을 실행한다.
+
+검사에 실패하면 `backend` 디렉터리에서 형식을 고치고, 커밋한 뒤 다시 push한다.
+
+```bash
+./gradlew spotlessApply
+git add -u .
+git commit -m "style: Spotless 형식 적용"
+git push
+```
+
+- **커밋이 필요한 이유**: pre-push hook은 push할 커밋이 아니라 디스크의 파일을 검사한다. `spotlessApply`만 하고 커밋하지 않으면 hook은 통과하지만 CI의 `backend-lint`가 실패한다.
+- **diff 크기**: 처음 고치는 파일은 파일 전체가 다시 포맷되어 diff가 커진다. 형식만 바꾼 변경은 `style:` 커밋으로 나눠 리뷰하기 쉽게 한다.
 
 ## 개발 환경 종료
 
