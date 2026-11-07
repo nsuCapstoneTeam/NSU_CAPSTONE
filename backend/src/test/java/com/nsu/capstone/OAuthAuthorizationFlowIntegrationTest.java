@@ -80,6 +80,8 @@ class OAuthAuthorizationFlowIntegrationTest {
             new java.util.concurrent.atomic.AtomicLong();
     private static final java.util.concurrent.atomic.AtomicLong USERINFO_DELAY_MILLIS =
             new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicInteger JWKS_REQUESTS =
+            new java.util.concurrent.atomic.AtomicInteger();
     private static final long STALLED_PROVIDER_MILLIS = 3000;
     private static HttpServer providerServer;
     private static RSAKey providerKey;
@@ -146,11 +148,26 @@ class OAuthAuthorizationFlowIntegrationTest {
 
     @Test
     @org.junit.jupiter.api.Timeout(20)
+    // decoder가 JWKS를 캐시하므로 새 컨텍스트에서 시작해야 이 테스트가 JWKS를 실제로 조회한다
+    @org.springframework.test.annotation.DirtiesContext(
+            methodMode = org.springframework.test.annotation.DirtiesContext.MethodMode.BEFORE_METHOD)
     void stalledJwkSetEndpointEndsCallbackWithinReadTimeoutAsProviderUnavailable() throws Exception {
         Flow flow = startFlow("google");
         JWKS_DELAY_MILLIS.set(STALLED_PROVIDER_MILLIS);
 
         assertStalledProviderEndsAsUnavailable(flow);
+    }
+
+    @Test
+    void secondCallbackOfSameProviderReusesCachedJwkSet() throws Exception {
+        // 앞선 테스트가 decoder를 미리 만들었을 수 있어 첫 콜백 뒤의 조회 횟수를 기준으로 삼는다
+        completeCallback(startFlow("google"));
+        int afterFirstCallback = JWKS_REQUESTS.get();
+
+        completeCallback(startFlow("google"));
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                afterFirstCallback, JWKS_REQUESTS.get(), "두 번째 콜백이 Provider JWKS를 다시 조회했다");
     }
 
     private void assertStalledProviderEndsAsUnavailable(Flow flow) throws Exception {
@@ -614,6 +631,7 @@ class OAuthAuthorizationFlowIntegrationTest {
                     "/kakao/token",
                     exchange -> token(exchange, "kakao-subject", "kakao-client", KAKAO_NONCE.get(), "openid"));
             providerServer.createContext("/jwks", exchange -> {
+                JWKS_REQUESTS.incrementAndGet();
                 stall(JWKS_DELAY_MILLIS);
                 json(exchange, 200, "{\"keys\":[" + providerKey.toPublicJWK().toJSONString() + "]}");
             });

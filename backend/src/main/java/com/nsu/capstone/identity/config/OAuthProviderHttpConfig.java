@@ -2,6 +2,8 @@ package com.nsu.capstone.identity.config;
 
 import com.nsu.capstone.identity.oauth.OAuthProperties;
 import java.net.http.HttpClient;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,6 +25,7 @@ import org.springframework.security.oauth2.core.http.converter.OAuth2AccessToken
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoderFactory;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
@@ -85,7 +88,9 @@ public class OAuthProviderHttpConfig {
     @ConditionalOnExpression(OAUTH_WITH_ANY_PROVIDER_ENABLED)
     JwtDecoderFactory<ClientRegistration> oauthIdTokenDecoderFactory(OAuthProperties properties) {
         RestTemplate restTemplate = new RestTemplate(requestFactory(properties));
-        return registration -> {
+        // 기본 팩토리처럼 registrationId별로 decoder를 재사용해야 decoder 안의 JWKS 캐시가 로그인마다 버려지지 않는다
+        Map<String, JwtDecoder> decoders = new ConcurrentHashMap<>();
+        return registration -> decoders.computeIfAbsent(registration.getRegistrationId(), id -> {
             NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(
                             registration.getProviderDetails().getJwkSetUri())
                     .jwsAlgorithm(SignatureAlgorithm.RS256)
@@ -94,7 +99,7 @@ public class OAuthProviderHttpConfig {
             decoder.setJwtValidator(JwtValidators.createDefaultWithValidators(new OidcIdTokenValidator(registration)));
             decoder.setClaimSetConverter(OidcIdTokenDecoderFactory.createDefaultClaimTypeConverter());
             return decoder;
-        };
+        });
     }
 
     private static JdkClientHttpRequestFactory requestFactory(OAuthProperties properties) {
