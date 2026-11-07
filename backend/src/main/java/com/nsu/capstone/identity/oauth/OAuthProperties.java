@@ -15,6 +15,8 @@ public class OAuthProperties implements InitializingBean {
     private Duration resultTtl = Duration.ofMinutes(1);
     private String frontendRedirectUri;
     private boolean bindingCookieSecure = true;
+    private Duration providerConnectTimeout = Duration.ofSeconds(3);
+    private Duration providerReadTimeout = Duration.ofSeconds(10);
     private Provider google = new Provider();
     private Provider kakao = new Provider();
     private Provider naver = new Provider();
@@ -25,6 +27,8 @@ public class OAuthProperties implements InitializingBean {
         requirePositive(signupSessionTtl, "signup-session-ttl");
         requirePositive(signupClaimLease, "signup-claim-lease");
         requirePositive(resultTtl, "result-ttl");
+        requirePositive(providerConnectTimeout, "provider-connect-timeout");
+        requirePositive(providerReadTimeout, "provider-read-timeout");
         if (!enabled) {
             return;
         }
@@ -125,6 +129,27 @@ public class OAuthProperties implements InitializingBean {
 
     public void setBindingCookieSecure(boolean bindingCookieSecure) {
         this.bindingCookieSecure = bindingCookieSecure;
+    }
+
+    /**
+     * 콜백 한 번이 Provider에 보내는 HTTP 호출(토큰, JWKS, userinfo) 하나의 연결 제한 시간이다. 호출 3개의 최악 합계가 결합 쿠키의 콜백 처리 여유(1분)보다 작아야
+     * 한다.
+     */
+    public Duration getProviderConnectTimeout() {
+        return providerConnectTimeout;
+    }
+
+    public void setProviderConnectTimeout(Duration providerConnectTimeout) {
+        this.providerConnectTimeout = providerConnectTimeout;
+    }
+
+    /** Provider HTTP 호출 하나의 응답 대기 제한 시간이다. */
+    public Duration getProviderReadTimeout() {
+        return providerReadTimeout;
+    }
+
+    public void setProviderReadTimeout(Duration providerReadTimeout) {
+        this.providerReadTimeout = providerReadTimeout;
     }
 
     public Provider getGoogle() {

@@ -47,6 +47,7 @@ import org.springframework.web.util.UriUtils;
         properties = {
             "auth.oauth.enabled=true",
             "auth.oauth.frontend-redirect-uri=https://frontend.test/oauth/result",
+            "auth.oauth.provider-read-timeout=300ms",
             "auth.oauth.google.enabled=true",
             "auth.oauth.google.client-id=google-client",
             "auth.oauth.google.client-secret=google-secret",
@@ -73,6 +74,13 @@ class OAuthAuthorizationFlowIntegrationTest {
 
     private static final AtomicReference<String> GOOGLE_NONCE = new AtomicReference<>();
     private static final AtomicReference<String> KAKAO_NONCE = new AtomicReference<>();
+    private static final java.util.concurrent.atomic.AtomicLong TOKEN_DELAY_MILLIS =
+            new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong JWKS_DELAY_MILLIS =
+            new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong USERINFO_DELAY_MILLIS =
+            new java.util.concurrent.atomic.AtomicLong();
+    private static final long STALLED_PROVIDER_MILLIS = 3000;
     private static HttpServer providerServer;
     private static RSAKey providerKey;
     private static String providerBaseUri;
@@ -109,6 +117,52 @@ class OAuthAuthorizationFlowIntegrationTest {
         if (providerServer != null) {
             providerServer.stop(0);
         }
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void resetProviderDelays() {
+        TOKEN_DELAY_MILLIS.set(0);
+        JWKS_DELAY_MILLIS.set(0);
+        USERINFO_DELAY_MILLIS.set(0);
+    }
+
+    @Test
+    @org.junit.jupiter.api.Timeout(20)
+    void stalledTokenEndpointEndsCallbackWithinReadTimeoutAsProviderUnavailable() throws Exception {
+        Flow flow = startFlow("google");
+        TOKEN_DELAY_MILLIS.set(STALLED_PROVIDER_MILLIS);
+
+        assertStalledProviderEndsAsUnavailable(flow);
+    }
+
+    @Test
+    @org.junit.jupiter.api.Timeout(20)
+    void stalledUserInfoEndpointEndsCallbackWithinReadTimeoutAsProviderUnavailable() throws Exception {
+        Flow flow = startFlow("google");
+        USERINFO_DELAY_MILLIS.set(STALLED_PROVIDER_MILLIS);
+
+        assertStalledProviderEndsAsUnavailable(flow);
+    }
+
+    @Test
+    @org.junit.jupiter.api.Timeout(20)
+    void stalledJwkSetEndpointEndsCallbackWithinReadTimeoutAsProviderUnavailable() throws Exception {
+        Flow flow = startFlow("google");
+        JWKS_DELAY_MILLIS.set(STALLED_PROVIDER_MILLIS);
+
+        assertStalledProviderEndsAsUnavailable(flow);
+    }
+
+    private void assertStalledProviderEndsAsUnavailable(Flow flow) throws Exception {
+        long startedAt = System.nanoTime();
+        String code = completeCallback(flow);
+        long elapsedMillis = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+
+        org.junit.jupiter.api.Assertions.assertTrue(
+                elapsedMillis < STALLED_PROVIDER_MILLIS - 500, "콜백이 read timeout 안에 끝나지 않았다: " + elapsedMillis + "ms");
+        exchange(code, flow.bindingCookie())
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code", equalTo("OAUTH_PROVIDER_UNAVAILABLE")));
     }
 
     @Test
@@ -550,6 +604,7 @@ class OAuthAuthorizationFlowIntegrationTest {
                     .keyID("test-key")
                     .build();
             providerServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            providerServer.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
             providerBaseUri = "http://127.0.0.1:" + providerServer.getAddress().getPort();
             providerServer.createContext(
                     "/google/token",
@@ -558,30 +613,39 @@ class OAuthAuthorizationFlowIntegrationTest {
             providerServer.createContext(
                     "/kakao/token",
                     exchange -> token(exchange, "kakao-subject", "kakao-client", KAKAO_NONCE.get(), "openid"));
-            providerServer.createContext(
-                    "/jwks",
-                    exchange -> json(
-                            exchange,
-                            200,
-                            "{\"keys\":[" + providerKey.toPublicJWK().toJSONString() + "]}"));
-            providerServer.createContext(
-                    "/google/userinfo",
-                    exchange -> json(
-                            exchange,
-                            200,
-                            "{\"sub\":\"google-subject\",\"email\":\"callback@example.com\","
-                                    + "\"email_verified\":true}"));
-            providerServer.createContext(
-                    "/kakao/userinfo", exchange -> json(exchange, 200, "{\"sub\":\"kakao-subject\"}"));
+            providerServer.createContext("/jwks", exchange -> {
+                stall(JWKS_DELAY_MILLIS);
+                json(exchange, 200, "{\"keys\":[" + providerKey.toPublicJWK().toJSONString() + "]}");
+            });
+            providerServer.createContext("/google/userinfo", exchange -> {
+                stall(USERINFO_DELAY_MILLIS);
+                json(
+                        exchange,
+                        200,
+                        "{\"sub\":\"google-subject\",\"email\":\"callback@example.com\"," + "\"email_verified\":true}");
+            });
+            providerServer.createContext("/kakao/userinfo", exchange -> {
+                stall(USERINFO_DELAY_MILLIS);
+                json(exchange, 200, "{\"sub\":\"kakao-subject\"}");
+            });
             providerServer.start();
         } catch (Exception exception) {
             throw new IllegalStateException("Failed to start fake OIDC provider", exception);
         }
     }
 
+    private static void stall(java.util.concurrent.atomic.AtomicLong delayMillis) {
+        try {
+            Thread.sleep(delayMillis.get());
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private static void token(HttpExchange exchange, String subject, String clientId, String nonce, String scope)
             throws IOException {
         exchange.getRequestBody().readAllBytes();
+        stall(TOKEN_DELAY_MILLIS);
         try {
             Instant now = Instant.now();
             JWTClaimsSet claims = new JWTClaimsSet.Builder()
