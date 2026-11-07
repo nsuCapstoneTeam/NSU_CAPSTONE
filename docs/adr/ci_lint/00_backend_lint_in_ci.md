@@ -1,4 +1,4 @@
-# ADR: PR마다 backend Spotless 검사
+# ADR: PR마다 backend Spotless·frontend ESLint 검사
 
 - 상태: **Proposed** (PR 리뷰에서 확정)
 - 결정일: **2026-11-06** (NSU-141 설계 세션)
@@ -8,17 +8,29 @@
 
 ## Decision
 
-PR마다 GitHub Actions에서 backend Java 코드에 Spotless 검사를 돌리고, 실패하면 머지를 막는다. lint 판정은 도구가 하고 LLM 리뷰에 맡기지 않는다.
+PR마다 GitHub Actions에서 backend Java 코드에 Spotless 검사를, frontend 코드에 ESLint 검사를 돌리고, 실패하면 머지를 막는다. lint 판정은 도구가 하고 LLM 리뷰에 맡기지 않는다.
 
-- workflow 파일은 `.github/workflows/ci.yml`이고, job 이름은 `backend-lint`다. NSU-135는 같은 파일에 테스트 job을 추가한다.
+- workflow 파일은 `.github/workflows/ci.yml`이고, job 이름은 `backend-lint`와 `frontend-lint`다. NSU-135는 같은 파일에 테스트 job을 추가한다.
 - 트리거는 `pull_request`와 `main`의 `push`다. `pull_request_target`은 쓰지 않는다. `main` 실행은 모든 PR이 읽을 Gradle 캐시를 만든다.
 - 검사 명령은 `cd backend && ./gradlew spotlessCheck`다.
 - Spotless 규칙은 `palantirJavaFormat()` 하나다. 사용하지 않는 import 제거와 import 정렬은 이 단계에 들어 있다.
 - `ratchetFrom 'origin/main'`으로 `origin/main` 대비 바뀐 Java 파일만 검사한다.
 - `enforceCheck false`로 `check`·`build`에서 `spotlessCheck`를 뺀다. ratchet은 git 저장소와 `origin/main` ref가 있어야 동작한다. 그래서 `check`에 묶으면 `.git`이 없는 곳이나 remote 이름이 다른 clone에서 형식과 관계없이 빌드가 깨진다. CI와 pre-push hook은 `spotlessCheck`를 직접 부른다.
-- branch protection에서 `backend-lint`를 required check로 지정한다. 설정 권한이 있는 사람이 PR 머지 뒤에 한다.
+- branch protection에서 `backend-lint`와 `frontend-lint`를 required check로 지정한다. 설정 권한이 있는 사람이 PR 머지 뒤에 한다.
 - 로컬에서는 레포 루트의 `lefthook.yml`이 pre-push hook으로 같은 검사를 돌린다. 설치는 각자 한 번 한다.
-- frontend ESLint는 이번 범위에서 뺀다(아래 "뺀 것").
+
+### frontend ESLint
+
+- 검사 명령은 `cd frontend && npm run lint -- --max-warnings=0`이다. 기존 `eslint.config.js` 규칙을 그대로 쓰고 바꾸지 않는다.
+- ratchet 없이 frontend 전체를 검사한다. ESLint는 파일 수가 적어 빠르고, 이 PR에서 기존 위반을 모두 고치므로 `main`이 깨끗하다.
+- `origin/main`의 기존 위반 3건은 이 PR에서 먼저 고친다(2026-11-07 사용자 결정, frontend 담당에게 PR 리뷰 요청).
+  - `react-hooks/set-state-in-effect` 2건: `signup-role-select.jsx:301`, `events-tab.jsx:40`
+  - `no-unused-vars` 1건: `organizer-events.test.js:153`
+  - 규칙을 끄거나 `eslint-disable` 주석으로 피하지 않는다. 고친 뒤에도 화면 동작(포커스 이동, 카드 애니메이션 대기)은 그대로여야 한다.
+- CI job `frontend-lint`
+  - `actions/checkout`(얕은 clone으로 충분하다), `actions/setup-node`(Node 24 LTS, npm 캐시는 `frontend/package-lock.json` 기준)
+  - 의존성 설치는 `npm ci --ignore-scripts`다. ESLint는 의존성의 install script가 필요 없다. 공급망 공격이 install script로 들어오는 경로를 막는다.
+- pre-push hook `frontend-eslint`: `root: "frontend/"`, glob은 `frontend/**/*.{js,jsx}`, 실행 명령은 `npm run lint -- --max-warnings=0`이다. push할 커밋에 frontend JS 파일이 없으면 건너뛴다. 로컬에 `node_modules`가 있어야 한다.
 
 ### workflow 설정
 
@@ -106,7 +118,6 @@ ratchet을 고른 이유는 열린 브랜치와 충돌하지 않는다는 점이
 
 | 뺀 것 | 이유 | 다시 볼 시점 |
 |---|---|---|
-| frontend ESLint | `origin/main`이 이미 3건 실패한다(`react-hooks/set-state-in-effect` 2건, `no-unused-vars` 1건). 고치는 일은 frontend 담당이 판단한다 | frontend 담당이 3건을 고친 뒤 `ci.yml`에 job을 추가 |
 | Checkstyle·PMD·Error Prone | 처음부터 규칙을 많이 걸면 기존 코드에서 실패가 쏟아진다. Error Prone은 Java 25 호환을 따로 확인해야 한다 | Spotless가 자리 잡은 뒤, 리뷰에서 같은 결함 패턴이 반복될 때 |
 | Claude Code `PostToolUse` hook | pre-push와 겹친다. 자동 수정을 넣으면 Edit 직후 파일이 바뀌어 다음 Edit가 실패할 수 있다. `.claude/`는 커밋하지 않아 팀에 공유되지 않는다 | pre-push 실패가 PR마다 반복될 때 |
 | full commit SHA pinning | ADR-006과 같은 정책을 쓴다. 이 job은 secret 없이 읽기 권한만 쓴다 | ADR-006에서 SHA pinning을 정할 때 |
