@@ -168,7 +168,7 @@ Eligibility가 곡 목록과 AI 추천 상태까지 읽으면 맡는 일이 커�
 |---|---|
 | 아티스트 프로필·일정 테이블까지 이 이슈에서 만들기 | 마이페이지(NSU-12) 설계를 함께 해야 해 범위가 2~3배다. 저작권 데이터는 여전히 다른 이슈에 있다 |
 | NSU-12·33을 먼저 설계하고 NSU-48은 나중에 | Spring↔AI 연동(NSU-63)이 그만큼 늦어진다 |
-| 계정 조건을 `VERIFIED_ARTIST`(실명 본인확인을 마친 아티스트)로 판정 | 같은 조건을 두 번 판정하게 된다. SSOT v1.17(승인) ①에서 곡 업로드가 `VERIFIED_ARTIST` 전용이 되어, 곡이 있는 아티스트는 업로드 때 이미 본인확인을 마쳤다. 이 간접 조건을 `RIGHTS-024`에 명시한 문장은 v1.18 초안 ②(팀 확인 전)다. 업로드 관문이 풀리면 이 사유도 다시 본다. 추천 참여와 프로필 관리는 `ACTIVE` ARTIST가 기준이다(v1.17 `AI-031`·`ART-027`). 곡 업로드가 `VERIFIED_ARTIST` 전용이라는 근거는 SSOT v1.17 `RIGHTS-023`·`RIGHTS-024`다(보조: PR #186의 ADR `music_upload/02` 7절). main의 `music_upload/01` "AI 추천 조건에서 `VERIFIED_ARTIST`를 뺀다" 절은 아직 옛 사유(본인확인 없이도 AI 추천 참여)를 적고 있다. 그 절은 PR #186이 정한 대로 NSU-105 ADR PR에서 고친다 |
+| 계정 조건을 `VERIFIED_ARTIST`(실명 본인확인을 마친 아티스트)로 판정 | 같은 조건을 두 번 판정하게 된다. SSOT v1.17(승인) ①에서 곡 업로드가 `VERIFIED_ARTIST` 전용이 되어, 곡이 있는 아티스트는 업로드 때 이미 본인확인을 마쳤다. 이 간접 조건을 `RIGHTS-024`에 명시한 문장은 v1.18 초안 ②(팀 확인 전)다. 업로드 관문이 풀리면 이 사유도 다시 본다. 추천 참여와 프로필 관리는 `ACTIVE` ARTIST가 기준이다(v1.17 `AI-031`·`ART-027`). 곡 업로드가 `VERIFIED_ARTIST` 전용이라는 근거는 SSOT v1.17 `RIGHTS-023`·`RIGHTS-024`다(보조: ADR `music_upload/02` 7절). 시연 서버의 본인확인 방식은 [identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md)이다. [music_upload/01](../music_upload/01_music_rights_verification.md) "AI 추천 조건에서 `VERIFIED_ARTIST`를 뺀다" 절에는 업로드 관문 뒤의 사정을 더했다 |
 | `ARTIST_VERIFIED` 이름 유지 | 화면 문구가 "인증된 아티스트"가 되기 쉽고, 용어집과 어긋난다 |
 | 저작권 조건을 아티스트 단위로 두고, 권리가 취소된 곡은 곡 쪽에서 끄기 | 곡 쪽 규칙이 구현되기 전까지 취소된 곡이 남는다. NSU-89 설계에서 곡 단위로 정했다 |
 | 일정: 막힌 시간만 확인 | 일정을 관리하지 않는 아티스트가 안 되는 날에 추천된다 |

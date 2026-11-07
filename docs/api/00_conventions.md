@@ -113,10 +113,12 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 | 400 | `INVALID_{대상}` | 경로 값의 형식 오류 (예: `INVALID_ARTIST_ID`) |
 | 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음, 만료, 서명 오류 |
 | 403 | `ACCESS_DENIED` | 인증은 됐지만 호출 주체에게 허용되지 않은 요청 |
+| 403 | `DEMO_WRITE_NOT_ALLOWED` | 시연 서버(`DEMO`)에서 허용 목록 밖 계정이 상태를 바꾸는 요청(`POST`·`PUT`·`PATCH`·`DELETE`)을 보냄. 인증(`401`) 바로 다음, 역할·본문 검사를 포함한 다른 모든 판정보다 먼저 검사한다. 본문을 읽기 전에 서버·프록시가 거절하는 요청 크기 초과(`413`, 04 §2.2)는 예외다. 가입·로그인·로그아웃·토큰 재발급·실명 본인확인·검색창 즉시 추천·회원 탈퇴는 제외한다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)) |
 | 404 | `{대상}_NOT_FOUND` | 대상이 없거나 호출 주체에게 존재를 드러내지 않는 대상 |
 | 422 | `IDEMPOTENCY_KEY_REUSED` | 같은 `Idempotency-Key`로 먼저 처리한 요청과 다른 본문을 보냄 |
 | 429 | `TOO_MANY_REQUESTS` | 요청 제한을 넘음. `Retry-After` 헤더에 다시 시도할 수 있을 때까지 남은 초를 준다. 이미 있는 기능별 code(예: `VERIFICATION_REQUEST_LIMIT_EXCEEDED`)는 그대로 쓴다 |
 | 500 | `INTERNAL_SERVER_ERROR` | 서버 오류. 예외 메시지·스택 트레이스 등 내부 정보를 담지 않는다 |
+| 503 | `RATE_LIMIT_UNAVAILABLE` | 요청 제한 카운터(Redis)를 쓸 수 없어 요청을 막음(fail-closed). `Retry-After`는 붙이지 않는다. 어느 경로가 막는지는 [signup-terms-and-send-limits §1.6](./signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때)에 있다 |
 
 - 멱등 키(`Idempotency-Key` 헤더)는 [03 행사 등록 §5.3.1](./03_events.md#531-멱등-키)에서 처음 정했다(2026-10-18). 값은 따옴표 없는 소문자 하이픈 표기 UUID이고, 키는 호출자마다 따로다. 다른 생성 API가 멱등 키를 받게 되면 같은 헤더·값 형식과 `400 VALIDATION_ERROR`·`422 IDEMPOTENCY_KEY_REUSED` 규칙을 따른다.
 

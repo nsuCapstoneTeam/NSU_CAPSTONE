@@ -17,10 +17,10 @@
 `POST /api/v1/auth/signup/artist/oauth/session`
 
 ```json
-{"oauthSignupSessionId":"<server-issued opaque ID>","phone":"01012345678","email":"artist@example.com"}
+{"oauthSignupSessionId":"<server-issued opaque ID>","phone":"01012345678","email":"artist@example.com","agreements":[{"id":"service","version":"v1"},{"id":"privacy","version":"v1"},{"id":"demo-notice","version":"v1"},{"id":"overseas-transfer","version":"v1"}]}
 ```
 
-- ID와 phone은 필수다. email은 Provider 이메일이 없거나 미검증이면 필수다.
+- ID·phone·agreements는 필수다. 필수 약관이 빠지면 `400 REQUIRED_TERMS_NOT_AGREED`다. `agreements`는 [signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1의 약관 ID·버전을 쓴다(위 예시는 `DEMO` 기준). 이 필드는 구현 전이며, NSU-123 배포 전까지 지금 서버는 `agreements` 없이 준비하고 약관 PUT으로 동의를 받는다. email은 Provider 이메일이 없거나 미검증이면 필수다.
 - 검증된 Provider 이메일은 생략하거나 동일 값만 보낼 수 있다.
 - 서버는 ARTIST/OAUTH를 고정한다. Provider 식별정보·role·인증 완료 boolean은 입력으로 사용하지 않는다.
 - 최초 생성은 201, 같은 입력의 재요청은 200이다. 응답은 아래 세 필드다.
@@ -33,10 +33,10 @@
 미검증 이메일은 준비 단계에서 고정한 주소에 기존 서비스 이메일 인증을 수행한다.
 입력 변경 API는 제공하지 않는다.
 
-휴대폰 인증·필수 약관 동의·성인 확인 및 필요한 이메일 인증은 기존
+필수 약관 동의는 이 준비 요청의 `agreements`로 받는다([signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1, 2026-11-05, SSOT `AUTH-006` v1.18 초안 ⑤ 팀 확인 전). 휴대폰 인증·성인 확인 및 필요한 이메일 인증은 기존
 `/api/v1/auth/signup/artist/session` 아래 API를 그대로 사용한다.
 약관은 서버 설정의 ID·버전 목록을 검증하고, 성인 확인은 생년월일로 만 18세 이상을 확인한다.
-필수 약관 설정에는 서비스 이용약관과 개인정보처리방침의 실제 버전이 모두 포함되어야 한다.
+필수 약관 설정에는 서비스 이용약관(`service`)과 개인정보 수집·이용(`privacy`)의 실제 버전이 모두 포함되어야 한다. 시연 서버는 `demo-notice`·`overseas-transfer`도 포함한다([signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1).
 
 ### 최종 가입
 
@@ -62,8 +62,12 @@
 | 조건 | code | HTTP |
 |---|---|---:|
 | 세션·연결·역할·가입 방식 불일치/만료 | SIGNUP_SESSION_INVALID | 400 |
-| 잘못된 준비 입력 | VALIDATION_ERROR | 400 |
+| 잘못된 준비 입력(숫자 정규형이 아닌 `phone` 포함) | VALIDATION_ERROR | 400 |
+| 준비 요청에 필수 약관이 빠지거나 버전이 다름 | REQUIRED_TERMS_NOT_AGREED | 400 |
+| 같은 약관 `id`가 두 번 오거나 모르는 `id` | TERMS_AGREEMENT_INVALID | 400 |
 | 필수조건 미완료 | 기존 가입 필수조건 코드 | 400 |
+| 준비 요청이 가입 세션 생성 한도를 넘음([signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.4) | TOO_MANY_REQUESTS(`Retry-After`) | 429 |
+| 한도 카운터(Redis)를 쓸 수 없음(같은 문서 §1.6) | RATE_LIMIT_UNAVAILABLE | 503 |
 | 이메일 중복 | EMAIL_ALREADY_EXISTS | 409 |
 | Provider 식별자 중복 | OAUTH_ACCOUNT_ALREADY_EXISTS | 409 |
 | 같은 세션 처리 중 | OAUTH_SIGNUP_IN_PROGRESS | 409 |
@@ -76,7 +80,7 @@ Profile/Trust, 외부 음악 플랫폼 연결, Refresh Token은 이번 범위에
 
 1. 브라우저에서 OAuth 인증을 완료하고 일회용 결과 코드를 `/api/v1/auth/oauth/result`에서 교환한다.
 2. `SIGNUP_REQUIRED` 응답의 `oauthSignupSessionId`로 가입 준비 API를 호출한다.
-3. 준비 응답의 `signupSessionId`로 기존 인증·동의·성인 확인 API를 호출한다. 두 세션 ID는 같은 값이다.
+3. 준비 요청에서 필수 약관 동의(`agreements`)를 함께 보낸다. 준비 응답의 `signupSessionId`로 기존 인증·성인 확인 API를 호출한다. 두 세션 ID는 같은 값이다.
 4. 필수조건 완료 후 `oauthSignupSessionId`로 최종 가입 API를 호출한다.
 5. 가입 후 같은 Provider 계정으로 기존 OAuth 로그인 흐름을 진행하여 토큰을 발급받는다.
 
@@ -94,8 +98,10 @@ Signup hash는 `signupMethod=OAUTH`, OAuth 연결 ID와 기존 필수조건 상�
 
 조건 세션의 절대 만료시각은 OAuth 세션과 같다. 기본 OAuth 세션 TTL은 30분이다.
 준비·인증·최종 claim은 만료시각을 연장하지 않는다. 연결된 세션이 사라져도 재생성하지 않는다.
-OTP는 기존 6자리/HMAC, 5분 TTL, 60초 cooldown, 실패 제한 5회 정책을 사용하며
-challenge·cooldown은 조건 세션의 남은 TTL을 넘지 않는다. 발송 Provider는 발송만 담당한다.
+OTP는 기존 6자리/HMAC, 5분 TTL, 실패 제한 5회 정책을 사용하며
+challenge는 조건 세션의 남은 TTL을 넘지 않는다. 발송 Provider는 발송만 담당한다.
+60초 cooldown과 발송 한도는 세션이 아니라 받는 곳 단위이고, 세션 TTL과 관계없다([signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.2).
+이 Lua들은 단독 Redis(클러스터 아님)를 전제로 한다. 받는 곳 단위 키는 세션 ID hash tag를 쓰지 않기 때문이다.
 
 최종 검증과 claim 획득은 한 Lua 실행에서 수행한다.
 연결·역할·가입 방식·필수조건·양쪽 TTL을 확인하고 확보한 서버 snapshot만 DB 저장에 사용한다.
@@ -114,7 +120,7 @@ OAuthAccount 삽입 실패는 User 삽입도 롤백한다. 실패한 트랜잭�
 
 - 확정 rollback 완료 통지에만 해당 소유자의 claim을 해제한다. 가입 인증 상태는 남겨 TTL 내 재시도한다.
 - commit 결과 UNKNOWN 또는 완료 통지 없는 예외에서는 즉시 해제하지 않고 유한 lease를 유지한다.
-- commit 이후 현재 소유자가 OAuth/Signup 상태, 두 채널 challenge·cooldown, claim을 원자적으로 삭제한다.
+- commit 이후 현재 소유자가 OAuth/Signup 상태, 두 채널 challenge, claim을 원자적으로 삭제한다. 받는 곳 단위 cooldown과 한도 카운터는 지우지 않고 TTL로 사라진다.
 - 이전 소유자는 교체된 claim의 상태를 해제·삭제할 수 없다. 반복 정리는 안전하다.
 - Redis 정리 실패나 소유권 만료는 DB 성공을 취소하지 않는다. 남은 상태는 기존 TTL로 만료된다.
   정리 실패 로그에는 세션 ID·소유자·이메일·전화번호·Provider ID·원본 예외 메시지를 남기지 않는다.
