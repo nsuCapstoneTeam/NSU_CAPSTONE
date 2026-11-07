@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 public class OAuthBindingCookie {
 
     private static final String HOST_PREFIXED_NAME = "__Host-NSU_OAUTH_BINDING";
+    private static final String DEVELOPMENT_NAME = "NSU_OAUTH_BINDING_DEV";
 
     private final OAuthProperties properties;
 
@@ -47,14 +48,15 @@ public class OAuthBindingCookie {
             .findFirst();
     }
 
+    /** 서버는 설정에 맞는 이름 하나만 읽고 쓴다. 운영에서는 접두사 없는 이름을 받지 않는다. */
     public String name() {
-        return HOST_PREFIXED_NAME;
+        return properties.isBindingCookieSecure() ? HOST_PREFIXED_NAME : DEVELOPMENT_NAME;
     }
 
     public ResponseCookie issue(String nonce) {
         return ResponseCookie.from(name(), nonce)
             .httpOnly(true)
-            .secure(true)
+            .secure(properties.isBindingCookieSecure())
             .sameSite("Lax")
             .path("/")
             .maxAge(properties.getAuthorizationRequestTtl().plus(properties.getResultTtl()))

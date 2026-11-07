@@ -334,6 +334,44 @@ class OAuthAuthorizationFlowIntegrationTest {
     }
 
     @Test
+    void concurrentCallbacksOfTheSameAuthorizationRequestHaveASingleWinner() throws Exception {
+        int workers = 8;
+        Flow flow = startFlow("google");
+        GOOGLE_NONCE.set(flow.providerNonce());
+        java.util.concurrent.CountDownLatch ready = new java.util.concurrent.CountDownLatch(workers);
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        java.util.List<java.util.concurrent.Future<String>> locations = new java.util.ArrayList<>();
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(workers)) {
+            for (int index = 0; index < workers; index++) {
+                locations.add(executor.submit(() -> {
+                    ready.countDown();
+                    start.await();
+                    return mockMvc.perform(get("/api/v1/auth/oauth/callback/google")
+                            .queryParam("code", "provider-code")
+                            .queryParam("state", flow.state())
+                            .cookie(flow.bindingCookie()))
+                        .andReturn().getResponse().getHeader("Location");
+                }));
+            }
+            org.junit.jupiter.api.Assertions.assertTrue(
+                ready.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            );
+            start.countDown();
+        }
+
+        long winners = 0;
+        for (var location : locations) {
+            String value = location.get();
+            if (value.startsWith("https://frontend.test/oauth/result?code=")) {
+                winners++;
+            } else {
+                org.junit.jupiter.api.Assertions.assertEquals(FALLBACK_LOCATION, value);
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertEquals(1, winners);
+    }
+
+    @Test
     void productionRejectsTheDevelopmentCookieName() throws Exception {
         Flow flow = startFlow("google");
         jakarta.servlet.http.Cookie devCookie = new jakarta.servlet.http.Cookie(

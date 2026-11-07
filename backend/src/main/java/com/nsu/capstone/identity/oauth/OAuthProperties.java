@@ -14,6 +14,7 @@ public class OAuthProperties implements InitializingBean {
     private Duration signupClaimLease = Duration.ofSeconds(30);
     private Duration resultTtl = Duration.ofMinutes(1);
     private String frontendRedirectUri;
+    private boolean bindingCookieSecure = true;
     private Provider google = new Provider();
     private Provider kakao = new Provider();
     private Provider naver = new Provider();
@@ -115,6 +116,15 @@ public class OAuthProperties implements InitializingBean {
 
     public void setFrontendRedirectUri(String frontendRedirectUri) {
         this.frontendRedirectUri = frontendRedirectUri;
+    }
+
+    /** false는 HTTP 개발 전용이다. 운영은 기본값(true)을 쓴다. */
+    public boolean isBindingCookieSecure() {
+        return bindingCookieSecure;
+    }
+
+    public void setBindingCookieSecure(boolean bindingCookieSecure) {
+        this.bindingCookieSecure = bindingCookieSecure;
     }
 
     public Provider getGoogle() {
