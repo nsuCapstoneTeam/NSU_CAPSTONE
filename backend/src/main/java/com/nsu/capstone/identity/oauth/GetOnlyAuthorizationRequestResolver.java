@@ -26,10 +26,7 @@ public class GetOnlyAuthorizationRequestResolver implements OAuth2AuthorizationR
     }
 
     @Override
-    public OAuth2AuthorizationRequest resolve(
-        HttpServletRequest request,
-        String clientRegistrationId
-    ) {
+    public OAuth2AuthorizationRequest resolve(HttpServletRequest request, String clientRegistrationId) {
         return isGet(request) ? delegate.resolve(request, clientRegistrationId) : null;
     }
 

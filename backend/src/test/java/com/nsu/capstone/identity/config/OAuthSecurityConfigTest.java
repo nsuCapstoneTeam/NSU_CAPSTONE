@@ -1,5 +1,6 @@
 package com.nsu.capstone.identity.config;
 
+import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -22,12 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import static org.mockito.Mockito.when;
-
-@WebMvcTest(controllers = {
-    OAuthResultController.class,
-    OAuthSecurityConfigTest.OAuthPathTestController.class
-})
+@WebMvcTest(controllers = {OAuthResultController.class, OAuthSecurityConfigTest.OAuthPathTestController.class})
 @Import({
     SecurityConfig.class,
     JsonAuthenticationEntryPoint.class,
@@ -36,52 +32,58 @@ import static org.mockito.Mockito.when;
 })
 class OAuthSecurityConfigTest {
 
-    @Autowired MockMvc mockMvc;
-    @MockitoBean OAuthResultService resultService;
-    @MockitoBean JwtDecoder jwtDecoder;
-    @MockitoBean UserDetailsService userDetailsService;
-    @MockitoBean PasswordEncoder passwordEncoder;
+    @Autowired
+    MockMvc mockMvc;
+
+    @MockitoBean
+    OAuthResultService resultService;
+
+    @MockitoBean
+    JwtDecoder jwtDecoder;
+
+    @MockitoBean
+    UserDetailsService userDetailsService;
+
+    @MockitoBean
+    PasswordEncoder passwordEncoder;
 
     @Test
     void permitsOnlyDeclaredOAuthMethodsWithoutCreatingSession() throws Exception {
         when(resultService.exchange("result-code"))
-            .thenReturn(OAuthResultResponse.signupRequired("signup-session", true));
+                .thenReturn(OAuthResultResponse.signupRequired("signup-session", true));
 
         mockMvc.perform(get("/api/v1/auth/oauth/authorization/google"))
-            .andExpect(status().isOk())
-            .andExpect(result -> org.junit.jupiter.api.Assertions.assertNull(
-                result.getRequest().getSession(false)
-            ));
+                .andExpect(status().isOk())
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertNull(
+                        result.getRequest().getSession(false)));
         mockMvc.perform(get("/api/v1/auth/oauth/callback/google"))
-            .andExpect(status().isOk())
-            .andExpect(result -> org.junit.jupiter.api.Assertions.assertNull(
-                result.getRequest().getSession(false)
-            ));
+                .andExpect(status().isOk())
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertNull(
+                        result.getRequest().getSession(false)));
         mockMvc.perform(post("/api/v1/auth/oauth/result")
-                .contentType(APPLICATION_JSON)
-                .content("{\"code\":\"result-code\"}"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.type").value("SIGNUP_REQUIRED"));
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"code\":\"result-code\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.type").value("SIGNUP_REQUIRED"));
 
         mockMvc.perform(post("/api/v1/auth/oauth/authorization/google"))
-            .andExpect(status().isUnauthorized())
-            .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
         mockMvc.perform(put("/api/v1/auth/oauth/result")
-                .contentType(APPLICATION_JSON)
-                .content("{}"))
-            .andExpect(status().isUnauthorized())
-            .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
-        mockMvc.perform(get("/api/v1/auth/oauth/undeclared"))
-            .andExpect(status().isUnauthorized());
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        mockMvc.perform(get("/api/v1/auth/oauth/undeclared")).andExpect(status().isUnauthorized());
     }
 
     @Test
     void validatesResultCode() throws Exception {
         mockMvc.perform(post("/api/v1/auth/oauth/result")
-                .contentType(APPLICATION_JSON)
-                .content("{\"code\":\"\"}"))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"code\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @RestController
