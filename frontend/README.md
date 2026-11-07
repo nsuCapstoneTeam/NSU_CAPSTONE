@@ -122,7 +122,7 @@ index.html → src/main.jsx → App(app.jsx) → 주소(routes.js) → page 상�
 ```
 
 - **화면 전환**: `App`의 `navigate('match')`처럼 페이지 키를 바꾸면 주소도 함께 바뀝니다(`/match`). 페이지 키와 주소의 짝은 `src/routes.js`의 `ROUTES`에 있습니다. (`home`, `match`, `events`, `board`, `mypage`, `artist-login`, `organizer-login`, `signup-role`, `artist-signup`, `organizer-signup`, `signup-complete`, `auth-required`)
-- **뒤로 가기**: 브라우저 뒤로·앞으로 가기를 누르면 `popstate`로 그 주소의 화면을 보여 줍니다. 새로고침하거나 주소를 직접 열어도 같은 화면이 열립니다. 지금은 메뉴 화면 사이만 해당하고, 화면 안의 단계(행사 찾기 장소·상세, 마이페이지 탭)는 아직 기록하지 않습니다.
+- **뒤로 가기**: 브라우저 뒤로·앞으로 가기를 누르면 `popstate`로 그 주소의 화면을 보여 줍니다. 새로고침하거나 주소를 직접 열어도 같은 화면이 열립니다. 단, 가입 완료(`/signup/complete`)는 가입 직후에만 의미가 있어서 직접 열거나 새로고침하면 홈이 열립니다. 지금은 메뉴 화면 사이만 해당하고, 화면 안의 단계(행사 찾기 장소·상세, 마이페이지 탭)는 아직 기록하지 않습니다.
 - **배포할 때**: `/events`처럼 주소로 바로 들어와도 열리도록, 배포 서버는 모르는 주소에 `index.html`을 돌려주게 설정해야 합니다(팀 확정 필요). 개발 서버(`npm run dev`)와 `npm run preview`는 설정 없이 됩니다.
 - **매칭**: `Matching` → `validateEvent` → `matchArtists` → `checkArtist`(필수 조건 필터) → `scoreArtist`(점수) → `ArtistResult`(카드 표시)
 - **저장**: `App` → `useStoredState` → `local-demo-store` → localStorage

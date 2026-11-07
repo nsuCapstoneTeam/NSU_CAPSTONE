@@ -37,8 +37,11 @@ const TITLES = {
 // 주소를 직접 열거나 새로고침했을 때 바로 보여 주지 않는 화면 (가입 직후에만 의미가 있음) → 홈으로
 const NOT_ON_LOAD = new Set(['signup-complete']);
 
+// 표에 직접 적힌 이름인지 ('toString'처럼 객체가 물려받은 이름은 아님)
+const has = (table, key) => Object.hasOwn(table, key);
+
 // 화면 이름 → 주소. 모르는 이름이면 '/'
-export const pathOf = (page) => ROUTES[page] ?? '/';
+export const pathOf = (page) => (has(ROUTES, page) ? ROUTES[page] : '/');
 
 // 주소 → 화면 이름. 끝의 '/'와 대소문자는 무시하고, 모르는 주소면 'home'
 // onLoad: 처음 열거나 새로고침한 경우 (가입 완료처럼 흐름 중간 화면은 홈으로)
@@ -49,4 +52,4 @@ export function pageOf(pathname = '/', { onLoad = false } = {}) {
 }
 
 // 브라우저 탭 제목: '행사 찾기 · CLAP SOUND', 홈은 'CLAP SOUND'
-export const titleOf = (page) => (TITLES[page] ? `${TITLES[page]} · CLAP SOUND` : 'CLAP SOUND');
+export const titleOf = (page) => (has(TITLES, page) ? `${TITLES[page]} · CLAP SOUND` : 'CLAP SOUND');

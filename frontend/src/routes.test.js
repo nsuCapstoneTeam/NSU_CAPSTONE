@@ -20,6 +20,15 @@ test('주소 끝의 / · 대소문자 · 쿼리는 무시하고, 모르는 주�
   assert.equal(pathOf('없는-화면'), '/');
 });
 
+test('객체가 물려받은 이름(toString 등)은 모르는 화면으로 본다', () => {
+  for (const name of ['toString', 'constructor', 'hasOwnProperty', '__proto__']) {
+    assert.equal(pathOf(name), '/', name);
+    assert.equal(titleOf(name), 'CLAP SOUND', name);
+  }
+  assert.equal(pageOf('/toString'), 'home');
+  assert.equal(pageOf('/constructor'), 'home');
+});
+
 test('가입 완료는 주소로 바로 열면 홈, 뒤로 가기로 돌아올 때는 그대로', () => {
   assert.equal(pageOf('/signup/complete', { onLoad: true }), 'home');
   assert.equal(pageOf('/signup/complete'), 'signup-complete');
