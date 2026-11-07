@@ -150,7 +150,8 @@ test('저장소 형식 검사: 화면에서 쓰는 칸이 하나라도 없거나
   assert.equal(isEventList([{ name: '이름만' }]), false);
   assert.equal(isEventList('x'), false);
   // 화면이 toLocaleString()을 부르는 숫자 칸이 빠진 예전 데이터
-  const { audience, ...noAudience } = saved;
+  const noAudience = { ...saved };
+  delete noAudience.audience;
   assert.equal(isEventList([noAudience]), false);
   assert.equal(isEventList([{ ...saved, budgetMax: '50' }]), false);
   assert.equal(isEventList([{ ...saved, venue: undefined }]), false);

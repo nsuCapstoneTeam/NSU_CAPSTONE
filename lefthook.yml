@@ -1,0 +1,10 @@
+pre-push:
+  commands:
+    backend-spotless:
+      root: "backend/"
+      glob: "backend/**/*.java"
+      run: ./gradlew spotlessCheck
+    frontend-eslint:
+      root: "frontend/"
+      glob: "frontend/**/*.{js,jsx}"
+      run: npm run lint -- --max-warnings=0

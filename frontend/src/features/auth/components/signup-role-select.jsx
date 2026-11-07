@@ -298,11 +298,13 @@ function RoleCard({ role, onSelect }) {
 
   // 카드에 들어왔을 때만 잠깐 기다림 (스타일이 바뀔 때는 기다리지 않아 끊기지 않음)
   useEffect(() => {
-    setReady(false);
     if (!active) return undefined;
 
     const timeout = window.setTimeout(() => setReady(true), READY_MS);
-    return () => window.clearTimeout(timeout);
+    return () => {
+      window.clearTimeout(timeout);
+      setReady(false);
+    };
   }, [active]);
 
   function stop() {
