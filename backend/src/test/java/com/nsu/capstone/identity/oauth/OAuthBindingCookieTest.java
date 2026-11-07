@@ -35,7 +35,7 @@ class OAuthBindingCookieTest {
         assertEquals("Lax", issued.getSameSite());
         assertEquals("/", issued.getPath());
         assertEquals(null, issued.getDomain());
-        assertEquals(360, issued.getMaxAge().toSeconds());
+        assertEquals(420, issued.getMaxAge().toSeconds());
     }
 
     @Test

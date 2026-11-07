@@ -164,7 +164,7 @@ class OAuthAuthorizationFlowIntegrationTest {
         org.junit.jupiter.api.Assertions.assertEquals(1, setCookies.size());
         String setCookie = setCookies.getFirst();
         org.junit.jupiter.api.Assertions.assertTrue(setCookie.startsWith("__Host-NSU_OAUTH_BINDING="), setCookie);
-        for (String attribute : java.util.List.of("HttpOnly", "Secure", "SameSite=Lax", "Path=/", "Max-Age=360")) {
+        for (String attribute : java.util.List.of("HttpOnly", "Secure", "SameSite=Lax", "Path=/", "Max-Age=420")) {
             org.junit.jupiter.api.Assertions.assertTrue(setCookie.contains(attribute), attribute + " 없음: " + setCookie);
         }
         org.junit.jupiter.api.Assertions.assertFalse(setCookie.contains("Domain"), setCookie);
@@ -279,6 +279,28 @@ class OAuthAuthorizationFlowIntegrationTest {
                 .andExpect(jsonPath("$.code", equalTo("OAUTH_RESULT_INVALID")));
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(
+            strings = {
+                "LOGIN:6f1c1c36-0f45-4a8f-9a53-6e0a1d6a0c11",
+                "UNKNOWN_TYPE:digest:payload",
+                "LOGIN:digest:not-a-uuid",
+                "ERROR:digest:NO_SUCH_ERROR_CODE",
+                "broken"
+            })
+    void unreadableStoredResultIsRejectedAsInvalidAndConsumed(String storedValue) throws Exception {
+        Flow flow = startFlow("google");
+        String code = "legacy-result-code";
+        String key = OAuthRedisKeys.result(opaqueValueService.digest(code));
+        redisTemplate.opsForValue().set(key, storedValue, java.time.Duration.ofMinutes(5));
+
+        exchange(code, flow.bindingCookie())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code", equalTo("OAUTH_RESULT_INVALID")))
+                .andExpect(header().doesNotExist("Set-Cookie"));
+        org.junit.jupiter.api.Assertions.assertFalse(redisTemplate.hasKey(key));
+    }
+
     @Test
     void resultExchangeWithAnotherBrowsersCookieIsRejected() throws Exception {
         Flow victim = startFlow("google");
@@ -330,8 +352,12 @@ class OAuthAuthorizationFlowIntegrationTest {
                             .getHeader("Location");
                 }));
             }
-            org.junit.jupiter.api.Assertions.assertTrue(ready.await(5, java.util.concurrent.TimeUnit.SECONDS));
-            start.countDown();
+            try {
+                org.junit.jupiter.api.Assertions.assertTrue(ready.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            } finally {
+                // 준비 대기가 실패해도 작업이 start.await()에 갇혀 executor.close()가 멈추지 않게 한다
+                start.countDown();
+            }
         }
 
         long winners = 0;
