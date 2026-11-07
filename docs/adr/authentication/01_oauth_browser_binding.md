@@ -3,6 +3,7 @@
 - 상태: **Proposed** (PR 리뷰에서 확정)
 - 결정일: **2026-11-07** (NSU-142). 사람 결정(김동엽): 미루지 않고 지금 고친다. 방식은 HttpOnly 쿠키 nonce다
 - 요구사항: SSOT 최종 승인 v1.17.1(현재 리비전 v1.19 초안)의 `SEC-118`("OAuth State Validation", "CSRF 방어"). 리비전 사이에 바뀌지 않았다
+- 설계 리뷰: Codex adversarial review(grill `20261107T043427Z-a1099d9a`) 지적 1건(실패한 흐름이 다른 흐름의 쿠키를 지움)을 Decision 2~4에 반영했다
 - 관련: [ADR authentication/00](./00_csrf_protection_for_bearer_api.md) Decision 6·7, [아티스트 OAuth 가입 API §OAuth 브라우저 결합](../../api/artist-oauth-signup.md), NSU-142, NSU-96, NSU-37(외부 계정 연결), NSU-129·PR #205(시연 서버 공개 조건), [RFC 9700 §4.7.1](https://www.rfc-editor.org/rfc/rfc9700.html#section-4.7.1)
 
 ---
@@ -16,12 +17,14 @@
 2. **콜백은 쿠키 nonce가 맞을 때만 처리한다.**
    - 콜백의 `state`로 인가 요청을 찾은 뒤, 요청의 쿠키 nonce digest가 저장된 digest와 같은지 상수 시간으로 비교한다.
    - 다르거나 쿠키가 없으면 인가 요청을 **소비하지 않고** 없는 것으로 다룬다. Spring은 `authorization_request_not_found`로 실패 핸들러를 탄다.
-3. **결과 코드도 같은 nonce에 묶는다.**
-   - 성공(`LOGIN`, `SIGNUP_REQUIRED`)과 오류(`ERROR`) 결과를 저장할 때, 그 요청의 쿠키 nonce digest를 결과와 함께 저장한다.
-   - 요청에 쿠키 nonce가 없으면 결과 코드를 만들지 않고 `?error=OAUTH_AUTHENTICATION_FAILED`로 보낸다(기존 fallback).
+   - 맞으면 "결합이 확인된 digest"를 요청 속성에 남긴다. 결과 저장(3)은 쿠키를 다시 읽지 않고 이 값만 쓴다.
+3. **결과 코드는 결합이 확인된 흐름에만 만든다.**
+   - 성공(`LOGIN`, `SIGNUP_REQUIRED`)과, 결합이 확인된 뒤의 오류(Provider 토큰 교환 실패, 가입 처리 오류 등)는 확인된 digest를 결과와 함께 저장한다.
+   - **결합 확인 전의 실패**(인가 요청 없음, nonce 불일치, 쿠키 없음, 위조 콜백)는 결과 코드를 만들지 않고 `?error=OAUTH_AUTHENTICATION_FAILED`로 보낸다(기존 fallback). 현재 쿠키에 오류를 묶지 않는다. 묶으면 같은 브라우저에서 진행 중인 다른 흐름의 쿠키를 그 오류 교환이 지운다(설계 리뷰 지적).
 4. **결과 교환(`POST /api/v1/auth/oauth/result`)은 쿠키 nonce가 맞을 때만 응답한다.**
    - 결과를 꺼내(일회용, 꺼내면 지운다) 저장된 digest와 요청 쿠키를 비교한다. 다르거나 쿠키가 없으면 `400 OAUTH_RESULT_INVALID`다. 결과가 없을 때와 같은 오류라 어느 쪽인지 드러나지 않는다.
-   - 응답은 성공·실패와 관계없이 결합 쿠키를 지운다(`Max-Age=0`, 같은 이름·경로).
+   - **쿠키는 일치한 교환에서만 지운다**(`Max-Age=0`, 같은 이름·경로). 불일치·결과 없음이면 쿠키를 건드리지 않는다. 늦게 도착한 다른 흐름의 결과나 위조 요청이 진행 중인 흐름의 쿠키를 지우지 못하게 하기 위해서다. 남은 쿠키는 `Max-Age`로 만료된다.
+   - 검증 시나리오: 흐름 A 시작 → B 시작 → A 콜백(불일치) 또는 위조 콜백(`?code=x&state=x`) 또는 A 결과의 늦은 교환이 일어나도, B는 끝까지 성공한다.
 5. **배포 전제**: 프런트와 API는 같은 출처다. nginx가 `https://<도메인>/`에서 React를, `https://<도메인>/api/`에서 Spring을 제공한다.
    - 그래서 결과 교환 `fetch`에 쿠키가 기본으로 실리고 CORS credentials 설정이 필요 없다.
    - HTTPS가 필요하다(`Secure`). nginx는 `X-Forwarded-Proto`·`X-Forwarded-Host`를 넘기고 Spring은 `server.forward-headers-strategy=framework`를 쓴다. 이것이 없으면 OAuth `redirect_uri`와 쿠키 판단이 틀어진다.
@@ -57,7 +60,7 @@ A를 고른 이유: 콜백 단계부터 막는 유일한 안이고, 배포가 �
 
 ### 결과 교환에서 불일치해도 소비하는 이유
 
-결과 코드는 1분짜리 일회용이다. 불일치에도 지워야 같은 코드로 여러 번 시도해 쿠키를 맞히는 시도를 막는다. 결과가 없을 때와 같은 `OAUTH_RESULT_INVALID`라 어떤 경우인지 드러나지 않는다.
+결과 코드는 1분짜리 일회용이다. 불일치에도 지워야 같은 코드로 여러 번 시도해 쿠키를 맞히는 시도를 막는다. 결과가 없을 때와 같은 `OAUTH_RESULT_INVALID`라 어떤 경우인지 드러나지 않는다. 결과는 지우지만 브라우저의 쿠키는 지우지 않는다(Decision 4). 결과 코드와 쿠키는 다른 흐름의 것일 수 있기 때문이다.
 
 ### ADR 00 Decision 6과의 관계
 
