@@ -12,7 +12,7 @@
 
 1. **OAuth 인가를 시작할 때 브라우저 결합 nonce를 쿠키로 내린다.**
    - 서버가 무작위 nonce(32바이트 이상, `SecureRandom`)를 만들어 쿠키 `__Host-NSU_OAUTH_BINDING`으로 내린다.
-   - 속성: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, `Domain` 없음, `Max-Age`는 인가 요청 TTL + 결과 코드 TTL + 콜백 처리 여유 1분(기본 7분). 여유를 두는 이유: 인가 요청이 만료되기 직전에 콜백이 오면 결과 코드 TTL은 콜백 처리(Provider 호출)가 끝난 뒤부터 세므로, 여유가 없으면 쿠키가 결과보다 먼저 만료돼 정상 교환이 `OAUTH_RESULT_INVALID`가 된다(PR #208 리뷰 지적). Provider 호출에 별도 timeout을 두지 않았으므로 1분을 넘는 콜백은 여전히 교환에 실패할 수 있고, 사용자는 로그인을 다시 시작한다.
+   - 속성: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, `Domain` 없음, `Max-Age`는 인가 요청 TTL + 결과 코드 TTL + 콜백 처리 여유 1분(기본 7분). 여유를 두는 이유: 인가 요청이 만료되기 직전에 콜백이 오면 결과 코드 TTL은 콜백 처리(Provider 호출)가 끝난 뒤부터 세므로, 여유가 없으면 쿠키가 결과보다 먼저 만료돼 정상 교환이 `OAUTH_RESULT_INVALID`가 된다(PR #208 리뷰 지적). 이 여유가 지켜지도록 콜백이 부르는 Provider HTTP 호출(토큰 교환, userinfo, ID 토큰 검증용 JWKS 조회)마다 연결 3초·응답 10초 제한을 둔다(`auth.oauth.provider-connect-timeout`·`provider-read-timeout`, 본인확인 이메일 발송과 같은 값). 콜백 한 번의 Provider 호출은 최대 3번이라 최악 39초로 여유 1분 안에 끝난다. 제한을 넘으면 결합이 확인된 뒤의 오류(3)로 처리되어 결과 교환이 `503 OAUTH_PROVIDER_UNAVAILABLE`을 받는다(PR #208 재리뷰 지적). 설정을 바꿀 때는 호출 수 × (연결 + 응답)이 1분보다 작아야 한다.
    - `__Host-` 접두사를 쓰는 이유: 브라우저는 이 접두사 쿠키를 HTTPS로, 같은 호스트가, `Path=/`·`Domain` 없이 내린 것만 받는다. 그래서 HTTPS 강제 전의 HTTP 응답을 조작하는 공격자나 다른 서브도메인이 공격자 nonce를 피해자 브라우저에 심을 수 없다(쿠키 주입, rfc6265bis §8.6, 설계 리뷰 3회차 지적). 받은 `Cookie` 헤더에는 속성이 없어 서버가 출처를 구별할 수 없으므로, 접두사가 유일한 보장이다. `Path=/`라 모든 요청에 실리지만 인증 수단이 아니고 `HttpOnly`다.
    - 개발 환경(HTTP)만 설정 `auth.oauth.binding-cookie-secure=false`로 이름 `NSU_OAUTH_BINDING_DEV`(접두사·`Secure` 없음)를 쓴다. 서버는 설정에 맞는 이름 하나만 읽는다. 운영(`true`, 기본값)에서는 접두사 없는 이름을 받지 않는다.
    - nonce의 digest(기존 `OAuthOpaqueValueService.digest`)를 Redis 인가 요청(`RedisOAuth2AuthorizationRequestRepository`)에 함께 저장한다. 원문 nonce는 저장하지 않는다.
