@@ -61,12 +61,14 @@ public class OAuthClientConfig {
     @Bean
     @ConditionalOnExpression(OAUTH_WITH_ANY_PROVIDER_ENABLED)
     OAuthSecurityConfigurer oauthSecurityConfigurer(
+        ClientRegistrationRepository clientRegistrationRepository,
         RedisOAuth2AuthorizationRequestRepository authorizationRequestRepository,
         NoOpOAuth2AuthorizedClientRepository authorizedClientRepository,
         OAuthAuthenticationSuccessHandler successHandler,
         OAuthAuthenticationFailureHandler failureHandler
     ) {
         return new OAuthSecurityConfigurer(
+            clientRegistrationRepository,
             authorizationRequestRepository,
             authorizedClientRepository,
             successHandler,

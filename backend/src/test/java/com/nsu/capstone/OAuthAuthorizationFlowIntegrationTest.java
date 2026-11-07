@@ -76,6 +76,7 @@ class OAuthAuthorizationFlowIntegrationTest {
     private static String providerBaseUri;
 
     @Autowired MockMvc mockMvc;
+    @Autowired org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 
     @DynamicPropertySource
     static void providerProperties(DynamicPropertyRegistry registry) {
@@ -116,6 +117,33 @@ class OAuthAuthorizationFlowIntegrationTest {
         assertAuthorizationRedirect("google", providerBaseUri + "/google/authorize");
         assertAuthorizationRedirect("kakao", providerBaseUri + "/kakao/authorize");
         assertAuthorizationRedirect("naver", "https://naver.test/authorize");
+    }
+
+    @Test
+    void nonGetAuthorizationRequestIsUnauthorizedAndLeavesNoStoredRequest() throws Exception {
+        int before = storedAuthorizationRequestCount();
+
+        mockMvc.perform(post("/api/v1/auth/oauth/authorization/google"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().doesNotExist("Location"))
+            .andExpect(jsonPath("$.code", equalTo("AUTHENTICATION_REQUIRED")));
+
+        org.junit.jupiter.api.Assertions.assertEquals(before, storedAuthorizationRequestCount());
+    }
+
+    @Test
+    void nonGetCallbackRequestIsUnauthorizedWithoutProviderProcessing() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/oauth/callback/google")
+                .queryParam("code", "provider-code")
+                .queryParam("state", "unknown-state"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(header().doesNotExist("Location"))
+            .andExpect(jsonPath("$.code", equalTo("AUTHENTICATION_REQUIRED")));
+    }
+
+    private int storedAuthorizationRequestCount() {
+        java.util.Set<String> keys = redisTemplate.keys("auth:oauth:authorization:*");
+        return keys == null ? 0 : keys.size();
     }
 
     @Test
