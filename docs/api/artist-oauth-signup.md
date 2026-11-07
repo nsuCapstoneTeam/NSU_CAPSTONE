@@ -20,7 +20,7 @@ OAuth 콜백과 결과 교환은 OAuth를 시작한 브라우저에서만 성공
 |---|---|
 | `GET /api/v1/auth/oauth/authorization/{provider}` | Provider로 `302`. 응답에 결합 쿠키 `NSU_OAUTH_BINDING`(`HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth/oauth`, 6분)을 내린다 |
 | `GET /api/v1/auth/oauth/callback/{registrationId}` | 쿠키 nonce가 그 흐름의 것과 맞을 때만 처리한다. 맞으면 결과 코드(성공, 또는 결합 확인 뒤의 오류)를 그 흐름에 묶어 `?code=`로 프런트에 보낸다. 맞지 않거나 쿠키가 없거나 인가 요청이 없으면, 인가 요청을 소비하지 않고 결과 코드 없이 `?error=OAUTH_AUTHENTICATION_FAILED`로 보낸다 |
-| `POST /api/v1/auth/oauth/result` | 결과 코드를 꺼내고(일회용) 쿠키 nonce가 맞을 때만 응답한다. 맞지 않거나 쿠키가 없으면 `400 OAUTH_RESULT_INVALID`(결과 코드가 없거나 만료됐을 때와 같은 오류). 결합 쿠키는 일치한 교환에서만 지운다. 불일치면 쿠키를 그대로 두어, 같은 브라우저에서 진행 중인 다른 흐름이 계속 동작한다 |
+| `POST /api/v1/auth/oauth/result` | 결과 코드를 꺼내고(일회용) 쿠키 nonce가 맞을 때만 응답한다. 맞지 않거나 쿠키가 없으면 `400 OAUTH_RESULT_INVALID`(결과 코드가 없거나 만료됐을 때와 같은 오류). 결합 쿠키를 쓰거나 지우지 않는다(`Set-Cookie` 없음). 쿠키는 6분 뒤 만료된다. 늦게 도착한 응답이 같은 브라우저에서 새로 시작한 흐름의 쿠키를 지우지 못하게 하기 위해서다 |
 
 - 프런트가 할 일은 없다. 프런트와 API가 같은 출처라서 브라우저가 쿠키를 자동으로 보낸다(`fetch` 기본값). `credentials: 'include'`를 쓸 필요가 없다.
 - 배포 전제: nginx가 `https://<도메인>/`에서 React를, `/api/`에서 Spring을 제공한다(같은 출처, HTTPS). 프록시는 `X-Forwarded-Proto`·`X-Forwarded-Host`를 넘기고 Spring은 `server.forward-headers-strategy=framework`를 쓴다. 로컬 개발은 Vite 프록시로 같은 출처를 만든다.
