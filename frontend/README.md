@@ -81,7 +81,7 @@ npm run dev
 
 ### 코드 검사 (ESLint)
 
-PR마다 CI의 `frontend-lint` job이 `npm ci --ignore-scripts` 뒤 `npm run lint -- --max-warnings=0`을 실행한다. 경고도 오류로 보므로 하나라도 있으면 PR을 머지할 수 없다.
+PR마다 CI의 `frontend-lint` job이 `npm ci --ignore-scripts` 뒤 `npm run lint -- --max-warnings=0`을 실행한다. 경고도 오류로 보므로 경고가 하나라도 있으면 이 검사가 실패한다. branch protection에서 `frontend-lint`를 required check로 지정한 뒤부터는 검사가 실패한 PR을 머지할 수 없다.
 
 - 검사 대상은 `frontend/` 전체다. 바뀐 파일만 검사하지 않는다.
 - CI는 Node 24를 쓴다. 로컬에서도 같은 명령으로 확인한다: `npm run lint -- --max-warnings=0`
@@ -92,6 +92,8 @@ push 전에 같은 검사를 돌리려면 레포를 clone한 뒤 한 번만 설�
 brew install lefthook
 lefthook install
 ```
+
+Homebrew를 쓸 수 없으면 [lefthook 공식 설치 안내](https://github.com/evilmartians/lefthook/blob/master/docs/install.md)의 다른 방법(패키지 매니저, 바이너리)으로 설치한 뒤 `lefthook install`을 실행한다.
 
 ## 폴더 구조
 

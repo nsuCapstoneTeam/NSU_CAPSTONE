@@ -174,7 +174,7 @@ src/main/java/com/nsu/capstone/NsuCapstoneApplication.java
 
 ## 코드 형식 검사 (Spotless)
 
-PR마다 CI의 `backend-lint` job이 `./gradlew spotlessCheck`를 실행한다. 형식이 맞지 않으면 PR을 머지할 수 없다.
+PR마다 CI의 `backend-lint` job이 `./gradlew spotlessCheck`를 실행한다. 형식이 맞지 않으면 이 검사가 실패한다. branch protection에서 `backend-lint`를 required check로 지정한 뒤부터는 검사가 실패한 PR을 머지할 수 없다.
 
 - 검사 규칙은 palantir-java-format이다. 사용하지 않는 import 제거와 import 정렬도 이 형식에 들어 있다.
 - `origin/main` 대비 바뀐 Java 파일만 검사한다. 건드리지 않은 파일은 형식이 달라도 통과한다.
@@ -187,6 +187,8 @@ push 전에 같은 검사를 돌리려면 레포를 clone한 뒤 한 번만 설�
 brew install lefthook
 lefthook install
 ```
+
+Homebrew를 쓸 수 없으면 [lefthook 공식 설치 안내](https://github.com/evilmartians/lefthook/blob/master/docs/install.md)의 다른 방법(패키지 매니저, 바이너리)으로 설치한 뒤 `lefthook install`을 실행한다.
 
 검사에 실패하면 `backend` 디렉터리에서 형식을 고치고, 커밋한 뒤 다시 push한다.
 
