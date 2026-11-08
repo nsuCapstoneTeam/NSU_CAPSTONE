@@ -69,7 +69,7 @@
 | 같은 세션 처리 중 | OAUTH_SIGNUP_IN_PROGRESS | 409 |
 
 이메일 중복은 기존 로그인 사용을 안내하며 자동 병합·연결·신규 User 생성은 하지 않는다.
-새 두 API는 정확한 POST 경로만 공개하고 CSRF에서 제외한다.
+새 두 API는 정확한 POST 경로만 공개한다. 서버는 CSRF 보호를 쓰지 않는다([ADR authentication/00](../adr/authentication/00_csrf_protection_for_bearer_api.md)).
 Profile/Trust, 외부 음악 플랫폼 연결, Refresh Token은 이번 범위에 포함하지 않는다.
 
 ### 가입 순서와 재시도

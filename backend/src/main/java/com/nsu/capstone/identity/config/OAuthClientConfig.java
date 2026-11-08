@@ -24,8 +24,7 @@ import org.springframework.util.StringUtils;
 @EnableConfigurationProperties(OAuthProperties.class)
 public class OAuthClientConfig {
 
-    private static final String OAUTH_WITH_ANY_PROVIDER_ENABLED =
-        "${auth.oauth.enabled:false} and ("
+    private static final String OAUTH_WITH_ANY_PROVIDER_ENABLED = "${auth.oauth.enabled:false} and ("
             + "${auth.oauth.google.enabled:false} or "
             + "${auth.oauth.kakao.enabled:false} or "
             + "${auth.oauth.naver.enabled:false})";
@@ -35,19 +34,14 @@ public class OAuthClientConfig {
     ClientRegistrationRepository oauthClientRegistrationRepository(OAuthProperties properties) {
         List<ClientRegistration> registrations = new ArrayList<>();
         if (properties.getGoogle().isEnabled()) {
-            registrations.add(registration(OAuthProvider.GOOGLE, properties.getGoogle(), List.of(
-                "openid", "email", "profile"
-            )));
+            registrations.add(
+                    registration(OAuthProvider.GOOGLE, properties.getGoogle(), List.of("openid", "email", "profile")));
         }
         if (properties.getKakao().isEnabled()) {
-            registrations.add(registration(OAuthProvider.KAKAO, properties.getKakao(), List.of(
-                "openid"
-            )));
+            registrations.add(registration(OAuthProvider.KAKAO, properties.getKakao(), List.of("openid")));
         }
         if (properties.getNaver().isEnabled()) {
-            registrations.add(registration(OAuthProvider.NAVER, properties.getNaver(), List.of(
-                "openid", "profile"
-            )));
+            registrations.add(registration(OAuthProvider.NAVER, properties.getNaver(), List.of("openid", "profile")));
         }
         return new InMemoryClientRegistrationRepository(registrations);
     }
@@ -61,40 +55,34 @@ public class OAuthClientConfig {
     @Bean
     @ConditionalOnExpression(OAUTH_WITH_ANY_PROVIDER_ENABLED)
     OAuthSecurityConfigurer oauthSecurityConfigurer(
-        RedisOAuth2AuthorizationRequestRepository authorizationRequestRepository,
-        NoOpOAuth2AuthorizedClientRepository authorizedClientRepository,
-        OAuthAuthenticationSuccessHandler successHandler,
-        OAuthAuthenticationFailureHandler failureHandler
-    ) {
+            ClientRegistrationRepository clientRegistrationRepository,
+            RedisOAuth2AuthorizationRequestRepository authorizationRequestRepository,
+            NoOpOAuth2AuthorizedClientRepository authorizedClientRepository,
+            OAuthAuthenticationSuccessHandler successHandler,
+            OAuthAuthenticationFailureHandler failureHandler) {
         return new OAuthSecurityConfigurer(
-            authorizationRequestRepository,
-            authorizedClientRepository,
-            successHandler,
-            failureHandler
-        );
+                clientRegistrationRepository,
+                authorizationRequestRepository,
+                authorizedClientRepository,
+                successHandler,
+                failureHandler);
     }
 
     private ClientRegistration registration(
-        OAuthProvider provider,
-        OAuthProperties.Provider properties,
-        List<String> scopes
-    ) {
-        ClientRegistration.Builder builder = ClientRegistration
-            .withRegistrationId(provider.registrationId())
-            .clientId(properties.getClientId())
-            .clientSecret(properties.getClientSecret())
-            .clientAuthenticationMethod(new ClientAuthenticationMethod(
-                properties.getClientAuthenticationMethod()
-            ))
-            .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-            .redirectUri(OAuthSecurityConfigurer.REDIRECT_URI_TEMPLATE)
-            .scope(scopes)
-            .authorizationUri(properties.getAuthorizationUri())
-            .tokenUri(properties.getTokenUri())
-            .jwkSetUri(properties.getJwkSetUri())
-            .issuerUri(properties.getIssuerUri())
-            .userNameAttributeName(IdTokenClaimNames.SUB)
-            .clientName(provider.name());
+            OAuthProvider provider, OAuthProperties.Provider properties, List<String> scopes) {
+        ClientRegistration.Builder builder = ClientRegistration.withRegistrationId(provider.registrationId())
+                .clientId(properties.getClientId())
+                .clientSecret(properties.getClientSecret())
+                .clientAuthenticationMethod(new ClientAuthenticationMethod(properties.getClientAuthenticationMethod()))
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri(OAuthSecurityConfigurer.REDIRECT_URI_TEMPLATE)
+                .scope(scopes)
+                .authorizationUri(properties.getAuthorizationUri())
+                .tokenUri(properties.getTokenUri())
+                .jwkSetUri(properties.getJwkSetUri())
+                .issuerUri(properties.getIssuerUri())
+                .userNameAttributeName(IdTokenClaimNames.SUB)
+                .clientName(provider.name());
         if (StringUtils.hasText(properties.getUserInfoUri())) {
             builder.userInfoUri(properties.getUserInfoUri());
         }

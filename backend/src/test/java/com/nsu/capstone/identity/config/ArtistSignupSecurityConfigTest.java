@@ -1,19 +1,20 @@
 package com.nsu.capstone.identity.config;
 
+import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.nsu.capstone.identity.application.ArtistSignupService;
 import com.nsu.capstone.identity.application.ArtistOAuthSignupService;
-import com.nsu.capstone.identity.presentation.ArtistOAuthSignupController;
-import com.nsu.capstone.identity.oauth.OAuthSignupStateStore.Prepared;
-import static org.mockito.Mockito.when;
+import com.nsu.capstone.identity.application.ArtistSignupService;
 import com.nsu.capstone.identity.application.EventPartnerSignupService;
 import com.nsu.capstone.identity.application.LoginService;
 import com.nsu.capstone.identity.application.SignupVerificationService;
+import com.nsu.capstone.identity.oauth.OAuthSignupStateStore.Prepared;
+import com.nsu.capstone.identity.presentation.ArtistOAuthSignupController;
 import com.nsu.capstone.identity.presentation.ArtistSignupController;
 import com.nsu.capstone.identity.presentation.ArtistSignupVerificationController;
 import com.nsu.capstone.identity.presentation.EventPartnerSignupController;
@@ -29,120 +30,139 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(controllers = {
-    ArtistOAuthSignupController.class,
-    ArtistSignupController.class,
-    ArtistSignupVerificationController.class,
-    EventPartnerSignupController.class,
-    EventPartnerSignupVerificationController.class,
-    LoginController.class
-})
-@Import({
-    SecurityConfig.class,
-    JsonAuthenticationEntryPoint.class,
-    JsonAccessDeniedHandler.class
-})
+@WebMvcTest(
+        controllers = {
+            ArtistOAuthSignupController.class,
+            ArtistSignupController.class,
+            ArtistSignupVerificationController.class,
+            EventPartnerSignupController.class,
+            EventPartnerSignupVerificationController.class,
+            LoginController.class
+        })
+@Import({SecurityConfig.class, JsonAuthenticationEntryPoint.class, JsonAccessDeniedHandler.class})
 class ArtistSignupSecurityConfigTest {
 
-    @Autowired MockMvc mockMvc;
-    @MockitoBean ArtistOAuthSignupService oauthSignup;
-    @MockitoBean ArtistSignupService artistSignupService;
-    @MockitoBean EventPartnerSignupService eventPartnerSignupService;
-    @MockitoBean SignupVerificationService verificationService;
-    @MockitoBean LoginService loginService;
-    @MockitoBean UserDetailsService userDetailsService;
-    @MockitoBean PasswordEncoder passwordEncoder;
-    @MockitoBean JwtDecoder jwtDecoder;
+    @Autowired
+    MockMvc mockMvc;
+
+    @MockitoBean
+    ArtistOAuthSignupService oauthSignup;
+
+    @MockitoBean
+    ArtistSignupService artistSignupService;
+
+    @MockitoBean
+    EventPartnerSignupService eventPartnerSignupService;
+
+    @MockitoBean
+    SignupVerificationService verificationService;
+
+    @MockitoBean
+    LoginService loginService;
+
+    @MockitoBean
+    UserDetailsService userDetailsService;
+
+    @MockitoBean
+    PasswordEncoder passwordEncoder;
+
+    @MockitoBean
+    JwtDecoder jwtDecoder;
 
     @Test
     void permitsOnlyExactArtistOAuthPostRoutes() throws Exception {
-        when(oauthSignup.prepare("session", "01012345678", null)).thenReturn(
-            new Prepared("session", "u@example.com", true, true));
-        mockMvc.perform(post("/api/v1/auth/signup/artist/oauth/session").contentType(APPLICATION_JSON)
-            .content("{\"oauthSignupSessionId\":\"session\",\"phone\":\"01012345678\"}"))
-            .andExpect(status().isCreated());
-        mockMvc.perform(post("/api/v1/auth/signup/artist/oauth").contentType(APPLICATION_JSON)
-            .content("{\"oauthSignupSessionId\":\"session\"}"))
-            .andExpect(status().isCreated());
+        when(oauthSignup.prepare("session", "01012345678", null))
+                .thenReturn(new Prepared("session", "u@example.com", true, true));
+        mockMvc.perform(post("/api/v1/auth/signup/artist/oauth/session")
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"oauthSignupSessionId\":\"session\",\"phone\":\"01012345678\"}"))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/auth/signup/artist/oauth")
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"oauthSignupSessionId\":\"session\"}"))
+                .andExpect(status().isCreated());
         mockMvc.perform(get("/api/v1/auth/signup/artist/oauth")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/auth/signup/artist/oauth/session")).andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/v1/auth/signup/event-partner/oauth")).andExpect(status().isForbidden());
-        mockMvc.perform(post("/api/v1/auth/signup/artist/oauth/other")).andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/auth/signup/event-partner/oauth"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        mockMvc.perform(post("/api/v1/auth/signup/artist/oauth/other"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
     }
 
     @Test
     void permitsOnlyDeclaredPreLoginSignupEndpointsWithoutCsrfToken() throws Exception {
         mockMvc.perform(post("/api/v1/auth/signup/artist/session/email-verification/send")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\"}"))
-            .andExpect(status().isAccepted());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\"}"))
+                .andExpect(status().isAccepted());
         mockMvc.perform(post("/api/v1/auth/signup/artist/session/email-verification/confirm")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\",\"code\":\"123456\"}"))
-            .andExpect(status().isNoContent());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\",\"code\":\"123456\"}"))
+                .andExpect(status().isNoContent());
         mockMvc.perform(post("/api/v1/auth/signup/artist/session/phone-verification/send")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\"}"))
-            .andExpect(status().isAccepted());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\"}"))
+                .andExpect(status().isAccepted());
         mockMvc.perform(post("/api/v1/auth/signup/artist/session/phone-verification/confirm")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\",\"code\":\"123456\"}"))
-            .andExpect(status().isNoContent());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\",\"code\":\"123456\"}"))
+                .andExpect(status().isNoContent());
         mockMvc.perform(put("/api/v1/auth/signup/artist/session/required-terms-agreement")
-                .contentType(APPLICATION_JSON)
-                .content("""
+                        .contentType(APPLICATION_JSON)
+                        .content("""
                     {"signupSessionId":"session-id","agreements":[{"id":"terms","version":"v1"}]}
                     """))
-            .andExpect(status().isNoContent());
+                .andExpect(status().isNoContent());
         mockMvc.perform(post("/api/v1/auth/signup/artist/session/adult-confirmation")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\",\"birthDate\":\"2000-01-01\"}"))
-            .andExpect(status().isNoContent());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\",\"birthDate\":\"2000-01-01\"}"))
+                .andExpect(status().isNoContent());
 
         mockMvc.perform(post("/api/v1/auth/signup/event-partner/session")
-                .contentType(APPLICATION_JSON)
-                .content("{\"email\":\"partner@example.com\",\"phone\":\"01012345678\"}"))
-            .andExpect(status().isCreated());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"email\":\"partner@example.com\",\"phone\":\"01012345678\"}"))
+                .andExpect(status().isCreated());
         mockMvc.perform(post("/api/v1/auth/signup/event-partner/session/email-verification/send")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\"}"))
-            .andExpect(status().isAccepted());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\"}"))
+                .andExpect(status().isAccepted());
         mockMvc.perform(post("/api/v1/auth/signup/event-partner/session/email-verification/confirm")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\",\"code\":\"123456\"}"))
-            .andExpect(status().isNoContent());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\",\"code\":\"123456\"}"))
+                .andExpect(status().isNoContent());
         mockMvc.perform(post("/api/v1/auth/signup/event-partner/session/phone-verification/send")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\"}"))
-            .andExpect(status().isAccepted());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\"}"))
+                .andExpect(status().isAccepted());
         mockMvc.perform(post("/api/v1/auth/signup/event-partner/session/phone-verification/confirm")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\",\"code\":\"123456\"}"))
-            .andExpect(status().isNoContent());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\",\"code\":\"123456\"}"))
+                .andExpect(status().isNoContent());
         mockMvc.perform(put("/api/v1/auth/signup/event-partner/session/required-terms-agreement")
-                .contentType(APPLICATION_JSON)
-                .content("""
+                        .contentType(APPLICATION_JSON)
+                        .content("""
                     {"signupSessionId":"session-id","agreements":[{"id":"terms","version":"v1"}]}
                     """))
-            .andExpect(status().isNoContent());
+                .andExpect(status().isNoContent());
         mockMvc.perform(post("/api/v1/auth/signup/event-partner/session/adult-confirmation")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\",\"birthDate\":\"2000-01-01\"}"))
-            .andExpect(status().isNoContent());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\",\"birthDate\":\"2000-01-01\"}"))
+                .andExpect(status().isNoContent());
         mockMvc.perform(post("/api/v1/auth/signup/event-partner")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\",\"password\":\"password\"}"))
-            .andExpect(status().isCreated());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\",\"password\":\"password\"}"))
+                .andExpect(status().isCreated());
 
         mockMvc.perform(post("/api/v1/auth/login")
-                .contentType(APPLICATION_JSON)
-                .content("{\"email\":\"user@example.com\",\"password\":\"password\"}"))
-            .andExpect(status().isOk());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"email\":\"user@example.com\",\"password\":\"password\"}"))
+                .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/auth/signup/artist/session/email-verification/send"))
-            .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized());
 
-        mockMvc.perform(get("/api/v1/auth/login"))
-            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/auth/login")).andExpect(status().isUnauthorized());
     }
 }
