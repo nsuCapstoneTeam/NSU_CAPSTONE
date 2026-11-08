@@ -14,8 +14,8 @@ import com.nsu.capstone.event.domain.ArtistType;
 import com.nsu.capstone.event.domain.EventType;
 import com.nsu.capstone.event.domain.Genre;
 import com.nsu.capstone.event.domain.Visibility;
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,8 +43,11 @@ import tools.jackson.databind.ObjectMapper;
 @DisplayName("API 문서(Scalar·OpenAPI)")
 class OpenApiDocsIntegrationTest {
 
-    @Autowired MockMvc mockMvc;
-    @Autowired ObjectMapper objectMapper;
+    @Autowired
+    MockMvc mockMvc;
+
+    @Autowired
+    ObjectMapper objectMapper;
 
     private JsonNode operation(String method, String path) throws Exception {
         return apiDocs().path("paths").path(path).path(method);
@@ -88,8 +91,8 @@ class OpenApiDocsIntegrationTest {
     private List<String> enumValues(JsonNode docs, JsonNode schema) {
         String ref = schema.path("$ref").asString("");
         JsonNode resolved = ref.isEmpty()
-            ? schema
-            : docs.path("components").path("schemas").path(ref.substring(ref.lastIndexOf('/') + 1));
+                ? schema
+                : docs.path("components").path("schemas").path(ref.substring(ref.lastIndexOf('/') + 1));
         List<String> values = new ArrayList<>();
         resolved.path("enum").forEach(value -> values.add(value.asString()));
         return values;
@@ -100,52 +103,51 @@ class OpenApiDocsIntegrationTest {
     }
 
     private JsonNode apiDocs() throws Exception {
-        String json = mockMvc.perform(get("/v3/api-docs"))
-            .andReturn().getResponse().getContentAsString();
+        String json =
+                mockMvc.perform(get("/v3/api-docs")).andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(json);
     }
 
     @Test
     @DisplayName("로그인하지 않아도 OpenAPI JSON을 받는다")
     void servesOpenApiJsonWithoutLogin() throws Exception {
-        mockMvc.perform(get("/v3/api-docs"))
-            .andExpect(status().isOk());
+        mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk());
     }
 
     @Test
     @DisplayName("로그인하지 않아도 Scalar 화면을 연다")
     void servesScalarPageWithoutLogin() throws Exception {
         mockMvc.perform(get("/scalar"))
-            .andExpect(status().isOk())
-            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML));
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML));
     }
 
     @Test
     @DisplayName("로그인하지 않아도 Scalar 화면이 불러오는 스크립트를 받는다")
     void servesScalarScriptWithoutLogin() throws Exception {
-        mockMvc.perform(get("/scalar/scalar.js"))
-            .andExpect(status().isOk());
+        mockMvc.perform(get("/scalar/scalar.js")).andExpect(status().isOk());
     }
 
     @Test
     @DisplayName("bearer JWT 인증 방식을 정의하고 모든 API에 기본으로 건다")
     void definesBearerJwtSchemeAndAppliesItGlobally() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
-            .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
-            .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
-            .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"))
-            .andExpect(jsonPath("$.security[0].bearerAuth").isArray());
+                .andExpect(
+                        jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme")
+                        .value("bearer"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat")
+                        .value("JWT"))
+                .andExpect(jsonPath("$.security[0].bearerAuth").isArray());
     }
 
     @Test
     @DisplayName("문서 첫 화면 설명에 오류 형식과 모든 API에 날 수 있는 500을 적는다")
     void describesErrorFormatAndServerErrorOnFirstPage() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
-            .andExpect(jsonPath("$.info.title").value("NSU_CAPSTONE API"))
-            .andExpect(jsonPath("$.info.description").value(allOf(
-                containsString("{code, message}"),
-                containsString("500 INTERNAL_SERVER_ERROR")
-            )));
+                .andExpect(jsonPath("$.info.title").value("NSU_CAPSTONE API"))
+                .andExpect(jsonPath("$.info.description")
+                        .value(allOf(containsString("{code, message}"), containsString("500 INTERNAL_SERVER_ERROR"))));
     }
 
     @Test
@@ -175,7 +177,7 @@ class OpenApiDocsIntegrationTest {
 
         assertThat(publicApis).hasSize(20);
         assertThat(publicApisWithAuth).isEmpty();
-        assertThat(otherApis).hasSize(10);
+        assertThat(otherApis).hasSize(11);
         assertThat(otherApisWithOverride).isEmpty();
     }
 
@@ -215,6 +217,9 @@ class OpenApiDocsIntegrationTest {
         if (path.startsWith("/api/v1/me/event-partner-profile")) {
             return "EVENT_PARTNER 프로필";
         }
+        if (path.startsWith("/api/v1/artists/")) {
+            return "Trust Profile";
+        }
         return "행사";
     }
 
@@ -229,11 +234,12 @@ class OpenApiDocsIntegrationTest {
         get    | /api/v1/regions                        | 200 | RegionListResponse
         """)
     @DisplayName("행사·지역 API의 성공 상태와 응답 스키마를 적는다")
-    void documentsSuccessStatusAndSchema(String method, String path, String status, String schema)
-        throws Exception {
+    void documentsSuccessStatusAndSchema(String method, String path, String status, String schema) throws Exception {
         JsonNode responses = operation(method, path).path("responses");
 
-        assertThat(responses.has(status)).as("응답 상태 목록 %s", responses.propertyNames()).isTrue();
+        assertThat(responses.has(status))
+                .as("응답 상태 목록 %s", responses.propertyNames())
+                .isTrue();
         assertThat(schemaName(responses.path(status))).isEqualTo(schema);
     }
 
@@ -306,11 +312,23 @@ class OpenApiDocsIntegrationTest {
         Set<String> required = new TreeSet<>();
         schema("EventRequest").path("required").forEach(field -> required.add(field.asString()));
 
-        assertThat(required).containsExactlyInAnyOrder(
-            "name", "eventType", "startDate", "startTime", "endDate", "endTime",
-            "performanceMinutes", "venue", "regionCode", "genres",
-            "budgetMin", "budgetMax", "expectedAudience", "description", "visibility"
-        );
+        assertThat(required)
+                .containsExactlyInAnyOrder(
+                        "name",
+                        "eventType",
+                        "startDate",
+                        "startTime",
+                        "endDate",
+                        "endTime",
+                        "performanceMinutes",
+                        "venue",
+                        "regionCode",
+                        "genres",
+                        "budgetMin",
+                        "budgetMax",
+                        "expectedAudience",
+                        "description",
+                        "visibility");
     }
 
     @ParameterizedTest
@@ -324,10 +342,9 @@ class OpenApiDocsIntegrationTest {
 
     static Stream<Arguments> codeFields() {
         return Stream.of(
-            Arguments.of("eventType", EventType.class),
-            Arguments.of("artistType", ArtistType.class),
-            Arguments.of("visibility", Visibility.class)
-        );
+                Arguments.of("eventType", EventType.class),
+                Arguments.of("artistType", ArtistType.class),
+                Arguments.of("visibility", Visibility.class));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -335,8 +352,11 @@ class OpenApiDocsIntegrationTest {
     @DisplayName("행사 본문의 코드값 필드에 허용 값을 적는다")
     void documentsAllowedValuesOfCodeFields(String field, Class<? extends Enum<?>> type) throws Exception {
         JsonNode docs = apiDocs();
-        JsonNode property = docs.path("components").path("schemas").path("EventRequest")
-            .path("properties").path(field);
+        JsonNode property = docs.path("components")
+                .path("schemas")
+                .path("EventRequest")
+                .path("properties")
+                .path(field);
 
         assertThat(enumValues(docs, property)).as(property.toString()).isEqualTo(names(type));
     }
@@ -345,8 +365,12 @@ class OpenApiDocsIntegrationTest {
     @DisplayName("행사 본문의 장르 배열 원소에 허용 값을 적는다")
     void documentsAllowedValuesOfGenres() throws Exception {
         JsonNode docs = apiDocs();
-        JsonNode items = docs.path("components").path("schemas").path("EventRequest")
-            .path("properties").path("genres").path("items");
+        JsonNode items = docs.path("components")
+                .path("schemas")
+                .path("EventRequest")
+                .path("properties")
+                .path("genres")
+                .path("items");
 
         assertThat(enumValues(docs, items)).as(items.toString()).isEqualTo(names(Genre.class));
     }
