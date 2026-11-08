@@ -1,12 +1,18 @@
 package com.nsu.capstone.identity.oauth;
 
 import java.time.Duration;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.StringUtils;
 
 @ConfigurationProperties(prefix = "auth.oauth")
 public class OAuthProperties implements InitializingBean {
+
+    /** 결과 TTL은 Provider 호출 뒤부터 세므로, 인가 요청 만료 직전 콜백도 결과를 교환할 수 있게 결합 쿠키 수명에 더하는 여유. */
+    static final Duration CALLBACK_PROCESSING_MARGIN = Duration.ofMinutes(1);
+
+    /** 콜백 한 번이 Provider에 보내는 HTTP 호출의 최대 수(토큰, userinfo, JWKS). */
+    static final int MAX_PROVIDER_CALLS_PER_CALLBACK = 3;
 
     private boolean enabled;
     private Duration authorizationRequestTtl = Duration.ofMinutes(5);
@@ -14,6 +20,9 @@ public class OAuthProperties implements InitializingBean {
     private Duration signupClaimLease = Duration.ofSeconds(30);
     private Duration resultTtl = Duration.ofMinutes(1);
     private String frontendRedirectUri;
+    private boolean bindingCookieSecure = true;
+    private Duration providerConnectTimeout = Duration.ofSeconds(3);
+    private Duration providerReadTimeout = Duration.ofSeconds(10);
     private Provider google = new Provider();
     private Provider kakao = new Provider();
     private Provider naver = new Provider();
@@ -24,6 +33,9 @@ public class OAuthProperties implements InitializingBean {
         requirePositive(signupSessionTtl, "signup-session-ttl");
         requirePositive(signupClaimLease, "signup-claim-lease");
         requirePositive(resultTtl, "result-ttl");
+        requirePositive(providerConnectTimeout, "provider-connect-timeout");
+        requirePositive(providerReadTimeout, "provider-read-timeout");
+        requireProviderTimeoutsWithinCallbackMargin();
         if (!enabled) {
             return;
         }
@@ -55,6 +67,16 @@ public class OAuthProperties implements InitializingBean {
         requireText(provider.tokenUri, name + ".token-uri");
         requireText(provider.jwkSetUri, name + ".jwk-set-uri");
         requireText(provider.clientAuthenticationMethod, name + ".client-authentication-method");
+    }
+
+    private void requireProviderTimeoutsWithinCallbackMargin() {
+        Duration worstCase =
+                providerConnectTimeout.plus(providerReadTimeout).multipliedBy(MAX_PROVIDER_CALLS_PER_CALLBACK);
+        if (worstCase.compareTo(CALLBACK_PROCESSING_MARGIN) >= 0) {
+            throw new IllegalStateException("auth.oauth.provider-connect-timeout과 provider-read-timeout의 합 × "
+                    + MAX_PROVIDER_CALLS_PER_CALLBACK + "이 콜백 처리 여유 " + CALLBACK_PROCESSING_MARGIN.toSeconds()
+                    + "초보다 작아야 한다 (현재 " + worstCase.toMillis() + "ms)");
+        }
     }
 
     private void requireText(String value, String property) {
@@ -115,6 +137,36 @@ public class OAuthProperties implements InitializingBean {
 
     public void setFrontendRedirectUri(String frontendRedirectUri) {
         this.frontendRedirectUri = frontendRedirectUri;
+    }
+
+    /** false는 HTTP 개발 전용이다. 운영은 기본값(true)을 쓴다. */
+    public boolean isBindingCookieSecure() {
+        return bindingCookieSecure;
+    }
+
+    public void setBindingCookieSecure(boolean bindingCookieSecure) {
+        this.bindingCookieSecure = bindingCookieSecure;
+    }
+
+    /**
+     * 콜백 한 번이 Provider에 보내는 HTTP 호출(토큰, JWKS, userinfo) 하나의 연결 제한 시간이다. 호출 3개의 최악 합계(연결 + 응답 제한 시간)가 결합 쿠키의 콜백 처리
+     * 여유(1분)보다 작아야 하며, 시작할 때 검증한다.
+     */
+    public Duration getProviderConnectTimeout() {
+        return providerConnectTimeout;
+    }
+
+    public void setProviderConnectTimeout(Duration providerConnectTimeout) {
+        this.providerConnectTimeout = providerConnectTimeout;
+    }
+
+    /** Provider HTTP 호출 하나의 응답 대기 제한 시간이다. */
+    public Duration getProviderReadTimeout() {
+        return providerReadTimeout;
+    }
+
+    public void setProviderReadTimeout(Duration providerReadTimeout) {
+        this.providerReadTimeout = providerReadTimeout;
     }
 
     public Provider getGoogle() {
@@ -224,6 +276,5 @@ public class OAuthProperties implements InitializingBean {
         public void setClientAuthenticationMethod(String clientAuthenticationMethod) {
             this.clientAuthenticationMethod = clientAuthenticationMethod;
         }
-
     }
 }

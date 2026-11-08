@@ -56,6 +56,9 @@ class LoginFlowIntegrationTest {
     OAuthLoginService oauthLoginService;
 
     @Autowired
+    com.nsu.capstone.identity.oauth.OAuthOpaqueValueService opaqueValueService;
+
+    @Autowired
     JdbcTemplate jdbcTemplate;
 
     @Autowired
@@ -103,10 +106,12 @@ class LoginFlowIntegrationTest {
             VALUES (?, ?, 'GOOGLE', 'oauth-subject', CURRENT_TIMESTAMP)
             """, uuidV7Generator.generate(), user.getId());
         String resultCode = oauthLoginService.completeAuthentication(
-                new OAuthUserIdentity(OAuthProvider.GOOGLE, "oauth-subject", "oauth-login@example.com", true));
+                new OAuthUserIdentity(OAuthProvider.GOOGLE, "oauth-subject", "oauth-login@example.com", true),
+                opaqueValueService.digest("binding-nonce"));
 
         MvcResult exchangeResult = mockMvc.perform(post("/api/v1/auth/oauth/result")
                         .contentType(APPLICATION_JSON)
+                        .cookie(new jakarta.servlet.http.Cookie("__Host-NSU_OAUTH_BINDING", "binding-nonce"))
                         .content("{\"code\":\"" + resultCode + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.type").value("LOGIN"))

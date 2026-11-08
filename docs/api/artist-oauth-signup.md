@@ -12,6 +12,21 @@
 기존 `POST /api/v1/auth/oauth/result`의 `SIGNUP_REQUIRED` 응답에서 받은
 `oauthSignupSessionId`를 사용한다. 결과 코드는 일회용이며 최종 가입에 재사용하지 않는다.
 
+### OAuth 브라우저 결합
+
+OAuth 콜백과 결과 교환은 OAuth를 시작한 브라우저에서만 성공한다([ADR authentication/01](../adr/authentication/01_oauth_browser_binding.md), NSU-142). 다른 사람이 시작한 흐름을 이어받는 login CSRF와 가입 탈취를 막기 위해서다.
+
+| 단계 | 동작 |
+|---|---|
+| `GET /api/v1/auth/oauth/authorization/{provider}` | Provider로 `302`. 응답에 결합 쿠키 `__Host-NSU_OAUTH_BINDING`(`HttpOnly; Secure; SameSite=Lax; Path=/`, `Domain` 없음, 7분)을 내린다. 쿠키를 쓰는 응답은 이것뿐이다 |
+| `GET /api/v1/auth/oauth/callback/{registrationId}` | 쿠키 nonce가 그 흐름의 것과 맞을 때만 처리한다. 맞으면 결과 코드(성공, 또는 결합 확인 뒤의 오류)를 그 흐름에 묶어 `?code=`로 프런트에 보낸다. 맞지 않거나 쿠키가 없거나 인가 요청이 없으면, 인가 요청을 소비하지 않고 결과 코드 없이 `?error=OAUTH_AUTHENTICATION_FAILED`로 보낸다 |
+| `POST /api/v1/auth/oauth/result` | 결과 코드를 꺼내고(일회용) 쿠키 nonce가 맞을 때만 응답한다. 맞지 않거나 쿠키가 없으면 `400 OAUTH_RESULT_INVALID`(결과 코드가 없거나 만료됐을 때와 같은 오류). 결합 쿠키를 쓰거나 지우지 않는다(`Set-Cookie` 없음). 쿠키는 7분 뒤 만료된다. 늦게 도착한 응답이 같은 브라우저에서 새로 시작한 흐름의 쿠키를 지우지 못하게 하기 위해서다 |
+
+- 프런트가 할 일은 없다. 프런트와 API가 같은 출처라서 브라우저가 쿠키를 자동으로 보낸다(`fetch` 기본값). `credentials: 'include'`를 쓸 필요가 없다.
+- 배포 전제: nginx가 `https://<도메인>/`에서 React를, `/api/`에서 Spring을 제공한다(같은 출처, HTTPS, HTTP→HTTPS 전환과 HSTS). 프록시는 `X-Forwarded-Proto`·`X-Forwarded-Host`를 넘기고 Spring은 `server.forward-headers-strategy=framework`를 쓴다. 로컬 개발은 Vite 프록시로 같은 출처를 만들고, HTTP 개발에서만 `auth.oauth.binding-cookie-secure=false`로 개발용 쿠키 이름 `NSU_OAUTH_BINDING_DEV`를 쓴다.
+- 같은 브라우저에서 OAuth를 두 탭으로 동시에 시작하면 먼저 시작한 쪽은 실패한다. 다시 시작하면 된다.
+- 결합 쿠키는 인증 수단이 아니다. API 인증은 계속 `Authorization: Bearer` 헤더만 쓴다.
+
 ### 가입 준비
 
 `POST /api/v1/auth/signup/artist/oauth/session`

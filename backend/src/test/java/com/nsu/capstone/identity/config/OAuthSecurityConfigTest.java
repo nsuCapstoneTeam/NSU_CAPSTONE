@@ -39,6 +39,9 @@ class OAuthSecurityConfigTest {
     OAuthResultService resultService;
 
     @MockitoBean
+    com.nsu.capstone.identity.oauth.OAuthBindingCookie bindingCookie;
+
+    @MockitoBean
     JwtDecoder jwtDecoder;
 
     @MockitoBean
@@ -49,7 +52,7 @@ class OAuthSecurityConfigTest {
 
     @Test
     void permitsOnlyDeclaredOAuthMethodsWithoutCreatingSession() throws Exception {
-        when(resultService.exchange("result-code"))
+        when(resultService.exchange("result-code", null))
                 .thenReturn(OAuthResultResponse.signupRequired("signup-session", true));
 
         mockMvc.perform(get("/api/v1/auth/oauth/authorization/google"))
