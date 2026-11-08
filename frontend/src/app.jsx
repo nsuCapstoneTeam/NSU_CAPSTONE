@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import brandMark from './assets/clap-sound-mark.svg';
 import brandMarkDark from './assets/clap-sound-mark-dark.svg';
 import teamLogo from './assets/hallaemallae-logo.png';
 import { ARTISTS } from './features/matching/matching.js';
 import { INITIAL_PROFILE, INITIAL_POSTS } from './data/demo-data.js';
 import useStoredState from './hooks/use-stored-state.js';
+import { pageOf, pathOf, titleOf } from './routes.js';
 import './app.css';
 import SignupRoleSelect from './features/auth/components/signup-role-select.jsx';
 import OrganizerLogin from './features/auth/components/organizer-login.jsx';
@@ -51,8 +52,9 @@ const SIGNUP_START_PAGES = ['signup-role', 'artist-signup', 'organizer-signup'];
 
 // 앱 전체: 현재 화면(page) 전환, 공유 상태(테마·프로필·로그인·게시글·일정·관심 목록), 공통 헤더·푸터
 export default function App() {
-  // 현재 화면 이름 (라우터 대신 상태로 전환)
-  const [page, setPage] = useState('home');
+  // 현재 화면 이름 (라우터 라이브러리 대신 상태로 전환)
+  // 처음에는 주소로 정함 (/events로 열면 행사 찾기). 이후에는 navigate()가 화면과 주소를 함께 바꿈 (NSU-119)
+  const [page, setPage] = useState(() => pageOf(window.location.pathname, { onLoad: true }));
   // 브라우저에 저장되는 상태들. 세 번째 값은 저장 실패 여부
   const [theme, setTheme, themeError] = useStoredState(
     'hallaemallae-theme',
@@ -115,19 +117,48 @@ export default function App() {
   }, [theme]);
   // 상단 메뉴를 숨기는 로그인 화면
   const isLoginScreen = page === 'artist-login' || page === 'organizer-login';
-  // 화면 전환: 로그인 흐름 밖으로 나가면 돌아갈 화면을 잊고, 맨 위로 스크롤 후 본문에 포커스
-  function navigate(next) {
+  // 탭 제목을 화면에 맞춤 (브라우저 방문 기록에도 화면 이름이 보임)
+  useEffect(() => {
+    document.title = titleOf(page);
+  }, [page]);
+  // 화면만 바꿈: 로그인 흐름 밖으로 나가면 돌아갈 화면을 잊고, 맨 위로 스크롤 후 본문에 포커스
+  function showPage(next) {
     if (!LOGIN_FLOW_PAGES.includes(next)) setReturnTo(null);
     setMyPageTab('profile');
-    // 가입을 새로 시작하면 기존 로그인은 끝냄.
-    // (로그인한 행사 관계자가 아티스트로 가입해도 예전 역할로 매칭 화면이 열리지 않도록)
-    if (SIGNUP_START_PAGES.includes(next) && session) setSession(null);
     setPage(next);
     setNotice('');
     window.scrollTo({ top: 0, behavior: 'instant' });
     // preventScroll: 포커스를 옮겨도 화면이 헤더 아래로 밀려 내려가지 않게 함 (무대 배경 화면에서 발생)
     setTimeout(() => mainRef.current?.focus({ preventScroll: true }), 0);
   }
+  // 화면 전환: 화면을 바꾸고 주소도 함께 바꿈 (브라우저 방문 기록에 한 칸 추가)
+  // replace: 지금 기록을 바꿔 끼움 (로그인을 마친 뒤 뒤로 가기로 로그인 폼에 돌아가지 않게)
+  function navigate(next, { replace = false } = {}) {
+    // 가입을 새로 시작하면 기존 로그인은 끝냄.
+    // (로그인한 행사 관계자가 아티스트로 가입해도 예전 역할로 매칭 화면이 열리지 않도록)
+    if (SIGNUP_START_PAGES.includes(next) && session) setSession(null);
+    showPage(next);
+    const path = pathOf(next);
+    // 같은 화면을 다시 누르면 기록을 늘리지 않음
+    if (replace || window.location.pathname === path) window.history.replaceState({ page: next }, '', path);
+    else window.history.pushState({ page: next }, '', path);
+  }
+  // 브라우저 뒤로·앞으로 가기: 바뀐 주소의 화면을 보여 줌
+  // 기록을 따라 움직이는 것뿐이라 로그아웃 같은 부수 효과는 없음 (가입 화면으로 돌아가도 로그인 유지)
+  const onHistoryMove = useEffectEvent(() => {
+    const next = pageOf(window.location.pathname);
+    // 같은 화면 안의 이동(본문 바로가기 링크 #main-content 등)은 무시
+    if (next !== page) showPage(next);
+  });
+  useEffect(() => {
+    // 처음 연 주소를 정리 (모르는 주소·가입 완료는 홈 주소로)
+    const first = pageOf(window.location.pathname, { onLoad: true });
+    window.history.replaceState({ page: first }, '', pathOf(first) + window.location.hash);
+    // 화면이 바뀔 때 직접 맨 위로 올리므로, 브라우저가 예전 스크롤 위치로 옮기지 않게 함
+    window.history.scrollRestoration = 'manual';
+    window.addEventListener('popstate', onHistoryMove);
+    return () => window.removeEventListener('popstate', onHistoryMove);
+  }, []);
   // 매칭 화면에서 '행사 등록하러 가기' → 마이페이지 '내 행사' 탭으로 (NSU-95)
   function openMyEvents() {
     navigate('mypage');
@@ -157,7 +188,7 @@ export default function App() {
       returnTo === 'match' && nextSession.role !== 'organizer'
         ? 'mypage'
         : returnTo || 'mypage';
-    navigate(target);
+    navigate(target, { replace: true });
     setNotice(`${nextSession.name}님, 환영합니다.`);
   }
   // 로그아웃: 세션만 지우고 홈으로 (프로필은 유지)
