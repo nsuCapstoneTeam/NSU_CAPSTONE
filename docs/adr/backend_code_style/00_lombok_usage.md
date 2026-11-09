@@ -62,13 +62,18 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원이 만든 파일�
 목록의 파일마다 다음을 검사한다.
 
 1. Lombok 참조는 허용 목록에만 있다. 대상은 `import lombok.…` 문과 `@lombok.…` 형태의 정규화된 이름이다. 허용 목록은 `lombok.Getter`, `lombok.RequiredArgsConstructor`, `lombok.NoArgsConstructor`, `lombok.AccessLevel`, `lombok.extern.slf4j.Slf4j`다. 와일드카드 import(`import lombok.*;`)와 static import(`import static lombok.…`)는 허용 목록 밖으로 본다.
-2. `@NoArgsConstructor`에는 `access = AccessLevel.PROTECTED`가 있다. 패키지 이름을 붙인 표기(`@lombok.NoArgsConstructor`, `lombok.AccessLevel.PROTECTED`)와 여러 줄에 걸친 인자도 같게 본다.
+2. `@NoArgsConstructor`에는 `access = AccessLevel.PROTECTED`가 있다. 패키지 이름을 붙인 표기(`@lombok.NoArgsConstructor`, `lombok.AccessLevel.PROTECTED`)와 여러 줄에 걸친 인자도 같게 본다. Lombok의 어노테이션일 때만 본다. 곧 `import lombok.NoArgsConstructor`나 `import lombok.*`가 있거나, `@lombok.NoArgsConstructor`로 썼을 때다.
 3. Lombok이 그대로 대신할 수 있는 코드를 손으로 쓰지 않았다. "그대로"는 Lombok이 같은 이름, 시그니처, 동작의 코드를 만든다는 뜻이다. Lombok이 그대로 만들 수 없는 코드는 위반이 아니다.
+   - 검사는 잘못 잡지 않는 쪽을 우선한다. Lombok이 그대로 만들 수 있는지 확실하지 않은 코드는 위반으로 보지 않는다.
    - `class` 선언에만 적용하고 `enum`·`record`·`interface`·어노테이션 타입은 검사하지 않는다. 클래스 안에 중첩된 선언도 그 선언의 종류를 따른다.
-   - logger: `LoggerFactory.getLogger(...)` 호출이 없다. 호출을 감싸는 가장 안쪽의 이름 있는 타입 선언이 `class`일 때만 본다.
+   - logger: `static` 필드를 SLF4J의 `LoggerFactory.getLogger(그 클래스.class)`로 초기화하면 위반이다. `@Slf4j`가 같은 logger를 만든다.
+     - "그 클래스"는 필드를 선언한 가장 안쪽의 이름 있는 `class`다.
+     - SLF4J인지는 `import org.slf4j.LoggerFactory`, `import org.slf4j.*`, 또는 `org.slf4j.LoggerFactory`로 쓴 이름으로 본다.
+     - 실행 중에 이름을 정하는 호출(`getLogger(category)`), 다른 클래스나 문자열을 넘기는 호출, 지역 변수, SLF4J가 아닌 `LoggerFactory`는 위반이 아니다.
    - 단순 getter: 다음을 모두 만족하면 위반이다.
      - 매개변수가 없는 인스턴스 메서드이고, 본문이 `return x;` 또는 `return this.x;` 하나뿐이다. `x`는 그 클래스에 선언된 인스턴스 필드다.
-     - 메서드 이름이 Lombok이 `x`에 만드는 getter 이름과 같다. `foo` → `getFoo()`, `boolean` 필드 `foo` → `isFoo()`, `boolean` 필드 `isFoo` → `isFoo()`다. `Boolean` 필드는 `getFoo()`다.
+     - 메서드 이름이 Lombok이 `x`에 만드는 getter 이름과 같다. `foo` → `getFoo()`, `boolean` 필드 `foo` → `isFoo()`, `boolean` 필드 `isFoo` → `isFoo()`다. `Boolean` 필드는 `getFoo()`다. 첫 글자는 Lombok처럼 바꾼다(영문 밖의 글자 포함).
+     - Lombok이 그 필드의 getter를 만들지 않게 하는 다른 메서드가 클래스에 없다. 예를 들어 `boolean` 필드 `active`에 `getActive()`가 있으면 Lombok은 `isActive()`를 만들지 않는다.
      - 반환 타입이 필드 타입과 같다.
      - `synchronized`·`final`이 아니고, `throws`와 `@Override` 밖의 어노테이션이 없다. Lombok getter는 동기화하지 않고, `final`과 `throws`를 붙이지 않으며, 손으로 쓴 메서드의 어노테이션을 옮기지 않는다.
      - 접근 수준은 보지 않는다. Lombok은 `@Getter(AccessLevel.PACKAGE)`처럼 어느 접근 수준의 getter든 만들 수 있다.
