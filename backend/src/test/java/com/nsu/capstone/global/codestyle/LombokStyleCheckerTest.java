@@ -663,6 +663,68 @@ class LombokStyleCheckerTest {
     }
 
     @Test
+    void rejectsValueConstructorWhoseParameterHasEllipsisOnlyInBlockComment() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private final String name;
+
+                    Sample(String /* ... */ name) {
+                        this.name = name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("@RequiredArgsConstructor");
+        });
+    }
+
+    @Test
+    void rejectsValueConstructorWhoseParameterHasEllipsisOnlyInLineComment() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private final String name;
+
+                    Sample(String // ...
+                            name) {
+                        this.name = name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("@RequiredArgsConstructor");
+        });
+    }
+
+    @Test
+    void rejectsValueConstructorWhoseParameterHasEllipsisOnlyInMultiLineComment() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private final String name;
+
+                    Sample(String /* first
+                            ... last */ name) {
+                        this.name = name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("@RequiredArgsConstructor");
+        });
+    }
+
+    @Test
     void acceptsConstructorOfClassWithNonNullAnnotatedField() {
         String source = """
                 package sample;

@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.type.TypeKind;
 import javax.tools.Diagnostic;
@@ -56,6 +57,8 @@ final class LombokStyleChecker {
             "lombok.extern.slf4j.Slf4j");
 
     private static final Set<String> PROTECTED_ACCESS = Set.of("AccessLevel.PROTECTED", "lombok.AccessLevel.PROTECTED");
+
+    private static final Pattern COMMENT = Pattern.compile("/\\*.*?\\*/|//[^\\n]*", Pattern.DOTALL);
 
     private LombokStyleChecker() {}
 
@@ -230,12 +233,14 @@ final class LombokStyleChecker {
             }
         }
 
-        /** 구문 트리에는 가변 인자 표시가 없어(타입이 {@code String[]}로 보인다) 매개변수의 소스 범위에서 {@code ...}를 찾는다. */
+        /** 구문 트리에는 가변 인자 표시가 없어(타입이 {@code String[]}로 보인다) 매개변수의 소스 범위에서 주석을 빼고 {@code ...}를 찾는다. */
         private boolean hasVarargs(MethodTree constructor) {
             return constructor.getParameters().stream().anyMatch(parameter -> {
                 int start = (int) positions.getStartPosition(unit, parameter);
                 int end = (int) positions.getEndPosition(unit, parameter);
-                return source.substring(start, end).contains("...");
+                return COMMENT.matcher(source.substring(start, end))
+                        .replaceAll(" ")
+                        .contains("...");
             });
         }
 
