@@ -50,7 +50,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 
 검사 테스트는 `backend/src/test`의 한 패키지에 둔다. 이름과 파싱 방법은 구현 때 정하되, 새 의존성 없이 JDK와 JUnit 5만 쓴다. 목록의 파일마다 다음을 검사한다.
 
-1. Lombok 참조는 허용 목록에만 있다. 대상은 `import lombok.…` 문과 `@lombok.…` 형태의 정규화된 이름이다. 허용 목록은 `lombok.Getter`, `lombok.RequiredArgsConstructor`, `lombok.NoArgsConstructor`, `lombok.AccessLevel`, `lombok.extern.slf4j.Slf4j`다.
+1. Lombok 참조는 허용 목록에만 있다. 대상은 `import lombok.…` 문과 `@lombok.…` 형태의 정규화된 이름이다. 허용 목록은 `lombok.Getter`, `lombok.RequiredArgsConstructor`, `lombok.NoArgsConstructor`, `lombok.AccessLevel`, `lombok.extern.slf4j.Slf4j`다. 와일드카드 import(`import lombok.*;`)와 static import(`import static lombok.…`)는 허용 목록 밖으로 본다.
 2. `@NoArgsConstructor`에는 `access = AccessLevel.PROTECTED`가 있다.
 3. Lombok이 대신할 코드를 손으로 쓰지 않았다. `class` 선언에만 적용하고 `enum`·`record`·`interface`는 검사하지 않는다.
    - logger: `LoggerFactory.getLogger(...)` 호출이 없다.
@@ -60,6 +60,25 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
    - 로직이 있는 생성자·getter(검증, 변환, 기본값 처리)는 위 형태에 맞지 않으므로 검사에 걸리지 않는다.
 
 테스트는 규칙마다 위반 예제로 실패하는 경우를 먼저 보인다(TDD RED). 목록 밖 파일에 위반이 있어도 통과하는 경우도 테스트한다. 팀원 코드를 검사하지 않는다는 결정을 이 테스트가 지킨다. 마지막으로 실제 레포의 목록 전체가 통과하는지 검사한다.
+
+#### 소스를 Gradle `test` 입력으로 등록한다
+
+- 검사 테스트는 `src/main/java`의 소스 원문을 읽는다. 그런데 Gradle `test` 태스크는 컴파일된 클래스와 test 리소스만 입력으로 본다. 그래서 바이트코드가 같은 소스 변경 뒤에는 `test`가 `UP-TO-DATE`로 건너뛰어진다. 예를 들어 `import lombok.Getter;`를 `import lombok.*;`로 바꾸거나, 쓰지 않는 `import lombok.Builder;`를 더해도 같은 명령이 성공한다.
+- 그래서 `backend/build.gradle`의 `test` 태스크에 소스 디렉터리를 입력으로 등록한다.
+
+  ```groovy
+  tasks.named('test') {
+      useJUnitPlatform()
+      inputs.dir('src/main/java')
+          .withPathSensitivity(PathSensitivity.RELATIVE)
+          .withPropertyName('lombokStyleSources')
+  }
+  ```
+
+  - `PathSensitivity.RELATIVE`는 Gradle 문서가 디렉터리 입력에 권하는 값이다. checkout 위치가 달라도 같은 입력으로 본다.
+  - 검사 목록 파일은 test 리소스라 이미 입력이다.
+- 지금 CI는 매번 새로 checkout하고 build cache를 켜지 않아(`backend/gradle.properties` 없음) `test`가 항상 실행된다. 이 등록은 로컬 실행과, 나중에 build cache를 켰을 때를 위한 것이다.
+- 구현 때 확인: 검사 명령을 한 번 성공시킨 뒤, 목록 파일 하나의 Lombok import를 `import lombok.*;`로 바꾼다. 바이트코드는 바뀌지 않는다. 같은 명령을 다시 실행해 실패하는 로그를 보고한다.
 
 ### PR 검사(CI)
 
@@ -194,6 +213,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 - 팀원이 `@Data`·`@ToString`을 쓰면 엔티티의 민감 정보가 로그에 남을 수 있다. 팀 전체 금지는 강석윤의 결정을 기다린다.
 - 새 파일을 목록에 더하는 일은 `AGENTS.md` 규칙에 기댄다. 잊으면 그 파일은 검사 밖에 남는다.
 - `backend-lint`가 Gradle 컴파일까지 하게 되어, 실행 시간이 Spotless 검사만 할 때보다 길어진다. 컴파일이 안 되는 PR은 누구의 PR이든 실패한다.
+- `src/main/java`가 `test` 태스크의 입력이 되어, 운영 코드의 주석만 바뀌어도 로컬 `test`가 다시 실행된다.
 - 허용 목록을 바꿀 때 세 곳(이 ADR, 협업 가이드 10절, 검사 테스트)을 고친다.
 - IDE에서 Lombok이 만든 메서드를 보려면 annotation processing이 켜져 있어야 한다. IntelliJ IDEA는 Lombok 지원을 내장하고 있다. Gradle 빌드와 CI는 IDE 설정과 관계없이 동작한다.
 
