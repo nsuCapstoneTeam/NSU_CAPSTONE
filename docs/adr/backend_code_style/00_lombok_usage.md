@@ -24,6 +24,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원이 만든 파일�
 - Lombok은 값만 옮기는 코드를 대신한다. 검증·변환 같은 로직이 있는 생성자와 getter는 손으로 쓴다.
 - `@NoArgsConstructor`는 `access = AccessLevel.PROTECTED`로 쓴다. `AccessLevel`은 static import하지 않는다.
 - 손으로 쓴 생성자가 `public`이 아니면 Lombok 생성자도 `access`로 같은 접근 수준을 지킨다. 예를 들어 package-private 생성자는 `@RequiredArgsConstructor(access = AccessLevel.PACKAGE)`로 바꾼다. Lombok으로 바꾸면서 생성자의 공개 범위가 넓어지지 않게 하기 위해서다.
+  - getter도 같다. 손으로 쓴 getter가 `public`이 아니면 필드에 `@Getter(AccessLevel.PACKAGE)`처럼 같은 접근 수준을 붙인다.
 - 4개 밖의 Lombok 기능(`@Data`, `@Setter`, `@ToString`, `@EqualsAndHashCode`, `@Value`, `@Builder`, `@AllArgsConstructor`, `@SneakyThrows`, `lombok.experimental` 기능 등)은 쓰지 않기를 권한다. 이유는 [Rationale](#허용-목록-방식으로-검사한다)에 있다.
 
 ### 적용 대상
@@ -69,14 +70,15 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원이 만든 파일�
      - 매개변수가 없는 인스턴스 메서드이고, 본문이 `return x;` 또는 `return this.x;` 하나뿐이다. `x`는 그 클래스에 선언된 인스턴스 필드다.
      - 메서드 이름이 Lombok이 `x`에 만드는 getter 이름과 같다. `foo` → `getFoo()`, `boolean` 필드 `foo` → `isFoo()`, `boolean` 필드 `isFoo` → `isFoo()`다. `Boolean` 필드는 `getFoo()`다.
      - 반환 타입이 필드 타입과 같다.
-     - `synchronized`가 아니고, `@Override` 밖의 어노테이션이 없다. Lombok getter는 동기화하지 않고, 손으로 쓴 메서드의 어노테이션을 옮기지 않는다.
+     - `synchronized`·`final`이 아니고, `throws`와 `@Override` 밖의 어노테이션이 없다. Lombok getter는 동기화하지 않고, `final`과 `throws`를 붙이지 않으며, 손으로 쓴 메서드의 어노테이션을 옮기지 않는다.
+     - 접근 수준은 보지 않는다. Lombok은 `@Getter(AccessLevel.PACKAGE)`처럼 어느 접근 수준의 getter든 만들 수 있다.
    - 값 생성자: 다음을 모두 만족하면 위반이다.
      - 본문이 `this.x = x;` 형태의 대입문만으로 되어 있다(한 개 이상).
      - 매개변수가 그 클래스의 "초기화하지 않은 `final` 인스턴스 필드" 전체와 이름, 타입, 순서가 같다. `@RequiredArgsConstructor`는 이 필드만 선언 순서대로 받는다.
      - 생성자와 매개변수에 어노테이션(`@Qualifier` 등)이 없고, `throws`와 가변 인자가 없다. Lombok은 기본 설정에서 이것들을 만들지 않는다.
      - 초기화하지 않은 인스턴스 필드에 이름이 `NonNull`인 어노테이션이 없다. 그런 필드가 있으면 Lombok이 매개변수와 null 검사를 더한다.
    - 엔티티처럼 `final`이 아닌 필드에 값을 넣는 생성자는 손으로 쓴다. 이 생성자를 만드는 `@AllArgsConstructor`는 허용 목록 밖이다.
-   - 빈 `protected` 생성자: 매개변수, 본문, 어노테이션이 모두 없는 `protected` 생성자는 위반이다.
+   - 빈 `protected` 생성자: 매개변수, 본문, 어노테이션, `throws`가 모두 없는 `protected` 생성자는 위반이다.
    - 로직이 있는 생성자·getter(검증, 변환, 기본값 처리)는 위 형태에 맞지 않으므로 검사에 걸리지 않는다.
 
 테스트는 규칙마다 위반 예제로 실패하는 경우를 먼저 보인다(TDD RED). Lombok이 그대로 만들 수 없어 위반이 아닌 경우도 테스트한다. 목록 밖 파일에 위반이 있어도 통과하는 경우도 테스트한다. 팀원 코드를 검사하지 않는다는 결정을 이 테스트가 지킨다. 마지막으로 실제 레포의 목록 전체가 통과하는지 검사한다.
