@@ -25,9 +25,11 @@ final class LombokStyleChecker {
 
     private static final Pattern QUALIFIED_LOMBOK = Pattern.compile("@(lombok\\.\\w+(?:\\.\\w+)*)");
 
-    private static final Pattern NO_ARGS_CONSTRUCTOR = Pattern.compile("@NoArgsConstructor\\b(\\s*\\([^)]*\\))?");
+    private static final Pattern NO_ARGS_CONSTRUCTOR =
+            Pattern.compile("@(?:lombok\\.)?NoArgsConstructor\\b(\\s*\\([^)]*\\))?");
 
-    private static final Pattern PROTECTED_ACCESS = Pattern.compile("\\baccess\\s*=\\s*AccessLevel\\.PROTECTED\\b");
+    private static final Pattern PROTECTED_ACCESS =
+            Pattern.compile("\\baccess\\s*=\\s*(?:lombok\\.)?AccessLevel\\.PROTECTED\\b");
 
     private static final Pattern HAND_WRITTEN_LOGGER = Pattern.compile("\\bLoggerFactory\\.getLogger\\s*\\(");
 
@@ -72,12 +74,13 @@ final class LombokStyleChecker {
                     violations.add(new Violation(i + 1, "허용 밖 Lombok 사용: " + qualified.group(1)));
                 }
             }
-            Matcher noArgs = NO_ARGS_CONSTRUCTOR.matcher(lines[i]);
-            while (noArgs.find()) {
-                String arguments = noArgs.group(1) == null ? "" : noArgs.group(1);
-                if (!PROTECTED_ACCESS.matcher(arguments).find()) {
-                    violations.add(new Violation(i + 1, "@NoArgsConstructor에는 access = AccessLevel.PROTECTED가 있어야 한다"));
-                }
+        }
+        Matcher noArgs = NO_ARGS_CONSTRUCTOR.matcher(text);
+        while (noArgs.find()) {
+            String arguments = noArgs.group(1) == null ? "" : noArgs.group(1);
+            if (!PROTECTED_ACCESS.matcher(arguments).find()) {
+                violations.add(new Violation(
+                        lineOf(text, noArgs.start()), "@NoArgsConstructor에는 access = AccessLevel.PROTECTED가 있어야 한다"));
             }
         }
         List<int[]> classBodies = new ArrayList<>();

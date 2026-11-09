@@ -368,4 +368,67 @@ class LombokStyleCheckerTest {
 
         assertThat(LombokStyleChecker.check(source)).isEmpty();
     }
+
+    @Test
+    void rejectsFullyQualifiedNoArgsConstructorWithoutAccessLevel() {
+        String source = """
+                package sample;
+
+                @lombok.NoArgsConstructor
+                class Sample {}
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(3);
+            assertThat(violation.message()).contains("@NoArgsConstructor").contains("AccessLevel.PROTECTED");
+        });
+    }
+
+    @Test
+    void acceptsFullyQualifiedNoArgsConstructorWithProtectedAccess() {
+        String source = """
+                package sample;
+
+                @lombok.NoArgsConstructor(access = lombok.AccessLevel.PROTECTED)
+                class Sample {}
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsNoArgsConstructorWhoseArgumentsSpanSeveralLines() {
+        String source = """
+                package sample;
+
+                import lombok.AccessLevel;
+                import lombok.NoArgsConstructor;
+
+                @NoArgsConstructor(
+                        // JPA가 쓰는 기본 생성자라 밖에 열지 않는다
+                        access = AccessLevel.PROTECTED)
+                class Sample {}
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void rejectsNoArgsConstructorWhoseMultiLineArgumentsLackProtectedAccess() {
+        String source = """
+                package sample;
+
+                import lombok.AccessLevel;
+                import lombok.NoArgsConstructor;
+
+                @NoArgsConstructor(
+                        access = AccessLevel.PUBLIC)
+                class Sample {}
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("AccessLevel.PROTECTED");
+        });
+    }
 }
