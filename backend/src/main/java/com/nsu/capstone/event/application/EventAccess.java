@@ -8,12 +8,15 @@ import com.nsu.capstone.global.exception.ErrorCode;
 import java.time.Clock;
 import java.util.Optional;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
  * id로 행사 하나를 읽는 유일한 길(ADR event_management/04).
  */
 @Component
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public class EventAccess {
 
     /**
@@ -95,12 +98,6 @@ public class EventAccess {
     private final EventRepository events;
     private final CanViewPrivateEvent seat;
     private final Clock clock;
-
-    EventAccess(EventRepository events, CanViewPrivateEvent seat, Clock clock) {
-        this.events = events;
-        this.seat = seat;
-        this.clock = clock;
-    }
 
     /**
      * 행사를 읽어 {@code operation}이 허용되는지 판정하고 돌려준다. 없거나 삭제됐으면 404다. UPDATE·CANCEL·

@@ -12,11 +12,16 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "events")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Event {
 
     public static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
@@ -79,6 +84,7 @@ public class Event {
     private Visibility visibility;
 
     @Embedded
+    @Getter(AccessLevel.NONE)
     private EventDetails details;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -96,8 +102,6 @@ public class Event {
 
     @Column(name = "request_hash", length = 64, updatable = false)
     private String requestHash;
-
-    protected Event() {}
 
     public static Event register(
             UUID id, UUID eventPartnerId, EventContent content, Clock clock, UUID idempotencyKey, String requestHash) {
@@ -165,96 +169,8 @@ public class Event {
         this.details = content.details();
     }
 
-    public UUID getId() {
-        return id;
-    }
-
-    public UUID getEventPartnerId() {
-        return eventPartnerId;
-    }
-
-    public EventStatus getStatus() {
-        return status;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public EventType getEventType() {
-        return eventType;
-    }
-
-    public Instant getStartAt() {
-        return startAt;
-    }
-
-    public Instant getEndAt() {
-        return endAt;
-    }
-
-    public int getPerformanceMinutes() {
-        return performanceMinutes;
-    }
-
-    public String getVenue() {
-        return venue;
-    }
-
-    public String getRegionCode() {
-        return regionCode;
-    }
-
-    public ArtistType getArtistType() {
-        return artistType;
-    }
-
-    public List<Genre> getGenres() {
-        return genres;
-    }
-
-    public long getBudgetMin() {
-        return budgetMin;
-    }
-
-    public long getBudgetMax() {
-        return budgetMax;
-    }
-
-    public int getExpectedAudience() {
-        return expectedAudience;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public Visibility getVisibility() {
-        return visibility;
-    }
-
     /** 선택정보가 모두 비면 JPA가 null로 읽으므로, 항상 객체로 돌려준다(03 §3.6 불변식 5). */
     public EventDetails getDetails() {
         return details == null ? EventDetails.empty() : details;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public Instant getDeletedAt() {
-        return deletedAt;
-    }
-
-    public UUID getIdempotencyKey() {
-        return idempotencyKey;
-    }
-
-    public String getRequestHash() {
-        return requestHash;
     }
 }

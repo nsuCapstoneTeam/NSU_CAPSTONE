@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -28,16 +29,13 @@ import org.springframework.web.bind.annotation.RestController;
         content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
 @Tag(name = "행사")
 @RequestMapping("/api/v1/me/events")
+@RequiredArgsConstructor
 public class MyEventController {
 
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 100;
 
     private final EventService eventService;
-
-    public MyEventController(EventService eventService) {
-        this.eventService = eventService;
-    }
 
     /**
      * 파라미터는 문자열로 받아 직접 검사한다. 타입 변환 실패가 Spring 표준 400이 되지 않게 하기 위해서다.

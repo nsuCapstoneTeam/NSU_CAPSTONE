@@ -17,9 +17,11 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class TrustProfileQueryService {
 
     private final UserRepository userRepository;
@@ -27,19 +29,6 @@ public class TrustProfileQueryService {
     private final VerificationReader verificationReader;
     private final TrustProfileAssembler assembler;
     private final Clock clock;
-
-    public TrustProfileQueryService(
-            UserRepository userRepository,
-            PerformanceOutcomeReader performanceOutcomeReader,
-            VerificationReader verificationReader,
-            TrustProfileAssembler assembler,
-            Clock clock) {
-        this.userRepository = userRepository;
-        this.performanceOutcomeReader = performanceOutcomeReader;
-        this.verificationReader = verificationReader;
-        this.assembler = assembler;
-        this.clock = clock;
-    }
 
     public TrustProfile getTrustProfile(UUID callerId, UserRole callerRole, UUID artistId) {
         boolean ownProfile = callerRole == UserRole.ARTIST && callerId.equals(artistId);

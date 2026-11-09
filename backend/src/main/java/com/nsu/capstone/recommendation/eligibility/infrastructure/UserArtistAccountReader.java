@@ -8,19 +8,17 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
  * {@code users}에서 역할과 상태를 한 번의 조회로 읽는다.
  */
 @Component
+@RequiredArgsConstructor
 public class UserArtistAccountReader implements ArtistAccountReader {
 
     private final UserRepository userRepository;
-
-    public UserArtistAccountReader(UserRepository userRepository) {
-        this.userRepository = userRepository;
-    }
 
     @Override
     public Map<UUID, ArtistAccount> findByArtistIds(Collection<UUID> artistIds) {

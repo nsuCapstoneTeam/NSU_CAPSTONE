@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -33,13 +34,10 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "EVENT_PARTNER 프로필")
 @RequestMapping("/api/v1/me/event-partner-profile")
 @PreAuthorize("hasRole('EVENT_PARTNER')")
+@RequiredArgsConstructor
 public class EventPartnerProfileController {
 
     private final EventPartnerProfileService service;
-
-    public EventPartnerProfileController(EventPartnerProfileService service) {
-        this.service = service;
-    }
 
     @GetMapping
     @ApiResponse(responseCode = "200")

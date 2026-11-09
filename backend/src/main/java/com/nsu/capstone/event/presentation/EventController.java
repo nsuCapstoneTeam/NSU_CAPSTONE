@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.net.URI;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -37,6 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
         content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
 @Tag(name = "행사")
 @RequestMapping("/api/v1/events")
+@RequiredArgsConstructor
 public class EventController {
 
     private static final Pattern LOWERCASE_UUID =
@@ -44,11 +46,6 @@ public class EventController {
 
     private final EventService eventService;
     private final EventRegistrationService registrationService;
-
-    public EventController(EventService eventService, EventRegistrationService registrationService) {
-        this.eventService = eventService;
-        this.registrationService = registrationService;
-    }
 
     @PostMapping
     @PreAuthorize("hasRole('EVENT_PARTNER')")

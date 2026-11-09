@@ -19,8 +19,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
@@ -36,9 +35,9 @@ import org.springframework.stereotype.Service;
  * </ul>
  */
 @Service
+@Slf4j
 public class EligibilityFilter {
 
-    private static final Logger log = LoggerFactory.getLogger(EligibilityFilter.class);
     private static final int PROVINCE_CODE_LENGTH = 2;
     private static final String PASSED_METER = "eligibility.passed";
     private static final String REJECTED_METER = "eligibility.rejected";

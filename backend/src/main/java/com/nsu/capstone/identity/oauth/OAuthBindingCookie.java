@@ -4,6 +4,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Arrays;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 
@@ -12,16 +13,13 @@ import org.springframework.stereotype.Component;
  * ADR authentication/01 Decision 1.
  */
 @Component
+@RequiredArgsConstructor
 public class OAuthBindingCookie {
 
     private static final String HOST_PREFIXED_NAME = "__Host-NSU_OAUTH_BINDING";
     private static final String DEVELOPMENT_NAME = "NSU_OAUTH_BINDING_DEV";
 
     private final OAuthProperties properties;
-
-    public OAuthBindingCookie(OAuthProperties properties) {
-        this.properties = properties;
-    }
 
     private static final String CONFIRMED_DIGEST_ATTRIBUTE = OAuthBindingCookie.class.getName() + ".CONFIRMED_DIGEST";
 

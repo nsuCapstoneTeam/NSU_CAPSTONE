@@ -9,11 +9,13 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@RequiredArgsConstructor
 public class EventPartnerProfileRepository {
 
     private static final String COLUMNS = "name, organization, bio, event_types, region_codes, updated_at";
@@ -27,10 +29,6 @@ public class EventPartnerProfileRepository {
             rs.getTimestamp("updated_at").toInstant());
 
     private final JdbcClient jdbc;
-
-    public EventPartnerProfileRepository(JdbcClient jdbc) {
-        this.jdbc = jdbc;
-    }
 
     public Optional<StoredProfile> find(UUID userId) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM event_partner_profiles WHERE user_id = :userId")

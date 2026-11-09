@@ -11,6 +11,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -20,19 +22,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public class EventService {
 
     private final EventRepository eventRepository;
     private final RegionRepository regionRepository;
     private final EventAccess access;
     private final Clock clock;
-
-    EventService(EventRepository eventRepository, RegionRepository regionRepository, EventAccess access, Clock clock) {
-        this.eventRepository = eventRepository;
-        this.regionRepository = regionRepository;
-        this.access = access;
-        this.clock = clock;
-    }
 
     @Transactional(readOnly = true)
     public Event get(UUID eventId, UUID viewerId) {

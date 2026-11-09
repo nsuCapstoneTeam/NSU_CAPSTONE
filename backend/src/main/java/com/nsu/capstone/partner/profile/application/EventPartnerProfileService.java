@@ -7,21 +7,16 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class EventPartnerProfileService {
 
     private final EventPartnerProfileRepository repository;
     private final RegionRepository regionRepository;
     private final Clock clock;
-
-    public EventPartnerProfileService(
-            EventPartnerProfileRepository repository, RegionRepository regionRepository, Clock clock) {
-        this.repository = repository;
-        this.regionRepository = regionRepository;
-        this.clock = clock;
-    }
 
     /** 저장된 프로필. 없으면(저장 전이거나 삭제함) 비어 있다. */
     public Optional<StoredProfile> find(UUID userId) {

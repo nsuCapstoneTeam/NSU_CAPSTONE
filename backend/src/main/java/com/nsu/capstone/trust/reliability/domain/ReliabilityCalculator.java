@@ -10,11 +10,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 
 /**
  * 공연 결과 원장으로 Artist Reliability를 계산한다(04 §9, 06 §5).
  * 불변이고 스레드 안전하며, 현재 시각을 입력으로 받지 않는다.
  */
+@RequiredArgsConstructor
 public final class ReliabilityCalculator {
 
     /** UUID.compareTo는 부호 있는 비교라 쓰지 않는다. 부호 없는 비교는 UUID 문자열의 사전순과 같다. */
@@ -32,12 +34,8 @@ public final class ReliabilityCalculator {
                     (ExcludedOutcome excluded) -> excluded.outcome().performanceId(), UNSIGNED_UUID_ORDER)
             .thenComparingInt(excluded -> excluded.outcome().revision());
 
+    /** 계산에 쓰는 γ, 사전분포, 경계값. */
     private final ReliabilityPolicy policy;
-
-    /** {@code policy}의 γ, 사전분포, 경계값으로 계산하는 계산기를 만든다. */
-    public ReliabilityCalculator(ReliabilityPolicy policy) {
-        this.policy = policy;
-    }
 
     /**
      * 원장 행으로 Reliability를 계산하고, 유효 관측과 계산에서 뺀 행을 나눠 담는다.
