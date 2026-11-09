@@ -283,7 +283,7 @@ class LombokStyleCheckerTest {
     }
 
     @Test
-    void rejectsValueConstructorEvenWhenConstructorItselfHasAnnotation() {
+    void acceptsValueConstructorThatItselfHasAnnotation() {
         String source = """
                 package sample;
 
@@ -297,9 +297,7 @@ class LombokStyleCheckerTest {
                 }
                 """;
 
-        assertThat(LombokStyleChecker.check(source))
-                .singleElement()
-                .satisfies(violation -> assertThat(violation.line()).isEqualTo(7));
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
     }
 
     @Test
@@ -467,5 +465,194 @@ class LombokStyleCheckerTest {
             assertThat(violation.line()).isEqualTo(4);
             assertThat(violation.message()).startsWith("파싱 실패");
         });
+    }
+
+    @Test
+    void acceptsLoggerInInterfaceEnumAndRecordNestedInsideAClass() {
+        String source = """
+                package sample;
+
+                class Outer {
+                    interface Marker {
+                        Logger LOG = LoggerFactory.getLogger(Marker.class);
+                    }
+
+                    enum Level {
+                        LOW;
+
+                        private static final Logger log = LoggerFactory.getLogger(Level.class);
+                    }
+
+                    record Pair(String first) {
+                        static final Logger LOG = LoggerFactory.getLogger(Pair.class);
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void rejectsLoggerInClassNestedInsideInterface() {
+        String source = """
+                package sample;
+
+                interface Marker {
+                    class Impl {
+                        private static final Logger log = LoggerFactory.getLogger(Impl.class);
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(5);
+            assertThat(violation.message()).contains("@Slf4j");
+        });
+    }
+
+    @Test
+    void acceptsConstructorThatAssignsNonFinalField() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String name;
+
+                    Sample(String name) {
+                        this.name = name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsConstructorThatTakesOnlySomeOfTheFinalFields() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private final String name;
+                    private final int size;
+
+                    {
+                        this.size = 1;
+                    }
+
+                    Sample(String name) {
+                        this.name = name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsConstructorWhoseParametersAreInDifferentOrderThanTheFields() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private final String name;
+                    private final int size;
+
+                    Sample(int size, String name) {
+                        this.size = size;
+                        this.name = name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsConstructorWhoseParameterTypeDiffersFromTheField() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private final long size;
+
+                    Sample(int size) {
+                        this.size = size;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsConstructorThatDeclaresThrows() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private final String name;
+
+                    Sample(String name) throws IOException {
+                        this.name = name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsConstructorWithVarargsParameter() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private final String[] names;
+
+                    Sample(String... names) {
+                        this.names = names;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsConstructorOfClassWithNonNullAnnotatedField() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private final String name;
+
+                    @NonNull
+                    private String title;
+
+                    Sample(String name) {
+                        this.name = name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsSynchronizedGetter() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String name = "a";
+
+                    public synchronized String getName() {
+                        return name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
     }
 }

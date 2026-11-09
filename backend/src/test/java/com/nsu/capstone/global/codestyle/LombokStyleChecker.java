@@ -99,7 +99,7 @@ final class LombokStyleChecker {
         private final SourcePositions positions;
         private final String source;
         private final List<Violation> violations;
-        private final Deque<ClassTree> enclosingClasses = new ArrayDeque<>();
+        private final Deque<ClassTree> enclosingTypes = new ArrayDeque<>();
 
         Scanner(CompilationUnitTree unit, SourcePositions positions, String source, List<Violation> violations) {
             this.unit = unit;
@@ -132,33 +132,53 @@ final class LombokStyleChecker {
 
         @Override
         public Void visitClass(ClassTree node, Void unused) {
-            enclosingClasses.push(node);
+            enclosingTypes.push(node);
             try {
                 if (node.getKind() == Tree.Kind.CLASS && !node.getSimpleName().isEmpty()) {
                     checkMembers(node);
                 }
                 return super.visitClass(node, unused);
             } finally {
-                enclosingClasses.pop();
+                enclosingTypes.pop();
             }
         }
 
         @Override
         public Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
-            if (isLoggerFactoryGetLogger(node)
-                    && enclosingClasses.stream().anyMatch(enclosing -> enclosing.getKind() == Tree.Kind.CLASS)) {
+            if (isLoggerFactoryGetLogger(node) && isInsideNamedClass()) {
                 report(startLine(node), "logger는 손으로 만들지 않고 @Slf4j를 쓴다");
             }
             return super.visitMethodInvocation(node, unused);
         }
 
+        /** 호출을 감싸는 가장 안쪽의 이름 있는 타입 선언이 {@code class}인지 본다. 익명 클래스는 건너뛴다. */
+        private boolean isInsideNamedClass() {
+            return enclosingTypes.stream()
+                    .filter(type -> !type.getSimpleName().isEmpty())
+                    .findFirst()
+                    .filter(type -> type.getKind() == Tree.Kind.CLASS)
+                    .isPresent();
+        }
+
         private void checkMembers(ClassTree node) {
             String className = node.getSimpleName().toString();
             Set<String> instanceFields = new HashSet<>();
+            List<VariableTree> requiredFields = new ArrayList<>();
+            boolean hasNonNullField = false;
             for (Tree member : node.getMembers()) {
                 if (member instanceof VariableTree field
                         && !field.getModifiers().getFlags().contains(Modifier.STATIC)) {
                     instanceFields.add(field.getName().toString());
+                    if (field.getModifiers().getFlags().contains(Modifier.FINAL) && field.getInitializer() == null) {
+                        requiredFields.add(field);
+                    }
+                    // Lombok은 이런 필드를 매개변수와 null 검사로 바꾸므로, 손으로 쓴 생성자와 같지 않다.
+                    if (field.getInitializer() == null
+                            && field.getModifiers().getAnnotations().stream()
+                                    .anyMatch(annotation -> lastName(annotation.getAnnotationType())
+                                            .equals("NonNull"))) {
+                        hasNonNullField = true;
+                    }
                 }
             }
             for (Tree member : node.getMembers()) {
@@ -166,20 +186,27 @@ final class LombokStyleChecker {
                     continue;
                 }
                 if (method.getName().contentEquals("<init>")) {
-                    checkConstructor(className, method);
+                    checkConstructor(className, method, requiredFields, hasNonNullField);
                 } else {
                     checkGetter(method, instanceFields);
                 }
             }
         }
 
-        private void checkConstructor(String className, MethodTree constructor) {
+        private void checkConstructor(
+                String className, MethodTree constructor, List<VariableTree> requiredFields, boolean hasNonNullField) {
             int line = nameLine(constructor, className);
             // Lombok은 매개변수의 어노테이션(@Qualifier 등)을 생성자로 옮기지 않으므로, 그런 생성자는 대체할 수 없다.
             boolean annotatedParameter = constructor.getParameters().stream()
                     .anyMatch(parameter ->
                             !parameter.getModifiers().getAnnotations().isEmpty());
-            if (!annotatedParameter && isValueAssignments(constructor)) {
+            if (!annotatedParameter
+                    && !hasNonNullField
+                    && constructor.getModifiers().getAnnotations().isEmpty()
+                    && constructor.getThrows().isEmpty()
+                    && !hasVarargs(constructor)
+                    && takesRequiredFields(constructor, requiredFields)
+                    && isValueAssignments(constructor)) {
                 report(line, "값만 넣는 생성자 " + className + "()는 손으로 쓰지 않고 @RequiredArgsConstructor를 쓴다");
             }
             if (constructor.getParameters().isEmpty()
@@ -187,6 +214,35 @@ final class LombokStyleChecker {
                     && constructor.getModifiers().getFlags().contains(Modifier.PROTECTED)) {
                 report(line, "빈 protected 생성자 " + className + "()는 손으로 쓰지 않고 @NoArgsConstructor를 쓴다");
             }
+        }
+
+        /** 구문 트리에는 가변 인자 표시가 없어(타입이 {@code String[]}로 보인다) 매개변수의 소스 범위에서 {@code ...}를 찾는다. */
+        private boolean hasVarargs(MethodTree constructor) {
+            return constructor.getParameters().stream().anyMatch(parameter -> {
+                int start = (int) positions.getStartPosition(unit, parameter);
+                int end = (int) positions.getEndPosition(unit, parameter);
+                return source.substring(start, end).contains("...");
+            });
+        }
+
+        /** {@code @RequiredArgsConstructor}는 초기화하지 않은 {@code final} 인스턴스 필드만 받는다. */
+        private static boolean takesRequiredFields(MethodTree constructor, List<VariableTree> requiredFields) {
+            List<? extends VariableTree> parameters = constructor.getParameters();
+            if (parameters.size() != requiredFields.size()) {
+                return false;
+            }
+            for (int i = 0; i < parameters.size(); i++) {
+                VariableTree parameter = parameters.get(i);
+                VariableTree field = requiredFields.get(i);
+                if (!parameter.getName().contentEquals(field.getName())
+                        || !parameter
+                                .getType()
+                                .toString()
+                                .equals(field.getType().toString())) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         /** 본문이 {@code this.x = x;} 대입문만으로 되어 있고, 대입하는 값이 같은 이름의 매개변수이면 true다. */
@@ -218,6 +274,7 @@ final class LombokStyleChecker {
             if (method.getReturnType() == null
                     || !method.getParameters().isEmpty()
                     || method.getModifiers().getFlags().contains(Modifier.STATIC)
+                    || method.getModifiers().getFlags().contains(Modifier.SYNCHRONIZED)
                     || !GETTER_NAME.matcher(method.getName()).matches()) {
                 return;
             }
@@ -262,11 +319,11 @@ final class LombokStyleChecker {
                     && lastName(select.getExpression()).equals("LoggerFactory");
         }
 
-        private static String lastName(ExpressionTree expression) {
-            if (expression instanceof IdentifierTree identifier) {
+        private static String lastName(Tree name) {
+            if (name instanceof IdentifierTree identifier) {
                 return identifier.getName().toString();
             }
-            if (expression instanceof MemberSelectTree select) {
+            if (name instanceof MemberSelectTree select) {
                 return select.getIdentifier().toString();
             }
             return "";
