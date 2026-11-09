@@ -21,6 +21,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 
 - Lombok은 값만 옮기는 코드를 대신한다. 검증·변환 같은 로직이 있는 생성자와 getter는 손으로 쓴다.
 - `@NoArgsConstructor`는 `access = AccessLevel.PROTECTED`로 쓴다. `AccessLevel`은 static import하지 않는다.
+- 손으로 쓴 생성자가 `public`이 아니면 Lombok 생성자도 `access`로 같은 접근 수준을 지킨다. 예를 들어 package-private 생성자는 `@RequiredArgsConstructor(access = AccessLevel.PACKAGE)`로 바꾼다. Lombok으로 바꾸면서 생성자의 공개 범위가 넓어지지 않게 하기 위해서다.
 - 4개 밖의 Lombok 기능(`@Data`, `@Setter`, `@ToString`, `@EqualsAndHashCode`, `@Value`, `@Builder`, `@AllArgsConstructor`, `@SneakyThrows`, `lombok.experimental` 기능 등)은 쓰지 않기를 권한다. 이유는 [Rationale](#허용-목록-방식으로-검사한다)에 있다.
 
 ### 적용 대상
@@ -48,10 +49,10 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 
 ### 검사 테스트
 
-검사 테스트는 `backend/src/test`의 한 패키지에 둔다. 이름과 파싱 방법은 구현 때 정하되, 새 의존성 없이 JDK와 JUnit 5만 쓴다. 목록의 파일마다 다음을 검사한다.
+검사 테스트는 `backend/src/test`의 `com.nsu.capstone.global.codestyle` 패키지에 둔다. 새 의존성 없이 JDK와 기존 테스트 의존성(JUnit 5, AssertJ)만 쓴다. 목록의 파일마다 다음을 검사한다.
 
 1. Lombok 참조는 허용 목록에만 있다. 대상은 `import lombok.…` 문과 `@lombok.…` 형태의 정규화된 이름이다. 허용 목록은 `lombok.Getter`, `lombok.RequiredArgsConstructor`, `lombok.NoArgsConstructor`, `lombok.AccessLevel`, `lombok.extern.slf4j.Slf4j`다. 와일드카드 import(`import lombok.*;`)와 static import(`import static lombok.…`)는 허용 목록 밖으로 본다.
-2. `@NoArgsConstructor`에는 `access = AccessLevel.PROTECTED`가 있다.
+2. `@NoArgsConstructor`에는 `access = AccessLevel.PROTECTED`가 있다. 패키지 이름을 붙인 표기(`@lombok.NoArgsConstructor`, `lombok.AccessLevel.PROTECTED`)와 여러 줄에 걸친 인자도 같게 본다.
 3. Lombok이 대신할 코드를 손으로 쓰지 않았다. `class` 선언에만 적용하고 `enum`·`record`·`interface`는 검사하지 않는다.
    - logger: `LoggerFactory.getLogger(...)` 호출이 없다.
    - 단순 getter: 매개변수가 없는 인스턴스 메서드 `getX()`·`isX()`의 본문이 `return x;` 또는 `return this.x;` 하나뿐이고 `x`가 그 클래스의 인스턴스 필드이면 위반이다.
@@ -87,7 +88,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 ```yaml
 - name: Lombok 스타일 검사
   working-directory: backend
-  run: ./gradlew test --tests '<검사 테스트 패키지>.*'
+  run: ./gradlew test --tests 'com.nsu.capstone.global.codestyle.*'
 ```
 
 - 지금 CI는 `spotlessCheck`만 실행하고 컴파일과 테스트를 하지 않는다(2026-11-09 확인). 이 단계가 없으면 검사 테스트가 PR 검사에서 실행되지 않는다.
