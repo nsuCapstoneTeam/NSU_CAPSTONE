@@ -13,7 +13,7 @@ PR마다 GitHub Actions에서 backend Java 코드에 Spotless 검사를, fronten
 - workflow 파일은 `.github/workflows/ci.yml`이고, job 이름은 `backend-lint`와 `frontend-lint`다. NSU-135는 같은 파일에 테스트 job을 추가한다.
 - 트리거는 `pull_request`와 `main`의 `push`다. `pull_request_target`은 쓰지 않는다. `main` 실행은 모든 PR이 읽을 Gradle 캐시를 만든다.
 - 검사 명령은 `cd backend && ./gradlew spotlessCheck`다.
-  - NSU-144부터 `backend-lint`는 Lombok 규칙 검사 단계도 실행한다([backend_code_style/00](../backend_code_style/00_lombok_usage.md#강제-방법)).
+  - NSU-144부터 `backend-lint`는 김동엽 파일의 Lombok 스타일 검사 단계(Gradle 컴파일 포함)도 실행한다([backend_code_style/00](../backend_code_style/00_lombok_usage.md#pr-검사ci)).
 - Spotless 규칙은 `palantirJavaFormat()` 하나다. 사용하지 않는 import 제거와 import 정렬은 이 단계에 들어 있다.
 - `ratchetFrom 'origin/main'`으로 `origin/main` 대비 바뀐 Java 파일만 검사한다.
 - `enforceCheck false`로 `check`·`build`에서 `spotlessCheck`를 뺀다. ratchet은 git 저장소와 `origin/main` ref가 있어야 동작한다. 그래서 `check`에 묶으면 `.git`이 없는 곳이나 remote 이름이 다른 clone에서 형식과 관계없이 빌드가 깨진다. CI와 pre-push hook은 `spotlessCheck`를 직접 부른다.
