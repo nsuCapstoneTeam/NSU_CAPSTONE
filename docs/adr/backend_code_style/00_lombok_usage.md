@@ -82,7 +82,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원이 만든 파일�
      - 본문이 `this.x = x;` 형태의 대입문만으로 되어 있다(한 개 이상).
      - 매개변수가 그 클래스의 "초기화하지 않은 `final` 인스턴스 필드" 전체와 이름, 타입, 순서가 같다. `@RequiredArgsConstructor`는 이 필드만 선언 순서대로 받는다.
      - 생성자와 매개변수에 어노테이션(`@Qualifier` 등)이 없고, `throws`와 가변 인자가 없다. Lombok은 기본 설정에서 이것들을 만들지 않는다.
-     - 초기화하지 않은 인스턴스 필드에 이름이 `NonNull`인 어노테이션이 없다. 그런 필드가 있으면 Lombok이 매개변수와 null 검사를 더한다.
+     - 초기화하지 않은 인스턴스 필드에 이름이 `NonNull`·`Nonnull`·`NotNull`인 어노테이션이 없다. Lombok은 이런 nullability 어노테이션(예: `org.jetbrains.annotations.NotNull`, `jakarta.annotation.Nonnull`)이 붙은 필드를 매개변수로 받고 null 검사를 더한다. 검사기는 패키지를 보지 않고 이름만 보므로, Lombok이 보지 않는 `jakarta.validation.constraints.NotNull`이 붙은 클래스도 위반으로 보지 않는다.
    - 엔티티처럼 `final`이 아닌 필드에 값을 넣는 생성자는 손으로 쓴다. 이 생성자를 만드는 `@AllArgsConstructor`는 허용 목록 밖이다.
    - 빈 `protected` 생성자: 매개변수, 본문, 어노테이션, `throws`가 모두 없는 `protected` 생성자는 위반이다.
    - 로직이 있는 생성자·getter(검증, 변환, 기본값 처리)는 위 형태에 맞지 않으므로 검사에 걸리지 않는다.
