@@ -999,6 +999,50 @@ class LombokStyleCheckerTest {
     }
 
     @Test
+    void acceptsConstructorOfClassWithNotNullAnnotatedField() {
+        String source = """
+                package sample;
+
+                import org.jetbrains.annotations.NotNull;
+
+                class Sample {
+                    private final String name;
+
+                    @NotNull
+                    private String title;
+
+                    Sample(String name) {
+                        this.name = name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsConstructorOfClassWithNonnullAnnotatedField() {
+        String source = """
+                package sample;
+
+                import jakarta.annotation.Nonnull;
+
+                class Sample {
+                    private final String name;
+
+                    @Nonnull
+                    private String title;
+
+                    Sample(String name) {
+                        this.name = name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
     void acceptsIsGetterWhenGetPrefixedMethodOfSameFieldAlsoExists() {
         String source = """
                 package sample;

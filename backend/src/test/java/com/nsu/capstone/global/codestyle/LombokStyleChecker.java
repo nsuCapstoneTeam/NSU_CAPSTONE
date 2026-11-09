@@ -56,6 +56,9 @@ final class LombokStyleChecker {
 
     private static final Set<String> PROTECTED_ACCESS = Set.of("AccessLevel.PROTECTED", "lombok.AccessLevel.PROTECTED");
 
+    /** Lombok이 null 검사를 만드는 어노테이션(여러 패키지에 있다)의 단순 이름. 이름만 보므로 Lombok이 보지 않는 같은 이름도 제외한다. */
+    private static final Set<String> NON_NULL_ANNOTATIONS = Set.of("NonNull", "Nonnull", "NotNull");
+
     private static final Pattern COMMENT = Pattern.compile("/\\*.*?\\*/|//[^\\n]*", Pattern.DOTALL);
 
     private LombokStyleChecker() {}
@@ -165,8 +168,8 @@ final class LombokStyleChecker {
                     // Lombok은 이런 필드를 매개변수와 null 검사로 바꾸므로, 손으로 쓴 생성자와 같지 않다.
                     if (field.getInitializer() == null
                             && field.getModifiers().getAnnotations().stream()
-                                    .anyMatch(annotation -> lastName(annotation.getAnnotationType())
-                                            .equals("NonNull"))) {
+                                    .anyMatch(annotation ->
+                                            NON_NULL_ANNOTATIONS.contains(lastName(annotation.getAnnotationType())))) {
                         hasNonNullField = true;
                     }
                 } else if (member instanceof VariableTree field) {
