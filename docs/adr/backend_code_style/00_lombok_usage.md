@@ -40,7 +40,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 ### 검사 목록
 
 - 위치: `backend/src/test/resources/lombok-style-files.txt`. 한 줄에 파일 하나를 `backend/` 기준 경로로 적는다. `#`으로 시작하는 줄은 주석이다.
-- 처음 목록은 김동엽이 만든 `backend/src/main/java`의 파일 전체다(2026-11-09 기준 약 90개). NSU-144에서 바꾸는 17개는 모두 이 안에 있다.
+- 처음 목록은 김동엽이 만든 `backend/src/main/java`의 파일 전체다(2026-11-09 기준 92개). NSU-144에서 바꾸는 19개는 모두 이 안에 있다.
   - 목록은 `git log --follow`의 처음 작성자로 만든다. git 기록에는 김동엽의 작성자 이름이 두 가지(`KIM DONG YUP`, `김동엽`)로 남아 있으므로 둘 다 김동엽으로 본다.
   - 목록은 스크립트로 만들고, 스크립트와 입력을 구현 보고에 적는다.
 - 김동엽과 김동엽의 Claude 세션이 `backend/src/main/java`에 새 파일을 만들면 같은 PR에서 목록에 더한다. 이 규칙은 로컬 `AGENTS.md`에 둔다.
@@ -100,13 +100,15 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 
 ### NSU-144에서 바꾸는 파일
 
-- 이 PR은 김동엽이 만든 파일 17개를 Lombok으로 바꾼다. 파일 목록은 NSU-144 이슈에 있다.
+- 이 PR은 김동엽이 만든 파일 19개를 Lombok으로 바꾼다. 파일 목록은 NSU-144 이슈에 있다.
+  - 처음 이슈에 적은 17개에, 검사 테스트의 첫 실행이 찾은 값 생성자 파일 2개(`GetOnlyAuthorizationRequestResolver`, `ReliabilityCalculator`)를 더했다. 둘 다 김동엽이 만든 파일이다. 빼면 목록이 "김동엽 파일 전체"가 아니게 된다.
+  - `ReliabilityCalculator` 생성자의 Javadoc 내용은 `policy` 필드의 Javadoc으로 옮긴다.
   - `Event`: 클래스에 `@Getter`를 붙인다. `details` 필드에는 `@Getter(AccessLevel.NONE)`를 붙인다.
     - 손으로 쓴 `getDetails()`는 남긴다. 저장된 값이 없으면 `EventDetails.empty()`를 돌려주는 로직이 있다([03 §3.6 불변식](../../api/03_events.md#36-불변식) 5).
     - 상태에서 계산하는 `isCancelled()`도 남긴다.
   - `Region`: 클래스에 `@Getter`와 `@NoArgsConstructor(access = AccessLevel.PROTECTED)`를 붙인다.
   - `EventRegistrationService`와 `EligibilityFilter`의 생성자는 로직이 있어 그대로 둔다. `EligibilityFilter`는 logger만 `@Slf4j`로 바꾼다.
-- 검사 테스트가 17개 밖의 목록 파일에서 위반을 찾으면, 구현 세션은 바로 고치지 않고 main 세션에 알린다. 범위를 바꿀지는 main 세션이 정한다.
+- 검사 테스트가 위 19개 밖의 목록 파일에서 위반을 찾으면, 구현 세션은 바로 고치지 않고 main 세션에 알린다. 범위를 바꿀지는 main 세션이 정한다.
 - 포맷 커밋과 Lombok 커밋을 나눈다. Spotless는 `ratchetFrom 'origin/main'`이라 건드린 파일 전체를 포맷 검사한다. 먼저 대상 파일에 `spotlessApply`만 적용해 커밋하고, 그다음 Lombok으로 바꾼다. 리뷰어가 Lombok 변경만 따로 볼 수 있다.
 - 동작은 바뀌지 않는다. 공개 메서드 시그니처가 그대로이고 `./gradlew test`가 통과해야 한다.
 - `lombok.config`는 만들지 않는다. 팀 전체에 거는 설정이라 팀원 코드에도 적용되기 때문이다.
@@ -208,7 +210,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 
 ## Consequences
 
-- 김동엽이 만든 17개 파일에서 값 생성자, 단순 getter, logger 선언이 사라진다. 목록의 파일 전체가 이 상태를 테스트로 유지한다.
+- 김동엽이 만든 19개 파일에서 값 생성자, 단순 getter, logger 선언이 사라진다. 목록의 파일 전체가 이 상태를 테스트로 유지한다.
 - 팀원 코드는 자유다. 레포에는 손으로 쓴 스타일과 Lombok 스타일이 함께 있다. 파일 하나 안에서는 섞지 않는다.
 - 팀원이 `@Data`·`@ToString`을 쓰면 엔티티의 민감 정보가 로그에 남을 수 있다. 팀 전체 금지는 강석윤의 결정을 기다린다.
 - 새 파일을 목록에 더하는 일은 `AGENTS.md` 규칙에 기댄다. 잊으면 그 파일은 검사 밖에 남는다.
