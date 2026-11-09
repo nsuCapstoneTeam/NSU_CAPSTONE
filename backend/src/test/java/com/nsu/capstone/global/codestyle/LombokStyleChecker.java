@@ -23,10 +23,8 @@ import com.sun.source.util.Trees;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -104,7 +102,6 @@ final class LombokStyleChecker {
         private final String source;
         private final List<Violation> violations;
         private final Set<String> imports;
-        private final Deque<ClassTree> enclosingTypes = new ArrayDeque<>();
 
         Scanner(CompilationUnitTree unit, SourcePositions positions, String source, List<Violation> violations) {
             this.unit = unit;
@@ -147,32 +144,10 @@ final class LombokStyleChecker {
 
         @Override
         public Void visitClass(ClassTree node, Void unused) {
-            enclosingTypes.push(node);
-            try {
-                if (node.getKind() == Tree.Kind.CLASS && !node.getSimpleName().isEmpty()) {
-                    checkMembers(node);
-                }
-                return super.visitClass(node, unused);
-            } finally {
-                enclosingTypes.pop();
+            if (node.getKind() == Tree.Kind.CLASS && !node.getSimpleName().isEmpty()) {
+                checkMembers(node);
             }
-        }
-
-        @Override
-        public Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
-            if (isLoggerFactoryGetLogger(node) && isInsideNamedClass()) {
-                report(startLine(node), "logger는 손으로 만들지 않고 @Slf4j를 쓴다");
-            }
-            return super.visitMethodInvocation(node, unused);
-        }
-
-        /** 호출을 감싸는 가장 안쪽의 이름 있는 타입 선언이 {@code class}인지 본다. 익명 클래스는 건너뛴다. */
-        private boolean isInsideNamedClass() {
-            return enclosingTypes.stream()
-                    .filter(type -> !type.getSimpleName().isEmpty())
-                    .findFirst()
-                    .filter(type -> type.getKind() == Tree.Kind.CLASS)
-                    .isPresent();
+            return super.visitClass(node, unused);
         }
 
         private void checkMembers(ClassTree node) {
@@ -194,6 +169,8 @@ final class LombokStyleChecker {
                                             .equals("NonNull"))) {
                         hasNonNullField = true;
                     }
+                } else if (member instanceof VariableTree field) {
+                    checkLogger(className, field);
                 }
             }
             List<MethodTree> methods = node.getMembers().stream()
@@ -409,10 +386,19 @@ final class LombokStyleChecker {
             return false;
         }
 
-        private static boolean isLoggerFactoryGetLogger(MethodInvocationTree invocation) {
-            return invocation.getMethodSelect() instanceof MemberSelectTree select
+        /** {@code static} 필드를 {@code LoggerFactory.getLogger(그 클래스.class)}로 초기화하면 {@code @Slf4j}로 대신할 수 있다. */
+        private void checkLogger(String className, VariableTree field) {
+            if (field.getInitializer() instanceof MethodInvocationTree invocation
+                    && invocation.getMethodSelect() instanceof MemberSelectTree select
                     && select.getIdentifier().contentEquals("getLogger")
-                    && lastName(select.getExpression()).equals("LoggerFactory");
+                    && lastName(select.getExpression()).equals("LoggerFactory")
+                    && invocation.getArguments().size() == 1
+                    && invocation.getArguments().get(0) instanceof MemberSelectTree literal
+                    && literal.getIdentifier().contentEquals("class")
+                    && literal.getExpression() instanceof IdentifierTree type
+                    && type.getName().contentEquals(className)) {
+                report(startLine(invocation), "logger는 손으로 만들지 않고 @Slf4j를 쓴다");
+            }
         }
 
         private static String lastName(Tree name) {

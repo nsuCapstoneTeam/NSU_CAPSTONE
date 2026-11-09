@@ -201,6 +201,91 @@ class LombokStyleCheckerTest {
     }
 
     @Test
+    void acceptsLoggerFactoryCallWhoseNameIsDecidedAtRuntime() {
+        String source = """
+                package sample;
+
+                import org.slf4j.Logger;
+                import org.slf4j.LoggerFactory;
+
+                class Sample {
+                    static Logger of(String category) {
+                        return LoggerFactory.getLogger(category);
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsLoggerFactoryCallWithClassLiteralOfAnotherClass() {
+        String source = """
+                package sample;
+
+                import org.slf4j.Logger;
+                import org.slf4j.LoggerFactory;
+
+                class Sample {
+                    private static final Logger log = LoggerFactory.getLogger(Other.class);
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsLoggerFactoryCallWithStringName() {
+        String source = """
+                package sample;
+
+                import org.slf4j.Logger;
+                import org.slf4j.LoggerFactory;
+
+                class Sample {
+                    private static final Logger log = LoggerFactory.getLogger("sample");
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsLoggerFactoryCallAssignedToLocalVariable() {
+        String source = """
+                package sample;
+
+                import org.slf4j.Logger;
+                import org.slf4j.LoggerFactory;
+
+                class Sample {
+                    void run() {
+                        Logger log = LoggerFactory.getLogger(Sample.class);
+                        log.info("start");
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsLoggerFactoryCallAssignedToInstanceField() {
+        String source = """
+                package sample;
+
+                import org.slf4j.Logger;
+                import org.slf4j.LoggerFactory;
+
+                class Sample {
+                    private final Logger log = LoggerFactory.getLogger(Sample.class);
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
     void ignoresCommentsAndStringLiterals() {
         String source = """
                 package sample;
