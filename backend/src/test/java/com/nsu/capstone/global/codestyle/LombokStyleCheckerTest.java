@@ -431,4 +431,41 @@ class LombokStyleCheckerTest {
             assertThat(violation.message()).contains("AccessLevel.PROTECTED");
         });
     }
+
+    @Test
+    void doesNotCheckAnonymousClassBodies() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    Object create() {
+                        return new Object() {
+                            private int size;
+
+                            public int getSize() {
+                                return size;
+                            }
+                        };
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void reportsSourceThatDoesNotParseAsViolation() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    void broken( {
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isNotEmpty().first().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(4);
+            assertThat(violation.message()).startsWith("파싱 실패");
+        });
+    }
 }

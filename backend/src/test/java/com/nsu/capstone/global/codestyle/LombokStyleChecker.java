@@ -1,13 +1,45 @@
 package com.nsu.capstone.global.codestyle;
 
+import com.sun.source.tree.AnnotationTree;
+import com.sun.source.tree.AssignmentTree;
+import com.sun.source.tree.ClassTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ExpressionStatementTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.ImportTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.ReturnTree;
+import com.sun.source.tree.StatementTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.tree.VariableTree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.SourcePositions;
+import com.sun.source.util.TreeScanner;
+import com.sun.source.util.Trees;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.URI;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.lang.model.element.Modifier;
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaCompiler;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
+import javax.tools.ToolProvider;
 
-/** 김동엽 파일의 Lombok 스타일 규칙(docs/adr/backend_code_style/00_lombok_usage.md)을 소스 원문에서 검사한다. */
+/** 김동엽 파일의 Lombok 스타일 규칙(docs/adr/backend_code_style/00_lombok_usage.md)을 JDK 파서의 구문 트리에서 검사한다. */
 final class LombokStyleChecker {
 
     record Violation(int line, String message) {}
@@ -20,295 +52,248 @@ final class LombokStyleChecker {
             "lombok.AccessLevel",
             "lombok.extern.slf4j.Slf4j");
 
-    private static final Pattern LOMBOK_IMPORT =
-            Pattern.compile("^\\s*import\\s+(static\\s+)?(lombok\\.[\\w.]*\\*?)\\s*;");
+    private static final Set<String> PROTECTED_ACCESS = Set.of("AccessLevel.PROTECTED", "lombok.AccessLevel.PROTECTED");
 
-    private static final Pattern QUALIFIED_LOMBOK = Pattern.compile("@(lombok\\.\\w+(?:\\.\\w+)*)");
-
-    private static final Pattern NO_ARGS_CONSTRUCTOR =
-            Pattern.compile("@(?:lombok\\.)?NoArgsConstructor\\b(\\s*\\([^)]*\\))?");
-
-    private static final Pattern PROTECTED_ACCESS =
-            Pattern.compile("\\baccess\\s*=\\s*(?:lombok\\.)?AccessLevel\\.PROTECTED\\b");
-
-    private static final Pattern HAND_WRITTEN_LOGGER = Pattern.compile("\\bLoggerFactory\\.getLogger\\s*\\(");
-
-    private static final Pattern CLASS_DECLARATION = Pattern.compile("(?<![.\\w])class\\s+(\\w+)");
-
-    private static final Pattern ANNOTATION = Pattern.compile("@\\w+(?:\\.\\w+)*(?:\\s*\\([^)]*\\))?");
-
-    private static final Pattern STATIC = Pattern.compile("\\bstatic\\b");
-
-    private static final Pattern PROTECTED = Pattern.compile("\\bprotected\\b");
-
-    private static final Pattern FIELD_NAME = Pattern.compile("(\\w+)\\s*(?:\\[\\s*]\\s*)*$");
-
-    private static final Pattern GETTER_HEADER = Pattern.compile(
-            "\\s*(?:(?:public|protected|private|final|synchronized)\\s+)*[\\w<>\\[\\],.?\\s]+?\\s+((?:get|is)[A-Z]\\w*)\\s*\\(\\s*\\)\\s*");
-
-    private static final Pattern SIMPLE_RETURN = Pattern.compile("\\s*return\\s+(?:this\\.)?(\\w+)\\s*;\\s*");
-
-    private static final Pattern VALUE_ASSIGNMENT = Pattern.compile("\\s*this\\.(\\w+)\\s*=\\s*(\\w+)\\s*");
-
-    /** 클래스 본문의 멤버 하나. 필드·추상 메서드처럼 본문이 없으면 {@code body}가 null이다. */
-    private record Member(String header, String body, int offset) {}
+    private static final Pattern GETTER_NAME = Pattern.compile("(?:get|is)[A-Z]\\w*");
 
     private LombokStyleChecker() {}
 
     static List<Violation> check(String source) {
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        if (compiler == null) {
+            throw new IllegalStateException("JDK가 필요하다. 이 검사는 jdk.compiler 모듈의 파서를 쓴다");
+        }
+        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        JavaFileObject file =
+                new SimpleJavaFileObject(URI.create("string:///Source.java"), JavaFileObject.Kind.SOURCE) {
+                    @Override
+                    public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+                        return source;
+                    }
+                };
+        JavacTask task =
+                (JavacTask) compiler.getTask(null, null, diagnostics, List.of("-proc:none"), null, List.of(file));
         List<Violation> violations = new ArrayList<>();
-        String text = blankCommentsAndLiterals(source);
-        String[] lines = text.split("\n", -1);
-        for (int i = 0; i < lines.length; i++) {
-            Matcher lombokImport = LOMBOK_IMPORT.matcher(lines[i]);
-            if (lombokImport.find()) {
-                boolean isStatic = lombokImport.group(1) != null;
-                String name = lombokImport.group(2);
-                if (isStatic || !ALLOWED_LOMBOK.contains(name)) {
-                    violations.add(new Violation(i + 1, "허용 밖 Lombok 사용: " + name));
-                }
+        try {
+            for (CompilationUnitTree unit : task.parse()) {
+                new Scanner(unit, Trees.instance(task).getSourcePositions(), source, violations).scan(unit, null);
             }
-            Matcher qualified = QUALIFIED_LOMBOK.matcher(lines[i]);
-            while (qualified.find()) {
-                if (!ALLOWED_LOMBOK.contains(qualified.group(1))) {
-                    violations.add(new Violation(i + 1, "허용 밖 Lombok 사용: " + qualified.group(1)));
-                }
-            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
-        Matcher noArgs = NO_ARGS_CONSTRUCTOR.matcher(text);
-        while (noArgs.find()) {
-            String arguments = noArgs.group(1) == null ? "" : noArgs.group(1);
-            if (!PROTECTED_ACCESS.matcher(arguments).find()) {
-                violations.add(new Violation(
-                        lineOf(text, noArgs.start()), "@NoArgsConstructor에는 access = AccessLevel.PROTECTED가 있어야 한다"));
-            }
+        List<Violation> parseFailures = diagnostics.getDiagnostics().stream()
+                .filter(diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR)
+                .map(diagnostic -> new Violation(
+                        (int) diagnostic.getLineNumber(), "파싱 실패: " + diagnostic.getMessage(Locale.ENGLISH)))
+                .toList();
+        if (!parseFailures.isEmpty()) {
+            return parseFailures;
         }
-        List<int[]> classBodies = new ArrayList<>();
-        Matcher classDeclaration = CLASS_DECLARATION.matcher(text);
-        while (classDeclaration.find()) {
-            int open = bodyStart(text, classDeclaration.end());
-            if (open >= 0) {
-                classBodies.add(new int[] {open, matchingBrace(text, open)});
-                checkClassBody(text, classDeclaration.group(1), open, violations);
-            }
-        }
-        Matcher logger = HAND_WRITTEN_LOGGER.matcher(text);
-        while (logger.find()) {
-            if (classBodies.stream().anyMatch(body -> body[0] < logger.start() && logger.start() < body[1])) {
-                violations.add(new Violation(lineOf(text, logger.start()), "logger는 손으로 만들지 않고 @Slf4j를 쓴다"));
-            }
-        }
+        violations.sort(Comparator.comparingInt(Violation::line));
         return violations;
     }
 
-    private static void checkClassBody(String text, String className, int open, List<Violation> violations) {
-        List<Member> members = members(text, open);
-        Set<String> instanceFields = instanceFields(members);
-        Pattern constructorHeader = Pattern.compile("\\s*(?:(?:public|protected|private)\\s+)?(?<name>"
-                + Pattern.quote(className) + ")\\s*\\((?<parameters>[^)]*)\\)\\s*");
-        for (Member member : members) {
-            if (member.body() == null) {
-                continue;
-            }
-            String header = blankAnnotations(member.header());
-            Matcher constructor = constructorHeader.matcher(header);
-            if (constructor.matches()) {
-                int line = lineOf(text, member.offset() + constructor.start("name"));
-                if (!hasAnnotatedParameter(member.header(), constructor)
-                        && isValueAssignments(member.body(), constructor.group("parameters"))) {
-                    violations.add(new Violation(
-                            line, "값만 넣는 생성자 " + className + "()는 손으로 쓰지 않고 @RequiredArgsConstructor를 쓴다"));
-                }
-                if (constructor.group("parameters").isBlank()
-                        && member.body().isBlank()
-                        && PROTECTED.matcher(header).find()) {
-                    violations.add(new Violation(
-                            line, "빈 protected 생성자 " + className + "()는 손으로 쓰지 않고 @NoArgsConstructor를 쓴다"));
-                }
-            }
-            Matcher getter = GETTER_HEADER.matcher(header);
-            if (getter.matches() && !STATIC.matcher(header).find()) {
-                Matcher returned = SIMPLE_RETURN.matcher(member.body());
-                if (returned.matches() && instanceFields.contains(returned.group(1))) {
-                    violations.add(new Violation(
-                            lineOf(text, member.offset() + getter.start(1)),
-                            "단순 getter " + getter.group(1) + "()는 손으로 쓰지 않고 @Getter를 쓴다"));
-                }
-            }
-        }
-    }
+    private static final class Scanner extends TreeScanner<Void, Void> {
 
-    /** Lombok은 매개변수의 어노테이션(@Qualifier 등)을 생성자로 옮기지 않으므로, 그런 생성자는 대체할 수 없다. */
-    private static boolean hasAnnotatedParameter(String rawHeader, Matcher constructor) {
-        return rawHeader
-                .substring(constructor.start("parameters"), constructor.end("parameters"))
-                .contains("@");
-    }
+        private final CompilationUnitTree unit;
+        private final SourcePositions positions;
+        private final String source;
+        private final List<Violation> violations;
+        private final Deque<ClassTree> enclosingClasses = new ArrayDeque<>();
 
-    /** 본문이 {@code this.x = x;} 대입문만으로 되어 있고, 대입하는 값이 같은 이름의 매개변수이면 true다. */
-    private static boolean isValueAssignments(String body, String parameters) {
-        Set<String> parameterNames = new HashSet<>();
-        Matcher token = Pattern.compile("\\w+").matcher(parameters);
-        while (token.find()) {
-            parameterNames.add(token.group());
+        Scanner(CompilationUnitTree unit, SourcePositions positions, String source, List<Violation> violations) {
+            this.unit = unit;
+            this.positions = positions;
+            this.source = source;
+            this.violations = violations;
         }
-        String trimmed = body.strip();
-        if (trimmed.isEmpty()) {
-            return false;
-        }
-        for (String statement : trimmed.split(";", -1)) {
-            if (statement.isBlank()) {
-                continue;
+
+        @Override
+        public Void visitImport(ImportTree node, Void unused) {
+            String name = node.getQualifiedIdentifier().toString();
+            if (name.startsWith("lombok.") && (node.isStatic() || !ALLOWED_LOMBOK.contains(name))) {
+                report(startLine(node), "허용 밖 Lombok 사용: " + name);
             }
-            Matcher assignment = VALUE_ASSIGNMENT.matcher(statement);
-            if (!assignment.matches()
-                    || !assignment.group(1).equals(assignment.group(2))
-                    || !parameterNames.contains(assignment.group(2))) {
+            return super.visitImport(node, unused);
+        }
+
+        @Override
+        public Void visitAnnotation(AnnotationTree node, Void unused) {
+            String type = node.getAnnotationType().toString();
+            if (type.startsWith("lombok.") && !ALLOWED_LOMBOK.contains(type)) {
+                report(startLine(node), "허용 밖 Lombok 사용: " + type);
+            }
+            if ((type.equals("NoArgsConstructor") || type.equals("lombok.NoArgsConstructor"))
+                    && !hasProtectedAccess(node)) {
+                report(startLine(node), "@NoArgsConstructor에는 access = AccessLevel.PROTECTED가 있어야 한다");
+            }
+            return super.visitAnnotation(node, unused);
+        }
+
+        @Override
+        public Void visitClass(ClassTree node, Void unused) {
+            enclosingClasses.push(node);
+            try {
+                if (node.getKind() == Tree.Kind.CLASS && !node.getSimpleName().isEmpty()) {
+                    checkMembers(node);
+                }
+                return super.visitClass(node, unused);
+            } finally {
+                enclosingClasses.pop();
+            }
+        }
+
+        @Override
+        public Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
+            if (isLoggerFactoryGetLogger(node)
+                    && enclosingClasses.stream().anyMatch(enclosing -> enclosing.getKind() == Tree.Kind.CLASS)) {
+                report(startLine(node), "logger는 손으로 만들지 않고 @Slf4j를 쓴다");
+            }
+            return super.visitMethodInvocation(node, unused);
+        }
+
+        private void checkMembers(ClassTree node) {
+            String className = node.getSimpleName().toString();
+            Set<String> instanceFields = new HashSet<>();
+            for (Tree member : node.getMembers()) {
+                if (member instanceof VariableTree field
+                        && !field.getModifiers().getFlags().contains(Modifier.STATIC)) {
+                    instanceFields.add(field.getName().toString());
+                }
+            }
+            for (Tree member : node.getMembers()) {
+                if (!(member instanceof MethodTree method) || method.getBody() == null) {
+                    continue;
+                }
+                if (method.getName().contentEquals("<init>")) {
+                    checkConstructor(className, method);
+                } else {
+                    checkGetter(method, instanceFields);
+                }
+            }
+        }
+
+        private void checkConstructor(String className, MethodTree constructor) {
+            int line = nameLine(constructor, className);
+            // Lombok은 매개변수의 어노테이션(@Qualifier 등)을 생성자로 옮기지 않으므로, 그런 생성자는 대체할 수 없다.
+            boolean annotatedParameter = constructor.getParameters().stream()
+                    .anyMatch(parameter ->
+                            !parameter.getModifiers().getAnnotations().isEmpty());
+            if (!annotatedParameter && isValueAssignments(constructor)) {
+                report(line, "값만 넣는 생성자 " + className + "()는 손으로 쓰지 않고 @RequiredArgsConstructor를 쓴다");
+            }
+            if (constructor.getParameters().isEmpty()
+                    && constructor.getBody().getStatements().isEmpty()
+                    && constructor.getModifiers().getFlags().contains(Modifier.PROTECTED)) {
+                report(line, "빈 protected 생성자 " + className + "()는 손으로 쓰지 않고 @NoArgsConstructor를 쓴다");
+            }
+        }
+
+        /** 본문이 {@code this.x = x;} 대입문만으로 되어 있고, 대입하는 값이 같은 이름의 매개변수이면 true다. */
+        private static boolean isValueAssignments(MethodTree constructor) {
+            Set<String> parameterNames = new HashSet<>();
+            constructor
+                    .getParameters()
+                    .forEach(parameter -> parameterNames.add(parameter.getName().toString()));
+            List<? extends StatementTree> statements = constructor.getBody().getStatements();
+            if (statements.isEmpty()) {
                 return false;
             }
-        }
-        return true;
-    }
-
-    private static Set<String> instanceFields(List<Member> members) {
-        Set<String> names = new HashSet<>();
-        for (Member member : members) {
-            if (member.body() != null) {
-                continue;
-            }
-            String header = blankAnnotations(member.header());
-            int assignment = header.indexOf('=');
-            String declaration = (assignment < 0 ? header : header.substring(0, assignment)).stripTrailing();
-            if (declaration.contains("(") || STATIC.matcher(declaration).find()) {
-                continue;
-            }
-            Matcher name = FIELD_NAME.matcher(declaration);
-            if (name.find()) {
-                names.add(name.group(1));
-            }
-        }
-        return names;
-    }
-
-    /** 클래스 이름 뒤에서 본문을 여는 {@code {}의 위치를 찾는다. 본문이 없으면 -1이다. */
-    private static int bodyStart(String text, int from) {
-        for (int i = from; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (c == '{') {
-                return i;
-            }
-            if (c == ';') {
-                return -1;
-            }
-        }
-        return -1;
-    }
-
-    /** {@code open}에서 시작하는 클래스 본문의 최상위 멤버를 순서대로 나눈다. */
-    private static List<Member> members(String text, int open) {
-        List<Member> members = new ArrayList<>();
-        int headerStart = open + 1;
-        int parentheses = 0;
-        boolean assignment = false;
-        for (int i = open + 1; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (c == '(') {
-                parentheses++;
-            } else if (c == ')') {
-                parentheses--;
-            } else if (c == '=' && parentheses == 0) {
-                assignment = true;
-            } else if (c == ';' && parentheses == 0) {
-                members.add(new Member(text.substring(headerStart, i), null, headerStart));
-                headerStart = i + 1;
-                assignment = false;
-            } else if (c == '{') {
-                int close = matchingBrace(text, i);
-                if (!assignment && parentheses == 0) {
-                    members.add(new Member(text.substring(headerStart, i), text.substring(i + 1, close), headerStart));
-                    headerStart = close + 1;
+            for (StatementTree statement : statements) {
+                if (!(statement instanceof ExpressionStatementTree expressionStatement)
+                        || !(expressionStatement.getExpression() instanceof AssignmentTree assignment)
+                        || !(assignment.getVariable() instanceof MemberSelectTree target)
+                        || !(target.getExpression() instanceof IdentifierTree owner)
+                        || !owner.getName().contentEquals("this")
+                        || !(assignment.getExpression() instanceof IdentifierTree value)
+                        || !target.getIdentifier().contentEquals(value.getName())
+                        || !parameterNames.contains(value.getName().toString())) {
+                    return false;
                 }
-                i = close;
-            } else if (c == '}') {
-                break;
+            }
+            return true;
+        }
+
+        private void checkGetter(MethodTree method, Set<String> instanceFields) {
+            if (method.getReturnType() == null
+                    || !method.getParameters().isEmpty()
+                    || method.getModifiers().getFlags().contains(Modifier.STATIC)
+                    || !GETTER_NAME.matcher(method.getName()).matches()) {
+                return;
+            }
+            List<? extends StatementTree> statements = method.getBody().getStatements();
+            if (statements.size() == 1
+                    && statements.get(0) instanceof ReturnTree returned
+                    && returnedField(returned.getExpression()) instanceof String field
+                    && instanceFields.contains(field)) {
+                report(
+                        nameLine(method, method.getName().toString()),
+                        "단순 getter " + method.getName() + "()는 손으로 쓰지 않고 @Getter를 쓴다");
             }
         }
-        return members;
-    }
 
-    private static int matchingBrace(String text, int open) {
-        int depth = 0;
-        for (int i = open; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (c == '{') {
-                depth++;
-            } else if (c == '}' && --depth == 0) {
-                return i;
+        /** {@code x} 또는 {@code this.x}이면 필드 이름을, 아니면 null을 돌려준다. */
+        private static String returnedField(ExpressionTree expression) {
+            if (expression instanceof IdentifierTree identifier) {
+                return identifier.getName().toString();
             }
-        }
-        return text.length() - 1;
-    }
-
-    /** 어노테이션을 같은 길이의 공백으로 바꿔, 헤더 안의 위치가 그대로 남는다. */
-    private static String blankAnnotations(String header) {
-        return ANNOTATION
-                .matcher(header)
-                .replaceAll(match -> " ".repeat(match.group().length()));
-    }
-
-    private static int lineOf(String text, int offset) {
-        int line = 1;
-        for (int i = 0; i < offset; i++) {
-            if (text.charAt(i) == '\n') {
-                line++;
+            if (expression instanceof MemberSelectTree select
+                    && select.getExpression() instanceof IdentifierTree owner
+                    && owner.getName().contentEquals("this")) {
+                return select.getIdentifier().toString();
             }
+            return null;
         }
-        return line;
-    }
 
-    /** 주석, 문자열, 텍스트 블록, 문자 리터럴을 공백으로 바꾼다. 줄바꿈은 남겨 줄 번호가 그대로다. */
-    private static String blankCommentsAndLiterals(String source) {
-        StringBuilder out = new StringBuilder(source.length());
-        int length = source.length();
-        int i = 0;
-        while (i < length) {
-            int stop = literalEnd(source, i);
-            if (stop < 0) {
-                out.append(source.charAt(i));
-                i++;
-                continue;
+        private static boolean hasProtectedAccess(AnnotationTree annotation) {
+            for (ExpressionTree argument : annotation.getArguments()) {
+                if (argument instanceof AssignmentTree assignment
+                        && assignment.getVariable().toString().equals("access")
+                        && PROTECTED_ACCESS.contains(assignment.getExpression().toString())) {
+                    return true;
+                }
             }
-            for (int j = i; j < stop; j++) {
-                out.append(source.charAt(j) == '\n' ? '\n' : ' ');
-            }
-            i = stop;
+            return false;
         }
-        return out.toString();
-    }
 
-    /** {@code start}에서 주석이나 리터럴이 시작하면 그 끝 위치를, 아니면 -1을 돌려준다. */
-    private static int literalEnd(String source, int start) {
-        int length = source.length();
-        if (source.startsWith("//", start)) {
-            int end = source.indexOf('\n', start);
-            return end < 0 ? length : end;
+        private static boolean isLoggerFactoryGetLogger(MethodInvocationTree invocation) {
+            return invocation.getMethodSelect() instanceof MemberSelectTree select
+                    && select.getIdentifier().contentEquals("getLogger")
+                    && lastName(select.getExpression()).equals("LoggerFactory");
         }
-        if (source.startsWith("/*", start)) {
-            int end = source.indexOf("*/", start + 2);
-            return end < 0 ? length : end + 2;
+
+        private static String lastName(ExpressionTree expression) {
+            if (expression instanceof IdentifierTree identifier) {
+                return identifier.getName().toString();
+            }
+            if (expression instanceof MemberSelectTree select) {
+                return select.getIdentifier().toString();
+            }
+            return "";
         }
-        if (source.startsWith("\"\"\"", start)) {
-            int end = source.indexOf("\"\"\"", start + 3);
-            return end < 0 ? length : end + 3;
+
+        /** 메서드의 시작 위치는 어노테이션 줄을 가리키므로, 반환 타입이나 한정자 뒤에서 이름을 찾아 그 줄을 돌려준다. */
+        private int nameLine(MethodTree method, String name) {
+            long from = method.getReturnType() != null
+                    ? positions.getEndPosition(unit, method.getReturnType())
+                    : positions.getEndPosition(unit, method.getModifiers());
+            if (from < 0) {
+                from = positions.getStartPosition(unit, method);
+            }
+            int index = source.indexOf(name, (int) from);
+            return line(index < 0 ? from : index);
         }
-        char quote = source.charAt(start);
-        if (quote != '"' && quote != '\'') {
-            return -1;
+
+        private int startLine(Tree node) {
+            return line(positions.getStartPosition(unit, node));
         }
-        int j = start + 1;
-        while (j < length && source.charAt(j) != quote && source.charAt(j) != '\n') {
-            j += source.charAt(j) == '\\' ? 2 : 1;
+
+        private int line(long position) {
+            return (int) unit.getLineMap().getLineNumber(position);
         }
-        return Math.min(j + 1, length);
+
+        private void report(int line, String message) {
+            violations.add(new Violation(line, message));
+        }
     }
 }
