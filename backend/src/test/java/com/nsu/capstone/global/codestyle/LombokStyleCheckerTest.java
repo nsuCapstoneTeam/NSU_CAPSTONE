@@ -801,6 +801,84 @@ class LombokStyleCheckerTest {
     }
 
     @Test
+    void rejectsGetterOfFirstFieldInMultiVariableDeclaration() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String first, last;
+
+                    public String getFirst() {
+                        return first;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("getFirst").contains("@Getter");
+        });
+    }
+
+    @Test
+    void rejectsGetterOfLastFieldInMultiVariableDeclarationWithInitializer() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private int a = 1, b;
+
+                    public int getB() {
+                        return b;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("getB").contains("@Getter");
+        });
+    }
+
+    @Test
+    void ignoresLombokTextAfterEscapedQuotesInsideTextBlock() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    static final String BLOCK = \"""
+                            \\\""" @lombok.Data
+                            \""";
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void rejectsSimpleGetterRightAfterTextBlockThatContainsEscapedQuotes() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    static final String BLOCK = \"""
+                            \\\""" is not the end
+                            \""";
+                    private String name = "a";
+
+                    public String getName() {
+                        return name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(9);
+            assertThat(violation.message()).contains("getName").contains("@Getter");
+        });
+    }
+
+    @Test
     void acceptsSynchronizedGetter() {
         String source = """
                 package sample;
