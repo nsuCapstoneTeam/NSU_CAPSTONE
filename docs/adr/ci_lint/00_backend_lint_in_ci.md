@@ -13,12 +13,14 @@ PR마다 GitHub Actions에서 backend Java 코드에 Spotless 검사를, fronten
 - workflow 파일은 `.github/workflows/ci.yml`이고, job 이름은 `backend-lint`와 `frontend-lint`다. NSU-135는 같은 파일에 테스트 job을 추가한다.
 - 트리거는 `pull_request`와 `main`의 `push`다. `pull_request_target`은 쓰지 않는다. `main` 실행은 모든 PR이 읽을 Gradle 캐시를 만든다.
 - 검사 명령은 `cd backend && ./gradlew spotlessCheck`다.
-  - NSU-144부터 `backend-lint`는 김동엽 파일의 Lombok 스타일 검사 단계(Gradle 컴파일 포함)도 실행한다([backend_code_style/00](../backend_code_style/00_lombok_usage.md#pr-검사ci)).
+  - NSU-144부터 `backend-lint`는 김동엽 파일의 Lombok 스타일 검사 단계도 실행한다. 이 단계는 Gradle `test` 태스크로 검사 테스트만 돌리고(`./gradlew test --tests 'com.nsu.capstone.global.codestyle.*'`), 그래서 Gradle 컴파일을 포함한다([backend_code_style/00](../backend_code_style/00_lombok_usage.md#pr-검사ci)).
 - Spotless 규칙은 `palantirJavaFormat()` 하나다. 사용하지 않는 import 제거와 import 정렬은 이 단계에 들어 있다.
 - `ratchetFrom 'origin/main'`으로 `origin/main` 대비 바뀐 Java 파일만 검사한다.
 - `enforceCheck false`로 `check`·`build`에서 `spotlessCheck`를 뺀다. ratchet은 git 저장소와 `origin/main` ref가 있어야 동작한다. 그래서 `check`에 묶으면 `.git`이 없는 곳이나 remote 이름이 다른 clone에서 형식과 관계없이 빌드가 깨진다. CI와 pre-push hook은 `spotlessCheck`를 직접 부른다.
 - branch protection에서 `backend-lint`와 `frontend-lint`를 required check로 지정한다. 설정 권한이 있는 사람이 PR 머지 뒤에 한다.
+  - 실제로는 저장소 ruleset "main lint required"로 지정했다(2026-11-09 확인: `enforcement: active`, bypass 없음).
 - 로컬에서는 레포 루트의 `lefthook.yml`이 pre-push hook으로 같은 검사를 돌린다. 설치는 각자 한 번 한다.
+  - Lombok 스타일 검사는 pre-push에 넣지 않고 CI에서만 돈다. push할 때마다 컴파일을 기다리지 않게 하기 위해서다.
 
 ### frontend ESLint
 
@@ -122,7 +124,7 @@ ratchet을 고른 이유는 열린 브랜치와 충돌하지 않는다는 점이
 | Checkstyle·PMD·Error Prone | 처음부터 규칙을 많이 걸면 기존 코드에서 실패가 쏟아진다. Error Prone은 Java 25 호환을 따로 확인해야 한다 | Spotless가 자리 잡은 뒤, 리뷰에서 같은 결함 패턴이 반복될 때 |
 | Claude Code `PostToolUse` hook | pre-push와 겹친다. 자동 수정을 넣으면 Edit 직후 파일이 바뀌어 다음 Edit가 실패할 수 있다. `.claude/`는 커밋하지 않아 팀에 공유되지 않는다 | pre-push 실패가 PR마다 반복될 때 |
 | full commit SHA pinning | ADR-006과 같은 정책을 쓴다. 이 job은 secret 없이 읽기 권한만 쓴다 | ADR-006에서 SHA pinning을 정할 때 |
-| CI 테스트 실행 | NSU-135의 범위다 | NSU-135 |
+| CI 전체 테스트 실행 | NSU-135의 범위다. NSU-144의 Lombok 스타일 검사 테스트만 `backend-lint`에서 돈다 | NSU-135 |
 
 ## 재사용
 

@@ -8,14 +8,16 @@
 
 ## Decision
 
-backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하지 않는다. 김동엽이 만든 운영 코드 파일만 검사 목록으로 관리하고, 그 파일만 테스트와 PR 검사(`backend-lint`)로 검사한다.
+backend의 Lombok 스타일은 팀 권장 사항이고, 팀원이 만든 파일에는 강제하지 않는다. 김동엽이 만든 운영 코드 파일만 검사 목록으로 관리하고, 그 파일만 테스트와 PR 검사(`backend-lint`)로 검사한다.
+
+팀원 PR에도 두 가지는 걸린다. 팀원이 목록의 파일을 고치면 그 파일은 검사를 받는다. 또 `backend-lint`가 Gradle 컴파일을 하므로, 컴파일이 안 되는 PR은 누구의 PR이든 실패한다. 두 가지 모두 2026-11-09 #dev 공지에 적었다.
 
 ### 권장 스타일
 
 | 어노테이션 | 쓰는 곳 | 대신하는 코드 |
 |---|---|---|
-| `@RequiredArgsConstructor` | 생성자 주입을 받는 클래스 | `final` 필드에 값만 넣는 생성자 |
-| `@Getter` | 엔티티(클래스 또는 필드) | 필드 값을 그대로 돌려주는 getter |
+| `@RequiredArgsConstructor` | 값 생성자가 있는 클래스(생성자 주입 빈 등) | `final` 필드에 값만 넣는 생성자 |
+| `@Getter` | 단순 getter가 있는 클래스(엔티티 등, 클래스 또는 필드) | 필드 값을 그대로 돌려주는 getter |
 | `@NoArgsConstructor(access = AccessLevel.PROTECTED)` | JPA 엔티티 | JPA가 쓰는 빈 `protected` 생성자 |
 | `@Slf4j` | 로그를 남기는 클래스 | `private static final Logger log = LoggerFactory.getLogger(...)` |
 
@@ -41,11 +43,11 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 ### 검사 목록
 
 - 위치: `backend/src/test/resources/lombok-style-files.txt`. 한 줄에 파일 하나를 `backend/` 기준 경로로 적는다. `#`으로 시작하는 줄은 주석이다.
-- 처음 목록은 김동엽이 만든 `backend/src/main/java`의 파일 전체다(2026-11-09 기준 92개). NSU-144에서 바꾸는 19개는 모두 이 안에 있다.
+- 처음 목록은 김동엽이 만든 `backend/src/main/java`의 파일 전체다(`origin/main` `4a24155` 기준 92개). NSU-144에서 바꾸는 19개는 모두 이 안에 있다.
   - 목록은 `git log --follow`의 처음 작성자로 만든다. git 기록에는 김동엽의 작성자 이름이 두 가지(`KIM DONG YUP`, `김동엽`)로 남아 있으므로 둘 다 김동엽으로 본다.
   - 목록은 스크립트로 만들고, 스크립트와 입력을 구현 보고에 적는다.
 - 김동엽과 김동엽의 Claude 세션이 `backend/src/main/java`에 새 파일을 만들면 같은 PR에서 목록에 더한다. 이 규칙은 로컬 `AGENTS.md`에 둔다.
-- 목록에 있는 파일이 없으면(이름 변경·삭제) 테스트가 실패한다. 목록이 조용히 낡지 않는다.
+- 목록에 있는 파일이 없으면(이름 변경·삭제) 테스트가 실패한다. 목록이 조용히 낡지 않는다. 목록이 비어 있어도 실패한다.
 
 ### 검사 테스트
 
@@ -55,7 +57,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 2. `@NoArgsConstructor`에는 `access = AccessLevel.PROTECTED`가 있다. 패키지 이름을 붙인 표기(`@lombok.NoArgsConstructor`, `lombok.AccessLevel.PROTECTED`)와 여러 줄에 걸친 인자도 같게 본다.
 3. Lombok이 대신할 코드를 손으로 쓰지 않았다. `class` 선언에만 적용하고 `enum`·`record`·`interface`는 검사하지 않는다.
    - logger: `LoggerFactory.getLogger(...)` 호출이 없다.
-   - 단순 getter: 매개변수가 없는 인스턴스 메서드 `getX()`·`isX()`의 본문이 `return x;` 또는 `return this.x;` 하나뿐이고 `x`가 그 클래스의 인스턴스 필드이면 위반이다.
+   - 단순 getter: 매개변수가 없는 인스턴스 메서드 `getX()`·`isX()`의 본문이 `return x;` 또는 `return this.x;` 하나뿐이고 `x`가 그 클래스의 인스턴스 필드이면 위반이다. 메서드 이름과 필드 이름이 맞는지는 보지 않는다. 그래서 `boolean`이 아닌 필드를 돌려주는 `isX()`처럼 Lombok으로 같은 시그니처를 만들 수 없는 메서드도 위반이 된다. 이런 메서드가 생기면 검사기에 이름 대응 조건을 더한다(`4a24155` 기준 목록에는 없다).
    - 값 생성자: 생성자 본문이 `this.x = x;` 형태의 대입문만으로 되어 있고(한 개 이상), 대입하는 값이 같은 이름의 매개변수이면 위반이다. 매개변수에 어노테이션(`@Qualifier` 등)이 있으면 제외한다. Lombok은 기본 설정에서 그 어노테이션을 생성자로 옮기지 않기 때문이다.
    - 빈 `protected` 생성자: 매개변수와 본문이 모두 빈 `protected` 생성자는 위반이다.
    - 로직이 있는 생성자·getter(검증, 변환, 기본값 처리)는 위 형태에 맞지 않으므로 검사에 걸리지 않는다.
@@ -96,6 +98,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 - 이 단계는 검사 테스트만 실행하므로 Docker(Testcontainers)가 필요 없다.
 - 맞는 테스트가 없으면 Gradle이 `No tests found for given includes`로 실패한다. 그래서 테스트 이름이 바뀌어도 검사가 조용히 빠지지 않는다.
 - 이 단계는 팀원 PR에서도 돈다. 검사 대상은 목록의 파일뿐이라 팀원 파일의 스타일은 보지 않는다. 다만 `test` 태스크가 main과 test 소스를 컴파일하므로, 컴파일이 안 되는 PR은 누구의 PR이든 이 단계에서 실패한다.
+- ruleset은 PR이 최신 `main`을 반영했는지 요구하지 않는다(`strict_required_status_checks_policy: false`). 그래서 각자 검사를 통과한 두 PR이 차례로 머지되면, 합친 `main`에서 검사가 실패할 수 있다. 그때는 `main`의 `backend-lint` 실패를 보고 고친다.
 - pre-push hook(`lefthook.yml`)에는 넣지 않는다. push할 때마다 컴파일을 기다리게 되기 때문이다. 머지를 막는 것은 CI다.
 - 전체 테스트 CI는 NSU-135(Todo)가 맡는다. 이 PR은 NSU-135를 기다리지 않는다. NSU-135가 끝나면 검사 테스트가 전체 테스트에서도 돌아 이 단계와 겹친다. 그래도 이 단계는 Docker 없이 빨리 실패를 알려 주므로 남겨 둔다.
 
@@ -104,7 +107,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 - 이 PR은 김동엽이 만든 파일 19개를 Lombok으로 바꾼다. 파일 목록은 NSU-144 이슈에 있다.
   - 처음 이슈에 적은 17개에, 검사 테스트의 첫 실행이 찾은 값 생성자 파일 2개(`GetOnlyAuthorizationRequestResolver`, `ReliabilityCalculator`)를 더했다. 둘 다 김동엽이 만든 파일이다. 빼면 목록이 "김동엽 파일 전체"가 아니게 된다.
   - `ReliabilityCalculator` 생성자의 Javadoc 내용은 `policy` 필드의 Javadoc으로 옮긴다.
-  - `Event`: 클래스에 `@Getter`를 붙인다. `details` 필드에는 `@Getter(AccessLevel.NONE)`를 붙인다.
+  - `Event`: 클래스에 `@Getter`와 `@NoArgsConstructor(access = AccessLevel.PROTECTED)`를 붙인다. `details` 필드에는 `@Getter(AccessLevel.NONE)`를 붙인다.
     - 손으로 쓴 `getDetails()`는 남긴다. 저장된 값이 없으면 `EventDetails.empty()`를 돌려주는 로직이 있다([03 §3.6 불변식](../../api/03_events.md#36-불변식) 5).
     - 상태에서 계산하는 `isCancelled()`도 남긴다.
   - `Region`: 클래스에 `@Getter`와 `@NoArgsConstructor(access = AccessLevel.PROTECTED)`를 붙인다.
@@ -123,7 +126,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 | 검사 목록, 검사 테스트, CI `backend-lint` | 빌드, PR 검사 | 김동엽 파일 검사 |
 | `AGENTS.md`(로컬 파일, `.gitignore` 대상) | 김동엽의 Claude 세션 | 새 코드에 4개를 쓰고 새 파일을 목록에 더하는 규칙, 다른 사람 파일 규칙 |
 
-허용 목록을 바꿀 때는 이 ADR, 협업 가이드 10절, 검사 테스트의 허용 목록을 함께 고친다.
+허용 목록을 바꿀 때는 이 ADR, 협업 가이드 10절, 검사 테스트의 허용 목록, 로컬 `AGENTS.md`를 함께 고친다.
 
 ## Context
 
@@ -211,19 +214,19 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 
 ## Consequences
 
-- 김동엽이 만든 19개 파일에서 값 생성자, 단순 getter, logger 선언이 사라진다. 목록의 파일 전체가 이 상태를 테스트로 유지한다.
+- 김동엽이 만든 19개 파일에서 값 생성자, 단순 getter, logger 선언, 빈 `protected` 생성자가 사라진다. 목록의 파일 전체가 이 상태를 테스트로 유지한다.
 - 팀원 코드는 자유다. 레포에는 손으로 쓴 스타일과 Lombok 스타일이 함께 있다. 파일 하나 안에서는 섞지 않는다.
 - 팀원이 `@Data`·`@ToString`을 쓰면 엔티티의 민감 정보가 로그에 남을 수 있다. 팀 전체 금지는 강석윤의 결정을 기다린다.
 - 새 파일을 목록에 더하는 일은 `AGENTS.md` 규칙에 기댄다. 잊으면 그 파일은 검사 밖에 남는다.
 - `backend-lint`가 Gradle 컴파일까지 하게 되어, 실행 시간이 Spotless 검사만 할 때보다 길어진다. 컴파일이 안 되는 PR은 누구의 PR이든 실패한다.
 - `src/main/java`가 `test` 태스크의 입력이 되어, 운영 코드의 주석만 바뀌어도 로컬 `test`가 다시 실행된다.
-- 허용 목록을 바꿀 때 세 곳(이 ADR, 협업 가이드 10절, 검사 테스트)을 고친다.
+- 허용 목록을 바꿀 때 네 곳(이 ADR, 협업 가이드 10절, 검사 테스트, 로컬 `AGENTS.md`)을 고친다.
 - IDE에서 Lombok이 만든 메서드를 보려면 annotation processing이 켜져 있어야 한다. IntelliJ IDEA는 Lombok 지원을 내장하고 있다. Gradle 빌드와 CI는 IDE 설정과 관계없이 동작한다.
 
 ## Reused
 
 - Lombok 의존성: `backend/build.gradle`에 이미 있다(`compileOnly`, `annotationProcessor`, `testCompileOnly`, `testAnnotationProcessor`). 버전은 Spring Boot가 관리하는 값을 쓰고 따로 고정하지 않는다.
-- 검사: JUnit 5와 JDK만 쓴다. Checkstyle, Error Prone, ArchUnit, JavaParser는 추가하지 않는다.
+- 검사: JDK와 기존 테스트 의존성(JUnit 5, AssertJ)만 쓴다. Checkstyle, Error Prone, ArchUnit, JavaParser는 추가하지 않는다.
 - CI: 이미 required check인 `backend-lint` job에 단계만 더한다.
 - 포맷: 기존 Spotless(palantir) 설정을 그대로 쓴다.
 
