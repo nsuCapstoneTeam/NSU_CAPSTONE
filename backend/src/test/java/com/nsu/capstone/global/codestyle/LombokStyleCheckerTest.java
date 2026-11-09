@@ -349,6 +349,54 @@ class LombokStyleCheckerTest {
     }
 
     @Test
+    void acceptsLoggerFieldWhoseNameIsNotLog() {
+        String source = """
+                package sample;
+
+                import org.slf4j.Logger;
+                import org.slf4j.LoggerFactory;
+
+                class Sample {
+                    private static final Logger LOGGER = LoggerFactory.getLogger(Sample.class);
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsLoggerFieldThatIsNotFinal() {
+        String source = """
+                package sample;
+
+                import org.slf4j.Logger;
+                import org.slf4j.LoggerFactory;
+
+                class Sample {
+                    private static Logger log = LoggerFactory.getLogger(Sample.class);
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsLoggerFieldThatIsNotPrivate() {
+        String source = """
+                package sample;
+
+                import org.slf4j.Logger;
+                import org.slf4j.LoggerFactory;
+
+                class Sample {
+                    public static final Logger log = LoggerFactory.getLogger(Sample.class);
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
     void ignoresCommentsAndStringLiterals() {
         String source = """
                 package sample;
