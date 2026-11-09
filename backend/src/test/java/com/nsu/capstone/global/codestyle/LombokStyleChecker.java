@@ -33,7 +33,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.type.TypeKind;
 import javax.tools.Diagnostic;
@@ -57,8 +56,6 @@ final class LombokStyleChecker {
             "lombok.extern.slf4j.Slf4j");
 
     private static final Set<String> PROTECTED_ACCESS = Set.of("AccessLevel.PROTECTED", "lombok.AccessLevel.PROTECTED");
-
-    private static final Pattern GETTER_NAME = Pattern.compile("(?:get|is)[A-Z]\\w*");
 
     private LombokStyleChecker() {}
 
@@ -296,8 +293,7 @@ final class LombokStyleChecker {
                     || !method.getThrows().isEmpty()
                     || method.getModifiers().getAnnotations().stream()
                             .anyMatch(annotation ->
-                                    !lastName(annotation.getAnnotationType()).equals("Override"))
-                    || !GETTER_NAME.matcher(method.getName()).matches()) {
+                                    !lastName(annotation.getAnnotationType()).equals("Override"))) {
                 return;
             }
             List<? extends StatementTree> statements = method.getBody().getStatements();
@@ -316,7 +312,7 @@ final class LombokStyleChecker {
         /** Lombok이 필드에 만드는 getter 이름. 기본형 {@code boolean}은 {@code is}, 그 밖은 {@code get}으로 시작한다. */
         private static String lombokGetterName(VariableTree field) {
             String name = field.getName().toString();
-            String capitalized = Character.toUpperCase(name.charAt(0)) + name.substring(1);
+            String capitalized = capitalized(name);
             boolean primitiveBoolean = field.getType() instanceof PrimitiveTypeTree type
                     && type.getPrimitiveTypeKind() == TypeKind.BOOLEAN;
             if (primitiveBoolean
@@ -326,6 +322,17 @@ final class LombokStyleChecker {
                 return name;
             }
             return (primitiveBoolean ? "is" : "get") + capitalized;
+        }
+
+        /** Lombok처럼 소문자인 첫 글자만 바꾼다. 3글자 이상이고 둘째 글자가 대문자이면 대문자로, 아니면 title case로 바꾼다. */
+        private static String capitalized(String name) {
+            char first = name.charAt(0);
+            if (!Character.isLowerCase(first)) {
+                return name;
+            }
+            boolean upperCase = name.length() > 2
+                    && (Character.isTitleCase(name.charAt(1)) || Character.isUpperCase(name.charAt(1)));
+            return (upperCase ? Character.toUpperCase(first) : Character.toTitleCase(first)) + name.substring(1);
         }
 
         /** {@code x} 또는 {@code this.x}이면 필드 이름을, 아니면 null을 돌려준다. */

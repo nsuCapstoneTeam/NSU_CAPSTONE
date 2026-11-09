@@ -683,6 +683,106 @@ class LombokStyleCheckerTest {
     }
 
     @Test
+    void rejectsGetterOfFieldWhoseNameStartsWithNonAsciiLetter() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String état = "a";
+
+                    public String getÉtat() {
+                        return état;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("getÉtat").contains("@Getter");
+        });
+    }
+
+    @Test
+    void rejectsGetterNamedWithTitleCaseOfFirstLetter() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String ǆx = "a";
+
+                    public String getǅx() {
+                        return ǆx;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("getǅx").contains("@Getter");
+        });
+    }
+
+    @Test
+    void rejectsGetterNamedWithUpperCaseOfFirstLetterWhenSecondLetterIsUpperCase() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String ǆBc = "a";
+
+                    public String getǄBc() {
+                        return ǆBc;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("getǄBc").contains("@Getter");
+        });
+    }
+
+    @Test
+    void rejectsGetterNamedWithFirstLetterThatIsAlreadyUpperCase() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String Ǆx = "a";
+
+                    public String getǄx() {
+                        return Ǆx;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("getǄx").contains("@Getter");
+        });
+    }
+
+    @Test
+    void rejectsGetterNamedWithTitleCaseOfFirstLetterWhenFieldNameHasTwoLetters() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String ǆB = "a";
+
+                    public String getǅB() {
+                        return ǆB;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("getǅB").contains("@Getter");
+        });
+    }
+
+    @Test
     void acceptsGetterWhoseNameDiffersFromTheLombokGetterName() {
         String source = """
                 package sample;
