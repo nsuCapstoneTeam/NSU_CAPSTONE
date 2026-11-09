@@ -185,4 +185,11 @@ CodeRabbit은 보조 리뷰어이며 최종 승인과 Squash Merge는 사람이 
 - 비밀번호 등 민감한 설정에는 저장소에 기본값을 작성하지 않는다.
 - 운영 환경의 민감한 설정은 Spring Boot Externalized Configuration 원칙에 따라 실행 환경에서 주입하며 저장소, JAR 및 컨테이너 이미지에 포함하지 않는다.
 
+## 10. Backend 코드 스타일 (Lombok)
+
+- Lombok은 `@RequiredArgsConstructor`, `@Getter`, `@NoArgsConstructor(access = AccessLevel.PROTECTED)`, `@Slf4j` 4개만 쓴다.
+- 다른 Lombok 기능을 쓰면 빌드(`backend/lombok.config`)나 테스트(소스 스캔)가 실패한다.
+- 다른 사람이 만든 파일을 고칠 때는 그 파일의 기존 스타일을 따른다. 손으로 쓴 getter가 있는 파일에 Lombok을 섞지 않는다.
+- 이유와 세부 규칙은 [ADR backend_code_style/00](../adr/backend_code_style/00_lombok_usage.md)에 있다.
+
 필요한 규칙이 실제로 생길 때만 이 문서를 확장한다.
