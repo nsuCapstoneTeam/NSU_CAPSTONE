@@ -286,6 +286,69 @@ class LombokStyleCheckerTest {
     }
 
     @Test
+    void acceptsLoggerFactoryThatIsNotFromSlf4j() {
+        String source = """
+                package sample;
+
+                import com.example.LoggerFactory;
+                import org.slf4j.Logger;
+
+                class Sample {
+                    private static final Logger log = LoggerFactory.getLogger(Sample.class);
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void rejectsHandWrittenLoggerWrittenWithFullyQualifiedSlf4jName() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(Sample.class);
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(4);
+            assertThat(violation.message()).contains("@Slf4j");
+        });
+    }
+
+    @Test
+    void rejectsHandWrittenLoggerWhenSlf4jIsImportedWithWildcard() {
+        String source = """
+                package sample;
+
+                import org.slf4j.*;
+
+                class Sample {
+                    private static final Logger log = LoggerFactory.getLogger(Sample.class);
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("@Slf4j");
+        });
+    }
+
+    @Test
+    void acceptsLoggerFactoryThatIsNotImported() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private static final Object log = LoggerFactory.getLogger(Sample.class);
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
     void ignoresCommentsAndStringLiterals() {
         String source = """
                 package sample;
@@ -600,6 +663,9 @@ class LombokStyleCheckerTest {
         String source = """
                 package sample;
 
+                import org.slf4j.Logger;
+                import org.slf4j.LoggerFactory;
+
                 class Outer {
                     interface Marker {
                         Logger LOG = LoggerFactory.getLogger(Marker.class);
@@ -625,6 +691,9 @@ class LombokStyleCheckerTest {
         String source = """
                 package sample;
 
+                import org.slf4j.Logger;
+                import org.slf4j.LoggerFactory;
+
                 interface Marker {
                     class Impl {
                         private static final Logger log = LoggerFactory.getLogger(Impl.class);
@@ -633,7 +702,7 @@ class LombokStyleCheckerTest {
                 """;
 
         assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
-            assertThat(violation.line()).isEqualTo(5);
+            assertThat(violation.line()).isEqualTo(8);
             assertThat(violation.message()).contains("@Slf4j");
         });
     }

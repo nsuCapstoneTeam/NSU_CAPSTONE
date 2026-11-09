@@ -386,12 +386,20 @@ final class LombokStyleChecker {
             return false;
         }
 
+        /** 정규화된 이름이거나, 이름을 SLF4J에서 import했을 때만 SLF4J의 {@code LoggerFactory}다. */
+        private boolean isSlf4jLoggerFactory(ExpressionTree expression) {
+            return expression.toString().equals("org.slf4j.LoggerFactory")
+                    || (expression instanceof IdentifierTree identifier
+                            && identifier.getName().contentEquals("LoggerFactory")
+                            && (imports.contains("org.slf4j.LoggerFactory") || imports.contains("org.slf4j.*")));
+        }
+
         /** {@code static} 필드를 {@code LoggerFactory.getLogger(그 클래스.class)}로 초기화하면 {@code @Slf4j}로 대신할 수 있다. */
         private void checkLogger(String className, VariableTree field) {
             if (field.getInitializer() instanceof MethodInvocationTree invocation
                     && invocation.getMethodSelect() instanceof MemberSelectTree select
                     && select.getIdentifier().contentEquals("getLogger")
-                    && lastName(select.getExpression()).equals("LoggerFactory")
+                    && isSlf4jLoggerFactory(select.getExpression())
                     && invocation.getArguments().size() == 1
                     && invocation.getArguments().get(0) instanceof MemberSelectTree literal
                     && literal.getIdentifier().contentEquals("class")
