@@ -51,18 +51,35 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원이 만든 파일�
 
 ### 검사 테스트
 
-검사 테스트는 `backend/src/test`의 `com.nsu.capstone.global.codestyle` 패키지에 둔다. 새 의존성 없이 JDK와 기존 테스트 의존성(JUnit 5, AssertJ)만 쓴다. 목록의 파일마다 다음을 검사한다.
+검사 테스트는 `backend/src/test`의 `com.nsu.capstone.global.codestyle` 패키지에 둔다. 새 의존성 없이 JDK와 기존 테스트 의존성(JUnit 5, AssertJ)만 쓴다.
+
+- 소스는 JDK의 컴파일러 파서(`jdk.compiler` 모듈의 `JavacTask.parse()`, `com.sun.source.tree`)로 읽어 구문 트리에서 검사한다. 이유는 [Rationale](#소스는-jdk-컴파일러-파서로-읽는다)에 있다.
+  - 주석, 문자열, 텍스트 블록은 구문 트리에 코드로 나타나지 않는다. 그 안의 `@lombok.Data` 같은 글자는 검사하지 않는다.
+  - 파싱에 실패한 목록 파일은 실패로 보고한다. 그런 파일은 컴파일도 되지 않는다.
+- 실제 레포의 목록을 검사하는 테스트는 작업 디렉터리가 `backend/`든 저장소 루트든 `backend/` 기준으로 파일을 찾는다. IDE에서 작업 디렉터리를 바꿔 실행해도 같은 결과가 나온다.
+
+목록의 파일마다 다음을 검사한다.
 
 1. Lombok 참조는 허용 목록에만 있다. 대상은 `import lombok.…` 문과 `@lombok.…` 형태의 정규화된 이름이다. 허용 목록은 `lombok.Getter`, `lombok.RequiredArgsConstructor`, `lombok.NoArgsConstructor`, `lombok.AccessLevel`, `lombok.extern.slf4j.Slf4j`다. 와일드카드 import(`import lombok.*;`)와 static import(`import static lombok.…`)는 허용 목록 밖으로 본다.
 2. `@NoArgsConstructor`에는 `access = AccessLevel.PROTECTED`가 있다. 패키지 이름을 붙인 표기(`@lombok.NoArgsConstructor`, `lombok.AccessLevel.PROTECTED`)와 여러 줄에 걸친 인자도 같게 본다.
-3. Lombok이 대신할 코드를 손으로 쓰지 않았다. `class` 선언에만 적용하고 `enum`·`record`·`interface`는 검사하지 않는다.
-   - logger: `LoggerFactory.getLogger(...)` 호출이 없다.
-   - 단순 getter: 매개변수가 없는 인스턴스 메서드 `getX()`·`isX()`의 본문이 `return x;` 또는 `return this.x;` 하나뿐이고 `x`가 그 클래스의 인스턴스 필드이면 위반이다. 메서드 이름과 필드 이름이 맞는지는 보지 않는다. 그래서 `boolean`이 아닌 필드를 돌려주는 `isX()`처럼 Lombok으로 같은 시그니처를 만들 수 없는 메서드도 위반이 된다. 이런 메서드가 생기면 검사기에 이름 대응 조건을 더한다(`4a24155` 기준 목록에는 없다).
-   - 값 생성자: 생성자 본문이 `this.x = x;` 형태의 대입문만으로 되어 있고(한 개 이상), 대입하는 값이 같은 이름의 매개변수이면 위반이다. 매개변수에 어노테이션(`@Qualifier` 등)이 있으면 제외한다. Lombok은 기본 설정에서 그 어노테이션을 생성자로 옮기지 않기 때문이다.
-   - 빈 `protected` 생성자: 매개변수와 본문이 모두 빈 `protected` 생성자는 위반이다.
+3. Lombok이 그대로 대신할 수 있는 코드를 손으로 쓰지 않았다. "그대로"는 Lombok이 같은 이름, 시그니처, 동작의 코드를 만든다는 뜻이다. Lombok이 그대로 만들 수 없는 코드는 위반이 아니다.
+   - `class` 선언에만 적용하고 `enum`·`record`·`interface`·어노테이션 타입은 검사하지 않는다. 클래스 안에 중첩된 선언도 그 선언의 종류를 따른다.
+   - logger: `LoggerFactory.getLogger(...)` 호출이 없다. 호출을 감싸는 가장 안쪽의 이름 있는 타입 선언이 `class`일 때만 본다.
+   - 단순 getter: 다음을 모두 만족하면 위반이다.
+     - 매개변수가 없는 인스턴스 메서드이고, 본문이 `return x;` 또는 `return this.x;` 하나뿐이다. `x`는 그 클래스에 선언된 인스턴스 필드다.
+     - 메서드 이름이 Lombok이 `x`에 만드는 getter 이름과 같다. `foo` → `getFoo()`, `boolean` 필드 `foo` → `isFoo()`, `boolean` 필드 `isFoo` → `isFoo()`다. `Boolean` 필드는 `getFoo()`다.
+     - 반환 타입이 필드 타입과 같다.
+     - `synchronized`가 아니고, `@Override` 밖의 어노테이션이 없다. Lombok getter는 동기화하지 않고, 손으로 쓴 메서드의 어노테이션을 옮기지 않는다.
+   - 값 생성자: 다음을 모두 만족하면 위반이다.
+     - 본문이 `this.x = x;` 형태의 대입문만으로 되어 있다(한 개 이상).
+     - 매개변수가 그 클래스의 "초기화하지 않은 `final` 인스턴스 필드" 전체와 이름, 타입, 순서가 같다. `@RequiredArgsConstructor`는 이 필드만 선언 순서대로 받는다.
+     - 생성자와 매개변수에 어노테이션(`@Qualifier` 등)이 없고, `throws`와 가변 인자가 없다. Lombok은 기본 설정에서 이것들을 만들지 않는다.
+     - 초기화하지 않은 인스턴스 필드에 이름이 `NonNull`인 어노테이션이 없다. 그런 필드가 있으면 Lombok이 매개변수와 null 검사를 더한다.
+   - 엔티티처럼 `final`이 아닌 필드에 값을 넣는 생성자는 손으로 쓴다. 이 생성자를 만드는 `@AllArgsConstructor`는 허용 목록 밖이다.
+   - 빈 `protected` 생성자: 매개변수, 본문, 어노테이션이 모두 없는 `protected` 생성자는 위반이다.
    - 로직이 있는 생성자·getter(검증, 변환, 기본값 처리)는 위 형태에 맞지 않으므로 검사에 걸리지 않는다.
 
-테스트는 규칙마다 위반 예제로 실패하는 경우를 먼저 보인다(TDD RED). 목록 밖 파일에 위반이 있어도 통과하는 경우도 테스트한다. 팀원 코드를 검사하지 않는다는 결정을 이 테스트가 지킨다. 마지막으로 실제 레포의 목록 전체가 통과하는지 검사한다.
+테스트는 규칙마다 위반 예제로 실패하는 경우를 먼저 보인다(TDD RED). Lombok이 그대로 만들 수 없어 위반이 아닌 경우도 테스트한다. 목록 밖 파일에 위반이 있어도 통과하는 경우도 테스트한다. 팀원 코드를 검사하지 않는다는 결정을 이 테스트가 지킨다. 마지막으로 실제 레포의 목록 전체가 통과하는지 검사한다.
 
 #### 소스를 Gradle `test` 입력으로 등록한다
 
@@ -178,6 +195,20 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원이 만든 파일�
 - Lombok을 쓰지 않게 된 원인은 Claude 세션이 주변 스타일을 따라 손으로 쓴 것이다. Lombok 기능만 검사하면 손으로 쓴 getter가 다시 생겨도 알 수 없다.
 - 팀원 파일은 목록 밖이라, 손으로 쓴 코드가 남아 있어도 이 검사에 걸리지 않는다.
 - 검사 형태는 값만 옮기는 코드로 좁혔다. 로직이 있는 생성자와 getter를 잘못 잡지 않는다.
+- Lombok이 그대로 만들 수 없는 코드는 잡지 않는다. 검사가 시키는 대로 바꿨는데 이름이나 시그니처가 바뀌면 호출하는 코드가 깨지고, `synchronized`가 빠지면 동작이 바뀐다.
+
+### 소스는 JDK 컴파일러 파서로 읽는다
+
+| 관점 | JDK 컴파일러 파서(채택) | 정규식으로 직접 해석(이전 구현, `b787672`까지) | JavaParser 라이브러리 |
+|---|---|---|---|
+| 정확성 | 컴파일러와 같은 문법으로 읽는다. 텍스트 블록, 한 줄의 여러 필드 선언, 중첩 타입, 타입·수정자를 그대로 구분한다 | 텍스트 블록 안의 `\"""`, `String a, b;`, 중첩 `interface`의 logger, `synchronized` getter를 잘못 읽었다(PR #213 CodeRabbit 지적) | JDK 파서와 비슷하다. 새 Java 문법은 라이브러리 갱신을 기다린다 |
+| 보안 | 차이 없음 | 차이 없음 | 차이 없음 |
+| 성능 | 92개 파일 파싱에 1초 안팎이다. 컴파일은 하지 않는다 | 가장 빠르다 | JDK 파서와 비슷하다 |
+| 메모리 | 파일마다 구문 트리를 만든다. 테스트 JVM에서 문제 되지 않는 크기다 | 가장 적다 | JDK 파서와 비슷하다 |
+| 확장성 | Java 버전이 올라도 toolchain JDK의 파서가 함께 따라온다 | 새 문법이나 경계 사례마다 정규식을 고친다 | 라이브러리 버전을 올린다 |
+| 운영 부담 | 검사 테스트가 JDK(`jdk.compiler`)에서만 돈다. Gradle toolchain과 CI는 JDK다 | 경계 사례가 리뷰마다 다시 나온다 | 테스트 의존성이 하나 늘어 버전을 관리한다 |
+| 개발자 경험 | 잘못된 실패가 줄어든다. 메시지에 정확한 줄 번호가 나온다 | 잘못된 실패가 나면 원인을 찾기 어렵다 | JDK 파서와 같다 |
+| 구현량 | 검사기를 구문 트리 방문으로 다시 쓴다 | 경계 사례마다 패치한다 | JDK 파서와 같고 의존성을 더한다 |
 
 ### 다른 사람이 만든 파일은 기존 스타일을 따른다
 
@@ -221,12 +252,13 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원이 만든 파일�
 - `backend-lint`가 Gradle 컴파일까지 하게 되어, 실행 시간이 Spotless 검사만 할 때보다 길어진다. 컴파일이 안 되는 PR은 누구의 PR이든 실패한다.
 - `src/main/java`가 `test` 태스크의 입력이 되어, 운영 코드의 주석만 바뀌어도 로컬 `test`가 다시 실행된다.
 - 허용 목록을 바꿀 때 네 곳(이 ADR, 협업 가이드 10절, 검사 테스트, 로컬 `AGENTS.md`)을 고친다.
+- 검사 테스트는 JDK의 `jdk.compiler` 모듈에 기댄다. JRE만 있는 환경에서는 돌지 않는다.
 - IDE에서 Lombok이 만든 메서드를 보려면 annotation processing이 켜져 있어야 한다. IntelliJ IDEA는 Lombok 지원을 내장하고 있다. Gradle 빌드와 CI는 IDE 설정과 관계없이 동작한다.
 
 ## Reused
 
 - Lombok 의존성: `backend/build.gradle`에 이미 있다(`compileOnly`, `annotationProcessor`, `testCompileOnly`, `testAnnotationProcessor`). 버전은 Spring Boot가 관리하는 값을 쓰고 따로 고정하지 않는다.
-- 검사: JDK와 기존 테스트 의존성(JUnit 5, AssertJ)만 쓴다. Checkstyle, Error Prone, ArchUnit, JavaParser는 추가하지 않는다.
+- 검사: JDK와 기존 테스트 의존성(JUnit 5, AssertJ)만 쓴다. 소스 해석은 JDK의 컴파일러 파서(`JavacTask.parse()`, `com.sun.source.tree`)를 쓴다. Checkstyle, Error Prone, ArchUnit, JavaParser는 추가하지 않는다.
 - CI: 이미 required check인 `backend-lint` job에 단계만 더한다.
 - 포맷: 기존 Spotless(palantir) 설정을 그대로 쓴다.
 
@@ -236,6 +268,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원이 만든 파일�
 - **git 작성자로 자동 판별**: 작성자 이름이 두 가지로 섞여 있고, 얕은 clone에서 동작하지 않는다.
 - **내 PC에서만 검사**: PR 검사로 보장되지 않고, PC와 세션마다 설정이 빠질 수 있다.
 - **Lombok 기능만 검사**: 손으로 쓴 getter·생성자·logger가 다시 생겨도 알 수 없다.
+- **정규식으로 소스 해석(`b787672`까지의 구현)**: 텍스트 블록, 여러 필드 선언, 중첩 타입 같은 경계 사례를 잘못 읽었다. 경계 사례마다 패치해야 한다.
 - **금지 목록 방식**: Lombok `@Value`가 `@ToString`을 함께 붙여 금지를 우회하고, `@Builder` 등이 엔티티 팩터리를 우회한다.
 - **팀원 파일도 이 PR에서 함께 전환, 또는 고칠 때마다 전환**: 팀원 동의가 없고, 팀원 브랜치와 충돌한다.
 - **규칙을 `AGENTS.md`나 ADR에만 두기**: `AGENTS.md`는 레포 밖이라 팀원이 볼 수 없다. ADR만 두면 Slack `@Claude`와 팀원이 찾기 어렵다.
