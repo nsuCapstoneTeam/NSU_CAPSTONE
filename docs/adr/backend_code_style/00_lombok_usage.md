@@ -34,7 +34,7 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원에게 강제하�
 - 다른 사람이 만든 파일을 고칠 때는 그 파일의 기존 스타일을 따른다. 손으로 쓴 getter가 있는 파일에 필드를 더하면 getter도 손으로 쓴다. 한 파일에 두 방식을 섞지 않는다.
   - 팀원이 검사 목록의 파일을 고칠 때도 같다. 그 파일은 Lombok 스타일이므로 검사 테스트가 그대로 검사한다.
 - 팀원 파일을 Lombok으로 바꿀지, 팀 전체에서 일부 기능(`@Data`·`@ToString` 등)을 막을지는 강석윤(Seokyun Kang)이 정한다.
-  - PR 뒤 Slack #dev 공지에서 묻는다. 이 PR은 그 답을 기다리지 않는다.
+  - 2026-11-09 Slack #dev 공지에서 물었다([공지](https://nsu-capstone.slack.com/archives/C0BUSGZSA0P/p1794206567254909)). 이 PR은 그 답을 기다리지 않는다.
   - 팀 전체에서 막기로 하면 그때 `backend/lombok.config`에 `flagUsage = error`를 더한다. 파일을 바꾸기로 하면 별도 이슈로 진행한다.
 
 ### 검사 목록
