@@ -188,7 +188,7 @@ CodeRabbit은 보조 리뷰어이며 최종 승인과 Squash Merge는 사람이 
 ## 10. Backend 코드 스타일 (Lombok)
 
 - Lombok은 `@RequiredArgsConstructor`, `@Getter`, `@NoArgsConstructor(access = AccessLevel.PROTECTED)`, `@Slf4j` 4개만 쓴다.
-- 다른 Lombok 기능을 쓰면 빌드(`backend/lombok.config`)나 테스트(소스 스캔)가 실패한다.
+- 다른 Lombok 기능을 쓰면 빌드(`backend/lombok.config`)나 테스트(소스 스캔)가 실패하고, PR 검사 `backend-lint`도 실패한다.
 - 다른 사람이 만든 파일을 고칠 때는 그 파일의 기존 스타일을 따른다. 손으로 쓴 getter가 있는 파일에 Lombok을 섞지 않는다.
 - 이유와 세부 규칙은 [ADR backend_code_style/00](../adr/backend_code_style/00_lombok_usage.md)에 있다.
 

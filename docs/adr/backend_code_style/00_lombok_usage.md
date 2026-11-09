@@ -8,7 +8,7 @@
 
 ## Decision
 
-backend 코드는 Lombok 기능 중 아래 4개만 쓴다. 다른 Lombok 기능을 쓰면 빌드나 테스트가 실패한다.
+backend 코드는 Lombok 기능 중 아래 4개만 쓴다. 다른 Lombok 기능을 쓰면 빌드와 테스트가 실패하고, PR의 required check(`backend-lint`)도 실패한다.
 
 | 어노테이션 | 쓰는 곳 | 대신하는 코드 |
 |---|---|---|
@@ -22,7 +22,7 @@ backend 코드는 Lombok 기능 중 아래 4개만 쓴다. 다른 Lombok 기능�
 
 ### 강제 방법
 
-규칙은 두 겹으로 강제한다. `lombok.config`는 컴파일할 때 바로 알려 주고, 소스 스캔 테스트는 `lombok.config`가 놓치는 경우를 잡는다.
+규칙은 두 겹으로 강제하고, 두 겹 모두 PR 검사에서 실행한다. `lombok.config`는 컴파일할 때 바로 알려 주고, 소스 스캔 테스트는 `lombok.config`가 놓치는 경우를 잡는다.
 
 1. **`backend/lombok.config`**: 허용 4개 밖의 기능에 `flagUsage = error`를 건다. 그 기능을 쓰면 `compileJava`가 실패한다.
 
@@ -71,7 +71,26 @@ backend 코드는 Lombok 기능 중 아래 4개만 쓴다. 다른 Lombok 기능�
    - `@NoArgsConstructor`에는 `access = AccessLevel.PROTECTED`가 있다.
    - 테스트 자신이 가진 문자열(허용 목록 등)은 검사에 걸리지 않게 한다.
 
-3. **구현 때 한 번 확인**: 막은 기능을 쓴 코드가 `compileJava`에서 실패하는 것을 보고, 실패 로그를 구현 보고에 넣는다. 일반 기능(`@Builder` 등), experimental 기능, 로그 어노테이션(`@Log4j2` 등)에서 하나씩 확인한다. 허용한 4개는 컴파일이 통과하는 것도 확인한다. 키 이름이 틀리면 Lombok이 그 줄을 적용하지 않을 수 있기 때문이다.
+3. **PR 검사(CI)**: `.github/workflows/ci.yml`의 `backend-lint` job에 단계를 하나 더한다.
+
+   ```yaml
+   - name: Lombok 규칙 검사
+     working-directory: backend
+     run: ./gradlew test --tests '<소스 스캔 테스트의 정규화된 클래스 이름>'
+   ```
+
+   - 지금 CI는 `spotlessCheck`만 실행하고 컴파일과 테스트는 하지 않는다(2026-11-09 확인). 이 단계가 없으면 `lombok.config`와 소스 스캔 테스트 모두 PR 검사에서 실행되지 않는다. 그러면 접근 지정이 빠진 `@NoArgsConstructor`가 PR 검사를 통과한다.
+   - `test` 태스크는 main과 test 소스를 모두 컴파일한다. 그래서 `lombok.config` 위반도 이 단계에서 실패한다.
+   - 이 단계는 소스 스캔 테스트만 실행하므로 Docker(Testcontainers)가 필요 없다.
+   - 테스트 이름이 바뀌어 맞는 테스트가 없으면 Gradle이 `No tests found for given includes`로 실패한다. 그래서 검사가 조용히 빠지지 않는다.
+   - 새 job을 만들지 않고 `backend-lint`에 단계를 더한다. `backend-lint`는 이미 저장소 ruleset의 required check다. 새 job은 ruleset을 따로 고쳐야 required가 된다.
+   - pre-push hook(`lefthook.yml`)에는 넣지 않는다. push할 때마다 컴파일을 기다리게 되기 때문이다. 머지를 막는 것은 CI다.
+   - 전체 테스트 CI는 NSU-135(Todo)가 맡는다. 이 PR은 NSU-135를 기다리지 않는다. NSU-135가 끝나면 소스 스캔 테스트가 전체 테스트에서도 돌아 이 단계와 겹친다. 그래도 이 단계는 Docker 없이 빨리 실패를 알려 주므로 남겨 둔다.
+
+4. **구현 때 한 번 확인**: 막은 기능을 쓴 코드가 `compileJava`에서 실패하는 것을 보고, 실패 로그를 구현 보고에 넣는다. 일반 기능(`@Builder` 등), experimental 기능, 로그 어노테이션(`@Log4j2` 등)에서 하나씩 확인한다. 허용한 4개는 컴파일이 통과하는 것도 확인한다. 키 이름이 틀리면 Lombok이 그 줄을 적용하지 않을 수 있기 때문이다.
+   - CI 단계와 같은 명령(`./gradlew test --tests …`)을 로컬에서도 실행한다. 다음 두 경우에 이 명령이 실패하는지 확인하고 로그를 보고한다.
+     - 접근 지정이 없는 `@NoArgsConstructor`
+     - 막은 기능 하나(예: `@Builder`)
 
 ### 적용 범위
 
@@ -95,7 +114,7 @@ backend 코드는 Lombok 기능 중 아래 4개만 쓴다. 다른 Lombok 기능�
 |---|---|---|
 | 이 ADR | 팀 | 규칙 원문과 이유 |
 | `docs/협업-가이드/README.md` 10절 | 팀원, Slack `@Claude` | 요약과 이 ADR 링크 |
-| `backend/lombok.config`, 소스 스캔 테스트 | 빌드 | 강제 |
+| `backend/lombok.config`, 소스 스캔 테스트, CI `backend-lint` | 빌드, PR 검사 | 강제 |
 | `AGENTS.md`(로컬 파일, `.gitignore` 대상) | 김동엽의 Claude 세션 | 새 코드에 4개를 쓰는 규칙, 다른 사람 파일 규칙 |
 
 허용 목록을 바꿀 때는 이 ADR, 협업 가이드 10절, `lombok.config`, 소스 스캔 테스트의 허용 목록을 함께 고친다.
@@ -178,6 +197,7 @@ backend 코드는 Lombok 기능 중 아래 4개만 쓴다. 다른 Lombok 기능�
 - 레포에는 한동안 손으로 쓴 스타일(팀원 파일)과 Lombok 스타일이 함께 있다. 파일 하나 안에서는 섞이지 않는다.
 - 허용 목록을 바꿀 때 네 곳(이 ADR, 협업 가이드 10절, `lombok.config`, 소스 스캔 테스트)을 고친다.
 - Lombok 버전이 올라 새 기능이 생기면, 컴파일은 통과하고 소스 스캔 테스트가 실패한다. 그 기능을 열지 막을지는 그때 정한다.
+- `backend-lint` job이 Gradle 컴파일까지 하게 되어, 실행 시간이 Spotless 검사만 할 때보다 길어진다.
 - IDE에서 Lombok이 만든 메서드를 보려면 annotation processing이 켜져 있어야 한다. IntelliJ IDEA는 Lombok 지원을 내장하고 있다. Gradle 빌드와 CI는 IDE 설정과 관계없이 동작한다.
 
 ## Reused
@@ -190,6 +210,8 @@ backend 코드는 Lombok 기능 중 아래 4개만 쓴다. 다른 Lombok 기능�
 
 - **금지 목록 방식**: 이슈 초안의 4개(`@Data`·`@Setter`·`@ToString`·`@EqualsAndHashCode`)만 막는다. Lombok `@Value`가 `@ToString`을 함께 붙여 금지를 우회하고, `@Builder` 등이 엔티티 팩터리를 우회한다.
 - **`lombok.config`만으로 강제**: 새 Lombok 기능과 `@NoArgsConstructor` 접근 수준을 막지 못한다.
+- **NSU-135(전체 테스트 CI)를 선행 조건으로 두기**: NSU-135는 Todo이고 Testcontainers용 Docker 설정이 필요하다. 그 기간 동안 규칙이 PR 검사에서 강제되지 않는다.
+- **Lombok 검사용 새 CI job**: 저장소 ruleset에 required check를 더해야 한다. 그 설정을 빠뜨리면 job이 실패해도 머지가 막히지 않는다.
 - **묶음 키(`lombok.log.flagUsage`, `lombok.anyConstructor.flagUsage`)로 줄 수 줄이기**: 허용한 `@Slf4j`와 생성자 어노테이션까지 막는다.
 - **팀원 파일도 이 PR에서 함께 전환, 또는 고칠 때마다 전환**: 팀원 동의가 없고, 팀원 브랜치와 충돌한다.
 - **규칙을 `AGENTS.md`나 ADR에만 두기**: `AGENTS.md`는 레포 밖이라 팀원이 볼 수 없다. ADR만 두면 Slack `@Claude`와 팀원이 찾기 어렵다.
