@@ -845,6 +845,159 @@ class LombokStyleCheckerTest {
     }
 
     @Test
+    void acceptsIsGetterWhenGetPrefixedMethodOfSameFieldAlsoExists() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private boolean active = true;
+
+                    public boolean isActive() {
+                        return active;
+                    }
+
+                    public boolean getActive() {
+                        return active;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsGetterOfBooleanFieldNamedWithIsWhenMethodWithoutIsAlsoExists() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private boolean isActive = true;
+
+                    public boolean isActive() {
+                        return isActive;
+                    }
+
+                    public boolean getActive() {
+                        return isActive;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsGetterWhenMethodWithSameNameIgnoringCaseAlsoExists() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String url = "a";
+
+                    public String getUrl() {
+                        return url;
+                    }
+
+                    public String getURL() {
+                        return url;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsGetterWhenMethodWithSameNameAndVarargsParameterExists() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private boolean active = true;
+
+                    public boolean isActive() {
+                        return active;
+                    }
+
+                    public boolean getActive(String... suffix) {
+                        return active;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void rejectsGetterWhenMethodWithSameNameTakesOneNonVarargsParameter() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private boolean active = true;
+
+                    public boolean isActive() {
+                        return active;
+                    }
+
+                    public boolean getActive(String suffix) {
+                        return active;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("isActive").contains("@Getter");
+        });
+    }
+
+    @Test
+    void acceptsGetterWhenMethodWithSameNameIsStaticAndReturnsOtherType() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private boolean active = true;
+
+                    public boolean isActive() {
+                        return active;
+                    }
+
+                    public static int getActive() {
+                        return 1;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void rejectsGetPrefixedGetterOfBoxedBooleanFieldEvenWhenIsPrefixedMethodExists() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private Boolean active = true;
+
+                    public Boolean isActive() {
+                        return active;
+                    }
+
+                    public Boolean getActive() {
+                        return active;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(10);
+            assertThat(violation.message()).contains("getActive").contains("@Getter");
+        });
+    }
+
+    @Test
     void acceptsGetterWhoseNameDiffersFromTheLombokGetterName() {
         String source = """
                 package sample;

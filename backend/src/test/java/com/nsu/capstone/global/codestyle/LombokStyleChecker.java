@@ -196,6 +196,11 @@ final class LombokStyleChecker {
                     }
                 }
             }
+            List<MethodTree> methods = node.getMembers().stream()
+                    .filter(MethodTree.class::isInstance)
+                    .map(MethodTree.class::cast)
+                    .filter(method -> !method.getName().contentEquals("<init>"))
+                    .toList();
             for (Tree member : node.getMembers()) {
                 if (!(member instanceof MethodTree method) || method.getBody() == null) {
                     continue;
@@ -203,7 +208,7 @@ final class LombokStyleChecker {
                 if (method.getName().contentEquals("<init>")) {
                     checkConstructor(className, method, requiredFields, hasNonNullField);
                 } else {
-                    checkGetter(method, instanceFields);
+                    checkGetter(method, instanceFields, methods);
                 }
             }
         }
@@ -234,8 +239,8 @@ final class LombokStyleChecker {
         }
 
         /** 구문 트리에는 가변 인자 표시가 없어(타입이 {@code String[]}로 보인다) 매개변수의 소스 범위에서 주석을 빼고 {@code ...}를 찾는다. */
-        private boolean hasVarargs(MethodTree constructor) {
-            return constructor.getParameters().stream().anyMatch(parameter -> {
+        private boolean hasVarargs(MethodTree method) {
+            return method.getParameters().stream().anyMatch(parameter -> {
                 int start = (int) positions.getStartPosition(unit, parameter);
                 int end = (int) positions.getEndPosition(unit, parameter);
                 return COMMENT.matcher(source.substring(start, end))
@@ -289,7 +294,8 @@ final class LombokStyleChecker {
             return true;
         }
 
-        private void checkGetter(MethodTree method, Map<String, VariableTree> instanceFields) {
+        private void checkGetter(
+                MethodTree method, Map<String, VariableTree> instanceFields, List<MethodTree> methods) {
             if (method.getReturnType() == null
                     || !method.getParameters().isEmpty()
                     || method.getModifiers().getFlags().contains(Modifier.STATIC)
@@ -307,26 +313,65 @@ final class LombokStyleChecker {
                     && returnedField(returned.getExpression()) instanceof String fieldName
                     && instanceFields.get(fieldName) instanceof VariableTree field
                     && method.getName().contentEquals(lombokGetterName(field))
-                    && method.getReturnType().toString().equals(field.getType().toString())) {
+                    && method.getReturnType().toString().equals(field.getType().toString())
+                    && !hasMethodThatStopsLombokGetter(method, field, methods)) {
                 report(
                         nameLine(method, method.getName().toString()),
                         "단순 getter " + method.getName() + "()는 손으로 쓰지 않고 @Getter를 쓴다");
             }
         }
 
+        /** Lombok은 같은 이름의 메서드가 이미 있으면 getter를 만들지 않는다. 검사 중인 getter 말고 그런 메서드가 있는지 본다. */
+        private boolean hasMethodThatStopsLombokGetter(
+                MethodTree getter, VariableTree field, List<MethodTree> methods) {
+            Set<String> names = lombokGetterNames(field);
+            return methods.stream()
+                    .anyMatch(other -> other != getter
+                            && canBeCalledWithoutArguments(other)
+                            && names.stream().anyMatch(other.getName().toString()::equalsIgnoreCase));
+        }
+
+        /** Lombok은 가변 인자 메서드를 매개변수 0개로도 센다. */
+        private boolean canBeCalledWithoutArguments(MethodTree method) {
+            return method.getParameters().isEmpty() || (method.getParameters().size() == 1 && hasVarargs(method));
+        }
+
         /** Lombok이 필드에 만드는 getter 이름. 기본형 {@code boolean}은 {@code is}, 그 밖은 {@code get}으로 시작한다. */
         private static String lombokGetterName(VariableTree field) {
             String name = field.getName().toString();
             String capitalized = capitalized(name);
-            boolean primitiveBoolean = field.getType() instanceof PrimitiveTypeTree type
-                    && type.getPrimitiveTypeKind() == TypeKind.BOOLEAN;
-            if (primitiveBoolean
-                    && name.length() > 2
-                    && name.startsWith("is")
-                    && !Character.isLowerCase(name.charAt(2))) {
+            boolean primitiveBoolean = isPrimitiveBoolean(field);
+            if (primitiveBoolean && startsWithIsPrefix(name)) {
                 return name;
             }
             return (primitiveBoolean ? "is" : "get") + capitalized;
+        }
+
+        /**
+         * Lombok이 getter가 이미 있는지 볼 때 쓰는 이름들. 기본형 {@code boolean}은 {@code is}와 {@code get} 둘 다 보고,
+         * {@code isFoo}처럼 {@code is}로 시작하면 {@code is}를 뗀 이름({@code Foo})으로도 본다.
+         */
+        private static Set<String> lombokGetterNames(VariableTree field) {
+            String name = field.getName().toString();
+            Set<String> names = new HashSet<>();
+            names.add("get" + capitalized(name));
+            if (isPrimitiveBoolean(field)) {
+                names.add("is" + capitalized(name));
+                if (startsWithIsPrefix(name)) {
+                    names.add("get" + capitalized(name.substring(2)));
+                    names.add("is" + capitalized(name.substring(2)));
+                }
+            }
+            return names;
+        }
+
+        /** Lombok은 {@code is} 바로 뒤가 소문자가 아닌 {@code boolean} 필드 이름({@code isFoo})에 {@code is}를 또 붙이지 않는다. */
+        private static boolean startsWithIsPrefix(String name) {
+            return name.length() > 2 && name.startsWith("is") && !Character.isLowerCase(name.charAt(2));
+        }
+
+        private static boolean isPrimitiveBoolean(VariableTree field) {
+            return field.getType() instanceof PrimitiveTypeTree type && type.getPrimitiveTypeKind() == TypeKind.BOOLEAN;
         }
 
         /** Lombok처럼 소문자인 첫 글자만 바꾼다. 3글자 이상이고 둘째 글자가 대문자이면 대문자로, 아니면 title case로 바꾼다. */
