@@ -63,6 +63,10 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// Lombok 스타일 검사 테스트가 src/main/java 소스 원문을 읽는다. 컴파일 결과가 같은 소스 변경에도 test가 다시 실행된다.
+	inputs.dir('src/main/java')
+		.withPathSensitivity(PathSensitivity.RELATIVE)
+		.withPropertyName('lombokStyleSources')
 }
 
 spotless {
