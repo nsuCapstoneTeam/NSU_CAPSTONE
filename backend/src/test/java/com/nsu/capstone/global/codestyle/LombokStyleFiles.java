@@ -13,6 +13,15 @@ final class LombokStyleFiles {
     private LombokStyleFiles() {}
 
     /**
+     * @param workingDirectory 테스트를 실행한 작업 디렉터리. backend/나 저장소 루트다.
+     * @return 목록의 경로가 상대 경로로 시작하는 기준 디렉터리(backend/)
+     */
+    static Path backendRoot(Path workingDirectory) {
+        Path backend = workingDirectory.resolve("backend");
+        return Files.isDirectory(backend.resolve("src/main/java")) ? backend : workingDirectory;
+    }
+
+    /**
      * @param backendRoot 목록의 경로가 상대 경로로 시작하는 기준 디렉터리(backend/)
      * @param listContent 검사 목록 파일의 내용
      * @return 실패 메시지. 비어 있으면 통과다.

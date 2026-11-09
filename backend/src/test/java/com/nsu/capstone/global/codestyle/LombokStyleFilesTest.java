@@ -39,8 +39,7 @@ class LombokStyleFilesTest {
         assertThat(failures)
                 .singleElement()
                 .asString()
-                .contains("src/main/java/sample/Bad.java")
-                .contains("3")
+                .contains("src/main/java/sample/Bad.java:3 ")
                 .contains("lombok.Data");
     }
 
@@ -89,6 +88,20 @@ class LombokStyleFilesTest {
     }
 
     @Test
+    void backendRootIsTheBackendDirectoryWhenWorkingDirectoryIsTheRepositoryRoot() throws IOException {
+        Files.createDirectories(root.resolve("backend/src/main/java"));
+
+        assertThat(LombokStyleFiles.backendRoot(root)).isEqualTo(root.resolve("backend"));
+    }
+
+    @Test
+    void backendRootIsTheWorkingDirectoryWhenItIsTheBackendDirectory() throws IOException {
+        Files.createDirectories(root.resolve("src/main/java"));
+
+        assertThat(LombokStyleFiles.backendRoot(root)).isEqualTo(root);
+    }
+
+    @Test
     void repositoryListedFilesFollowTheLombokStyle() throws IOException {
         String list;
         try (InputStream resource = getClass().getResourceAsStream("/lombok-style-files.txt")) {
@@ -96,7 +109,9 @@ class LombokStyleFilesTest {
             list = new String(resource.readAllBytes(), StandardCharsets.UTF_8);
         }
 
-        List<String> failures = LombokStyleFiles.check(Path.of(System.getProperty("user.dir")), list);
+        Path backendRoot = LombokStyleFiles.backendRoot(Path.of(System.getProperty("user.dir")));
+
+        List<String> failures = LombokStyleFiles.check(backendRoot, list);
 
         assertThat(failures)
                 .as("Lombok 스타일 위반 (규칙: docs/adr/backend_code_style/00_lombok_usage.md)")
