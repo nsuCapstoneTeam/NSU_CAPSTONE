@@ -66,10 +66,11 @@ backend의 Lombok 스타일은 팀 권장 사항이고, 팀원이 만든 파일�
 3. Lombok이 그대로 대신할 수 있는 코드를 손으로 쓰지 않았다. "그대로"는 Lombok이 같은 이름, 시그니처, 동작의 코드를 만든다는 뜻이다. Lombok이 그대로 만들 수 없는 코드는 위반이 아니다.
    - 검사는 잘못 잡지 않는 쪽을 우선한다. Lombok이 그대로 만들 수 있는지 확실하지 않은 코드는 위반으로 보지 않는다.
    - `class` 선언에만 적용하고 `enum`·`record`·`interface`·어노테이션 타입은 검사하지 않는다. 클래스 안에 중첩된 선언도 그 선언의 종류를 따른다.
-   - logger: `static` 필드를 SLF4J의 `LoggerFactory.getLogger(그 클래스.class)`로 초기화하면 위반이다. `@Slf4j`가 같은 logger를 만든다.
+   - logger: `private static final` 필드 `log`를 SLF4J의 `LoggerFactory.getLogger(그 클래스.class)`로 초기화하면 위반이다. `@Slf4j`가 같은 필드(`private static final Logger log`)를 만든다.
      - "그 클래스"는 필드를 선언한 가장 안쪽의 이름 있는 `class`다.
      - SLF4J인지는 `import org.slf4j.LoggerFactory`, `import org.slf4j.*`, 또는 `org.slf4j.LoggerFactory`로 쓴 이름으로 본다.
      - 실행 중에 이름을 정하는 호출(`getLogger(category)`), 다른 클래스나 문자열을 넘기는 호출, 지역 변수, SLF4J가 아닌 `LoggerFactory`는 위반이 아니다.
+     - 이름이 `log`가 아니거나, `final`이 아니거나, `private`이 아닌 필드도 위반이 아니다. 이 레포는 `lombok.config`를 두지 않으므로 `@Slf4j`가 만드는 필드의 이름과 접근 수준을 바꿀 수 없다. 그래서 이런 필드를 바꾸면 그 필드를 참조하는 코드가 깨진다.
    - 단순 getter: 다음을 모두 만족하면 위반이다.
      - 매개변수가 없는 인스턴스 메서드이고, 본문이 `return x;` 또는 `return this.x;` 하나뿐이다. `x`는 그 클래스에 선언된 인스턴스 필드다.
      - 메서드 이름이 Lombok이 `x`에 만드는 getter 이름과 같다. `foo` → `getFoo()`, `boolean` 필드 `foo` → `isFoo()`, `boolean` 필드 `isFoo` → `isFoo()`다. `Boolean` 필드는 `getFoo()`다. 첫 글자는 Lombok처럼 바꾼다(영문 밖의 글자 포함).
