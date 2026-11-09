@@ -11,6 +11,7 @@ import com.sun.source.tree.ImportTree;
 import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.PrimitiveTypeTree;
 import com.sun.source.tree.ReturnTree;
 import com.sun.source.tree.StatementTree;
 import com.sun.source.tree.Tree;
@@ -26,12 +27,15 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import javax.lang.model.element.Modifier;
+import javax.lang.model.type.TypeKind;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
@@ -162,13 +166,13 @@ final class LombokStyleChecker {
 
         private void checkMembers(ClassTree node) {
             String className = node.getSimpleName().toString();
-            Set<String> instanceFields = new HashSet<>();
+            Map<String, VariableTree> instanceFields = new HashMap<>();
             List<VariableTree> requiredFields = new ArrayList<>();
             boolean hasNonNullField = false;
             for (Tree member : node.getMembers()) {
                 if (member instanceof VariableTree field
                         && !field.getModifiers().getFlags().contains(Modifier.STATIC)) {
-                    instanceFields.add(field.getName().toString());
+                    instanceFields.put(field.getName().toString(), field);
                     if (field.getModifiers().getFlags().contains(Modifier.FINAL) && field.getInitializer() == null) {
                         requiredFields.add(field);
                     }
@@ -211,6 +215,7 @@ final class LombokStyleChecker {
             }
             if (constructor.getParameters().isEmpty()
                     && constructor.getBody().getStatements().isEmpty()
+                    && constructor.getModifiers().getAnnotations().isEmpty()
                     && constructor.getModifiers().getFlags().contains(Modifier.PROTECTED)) {
                 report(line, "빈 protected 생성자 " + className + "()는 손으로 쓰지 않고 @NoArgsConstructor를 쓴다");
             }
@@ -270,23 +275,43 @@ final class LombokStyleChecker {
             return true;
         }
 
-        private void checkGetter(MethodTree method, Set<String> instanceFields) {
+        private void checkGetter(MethodTree method, Map<String, VariableTree> instanceFields) {
             if (method.getReturnType() == null
                     || !method.getParameters().isEmpty()
                     || method.getModifiers().getFlags().contains(Modifier.STATIC)
                     || method.getModifiers().getFlags().contains(Modifier.SYNCHRONIZED)
+                    || method.getModifiers().getAnnotations().stream()
+                            .anyMatch(annotation ->
+                                    !lastName(annotation.getAnnotationType()).equals("Override"))
                     || !GETTER_NAME.matcher(method.getName()).matches()) {
                 return;
             }
             List<? extends StatementTree> statements = method.getBody().getStatements();
             if (statements.size() == 1
                     && statements.get(0) instanceof ReturnTree returned
-                    && returnedField(returned.getExpression()) instanceof String field
-                    && instanceFields.contains(field)) {
+                    && returnedField(returned.getExpression()) instanceof String fieldName
+                    && instanceFields.get(fieldName) instanceof VariableTree field
+                    && method.getName().contentEquals(lombokGetterName(field))
+                    && method.getReturnType().toString().equals(field.getType().toString())) {
                 report(
                         nameLine(method, method.getName().toString()),
                         "단순 getter " + method.getName() + "()는 손으로 쓰지 않고 @Getter를 쓴다");
             }
+        }
+
+        /** Lombok이 필드에 만드는 getter 이름. 기본형 {@code boolean}은 {@code is}, 그 밖은 {@code get}으로 시작한다. */
+        private static String lombokGetterName(VariableTree field) {
+            String name = field.getName().toString();
+            String capitalized = Character.toUpperCase(name.charAt(0)) + name.substring(1);
+            boolean primitiveBoolean = field.getType() instanceof PrimitiveTypeTree type
+                    && type.getPrimitiveTypeKind() == TypeKind.BOOLEAN;
+            if (primitiveBoolean
+                    && name.length() > 2
+                    && name.startsWith("is")
+                    && !Character.isLowerCase(name.charAt(2))) {
+                return name;
+            }
+            return (primitiveBoolean ? "is" : "get") + capitalized;
         }
 
         /** {@code x} 또는 {@code this.x}이면 필드 이름을, 아니면 null을 돌려준다. */

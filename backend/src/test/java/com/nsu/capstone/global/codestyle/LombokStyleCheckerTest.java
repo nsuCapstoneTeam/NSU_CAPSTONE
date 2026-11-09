@@ -640,6 +640,167 @@ class LombokStyleCheckerTest {
     }
 
     @Test
+    void acceptsGetterWhoseNameDiffersFromTheLombokGetterName() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String name = "a";
+
+                    public String getDisplayName() {
+                        return name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsGetterWhoseReturnTypeDiffersFromTheFieldType() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private int size;
+
+                    public long getSize() {
+                        return size;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsGetPrefixedGetterOfPrimitiveBooleanField() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private boolean active = true;
+
+                    public boolean getActive() {
+                        return active;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void rejectsGetterOfBooleanFieldWhoseNameStartsWithIs() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private boolean isActive = true;
+
+                    public boolean isActive() {
+                        return isActive;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("isActive").contains("@Getter");
+        });
+    }
+
+    @Test
+    void acceptsIsPrefixedGetterOfBoxedBooleanField() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private Boolean active = true;
+
+                    public Boolean isActive() {
+                        return active;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void rejectsGetPrefixedGetterOfBoxedBooleanField() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private Boolean active = true;
+
+                    public Boolean getActive() {
+                        return active;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(6);
+            assertThat(violation.message()).contains("getActive").contains("@Getter");
+        });
+    }
+
+    @Test
+    void acceptsGetterWithAnnotationOtherThanOverride() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String name = "a";
+
+                    @JsonIgnore
+                    public String getName() {
+                        return name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void rejectsGetterThatOnlyHasOverrideAnnotation() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String name = "a";
+
+                    @Override
+                    public String getName() {
+                        return name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).singleElement().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(7);
+            assertThat(violation.message()).contains("getName").contains("@Getter");
+        });
+    }
+
+    @Test
+    void acceptsEmptyProtectedConstructorThatHasAnnotation() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    @Deprecated
+                    protected Sample() {}
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
     void acceptsSynchronizedGetter() {
         String source = """
                 package sample;
