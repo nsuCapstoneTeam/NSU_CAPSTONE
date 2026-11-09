@@ -216,6 +216,7 @@ final class LombokStyleChecker {
             if (constructor.getParameters().isEmpty()
                     && constructor.getBody().getStatements().isEmpty()
                     && constructor.getModifiers().getAnnotations().isEmpty()
+                    && constructor.getThrows().isEmpty()
                     && constructor.getModifiers().getFlags().contains(Modifier.PROTECTED)) {
                 report(line, "빈 protected 생성자 " + className + "()는 손으로 쓰지 않고 @NoArgsConstructor를 쓴다");
             }
@@ -280,6 +281,8 @@ final class LombokStyleChecker {
                     || !method.getParameters().isEmpty()
                     || method.getModifiers().getFlags().contains(Modifier.STATIC)
                     || method.getModifiers().getFlags().contains(Modifier.SYNCHRONIZED)
+                    || method.getModifiers().getFlags().contains(Modifier.FINAL)
+                    || !method.getThrows().isEmpty()
                     || method.getModifiers().getAnnotations().stream()
                             .anyMatch(annotation ->
                                     !lastName(annotation.getAnnotationType()).equals("Override"))

@@ -879,6 +879,53 @@ class LombokStyleCheckerTest {
     }
 
     @Test
+    void acceptsEmptyProtectedConstructorThatDeclaresThrows() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    protected Sample() throws IOException {}
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsFinalGetter() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String name = "a";
+
+                    public final String getName() {
+                        return name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void acceptsGetterThatDeclaresThrows() {
+        String source = """
+                package sample;
+
+                class Sample {
+                    private String name = "a";
+
+                    public String getName() throws IOException {
+                        return name;
+                    }
+                }
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
     void acceptsSynchronizedGetter() {
         String source = """
                 package sample;
