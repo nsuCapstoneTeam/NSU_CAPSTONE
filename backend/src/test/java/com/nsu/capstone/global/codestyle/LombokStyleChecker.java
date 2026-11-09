@@ -103,6 +103,7 @@ final class LombokStyleChecker {
         private final SourcePositions positions;
         private final String source;
         private final List<Violation> violations;
+        private final Set<String> imports;
         private final Deque<ClassTree> enclosingTypes = new ArrayDeque<>();
 
         Scanner(CompilationUnitTree unit, SourcePositions positions, String source, List<Violation> violations) {
@@ -110,6 +111,10 @@ final class LombokStyleChecker {
             this.positions = positions;
             this.source = source;
             this.violations = violations;
+            this.imports = Set.copyOf(unit.getImports().stream()
+                    .filter(importTree -> !importTree.isStatic())
+                    .map(importTree -> importTree.getQualifiedIdentifier().toString())
+                    .toList());
         }
 
         @Override
@@ -127,11 +132,17 @@ final class LombokStyleChecker {
             if (type.startsWith("lombok.") && !ALLOWED_LOMBOK.contains(type)) {
                 report(startLine(node), "허용 밖 Lombok 사용: " + type);
             }
-            if ((type.equals("NoArgsConstructor") || type.equals("lombok.NoArgsConstructor"))
-                    && !hasProtectedAccess(node)) {
+            if (isLombokNoArgsConstructor(type) && !hasProtectedAccess(node)) {
                 report(startLine(node), "@NoArgsConstructor에는 access = AccessLevel.PROTECTED가 있어야 한다");
             }
             return super.visitAnnotation(node, unused);
+        }
+
+        /** 정규화된 이름이거나, 이름을 Lombok에서 import했을 때만 Lombok의 {@code @NoArgsConstructor}다. */
+        private boolean isLombokNoArgsConstructor(String type) {
+            return type.equals("lombok.NoArgsConstructor")
+                    || (type.equals("NoArgsConstructor")
+                            && (imports.contains("lombok.NoArgsConstructor") || imports.contains("lombok.*")));
         }
 
         @Override

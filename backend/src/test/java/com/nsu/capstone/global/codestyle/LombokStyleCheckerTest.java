@@ -139,6 +139,49 @@ class LombokStyleCheckerTest {
     }
 
     @Test
+    void acceptsNoArgsConstructorThatIsNotFromLombok() {
+        String source = """
+                package sample;
+
+                import com.example.NoArgsConstructor;
+
+                @NoArgsConstructor
+                class Sample {}
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
+    void rejectsNoArgsConstructorWithoutAccessLevelWhenLombokIsImportedWithWildcard() {
+        String source = """
+                package sample;
+
+                import lombok.*;
+
+                @NoArgsConstructor
+                class Sample {}
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).hasSize(2).last().satisfies(violation -> {
+            assertThat(violation.line()).isEqualTo(5);
+            assertThat(violation.message()).contains("AccessLevel.PROTECTED");
+        });
+    }
+
+    @Test
+    void acceptsNoArgsConstructorThatIsNotImported() {
+        String source = """
+                package sample;
+
+                @NoArgsConstructor
+                class Sample {}
+                """;
+
+        assertThat(LombokStyleChecker.check(source)).isEmpty();
+    }
+
+    @Test
     void rejectsHandWrittenLogger() {
         String source = """
                 package sample;
