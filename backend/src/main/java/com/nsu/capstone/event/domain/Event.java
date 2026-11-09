@@ -97,17 +97,10 @@ public class Event {
     @Column(name = "request_hash", length = 64, updatable = false)
     private String requestHash;
 
-    protected Event() {
-    }
+    protected Event() {}
 
     public static Event register(
-        UUID id,
-        UUID eventPartnerId,
-        EventContent content,
-        Clock clock,
-        UUID idempotencyKey,
-        String requestHash
-    ) {
+            UUID id, UUID eventPartnerId, EventContent content, Clock clock, UUID idempotencyKey, String requestHash) {
         Event event = register(id, eventPartnerId, content, clock);
         event.idempotencyKey = idempotencyKey;
         event.requestHash = requestHash;

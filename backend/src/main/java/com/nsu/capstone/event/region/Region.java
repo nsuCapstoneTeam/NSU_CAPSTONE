@@ -22,8 +22,7 @@ public class Region {
     @Column(nullable = false, length = 50)
     private String name;
 
-    protected Region() {
-    }
+    protected Region() {}
 
     public String getCode() {
         return code;

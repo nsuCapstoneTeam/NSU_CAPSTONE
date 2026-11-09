@@ -23,10 +23,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @ApiResponse(
-    responseCode = "401",
-    description = "AUTHENTICATION_REQUIRED",
-    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-)
+        responseCode = "401",
+        description = "AUTHENTICATION_REQUIRED",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
 @Tag(name = "행사")
 @RequestMapping("/api/v1/me/events")
 public class MyEventController {
@@ -48,31 +47,26 @@ public class MyEventController {
     @PreAuthorize("hasRole('EVENT_PARTNER')")
     @ApiResponse(responseCode = "200")
     @ApiResponse(
-        responseCode = "400",
-        description = "VALIDATION_ERROR",
-        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-    )
+            responseCode = "400",
+            description = "VALIDATION_ERROR",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(
-        responseCode = "403",
-        description = "ACCESS_DENIED",
-        content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-    )
+            responseCode = "403",
+            description = "ACCESS_DENIED",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     public PageResponse<EventResponse> list(
-        @AuthenticationPrincipal Jwt jwt,
-        @Parameter(schema = @Schema(implementation = EventPeriod.class))
-        @RequestParam(required = false) String period,
-        @Parameter(schema = @Schema(types = "integer")) @RequestParam(required = false) String page,
-        @Parameter(schema = @Schema(types = "integer")) @RequestParam(required = false) String size
-    ) {
+            @AuthenticationPrincipal Jwt jwt,
+            @Parameter(schema = @Schema(implementation = EventPeriod.class)) @RequestParam(required = false)
+                    String period,
+            @Parameter(schema = @Schema(types = "integer")) @RequestParam(required = false) String page,
+            @Parameter(schema = @Schema(types = "integer")) @RequestParam(required = false) String size) {
         return PageResponse.from(
-            eventService.listMine(
-                UUID.fromString(jwt.getSubject()),
-                period(period),
-                integer(page, 0, 0, Integer.MAX_VALUE),
-                integer(size, DEFAULT_SIZE, 1, MAX_SIZE)
-            ),
-            EventResponse::from
-        );
+                eventService.listMine(
+                        UUID.fromString(jwt.getSubject()),
+                        period(period),
+                        integer(page, 0, 0, Integer.MAX_VALUE),
+                        integer(size, DEFAULT_SIZE, 1, MAX_SIZE)),
+                EventResponse::from);
     }
 
     private static EventPeriod period(String value) {

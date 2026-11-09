@@ -18,19 +18,19 @@ import java.util.UUID;
 public final class ReliabilityCalculator {
 
     /** UUID.compareTo는 부호 있는 비교라 쓰지 않는다. 부호 없는 비교는 UUID 문자열의 사전순과 같다. */
-    private static final Comparator<UUID> UNSIGNED_UUID_ORDER = Comparator
-        .comparing(UUID::getMostSignificantBits, Long::compareUnsigned)
-        .thenComparing(UUID::getLeastSignificantBits, Long::compareUnsigned);
+    private static final Comparator<UUID> UNSIGNED_UUID_ORDER = Comparator.comparing(
+                    UUID::getMostSignificantBits, Long::compareUnsigned)
+            .thenComparing(UUID::getLeastSignificantBits, Long::compareUnsigned);
 
     /** 04 D43: 행동 시각 순서, 같으면 공연 식별자 순서. */
-    private static final Comparator<Observation> ACTION_TIME_ORDER = Comparator
-        .comparing((Observation observation) -> observation.outcome().orderingAt())
-        .thenComparing(observation -> observation.outcome().performanceId(), UNSIGNED_UUID_ORDER);
+    private static final Comparator<Observation> ACTION_TIME_ORDER = Comparator.comparing(
+                    (Observation observation) -> observation.outcome().orderingAt())
+            .thenComparing(observation -> observation.outcome().performanceId(), UNSIGNED_UUID_ORDER);
 
     /** 같은 공연의 revision 이력이 붙어 있도록 공연 식별자 순서, 같으면 revision 순서. */
-    private static final Comparator<ExcludedOutcome> PERFORMANCE_REVISION_ORDER = Comparator
-        .comparing((ExcludedOutcome excluded) -> excluded.outcome().performanceId(), UNSIGNED_UUID_ORDER)
-        .thenComparingInt(excluded -> excluded.outcome().revision());
+    private static final Comparator<ExcludedOutcome> PERFORMANCE_REVISION_ORDER = Comparator.comparing(
+                    (ExcludedOutcome excluded) -> excluded.outcome().performanceId(), UNSIGNED_UUID_ORDER)
+            .thenComparingInt(excluded -> excluded.outcome().revision());
 
     private final ReliabilityPolicy policy;
 
@@ -85,7 +85,7 @@ public final class ReliabilityCalculator {
         for (PerformanceOutcome outcome : outcomes) {
             if (!seen.add(new PerformanceRevision(outcome.performanceId(), outcome.revision()))) {
                 throw new IllegalArgumentException("같은 공연의 같은 revision이 두 번 들어왔다. performanceId="
-                    + outcome.performanceId() + ", revision=" + outcome.revision());
+                        + outcome.performanceId() + ", revision=" + outcome.revision());
             }
             latestRevisions.merge(outcome.performanceId(), outcome.revision(), Math::max);
         }
@@ -98,8 +98,7 @@ public final class ReliabilityCalculator {
      * @param performanceId 공연 식별자
      * @param revision 같은 공연의 결과 번호
      */
-    private record PerformanceRevision(UUID performanceId, int revision) {
-    }
+    private record PerformanceRevision(UUID performanceId, int revision) {}
 
     /** 취소·노쇼 중 귀책이 ARTIST가 아닌 결과는 아티스트의 이행을 보여 주지 못해 관측이 아니다. */
     private static boolean isNonArtistAttribution(PerformanceOutcome outcome) {

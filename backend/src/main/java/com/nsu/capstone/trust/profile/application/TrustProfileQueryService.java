@@ -29,12 +29,11 @@ public class TrustProfileQueryService {
     private final Clock clock;
 
     public TrustProfileQueryService(
-        UserRepository userRepository,
-        PerformanceOutcomeReader performanceOutcomeReader,
-        VerificationReader verificationReader,
-        TrustProfileAssembler assembler,
-        Clock clock
-    ) {
+            UserRepository userRepository,
+            PerformanceOutcomeReader performanceOutcomeReader,
+            VerificationReader verificationReader,
+            TrustProfileAssembler assembler,
+            Clock clock) {
         this.userRepository = userRepository;
         this.performanceOutcomeReader = performanceOutcomeReader;
         this.verificationReader = verificationReader;
@@ -63,9 +62,9 @@ public class TrustProfileQueryService {
             return Map.of();
         }
         List<UUID> foundArtistIds = userRepository.findAllById(artistIds).stream()
-            .filter(user -> user.getRole() == UserRole.ARTIST)
-            .map(User::getId)
-            .toList();
+                .filter(user -> user.getRole() == UserRole.ARTIST)
+                .map(User::getId)
+                .toList();
         return assembleAll(foundArtistIds);
     }
 
@@ -77,26 +76,24 @@ public class TrustProfileQueryService {
         if (artistIds.isEmpty()) {
             return Map.of();
         }
-        Map<UUID, List<PerformanceOutcome>> outcomes =
-            performanceOutcomeReader.findByArtistIds(artistIds);
-        Map<UUID, List<VerificationItem>> verifications =
-            verificationReader.findVerifiedByArtistIds(artistIds);
+        Map<UUID, List<PerformanceOutcome>> outcomes = performanceOutcomeReader.findByArtistIds(artistIds);
+        Map<UUID, List<VerificationItem>> verifications = verificationReader.findVerifiedByArtistIds(artistIds);
         Instant now = clock.instant();
-        return artistIds.stream().collect(Collectors.toUnmodifiableMap(
-            Function.identity(),
-            artistId -> assembler.assemble(
-                artistId,
-                outcomes.getOrDefault(artistId, List.of()),
-                verifications.getOrDefault(artistId, List.of()),
-                now
-            )
-        ));
+        return artistIds.stream()
+                .collect(Collectors.toUnmodifiableMap(
+                        Function.identity(),
+                        artistId -> assembler.assemble(
+                                artistId,
+                                outcomes.getOrDefault(artistId, List.of()),
+                                verifications.getOrDefault(artistId, List.of()),
+                                now)));
     }
 
     private boolean isActiveArtist(UUID userId) {
-        return userRepository.findById(userId)
-            .filter(user -> user.getRole() == UserRole.ARTIST)
-            .filter(user -> user.getStatus() == UserStatus.ACTIVE)
-            .isPresent();
+        return userRepository
+                .findById(userId)
+                .filter(user -> user.getRole() == UserRole.ARTIST)
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
+                .isPresent();
     }
 }

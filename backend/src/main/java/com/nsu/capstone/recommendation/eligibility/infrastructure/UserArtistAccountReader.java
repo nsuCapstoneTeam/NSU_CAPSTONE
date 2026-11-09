@@ -24,9 +24,8 @@ public class UserArtistAccountReader implements ArtistAccountReader {
 
     @Override
     public Map<UUID, ArtistAccount> findByArtistIds(Collection<UUID> artistIds) {
-        return userRepository.findAllByIdIn(artistIds).stream().collect(Collectors.toUnmodifiableMap(
-            UserAccountRow::id,
-            row -> new ArtistAccount(row.role(), row.status())
-        ));
+        return userRepository.findAllByIdIn(artistIds).stream()
+                .collect(Collectors.toUnmodifiableMap(
+                        UserAccountRow::id, row -> new ArtistAccount(row.role(), row.status())));
     }
 }

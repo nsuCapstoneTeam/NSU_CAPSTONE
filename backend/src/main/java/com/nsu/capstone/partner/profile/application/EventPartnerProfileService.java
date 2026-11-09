@@ -17,10 +17,7 @@ public class EventPartnerProfileService {
     private final Clock clock;
 
     public EventPartnerProfileService(
-        EventPartnerProfileRepository repository,
-        RegionRepository regionRepository,
-        Clock clock
-    ) {
+            EventPartnerProfileRepository repository, RegionRepository regionRepository, Clock clock) {
         this.repository = repository;
         this.regionRepository = regionRepository;
         this.clock = clock;
@@ -32,14 +29,12 @@ public class EventPartnerProfileService {
     }
 
     public StoredProfile save(UUID userId, ProfileContent content) {
-        List<String> regionCodes = new RegionNormalizer(regionRepository.findAll())
-            .normalize(content.regionCodes());
+        List<String> regionCodes = new RegionNormalizer(regionRepository.findAll()).normalize(content.regionCodes());
         return repository.upsert(
-            userId,
-            new ProfileContent(
-                content.name(), content.organization(), content.bio(), content.eventTypes(), regionCodes),
-            clock.instant()
-        );
+                userId,
+                new ProfileContent(
+                        content.name(), content.organization(), content.bio(), content.eventTypes(), regionCodes),
+                clock.instant());
     }
 
     /** 프로필이 없어도 오류가 아니다(05 §1). */

@@ -11,10 +11,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @ApiResponse(
-    responseCode = "401",
-    description = "AUTHENTICATION_REQUIRED",
-    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-)
+        responseCode = "401",
+        description = "AUTHENTICATION_REQUIRED",
+        content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
 @Tag(name = "지역")
 @RequestMapping("/api/v1/regions")
 public class RegionController {

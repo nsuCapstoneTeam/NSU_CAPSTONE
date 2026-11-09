@@ -33,11 +33,21 @@ public class EventAccess {
         /** 추천 입력(03 §8.1). 행사를 한 번 읽어 고정할 뿐이라 잠그지 않는다(03 §8.4). */
         RECOMMEND(Lock.NONE, Who.OWNER, State.OPEN_AND_NOT_STARTED);
 
-        private enum Lock { NONE, WRITE }
+        private enum Lock {
+            NONE,
+            WRITE
+        }
 
-        private enum Who { VIEWER, OWNER }
+        private enum Who {
+            VIEWER,
+            OWNER
+        }
 
-        private enum State { ANY, OPEN_AND_NOT_STARTED, CANCEL_IS_REPEATABLE }
+        private enum State {
+            ANY,
+            OPEN_AND_NOT_STARTED,
+            CANCEL_IS_REPEATABLE
+        }
 
         private final Lock lock;
         private final Who who;
@@ -99,8 +109,8 @@ public class EventAccess {
      */
     public Event load(UUID eventId, UUID userId, Operation operation) {
         Optional<Event> found = operation.locksRow()
-            ? events.findWithLockByIdAndDeletedAtIsNull(eventId)
-            : events.findByIdAndDeletedAtIsNull(eventId);
+                ? events.findWithLockByIdAndDeletedAtIsNull(eventId)
+                : events.findByIdAndDeletedAtIsNull(eventId);
         Event event = found.orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
         operation.admit(event, userId, seat, clock);
         return event;
