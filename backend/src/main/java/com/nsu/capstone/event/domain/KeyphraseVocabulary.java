@@ -1,5 +1,7 @@
 package com.nsu.capstone.event.domain;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -15,17 +17,69 @@ final class KeyphraseVocabulary {
     /** AI 담당이 검증한 매핑 버전. 0은 검증된 버전이 없다는 뜻이다. 검증 근거가 있을 때만 바꾼다. */
     static final int VERIFIED_MAPPING_VERSION = 0;
 
+    private static final String MUSIC = " music";
+
     private KeyphraseVocabulary() {}
 
     static String sentence(MusicConditions conditions) {
-        String pieces = moodPiece(conditions.mood())
-                + tempoPiece(conditions.tempo())
-                + instrumentalPiece(conditions.vocal())
-                + genresPiece(conditions.genres())
-                + " music"
-                + vocalAfterMusic(conditions.vocal())
-                + forClause(conditions.eventType());
-        return pieces.substring(1);
+        return String.join("", pieces(conditions)).substring(1);
+    }
+
+    /** 조건이 {@link #slotPieces()}와 같은 칸 순서로 만드는 조각. 고르지 않은 칸은 빈 문자열이다. */
+    static List<String> pieces(MusicConditions conditions) {
+        return List.of(
+                moodPiece(conditions.mood()),
+                tempoPiece(conditions.tempo()),
+                instrumentalPiece(conditions.vocal()),
+                genresPiece(conditions.genres()),
+                MUSIC,
+                vocalAfterMusic(conditions.vocal()),
+                forClause(conditions.eventType()));
+    }
+
+    /**
+     * 문장 틀의 칸 순서대로, 칸마다 고를 수 있는 모든 조각(앞 공백 포함, 빈 조각 제외). 길이 증명과 버전 가드
+     * 테스트가 쓴다.
+     */
+    static List<List<String>> slotPieces() {
+        return List.of(
+                Arrays.stream(Mood.values()).map(KeyphraseVocabulary::moodPiece).toList(),
+                Arrays.stream(Tempo.values())
+                        .map(KeyphraseVocabulary::tempoPiece)
+                        .toList(),
+                List.of(instrumentalPiece(Vocal.INSTRUMENTAL)),
+                genreCombinationPieces(),
+                List.of(MUSIC),
+                Arrays.stream(Vocal.values())
+                        .map(KeyphraseVocabulary::vocalAfterMusic)
+                        .filter(piece -> !piece.isEmpty())
+                        .toList(),
+                Arrays.stream(EventType.values())
+                        .map(KeyphraseVocabulary::forClause)
+                        .filter(piece -> !piece.isEmpty())
+                        .toList());
+    }
+
+    /** 장르를 1개부터 {@link MusicConditions#MAX_GENRES}개까지 선언 순서로 고른 모든 조합의 조각이다. */
+    private static List<String> genreCombinationPieces() {
+        List<String> pieces = new ArrayList<>();
+        collectGenreCombinations(List.of(), 0, pieces);
+        return pieces;
+    }
+
+    private static void collectGenreCombinations(List<Genre> chosen, int from, List<String> pieces) {
+        if (!chosen.isEmpty()) {
+            pieces.add(genresPiece(chosen));
+        }
+        if (chosen.size() == MusicConditions.MAX_GENRES) {
+            return;
+        }
+        Genre[] all = Genre.values();
+        for (int i = from; i < all.length; i++) {
+            List<Genre> next = new ArrayList<>(chosen);
+            next.add(all[i]);
+            collectGenreCombinations(next, i + 1, pieces);
+        }
     }
 
     private static String moodPiece(Mood mood) {
@@ -65,7 +119,7 @@ final class KeyphraseVocabulary {
             case 0 -> "";
             case 1 -> " " + phrases.get(0);
             case 2 -> " " + phrases.get(0) + " or " + phrases.get(1);
-            default -> " " + phrases.get(0) + ", " + phrases.get(1) + ", or " + phrases.get(2);
+            default -> " " + String.join(", ", phrases.subList(0, phrases.size() - 1)) + ", or " + phrases.getLast();
         };
     }
 
