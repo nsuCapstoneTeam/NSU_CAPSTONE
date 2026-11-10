@@ -1,6 +1,6 @@
 package com.nsu.capstone.event.domain;
 
-public enum EventType {
+public enum EventType implements MusicChoice {
     UNIVERSITY_FESTIVAL("대학 축제"),
     CAMPUS_EVENT("동아리·학과 행사"),
     LOCAL_FESTIVAL("지역 축제·공공 행사"),
