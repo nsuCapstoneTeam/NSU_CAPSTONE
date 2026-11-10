@@ -2,14 +2,14 @@
 
 - 상태: **Proposed** (PR 리뷰에서 확정)
 - 결정일: **2026-11-10** (NSU-11 설계 세션)
-- 관련: 서버 협의 016(Accepted)·017(Proposed), SSOT `AI-MATCH-050`·`EVT-042` v1.17, [02 추천 API §1·§1.0·§2.4·§4.1·§4.3](../../api/02_recommendation_trust_and_new_artist.md), [03 행사 API §3.3·§8](../../api/03_events.md), [ADR event_management/04](../event_management/04_event_content_invariants_and_access.md), AI 저장소 ADR-0009, [Slack AI 담당 답변 2026-11-10](https://nsu-capstone.slack.com/archives/C0C6ZQCHBV0/p1794238184808299), NSU-11, NSU-121, NSU-122, NSU-63
+- 관련: 서버 협의 016(Accepted)·017(Accepted 2026-11-10, 필드 wire type 등 TBD는 남음), SSOT `AI-MATCH-050`·`EVT-042` v1.17, [02 추천 API §1·§1.0·§2.4·§4.1·§4.3](../../api/02_recommendation_trust_and_new_artist.md), [03 행사 API §3.3·§8](../../api/03_events.md), [ADR event_management/04](../event_management/04_event_content_invariants_and_access.md), AI 저장소 ADR-0009, [Slack AI 담당 답변 2026-11-10](https://nsu-capstone.slack.com/archives/C0C6ZQCHBV0/p1794238184808299), NSU-11, NSU-121, NSU-122, NSU-63
 
 ---
 
 ## Decision
 
 1. **검색 문구는 Spring이 음악 조건으로 만든다.** 화면은 선택지 코드를 보내고, Spring은 코드를 검증한 뒤 짧은 영문 문장 하나를 만든다. 행사 기준 추천(NSU-63)과 검색창 즉시 추천(NSU-122)은 같은 함수 `Keyphrase.of(MusicConditions)`를 쓴다(서버 협의 016, `AI-MATCH-050`).
-   - 행사 설명은 넣지 않는다(`EVT-042` v1.17). 공연 형태(`artistType`)도 넣지 않는다. 공연 형태는 Eligibility 필터다(`AI-MATCH-050`, 서버 협의 009).
+   - 행사 설명은 넣지 않는다(`EVT-042` v1.17). 공연 형태(`artistType`)도 넣지 않는다. 공연 형태는 Eligibility 필터다(`AI-MATCH-050`·`051`, 서버 협의 009).
    - 번역·LLM은 쓰지 않는다. AI는 문장을 고치거나 다시 해석하지 않는다(016).
 2. **음악 조건 v1은 다섯 축이다.** 리듬과 악기 편성은 v1에 넣지 않는다.
 
@@ -95,11 +95,12 @@
    | 장르 3개·기타 | `pop, rock, or jazz music` |
 
    - 장르는 고른 순서와 관계없이 03 §3.3 표 순서로 쓴다. 2개는 `A or B`, 3개는 `A, B, or C`다.
-   - 소문자로 시작하고 마침표를 붙이지 않는다(AI 담당 예시 `energetic electronic music for a university festival`). `R&B`·`Korean`은 문구 그대로 쓴다.
+   - 마침표를 붙이지 않고, 문구는 표에 적힌 대소문자 그대로 쓴다(AI 담당 예시 `energetic electronic music for a university festival`). 그래서 대부분 소문자로 시작하지만, 첫 낱말이 `R&B`·`Korean`이면 대문자로 시작한다(예: `R&B music`).
    - `music`은 늘 들어가므로 문장이 비지 않는다.
 5. **글자와 길이.** 상한은 GPT-2 tokenizer 기준 77토큰이다. AI가 붙이는 끝 표시 ` <|endoftext|>`까지 센다. 글자 수 기준이 아니다. 넘는 문장은 AI가 `422`로 거절하고, 자르지 않는다(AI 담당 답변 2026-11-10).
    - Spring은 이 상한을 미리 검증한다. 어휘가 닫혀 있으므로 운영 코드에서 세지 않고, 빌드 테스트로 **모든 조합**이 77토큰 이하임을 증명한다(Rationale "길이 증명").
-   - 문구는 출력 가능한 ASCII 낱말을 공백 하나로 이은 것이다. 제어 문자, `<`, `|`는 쓰지 않는다. AI가 허용한 범위(영문·숫자·공백·일반 문장부호)의 부분집합이다.
+   - AI 담당은 API 계약을 모델 한도보다 보수적으로 두라고 권했다. 그래서 검색 문구는 짧은 keyphrase 꼴을 유지한다(v1 상한 32토큰).
+   - 문구는 출력 가능한 ASCII 낱말을 공백 하나로 이은 것이다. 제어 문자, `<`, `|`는 쓰지 않는다. AI가 허용한 범위(영문·숫자·공백·일반 문장부호) 안에 두려는 것이다. `R&B`의 `&`가 "일반 문장부호"에 드는지는 AI 담당 확인을 기다린다.
    - 같은 선택이면 바이트까지 같은 문장이 나온다. AI는 문장의 SHA-256으로 임베딩을 캐시한다.
 6. **매핑 버전.** 정수이고, 이 초안이 `1`이다.
    - 문장이 하나라도 바뀌면(문구, 칸 순서, 이음말) 버전을 올린다. 버전을 올리지 않고 출력을 바꾸면 테스트가 실패한다.
@@ -125,10 +126,11 @@
 
 ## Context
 
-- 서버 협의 016(2026-11-05 Accepted)은 검색 입력을 "화면 체크박스 선택값 → Spring이 만든 영문 문구"로 바꿨다. 012 결정 3.2(행사 원문을 AI가 해석)를 이 부분만 대체한다. 매핑표와 조립 규칙은 "AI 담당의 실험 결과에 맞춰 정한다"고 남겼다.
+- 서버 협의 016(2026-11-05 Accepted)은 검색 입력을 "화면 체크박스 선택값 → Spring이 만든 영문 문구"로 바꿨다. 012 결정 3.2(행사 원문을 AI가 해석)를 이 부분만 대체한다. 매핑표와 조립 규칙은 "AI 담당의 실험 결과에 맞춰 정한다"고 남겼다. Genre 미선택 정책과 검증 실패 오류 코드는 "후속 API 설계"로 넘겼고, 이 ADR이 정한다(장르 0~3개, `400 VALIDATION_ERROR`). SSOT `AI-MATCH-050`·016의 "화면은 체크박스마다 정해 둔 영어 값을 보낸다"의 영어 값은 결정 3 표의 UPPER_SNAKE 코드다.
+- 서버 협의 017(2026-11-10 Accepted)은 AI 요청 본문(`canonicalText`, `candidates`)을 정했다. 길이·문자 정책과 `canonicalVersion`은 017에 아직 TBD로 남아 있고, 아래 AI 담당 답변이 정했다.
 - 2026-11-10 AI 담당 답변: 확정된 매핑표는 없다. Spring이 초안을 먼저 제안하고, AI가 MSCLAP 검색 결과로 검증한 뒤 필요하면 표현을 고쳐 확정하자. 길이는 tokenizer 기준 77토큰(초과 `422`, Spring 사전 검증, 자르지 않음). 제어 문자는 금지한다. mappingVersion은 Spring만 보관한다.
 - AI 서버 코드(`text_embedding.py`, origin/main `a2c4be9`)는 문자열을 정규화하지 않는다. 비거나 공백뿐이면 거절하고, `text + " <|endoftext|>"`가 77토큰을 넘으면 자르지 않고 거절한다. 텍스트 임베딩의 키는 `sha256(text)`다.
-- 지금 코드: `AiEventSource`가 행사 설명과 한국어 이름을 싣는다(012 기준). 지문은 `description`을 포함한다. `FingerprintSnapshotAgreementTest`는 "016이면 비교 대상을 실제 AI 입력으로 옮겨야 한다"는 한계를 적어 두었다(ADR event_management/04 Consequences). Spring에는 토크나이저가 없다. `event`는 `recommendation`을 import하지 않는다.
+- 결정 전 코드: `AiEventSource`가 행사 설명과 한국어 이름을 싣는다(012 기준). 지문은 `description`을 포함한다. `FingerprintSnapshotAgreementTest`는 "016이면 비교 대상을 실제 AI 입력으로 옮겨야 한다"는 한계를 적어 두었다(ADR event_management/04 Consequences). Spring에는 토크나이저가 없다. `event`는 `recommendation`을 import하지 않는다.
 
 ## Rationale
 
@@ -138,7 +140,7 @@
 // 행사 기준 추천 (NSU-63)
 EventSnapshot snapshot = inputService.snapshotForRecommendation(eventId, userId);
 Keyphrase keyphrase = Keyphrase.of(snapshot.conditions());
-aiClient.search(keyphrase.text(), eligibleCandidates);          // 017 초안의 canonicalText
+aiClient.search(keyphrase.text(), eligibleCandidates);          // 017의 canonicalText
 results.save(..., keyphrase.text(), keyphrase.mappingVersion(), snapshot.conditions(), snapshot.fingerprint());
 
 // 즉시 추천 (NSU-122): 요청 DTO가 문자열을 도메인 타입으로 바꾼다
@@ -167,7 +169,7 @@ public final class Keyphrase {
     public static Keyphrase of(MusicConditions conditions);   // 순수 함수
     public String text();
     public int mappingVersion();
-    public boolean mappingVerified();     // mappingVersion == VERIFIED_MAPPING_VERSION. NSU-63은 false면 AI를 부르지 않는다
+    public boolean mappingVerified();     // VERIFIED_MAPPING_VERSION != 0 && mappingVersion == VERIFIED_MAPPING_VERSION. NSU-63은 false면 AI를 부르지 않는다
     // 생성자는 private: 문장과 그 문장을 만든 버전이 늘 짝으로 다닌다
 }
 
@@ -201,7 +203,7 @@ final class KeyphraseVocabulary {          // package-private, 매핑표 v1 전�
 2. 칸 조각은 빈 문자열이거나 `" "`+영문자로 시작해 영문자로 끝난다. 문장은 비어 있지 않은 조각을 이은 뒤 맨 앞 공백 하나를 뗀 것이다. GPT-2 사전 분할은 `" "`+글자 앞에서 끊기므로, 문장의 토큰 수 = (첫 조각을 공백 없이 센 토큰 수) + (나머지 조각을 공백 붙여 센 토큰 수의 합)이다.
    - 같은 낱말도 앞 공백 유무에 따라 토큰 수가 다르다. 설계 리뷰(2026-11-10)에서 `instrumental music`은 끝 표시 포함 6토큰인데, 모든 조각을 공백 붙여 센 합은 4토큰이었다.
    - 앞쪽 축을 고르지 않으면 어느 칸이든 첫 조각이 될 수 있다. 표본 조합에 앞쪽 축을 뺀 경우를 넣어 위 계산과 실제가 같은지 확인한다.
-3. 상한 = Σ 칸마다 max(그 칸 조각을 공백 붙여 센 토큰 수, 공백 떼고 센 토큰 수) + 2(끝 표시 앞 공백 1, `<|endoftext|>` 1) ≤ 77. 어느 칸이 첫 조각이 돼도 실제 토큰 수는 이 값을 넘지 않는다. 조합의 곱(v1 약 22만 개)이 아니라 조각 수의 합(장르 칸 175개를 포함해 약 200개)만 센다. v1의 상한은 테스트로 잰 32토큰이다(한도 77).
+3. 상한 = Σ 칸마다 max(그 칸 조각을 공백 붙여 센 토큰 수, 공백 떼고 센 토큰 수) + 2(끝 표시 앞 공백 1, `<|endoftext|>` 1) ≤ 77. 어느 칸이 첫 조각이 돼도 실제 토큰 수는 이 값을 넘지 않는다. 조합의 곱(v1 약 22만 개)이 아니라 조각 수의 합(장르 칸 175개를 포함해 약 200개)만 센다. v1의 상한은 구현 때 잰 32토큰이다. 테스트는 77 이하를 강제한다.
 
 ### 그릴링에서 고른 것 (2026-11-10)
 
@@ -229,7 +231,7 @@ final class KeyphraseVocabulary {          // package-private, 매핑표 v1 전�
   - NSU-121: 분위기·템포·보컬을 `EventContent`·지문·`MusicConditions` 생성에 연결한다. 지문의 null(`-1;`)과 빈 목록(`0:;`) 표기를 어떻게 맞출지, 새 enum의 DB `CHECK`를 enum과 맞추는 테스트를 정한다.
   - NSU-122: 즉시 추천의 필수 항목과 "아무것도 고르지 않음" 처리를 정한다.
   - NSU-11 테스트: 지금 버전이 v1이고 검증된 버전이 0이면 `mappingVerified()`가 `false`다. `MAPPING_VERSION`만 올리고 `VERIFIED_MAPPING_VERSION`을 그대로 두면 `false`가 된다(회귀 테스트). `VERIFIED_MAPPING_VERSION`은 `MAPPING_VERSION`보다 클 수 없다.
-  - NSU-63: `Keyphrase.mappingVerified()`가 `false`면 AI를 부르지 않는다(테스트로 강제, 응답은 NSU-63이 정함). AI `422`(길이 초과 등, 재시도하지 않음)를 `503 RECOMMENDATION_UNAVAILABLE`로 바꾼다(서버 협의 010). 검색 문구·매핑 버전·음악 조건을 결과와 함께 저장한다. 추천 이유의 `TEMPO` 비교에 쓸 템포별 BPM 구간을 정한다. 생성 당시 비교 결과를 저장해, 구간을 바꿔도 다시 보기의 판정이 뒤집히지 않게 한다(02 §2.2·§4.1).
+  - NSU-63: `Keyphrase.mappingVerified()`가 `false`면 AI를 부르지 않는다(테스트로 강제, 응답은 NSU-63이 정함). AI `422`(길이 초과 등, 재시도하지 않음)를 `503 RECOMMENDATION_UNAVAILABLE`로 바꾼다(서버 협의 010). 검색 문구·매핑 버전·음악 조건을 결과와 함께 저장한다. 추천 이유의 `TEMPO` 비교 기준의 형식을 AI 담당과 정한다. 이 기준은 AI가 버전으로 관리하는 검증된 기준이다(SSOT `AI-MATCH-050`). 생성 당시 비교 결과를 저장해, 구간을 바꿔도 다시 보기의 판정이 뒤집히지 않게 한다(02 §2.2·§4.1).
   - AI 담당 검증 결과가 오면 `KeyphraseVocabulary`를 고치고 매핑 버전을 올린다.
 
 ## Reused

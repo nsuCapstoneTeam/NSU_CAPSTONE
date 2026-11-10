@@ -4,8 +4,8 @@
 
 - 구현 이슈: NSU-48·NSU-63 (Spring↔AI 연동), NSU-70 (Trust Profile 조합), NSU-86·87·88·89 (다시 보기·재생·생성 제한·업로드 검사), NSUAI-28 (옛 NSU-16, AI 팀으로 이동)
 - 관련 이슈: NSU-28, NSU-90 (화면), NSU-71 (취소), NSUAI-9, NSUAI-10, NSUAI-12, NSUAI-15, NSUAI-16, NSUAI-25
-- 요구사항: SSOT v1.16(2026-10-18 문서 전체 최종 승인) `AI-MATCH-050`·`051`·`052`·`053`·`054`, `AI-031`·`AI-034`, `STORAGE-103`, `SEC-119`, `TRUST-151`·`153`. `AI-MATCH-155`는 v1.9에서 폐지했다. §2.5의 업로드 길이와 권리 신고 때 재생 차단은 SSOT v1.17(2026-11-05 승인) `AI-033`·`RIGHTS-161`을 따른다
-- 서버 협의(Linear): [012. CLAP 음악 유사도 기반 곡 추천 흐름](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)(Accepted, 2026-10-10), [014. 추천 생성 잠금·재생 동의 확인·행사 snapshot](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)(Accepted, 2026-10-15), [007. 추천 단위는 곡](https://linear.app/nsu-capstone/document/007-추천-단위는-곡-69137a45b2c6), [010. AI 곡 검색 실패·시간 초과 시 추천 API 응답](https://linear.app/nsu-capstone/document/010-ai-곡-검색-실패시간-초과-시-추천-api-응답-46a63dece138)
+- 요구사항: SSOT v1.16(2026-10-18 문서 전체 최종 승인) `AI-MATCH-050`·`051`·`052`·`053`·`054`, `AI-031`·`AI-034`, `STORAGE-103`, `SEC-119`, `TRUST-151`·`153`. `AI-MATCH-155`는 v1.9에서 폐지했다. §2.5의 업로드 길이와 권리 신고 때 재생 차단은 SSOT v1.17(2026-11-05 승인) `AI-033`·`RIGHTS-161`을 따른다. 검색 문구(§1.0)와 지문(§4.3)은 SSOT v1.17 `AI-MATCH-050`·`EVT-042`를 따른다
+- 서버 협의(Linear): [012. CLAP 음악 유사도 기반 곡 추천 흐름](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)(Accepted, 2026-10-10), [014. 추천 생성 잠금·재생 동의 확인·행사 snapshot](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)(Accepted, 2026-10-15), [016. Spring canonical 검색 입력 생성 및 AI 입력 책임 분리](https://linear.app/nsu-capstone/document/016-spring-canonical-검색-입력-생성-및-ai-입력-책임-분리-29ac49c33ada)(Accepted, 2026-11-05), [017. Spring canonical 검색 입력 기반 AI Recommend Server 요청·응답 계약](https://linear.app/nsu-capstone/document/017-spring-canonical-검색-입력-기반-ai-recommend-server-요청응답-계약-f96a57425124)(Accepted, 2026-11-10), [007. 추천 단위는 곡](https://linear.app/nsu-capstone/document/007-추천-단위는-곡-69137a45b2c6), [010. AI 곡 검색 실패·시간 초과 시 추천 API 응답](https://linear.app/nsu-capstone/document/010-ai-곡-검색-실패시간-초과-시-추천-api-응답-46a63dece138)
 - 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
 - 공통 규칙: [00_conventions.md](./00_conventions.md), Trust Profile 스키마: [01_trust_profile.md](./01_trust_profile.md), 행사: [03_events.md](./03_events.md), 곡 업로드·권리: [04_music.md](./04_music.md)
 - Eligibility 판정식: [recommendation_eligibility/00](../adr/recommendation_eligibility/00_eligibility_rules.md) (2026-10-20 NSU-48 설계 세션)
@@ -201,7 +201,7 @@ AI가 준 곡별 상세 정보(BPM·리듬 등)를 화면용 이름으로 옮긴
 - 측정값·요청 조건·비교 결과를 구분한다. 예: 곡 BPM은 분석됐지만 요청 템포가 없다면 BPM은 표시할 수 있고, 요청과 일치한다는 문장은 만들지 않는다.
 - AI가 분석하지 못한 항목은 값 대신 `null`과 사유로 온다. 화면용 필드에서도 `null`로 둔다. 분석 실패와 요청 조건 없음을 구분한다.
 - BPM·리듬의 0~100 항목 점수는 만들지 않는다. 상세 분석 실패만으로 음악 순위나 추천 곡을 제외하지 않는다.
-- 요청 템포와 곡 BPM을 비교하는 기준(템포별 구간)과 그 결과를 어느 서버가 만드는지는 NSU-63에서 AI 담당과 정한다. 구체 필드·enum·실패 사유 형식은 AI 문서에 기록 예정이며, 이 문서에서 임의로 정하지 않는다.
+- 요청 템포와 곡 BPM을 비교하는 기준(템포별 구간)은 AI가 버전으로 관리하는 검증된 기준이어야 한다(SSOT `AI-MATCH-050`). 검증된 기준이 없으면 비교 결과와 일치 문장을 만들지 않는다. 기준과 결과의 형식은 NSU-63에서 AI 담당과 정한다. 구체 필드·enum·실패 사유 형식은 AI 문서에 기록 예정이며, 이 문서에서 임의로 정하지 않는다.
 - 비교 결과는 어느 서버가 만들든 생성 당시 값을 저장하고(§4.1), 다시 볼 때 현재 기준으로 다시 계산하지 않는다. 템포 구간을 바꿔도 이미 저장한 추천의 판정이 뒤집히지 않게 하기 위해서다.
 
 ### 2.3 `eligibility.passedConditions`
@@ -240,7 +240,7 @@ SSOT `AI-MATCH-051`의 필수 조건을 따른다. 저작권 조건은 곡에 �
 - 지금의 0~100 변환은 AI의 임시 기준이며, ai-recommend-server의 청취 평가·실험으로 고정 변환 v1을 정한다. 기준이 바뀌면 결과 버전이 바뀐다.
 - Spring은 AI가 준 `resultVersion` 1개를 결과와 함께 저장한다. AI는 모델/checkpoint·Embedding 생성·전처리·유사도 변환·상세 분석 버전을 필요에 따라 별도로 추적한다. Spring의 매핑 버전(§1.0)은 `resultVersion`과 따로 저장한다.
 - AI는 각 `resultVersion`과 당시 세부 기준의 대응 관계를 보존한다. 결과에 영향을 주는 기준이 바뀌면 새 버전을 발급하며 기존 버전의 뜻을 덮어쓰지 않는다. `audioRevision`·Embedding 생성 버전을 `resultVersion`으로 대체하지 않는다(서버 협의 001).
-- 추천 이유의 재료는 `details`, 음악 조건(§1.0), `eligibility.passedConditions`다. 음악 조건은 저장하지만 이 응답에는 내보내지 않는다.
+- 추천 이유의 재료는 `details`, 음악 조건(§1.0), 템포 비교 결과(§2.2), `eligibility.passedConditions`다. 음악 조건은 저장하지만 이 응답에는 내보내지 않는다.
 - 템플릿은 실제로 있는 값만 쓴다. 값이 `null`인 상세 정보 항목은 문장에서 뺀다(SSOT `AI-MATCH-054` 임의 평가 금지).
 - 추천 이유는 항목별로 나눠 만든다. 2026-09-17 회의(지도교수 피드백)의 "왜 추천됐는지 항목별로 설명하는 구조"를 따르기 위해서다(2026-10-07 결정).
 - 순서는 `MUSIC_SIMILARITY` → `TEMPO` → `RHYTHM` → `ELIGIBILITY`로 고정하고, 항목마다 최대 1개다.
@@ -332,7 +332,7 @@ Authorization: Bearer {accessToken}
 |---|---|
 | 저장한다 (다시 볼 때 저장 값 그대로) | 순서(`rank`, 다시 볼 때 뺀 곡이 있으면 번호만 다시 매김), `(music_id, audioRevision)`, 음악 유사도(반올림 전 소수), 상세 정보, `eligibility.passedConditions`, 음악 조건, 검색 문구와 매핑 버전(§1.0), 템포 비교 결과(§2.2), 결과 버전(AI가 주는 `resultVersion` 1개), 행사 지문(§4.3), 요청한 사용자(§5.2) |
 | 다시 볼 때 계산한다 (현재 값) | `trustProfile`, `music.title`, `artist.name`·`profileImageUrl`, `isNewArtist`, `availability`, `isEventChanged`, `excludedCount` |
-| 다시 볼 때 저장 값으로 만든다 | `matching.reasons` (저장한 상세 정보·음악 조건·통과 조건으로 템플릿을 다시 적용) |
+| 다시 볼 때 저장 값으로 만든다 | `matching.reasons` (저장한 상세 정보·음악 조건·템포 비교 결과·통과 조건으로 템플릿을 다시 적용) |
 
 - 다시 볼 때 AI를 호출하지 않는다.
 - 생성 응답도 방금 저장한 결과에 이 표의 규칙을 그대로 적용해 만든다. 그래서 생성하는 동안 바뀐 상태(행사 수정, 아티스트 정지·AI 추천 해제)가 생성 응답에도 나타난다(2026-10-07 결정, Codex 설계 리뷰).

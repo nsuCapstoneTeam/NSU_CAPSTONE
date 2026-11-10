@@ -563,7 +563,7 @@ V1 Risk Signal은 원장에서 조회 시 계산하며 별도 테이블에 저�
 소유 책임:
 
 - CLAP Embedding
-- 행사 요청 자연어 해석. 번역·규칙·LLM 중 적절한 방식은 AI가 검증 후 선택하며, 원문에 없는 정밀 BPM은 만들지 않는다
+- 행사 요청 자연어 해석. 번역·규칙·LLM 중 적절한 방식은 AI가 검증 후 선택하며, 원문에 없는 정밀 BPM은 만들지 않는다. (2026-11-10 대체: 검색 입력은 Spring이 음악 조건으로 만든 검색 문구이고 AI는 해석하지 않는다. [recommendation_search_input/00](../recommendation_search_input/00_canonical_keyphrase.md))
 - 음악 유사도 계산과 정렬: ACTIVE 후보 쌍 안에서 상위 100곡. 청취 평가·calibration 실험과 구체 변환 함수 결정은 ai-recommend-server가 수행한다
 - BPM / Rhythm / Audio Feature 추출. 설명용 상세 정보로만 제공하고 순위에 쓰지 않는다(NSUAI-9)
 - 추천 이유 문장은 만들지 않는다. Spring이 상세 정보로 템플릿 문장을 만든다(012 결정 6.2, 2026-10-06 AI 동의)
@@ -587,6 +587,8 @@ AI/Matching 영역은 공연 완료·취소·노쇼의 기준 원본을 소유�
 | 전체 후보를 한 번에 전달 | 입력 상한은 AI의 실측 후 공개합니다. 반환 상한 100과 구분하고 Spring이 후보를 임의로 자르지 않습니다. |
 | 상세 정보로 템플릿 생성 | 측정값·요청 해석·비교 결과를 구분합니다. 분석 실패와 요청 조건 없음을 구분하고, 없는 근거의 문장은 생략합니다. BPM·리듬 점수는 순위에 넣지 않습니다. |
 | 업로드 원본을 재생 | 정해진 길이의 MP3·M4A(AAC), 10MB 이하로 허용 범위를 제한해 별도 Preview 변환을 줄입니다. Signed URL은 Spring이 발급합니다. 실제 codec·브라우저 재생과 AI 디코딩 지원은 검증해야 하며 013은 AI 최종 동의 전 Proposed입니다. |
+
+> 2026-11-10 변경: 위 표의 "원문에 근거한 해석", "해석 버전", "요청 해석"은 서버 협의 016 이전 흐름이다. 지금은 Spring이 음악 조건으로 검색 문구를 만들고, 검색 문구와 매핑 버전을 결과와 함께 저장한다([recommendation_search_input/00](../recommendation_search_input/00_canonical_keyphrase.md), [02 §1.0](../../api/02_recommendation_trust_and_new_artist.md)).
 
 표시 유사도의 내림차순 검사는 raw cosine 정렬을 증명하지 않습니다. 예를 들어 표시값이 모두 100이어도 Spring은 AI 순서를 유지합니다. raw cosine을 추가하면 독립 정렬 검증은 가능하지만 계약이 늘어나므로 이번에는 소비 검증만 수행합니다.
 

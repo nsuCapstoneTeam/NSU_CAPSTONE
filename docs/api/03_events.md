@@ -5,7 +5,7 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 - 구현 이슈: NSU-54 (행사 일정·행사 정보 CRUD), NSU-58 (행사 정보와 추천 요청 연동), NSU-99 (등록 멱등 키, 선택정보 불리언 이름)
 - 요구사항: SSOT v1.16(2026-10-18 문서 전체 최종 승인) `EVT-041`~`EVT-044`, `SEC-100`, `DOMAIN-108`, `AI-MATCH-050`·`051`, `ART-028`·`029`
 - 결정 기록: [00 행사 단위와 시간대](../adr/event_management/00_event_unit_and_time_window.md), [01 지역 코드 표준](../adr/event_management/01_region_code_standard.md), [02 행사 소프트 삭제](../adr/event_management/02_event_soft_delete.md), [03 행사 등록 멱등 키](../adr/event_management/03_event_registration_idempotency_key.md)
-- 관련 계약: [02 추천 응답](./02_recommendation_trust_and_new_artist.md), 서버 협의 [012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)·[014](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)
+- 관련 계약: [02 추천 응답](./02_recommendation_trust_and_new_artist.md), 서버 협의 [012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)·[014](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)·[016](https://linear.app/nsu-capstone/document/016-spring-canonical-검색-입력-생성-및-ai-입력-책임-분리-29ac49c33ada)·[017](https://linear.app/nsu-capstone/document/017-spring-canonical-검색-입력-기반-ai-recommend-server-요청응답-계약-f96a57425124). 검색 문구의 재료(§8.2)와 지문(§8.3)은 SSOT v1.17(2026-11-05 승인) `AI-MATCH-050`·`EVT-042`와 [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)을 따른다
 - 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
 - 공통 규칙: [00_conventions.md](./00_conventions.md). 에러 형식과 공통 `code`는 [ADR-007](../adr/ADR-007-spring-backend-global-exception-handling.md)을 따른다
 
@@ -452,7 +452,7 @@ Authorization: Bearer {accessToken}
 | Eligibility 입력(`AI-MATCH-051`) | 시간대(`startDate`·`startTime`·`endDate`·`endTime`), `performanceMinutes`, `regionCode`, `budgetMin`·`budgetMax`, `artistType` |
 | 검색 문구의 재료(서버 협의 016) | `eventType`, `genres` (NSU-121 이후 분위기·템포·보컬) |
 
-- Spring은 이 값으로 영문 검색 문구를 만들어 AI에 보낸다(02 §1.0, [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)). AI 요청의 필드 모양은 NSU-63에서 정한다(서버 협의 017).
+- Spring은 이 값으로 영문 검색 문구를 만들어 AI에 보낸다(02 §1.0, [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)). AI 요청의 필드는 서버 협의 017(Accepted)을 따르고, 구현은 NSU-63이 한다.
 - 예산을 어떻게 판정할지(범위가 겹치는지, 출연료 최소가 예산 최대 이하인지)는 NSU-48에서 정한다.
 
 ### 8.3 `isEventChanged` 지문
@@ -652,7 +652,7 @@ HTTP/1.1 422 Unprocessable Content
 | 열람 | 다른 사용자의 PUBLIC 조회 `200`, PRIVATE 조회 `404`. 다른 사용자의 PUBLIC 수정 `403`, PRIVATE 수정 `404` |
 | 역할 | ARTIST의 등록·내 행사 목록은 `403`. ARTIST가 멱등 키 없이 등록해도 `403`(역할을 키보다 먼저 검사) |
 | 목록 | 시작 = 지금인 행사는 `PAST`. `UPCOMING` 오름차순, `PAST` 내림차순. `size = 101`은 `400`, 끝을 넘은 `page`는 `items: []` |
-| 지문 | `name`·`details` 수정은 `isEventChanged = false`, `endDate`·`regionCode` 수정은 `true`. `genres` 순서만 바꾸면 `false` |
+| 지문 | `name`·`details`·`description` 수정은 `isEventChanged = false`, `endDate`·`regionCode` 수정은 `true`. `genres` 순서만 바꾸면 `false` |
 | 생성 중 변경 | AI 응답을 기다리는 동안 행사를 취소하면 결과가 저장되고 `201`. 삭제하면 결과가 저장되고 `404`이며, 그 결과가 하루 5회 계산에 들어간다. `name`만 고치면 생성 응답의 `isEventChanged = false`, `endDate`를 고치면 `true`. 저장 직전 횟수 재확인에서 한도를 넘으면 행사를 지웠어도 `429`이고 저장하지 않는다 |
 | 비공개 | PRIVATE으로 등록할 수 있다. 등록자는 `200`, 다른 사용자는 `404`. 오래된 화면의 PUT으로 PUBLIC으로 되돌아가는 것은 알려진 위험이다(§5.4) |
 | 멱등 키 형식 | 키가 없으면 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다. 따옴표로 감싼 값, 대문자 UUID, UUID가 아닌 값도 `VALIDATION_ERROR`다. UUIDv4와 UUIDv7은 통과 |
