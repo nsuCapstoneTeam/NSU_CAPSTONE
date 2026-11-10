@@ -20,67 +20,6 @@
   background: var(--surface);
   box-shadow: var(--shadow);
 }
-.signup-progress {
-  margin: 0 0 34px;
-  padding: 0 4px 28px;
-  border-bottom: 1px solid var(--line);
-}
-.signup-progress ol {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.signup-progress li {
-  position: relative;
-  display: grid;
-  justify-items: center;
-  gap: 9px;
-  color: var(--muted);
-  font-size: 11px;
-  text-align: center;
-}
-.signup-progress li:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  top: 16px;
-  left: calc(50% + 24px);
-  width: calc(100% - 48px);
-  height: 2px;
-  background: var(--line);
-}
-.signup-progress li > span {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  position: relative;
-  z-index: 1;
-  border: 2px solid var(--line);
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-.signup-progress li.is-active,
-.signup-progress li.is-complete {
-  color: var(--blue);
-}
-.signup-progress li.is-active > span,
-.signup-progress li.is-complete > span {
-  border-color: var(--blue);
-  background: var(--blue);
-  color: white;
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--blue) 22%, transparent);
-}
-.signup-progress li.is-complete:not(:last-child)::after {
-  background: var(--blue);
-}
-.signup-progress strong {
-  font-size: 11px;
-}
 .signup-section {
   display: flex;
   align-items: center;
@@ -375,83 +314,9 @@
 
 /* ===== 아티스트 가입: NSU-38 요구사항 보완 ===== */
 
-/* 진행 단계 4개 */
-.signup-progress.is-four ol {
-  grid-template-columns: repeat(4, 1fr);
-}
-
 /* 인증 칸이 여러 개 이어질 때 간격 */
 .signup-verification + .signup-verification {
   margin-top: 16px;
-}
-
-/* 알약 모양 선택 버튼 (아티스트 형태·연락 수단·사업자 유형) */
-.signup-choice-group {
-  margin: 18px 0 0;
-  padding: 0;
-  border: 0;
-  min-width: 0;
-}
-.signup-choice-group legend {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding: 0;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 700;
-}
-.signup-choice-group legend small {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
-}
-.signup-choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.signup-choice {
-  position: relative;
-  display: inline-flex;
-  margin: 0;
-  cursor: pointer;
-}
-/* 실제 입력칸은 숨기고(키보드·화면 낭독기는 사용 가능) 옆 글자를 버튼처럼 표시 */
-.signup-choice input {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-  margin: 0;
-}
-.signup-choice span {
-  padding: 9px 16px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
-}
-.signup-choice:hover span {
-  border-color: var(--blue);
-  color: var(--ink);
-}
-.signup-choice input:checked + span {
-  border-color: var(--blue);
-  background: var(--tint);
-  color: var(--blue);
-  box-shadow: inset 0 0 0 1px var(--blue);
-}
-.signup-choice input:focus-visible + span {
-  outline: 3px solid var(--blue);
-  outline-offset: 2px;
-}
-.signup-choice-group.is-invalid .signup-choice span {
-  border-color: #c93643;
 }
 
 /* 사업자등록번호 칸 (사업자 선택 시에만 표시) */
@@ -590,15 +455,8 @@
   .signup-missing { animation: none; }
 }
 
-@media (max-width: 580px) {
-  .signup-progress.is-four strong {
-    font-size: 10px;
-  }
-}
-
 /* 전역 label 스타일(세로 배치)을 덮어써 체크박스와 문구를 한 줄로 */
-.signup-consent label,
-.signup-choice {
+.signup-consent label {
   flex-direction: row;
 }
 

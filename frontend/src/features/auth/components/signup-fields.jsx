@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 
 // 회원가입 화면(아티스트·행사 관계자)에서 같이 쓰는 입력 부품
 // - CodeVerification: 휴대폰·이메일 인증 칸
-// - ChoiceGroup: 알약 모양 선택 버튼 묶음
-// - SignupProgress: 상단 진행 단계 표시
 // - SignupMissingCard: 가입 버튼을 눌렀을 때 빠진 필수 항목 안내 카드
 // - LabelText / RequiredMark / RequiredNote: 라벨 글자, 필수 표시(*)와 안내 문구
 
@@ -230,71 +228,6 @@ export function CodeVerification({
         </p>
       </div>
     </fieldset>
-  );
-}
-
-// 알약 모양 선택 버튼 묶음 (radio: 하나만 / checkbox: 여러 개)
-// 첫 번째 선택지의 id(`${idPrefix}-0`)는 빠진 항목 안내에서 이동할 때 사용
-export function ChoiceGroup({
-  legend,
-  hint,
-  name,
-  idPrefix,
-  type,
-  options,
-  isChecked,
-  onChange,
-  invalid,
-  required = false,
-}) {
-  return (
-    <fieldset
-      className={`signup-choice-group ${invalid ? 'is-invalid' : ''}`}
-      aria-invalid={invalid}
-    >
-      <legend>
-        {legend}
-        {required && <RequiredMark />}
-        {hint && <small>{hint}</small>}
-      </legend>
-      <div className="signup-choices">
-        {options.map((option, index) => (
-          <label key={option} className="signup-choice">
-            <input
-              id={`${idPrefix}-${index}`}
-              type={type}
-              name={name}
-              // 하나만 고르는 필수 묶음은 화면낭독기에 '필수'로 안내
-              required={required && type === 'radio'}
-              checked={isChecked(option)}
-              onChange={() => onChange(option)}
-            />
-            <span>{option}</span>
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
-
-// 상단 진행 단계 표시 (현재 단계 강조, 완료 단계는 ✓)
-// steps: [{ number, label, complete }], current: 지금 진행 중인 단계 번호
-export function SignupProgress({ steps, current, label }) {
-  return (
-    <nav className="signup-progress is-four" aria-label={label}>
-      <ol>
-        {steps.map((step) => (
-          <li
-            key={step.number}
-            className={`${current === step.number ? 'is-active' : ''} ${step.complete ? 'is-complete' : ''}`}
-            aria-current={current === step.number ? 'step' : undefined}
-          >
-            <span aria-hidden="true">{step.complete ? '✓' : step.number}</span>
-            <strong>{step.label}</strong>
-          </li>
-        ))}
-      </ol>
-    </nav>
   );
 }
 

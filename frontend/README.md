@@ -142,7 +142,7 @@ index.html → src/main.jsx → App(app.jsx) → 주소(routes.js) → page 상�
 - **배포할 때**: `/events`처럼 주소로 바로 들어와도 열리도록, 배포 서버는 모르는 주소에 `index.html`을 돌려주게 설정해야 합니다(팀 확정 필요). 개발 서버(`npm run dev`)와 `npm run preview`는 설정 없이 됩니다.
 - **매칭**: `Matching` → `validateEvent` → `matchArtists` → `checkArtist`(필수 조건 필터) → `scoreArtist`(점수) → `ArtistResult`(카드 표시)
 - **저장**: `App` → `useStoredState` → `local-demo-store` → localStorage
-- **로그인 역할 전환**: `RoleCd`(CD) 클릭 → 회전 애니메이션 → `onChangeRole` → `App`이 `artist-login` ↔ `organizer-login` 전환
+- **로그인 역할 전환**: `RoleSwitch`('회원가입' 위 버튼) 클릭 → 라벨이 동전처럼 반쯤 뒤집힘(`useCoinFlip`, `cd-login-motion.js`) → `onChangeRole` → `App`이 `artist-login` ↔ `organizer-login` 전환 → 새 화면에서 나머지 반을 뒤집으며 들어옴
 
 파일별 상세 설명은 [`src/code-guide.md`](src/code-guide.md)를 참고하세요.
 
@@ -154,8 +154,8 @@ index.html → src/main.jsx → App(app.jsx) → 주소(routes.js) → page 상�
 
 | 대상 | 규칙 | 예 |
 | --- | --- | --- |
-| 파일·폴더 | 소문자 kebab-case | `role-cd.jsx`, `login-motion.css` |
-| React 컴포넌트 | PascalCase | `RoleCd`, `ArtistLogin` |
+| 파일·폴더 | 소문자 kebab-case | `cd-login-stage.jsx`, `login-motion.css` |
+| React 컴포넌트 | PascalCase | `CdLoginStage`, `ArtistLogin` |
 | 훅 | `use` + camelCase | `useStoredState` |
 | 변수·함수 | camelCase | `matchArtists` |
 | 상수 | UPPER_SNAKE_CASE | `DEFAULT_EVENT` |
