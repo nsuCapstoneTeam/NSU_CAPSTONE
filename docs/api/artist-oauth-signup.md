@@ -35,7 +35,7 @@ OAuth 콜백과 결과 교환은 OAuth를 시작한 브라우저에서만 성공
 {"oauthSignupSessionId":"<server-issued opaque ID>","phone":"01012345678","email":"artist@example.com","agreements":[{"id":"service","version":"v1"},{"id":"privacy","version":"v1"},{"id":"demo-notice","version":"v1"},{"id":"overseas-transfer","version":"v1"}]}
 ```
 
-- ID·phone·agreements는 필수다. 필수 약관이 빠지면 `400 REQUIRED_TERMS_NOT_AGREED`다. `agreements`는 [signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1의 약관 ID·버전을 쓴다(위 예시는 `DEMO` 기준). 이 필드는 구현 전이며, NSU-123 배포 전까지 지금 서버는 `agreements` 없이 준비하고 약관 PUT으로 동의를 받는다. email은 Provider 이메일이 없거나 미검증이면 필수다.
+- ID·phone·agreements는 필수다. 필수 약관이 빠지면 `400 REQUIRED_TERMS_NOT_AGREED`다. `agreements`는 [signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1의 약관 ID·버전을 쓴다(위 예시는 `DEMO` 기준). 이 필드는 백엔드에 구현됐으며 프론트 NSU-129와 같은 배포로 반영한다. 약관 PUT은 제거됐다. email은 Provider 이메일이 없거나 미검증이면 필수다.
 - 검증된 Provider 이메일은 생략하거나 동일 값만 보낼 수 있다.
 - 서버는 ARTIST/OAUTH를 고정한다. Provider 식별정보·role·인증 완료 boolean은 입력으로 사용하지 않는다.
 - 최초 생성은 201, 같은 입력의 재요청은 200이다. 응답은 아래 세 필드다.
@@ -44,7 +44,7 @@ OAuth 콜백과 결과 교환은 OAuth를 시작한 브라우저에서만 성공
 {"signupSessionId":"<same OAuth session ID>","email":"artist@example.com","emailVerified":true}
 ```
 
-재요청은 이메일·휴대폰·역할·인증 상태·OTP 실패 횟수·cooldown을 바꾸거나 초기화하지 않는다.
+재요청은 이메일·휴대폰·역할·동의 내용·동의 시각·인증 상태·OTP 실패 횟수·cooldown을 바꾸거나 초기화하지 않는다. 같은 ID·버전 목록은 순서와 관계없이 같은 동의로 취급하고, 다른 유효한 동의 목록이면 `400 VALIDATION_ERROR`다. 누락·모르는 ID·버전 오류는 약관 검증 오류로 거절한다.
 미검증 이메일은 준비 단계에서 고정한 주소에 기존 서비스 이메일 인증을 수행한다.
 입력 변경 API는 제공하지 않는다.
 

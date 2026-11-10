@@ -10,26 +10,27 @@ import com.nsu.capstone.identity.verification.ChallengeIssueResult;
 import com.nsu.capstone.identity.verification.ChallengeVerificationResult;
 import com.nsu.capstone.identity.verification.OtpCodeGenerator;
 import com.nsu.capstone.identity.verification.OtpDigestService;
-import com.nsu.capstone.identity.verification.VerificationChallenge;
+import com.nsu.capstone.identity.verification.SignupSendPreflight;
+import com.nsu.capstone.identity.verification.VerificationAlertService;
 import com.nsu.capstone.identity.verification.VerificationChallengeStore;
 import com.nsu.capstone.identity.verification.VerificationChannel;
 import com.nsu.capstone.identity.verification.adult.AdultEvidenceVerifier;
 import com.nsu.capstone.identity.verification.port.EmailSender;
 import com.nsu.capstone.identity.verification.port.SmsSender;
 import com.nsu.capstone.identity.verification.port.VerificationDeliveryException;
-import com.nsu.capstone.identity.verification.terms.RequiredTermsPolicy;
-import com.nsu.capstone.identity.verification.terms.TermVersion;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 @Service
 public class SignupVerificationService {
+
+    private static final Logger log = LoggerFactory.getLogger(SignupVerificationService.class);
 
     private final SignupSessionStore signupSessionStore;
     private final VerificationChallengeStore challengeStore;
@@ -37,94 +38,72 @@ public class SignupVerificationService {
     private final OtpDigestService digestService;
     private final EmailSender emailSender;
     private final SmsSender smsSender;
-    private final RequiredTermsPolicy requiredTermsPolicy;
     private final AdultEvidenceVerifier adultEvidenceVerifier;
     private final SignupVerificationProperties properties;
     private final Clock clock;
+    private final VerificationAlertService alerts;
+    private final SignupSendPreflight preflight;
 
     public SignupVerificationService(
-        SignupSessionStore signupSessionStore,
-        VerificationChallengeStore challengeStore,
-        OtpCodeGenerator codeGenerator,
-        OtpDigestService digestService,
-        EmailSender emailSender,
-        SmsSender smsSender,
-        RequiredTermsPolicy requiredTermsPolicy,
-        AdultEvidenceVerifier adultEvidenceVerifier,
-        SignupVerificationProperties properties,
-        Clock clock
-    ) {
+            SignupSessionStore signupSessionStore,
+            VerificationChallengeStore challengeStore,
+            OtpCodeGenerator codeGenerator,
+            OtpDigestService digestService,
+            EmailSender emailSender,
+            SmsSender smsSender,
+            AdultEvidenceVerifier adultEvidenceVerifier,
+            SignupVerificationProperties properties,
+            Clock clock,
+            VerificationAlertService alerts,
+            SignupSendPreflight preflight) {
         this.signupSessionStore = signupSessionStore;
         this.challengeStore = challengeStore;
         this.codeGenerator = codeGenerator;
         this.digestService = digestService;
         this.emailSender = emailSender;
         this.smsSender = smsSender;
-        this.requiredTermsPolicy = requiredTermsPolicy;
         this.adultEvidenceVerifier = adultEvidenceVerifier;
         this.properties = properties;
         this.clock = clock;
+        this.alerts = alerts;
+        this.preflight = preflight;
     }
 
-    public void sendEmailCode(String signupSessionId, UserRole expectedRole) {
+    public void sendEmailCode(String signupSessionId, UserRole expectedRole, String remoteAddress) {
+        long deadline = preflight.deadline();
+        SignupSession session = signupSessionForSend(signupSessionId, expectedRole, deadline);
+        if (session.emailVerified()) {
+            return;
+        }
+        issueAndSend(session, expectedRole, VerificationChannel.EMAIL, session.email(), remoteAddress, deadline);
+    }
+
+    public void confirmEmailCode(String signupSessionId, String code, UserRole expectedRole, String remoteAddress) {
         SignupSession session = signupSession(signupSessionId, expectedRole);
         if (session.emailVerified()) {
             return;
         }
-        issueAndSend(session, expectedRole, VerificationChannel.EMAIL, session.email());
+        verify(session, expectedRole, VerificationChannel.EMAIL, session.email(), code, remoteAddress);
     }
 
-    public void confirmEmailCode(String signupSessionId, String code, UserRole expectedRole) {
-        SignupSession session = signupSession(signupSessionId, expectedRole);
-        if (session.emailVerified()) {
+    public void sendPhoneCode(String signupSessionId, UserRole expectedRole, String remoteAddress) {
+        long deadline = preflight.deadline();
+        SignupSession session = signupSessionForSend(signupSessionId, expectedRole, deadline);
+        if (session.phoneVerified()) {
             return;
         }
-        verify(session, expectedRole, VerificationChannel.EMAIL, session.email(), code);
+        issueAndSend(session, expectedRole, VerificationChannel.PHONE, session.phone(), remoteAddress, deadline);
     }
 
-    public void sendPhoneCode(String signupSessionId, UserRole expectedRole) {
+    public void confirmPhoneCode(String signupSessionId, String code, UserRole expectedRole, String remoteAddress) {
         SignupSession session = signupSession(signupSessionId, expectedRole);
         if (session.phoneVerified()) {
             return;
         }
-        issueAndSend(session, expectedRole, VerificationChannel.PHONE, session.phone());
+        verify(session, expectedRole, VerificationChannel.PHONE, session.phone(), code, remoteAddress);
     }
 
-    public void confirmPhoneCode(String signupSessionId, String code, UserRole expectedRole) {
-        SignupSession session = signupSession(signupSessionId, expectedRole);
-        if (session.phoneVerified()) {
-            return;
-        }
-        verify(session, expectedRole, VerificationChannel.PHONE, session.phone(), code);
-    }
-
-    public void agreeRequiredTerms(
-        String signupSessionId,
-        List<TermVersion> agreements,
-        UserRole expectedRole
-    ) {
-        SignupSession session = signupSession(signupSessionId, expectedRole);
-        if (session.requiredTermsAgreed()) {
-            return;
-        }
-
-        Set<TermVersion> uniqueAgreements = new HashSet<>(agreements);
-        if (uniqueAgreements.size() != agreements.size()) {
-            throw new BusinessException(ErrorCode.TERMS_AGREEMENT_INVALID);
-        }
-        if (!uniqueAgreements.containsAll(requiredTermsPolicy.requiredTerms())) {
-            throw new BusinessException(ErrorCode.REQUIRED_TERMS_NOT_AGREED);
-        }
-        if (!signupSessionStore.markRequiredTermsAgreed(signupSessionId, expectedRole)) {
-            throw new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID);
-        }
-    }
-
-    public void confirmAdult(
-        String signupSessionId,
-        LocalDate birthDate,
-        UserRole expectedRole
-    ) {
+    public void confirmAdult(String signupSessionId, LocalDate birthDate, UserRole expectedRole) {
         SignupSession session = signupSession(signupSessionId, expectedRole);
         if (session.adultConfirmed()) {
             return;
@@ -141,87 +120,138 @@ public class SignupVerificationService {
     }
 
     private void issueAndSend(
-        SignupSession session,
-        UserRole expectedRole,
-        VerificationChannel channel,
-        String destination
-    ) {
+            SignupSession session,
+            UserRole expectedRole,
+            VerificationChannel channel,
+            String destination,
+            String remoteAddress,
+            long deadline) {
         String code = codeGenerator.generate();
         String generationId = UUID.randomUUID().toString();
         String destinationDigest = digestService.destinationDigest(channel, destination);
-        String codeDigest = digestService.codeDigest(
-            session.signupSessionId(),
-            channel,
-            destination,
-            generationId,
-            code
-        );
+        String codeDigest =
+                digestService.codeDigest(session.signupSessionId(), channel, destination, generationId, code);
 
-        ChallengeIssueResult result = challengeStore.issue(
-            session.signupSessionId(),
-            expectedRole,
-            channel,
-            codeDigest,
-            destinationDigest,
-            generationId,
-            Instant.now(clock)
-        );
+        String recipient = digestService.rateLimitDestinationDigest(channel, destination);
+        ChallengeIssueResult result = preflight.await(
+                deadline,
+                () -> preflight
+                        .challenges()
+                        .issue(
+                                session.signupSessionId(),
+                                expectedRole,
+                                channel,
+                                codeDigest,
+                                destinationDigest,
+                                generationId,
+                                Instant.now(clock),
+                                recipient,
+                                digestService.clientIpDigest(remoteAddress)));
         switch (result) {
             case SESSION_INVALID -> throw new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID);
-            case COOLDOWN_ACTIVE -> throw new BusinessException(
-                ErrorCode.VERIFICATION_REQUEST_LIMIT_EXCEEDED
-            );
             case ALREADY_VERIFIED -> {
                 return;
             }
-            case ISSUED -> send(session.signupSessionId(), channel, destination, code, generationId);
+            case ISSUED ->
+                send(session.signupSessionId(), channel, destination, code, generationId, recipient, deadline);
         }
     }
 
     private void send(
-        String signupSessionId,
-        VerificationChannel channel,
-        String destination,
-        String code,
-        String generationId
-    ) {
+            String signupSessionId,
+            VerificationChannel channel,
+            String destination,
+            String code,
+            String generationId,
+            String recipient,
+            long deadline) {
+        boolean started = preflight.await(
+                deadline,
+                () -> preflight.challenges().startDelivery(signupSessionId, channel, generationId, Instant.now(clock)));
+        if (!started) {
+            throw new BusinessException(ErrorCode.VERIFICATION_DELIVERY_FAILED);
+        }
+
+        preflight.check(deadline);
         try {
             if (channel == VerificationChannel.EMAIL) {
                 emailSender.sendVerificationCode(destination, code, properties.otpTtl());
             } else {
-                smsSender.sendVerificationCode(destination, code, properties.otpTtl());
+                smsSender.sendVerificationCode(
+                        digestService.canonicalMobileNumber(destination), code, properties.otpTtl());
             }
         } catch (VerificationDeliveryException exception) {
-            challengeStore.cancel(signupSessionId, channel, generationId);
-            throw new BusinessException(ErrorCode.VERIFICATION_DELIVERY_FAILED);
+            alerts.providerFailure(channel);
+            switch (exception.outcome()) {
+                case UNKNOWN -> log.warn("가입 인증 코드 발송 결과를 확인할 수 없습니다. 채널: {}", channel);
+                case REJECTED, NOT_SENT ->
+                    throw deliveryFailure(
+                            signupSessionId,
+                            channel,
+                            generationId,
+                            recipient,
+                            exception.outcome() == VerificationDeliveryException.Outcome.NOT_SENT);
+            }
+        } catch (RuntimeException exception) {
+            alerts.providerFailure(channel);
+            try {
+                challengeStore.cancel(signupSessionId, channel, generationId, true);
+            } catch (DataAccessException cleanupFailure) {
+                log.warn("가입 인증 코드의 미발송 예약을 정리하지 못했습니다. 채널: {}", channel);
+            }
+            throw new IllegalStateException("가입 인증 코드 요청을 준비하지 못했습니다");
+        }
+        try {
+            challengeStore.promote(signupSessionId, channel, generationId);
+        } catch (DataAccessException exception) {
+            log.warn("가입 인증 코드 발송 결과를 저장하지 못했습니다. 채널: {}", channel);
+        }
+    }
+
+    private BusinessException deliveryFailure(
+            String signupSessionId,
+            VerificationChannel channel,
+            String generationId,
+            String recipient,
+            boolean refundAll) {
+        try {
+            challengeStore.cancel(signupSessionId, channel, generationId, refundAll);
+            return new BusinessException(
+                    ErrorCode.VERIFICATION_DELIVERY_FAILED, challengeStore.retryAfterCooldown(channel, recipient));
+        } catch (DataAccessException exception) {
+            log.warn("가입 인증 코드 발송 실패를 Redis에 정리하지 못했습니다. 채널: {}", channel);
+            return new BusinessException(ErrorCode.VERIFICATION_DELIVERY_FAILED);
         }
     }
 
     private void verify(
-        SignupSession session,
-        UserRole expectedRole,
-        VerificationChannel channel,
-        String destination,
-        String code
-    ) {
-        VerificationChallenge challenge = challengeStore.find(session.signupSessionId(), channel)
-            .orElseThrow(() -> new BusinessException(ErrorCode.VERIFICATION_CODE_EXPIRED));
+            SignupSession session,
+            UserRole expectedRole,
+            VerificationChannel channel,
+            String destination,
+            String code,
+            String remoteAddress) {
+        Instant now = Instant.now(clock);
+        String id = session.signupSessionId();
         String destinationDigest = digestService.destinationDigest(channel, destination);
-        String candidateDigest = digestService.codeDigest(
-            session.signupSessionId(),
-            channel,
-            destination,
-            challenge.generationId(),
-            code
-        );
-        ChallengeVerificationResult result = challengeStore.verifyAndConsume(
-            session.signupSessionId(),
-            expectedRole,
-            channel,
-            challenge.generationId(),
-            candidateDigest,
-            destinationDigest
-        );
+        String recipient = digestService.rateLimitDestinationDigest(channel, destination);
+        String ipDigest = digestService.clientIpDigest(remoteAddress);
+        var active = challengeStore.find(id, channel, now);
+        var pending = challengeStore.findRecoverable(id, channel, now);
+        ChallengeVerificationResult result = challengeStore.verifyCandidates(
+                id,
+                expectedRole,
+                channel,
+                active.map(c -> c.generationId()).orElse(""),
+                active.map(c -> digestService.codeDigest(id, channel, destination, c.generationId(), code))
+                        .orElse(""),
+                pending.map(c -> c.generationId()).orElse(""),
+                pending.map(c -> digestService.codeDigest(id, channel, destination, c.generationId(), code))
+                        .orElse(""),
+                destinationDigest,
+                recipient,
+                ipDigest,
+                now);
         switch (result) {
             case VERIFIED, ALREADY_VERIFIED -> {
                 return;
@@ -229,15 +259,22 @@ public class SignupVerificationService {
             case SESSION_INVALID -> throw new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID);
             case EXPIRED -> throw new BusinessException(ErrorCode.VERIFICATION_CODE_EXPIRED);
             case INVALID -> throw new BusinessException(ErrorCode.VERIFICATION_CODE_INVALID);
-            case ATTEMPT_LIMIT_EXCEEDED -> throw new BusinessException(
-                ErrorCode.VERIFICATION_ATTEMPT_LIMIT_EXCEEDED
-            );
+            case ATTEMPT_LIMIT_EXCEEDED -> throw new BusinessException(ErrorCode.VERIFICATION_ATTEMPT_LIMIT_EXCEEDED);
         }
     }
 
+    private SignupSession signupSessionForSend(String signupSessionId, UserRole expectedRole, long deadline) {
+        SignupSession session = preflight
+                .await(deadline, () -> preflight.sessions().findById(signupSessionId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID));
+        if (session.role() != expectedRole) throw new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID);
+        return session;
+    }
+
     private SignupSession signupSession(String signupSessionId, UserRole expectedRole) {
-        SignupSession session = signupSessionStore.findById(signupSessionId)
-            .orElseThrow(() -> new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID));
+        SignupSession session = signupSessionStore
+                .findById(signupSessionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID));
         if (session.role() != expectedRole) {
             throw new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID);
         }

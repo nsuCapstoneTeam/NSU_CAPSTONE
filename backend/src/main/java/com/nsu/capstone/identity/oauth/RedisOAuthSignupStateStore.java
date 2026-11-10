@@ -5,6 +5,7 @@ import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.domain.OAuthProvider;
 import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.signup.SignupRedisKeys;
+import com.nsu.capstone.identity.signup.SignupTermsConsent;
 import com.nsu.capstone.identity.verification.VerificationChannel;
 import java.util.List;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -39,7 +40,8 @@ public class RedisOAuthSignupStateStore implements OAuthSignupStateStore {
         end
         """;
 
-    private static final DefaultRedisScript<List> PREPARE = new DefaultRedisScript<>("""
+    private static final DefaultRedisScript<List> PREPARE =
+            new DefaultRedisScript<>("""
         if redis.call('PTTL', KEYS[1]) <= 0
             or redis.call('HGET', KEYS[1], 'oauthSignupSessionId') ~= ARGV[1] then
             return {'SIGNUP_SESSION_INVALID'}
@@ -58,23 +60,23 @@ public class RedisOAuthSignupStateStore implements OAuthSignupStateStore {
             or redis.call('EXISTS', KEYS[2]) == 1 then
         """ + VALIDATE_LINK + """
             if email ~= redis.call('HGET', KEYS[2], 'email')
-                or ARGV[3] ~= redis.call('HGET', KEYS[2], 'phone') then
+                or ARGV[3] ~= redis.call('HGET', KEYS[2], 'phone')
+                or ARGV[6] ~= redis.call('HGET', KEYS[2], 'agreements') then
                 return {'VALIDATION_ERROR'}
             end
             return {'EXISTING', email, redis.call('HGET', KEYS[2], 'emailVerified')}
         end
         redis.call('HSET', KEYS[1], 'linkedSessionId', ARGV[1], 'signupRole', ARGV[2],
-            'signupEmail', email, 'signupPhone', ARGV[3])
+            'signupEmail', email, 'signupPhone', ARGV[3], 'agreements', ARGV[6], 'agreedAt', ARGV[7])
         redis.call('HSET', KEYS[2], 'signupSessionId', ARGV[1], 'oauthSignupSessionId', ARGV[1],
             'signupMethod', 'OAUTH', 'role', ARGV[2], 'email', email, 'phone', ARGV[3],
             'emailVerified', verified and 'true' or 'false', 'phoneVerified', 'false',
-            'requiredTermsAgreed', 'false', 'adultConfirmed', 'false')
+            'requiredTermsAgreed', 'true', 'adultConfirmed', 'false', 'agreements', ARGV[6], 'agreedAt', ARGV[7])
         redis.call('PEXPIREAT', KEYS[2], redis.call('PEXPIRETIME', KEYS[1]))
         return {'CREATED', email, verified and 'true' or 'false'}
         """, List.class);
 
-    private static final DefaultRedisScript<List> CLAIM = new DefaultRedisScript<>(
-        VALIDATE_LINK + """
+    private static final DefaultRedisScript<List> CLAIM = new DefaultRedisScript<>(VALIDATE_LINK + """
         local provider = redis.call('HGET', KEYS[1], 'provider')
         local subject = redis.call('HGET', KEYS[1], 'providerUserId')
         if (provider ~= 'GOOGLE' and provider ~= 'KAKAO' and provider ~= 'NAVER')
@@ -85,7 +87,10 @@ public class RedisOAuthSignupStateStore implements OAuthSignupStateStore {
         if redis.call('HGET', KEYS[2], 'phoneVerified') ~= 'true' then
             return {'PHONE_VERIFICATION_REQUIRED'}
         end
-        if redis.call('HGET', KEYS[2], 'requiredTermsAgreed') ~= 'true' then
+        if redis.call('HGET', KEYS[2], 'requiredTermsAgreed') ~= 'true'
+            or not redis.call('HGET', KEYS[2], 'agreedAt')
+            or redis.call('HGET', KEYS[2], 'agreements') ~= redis.call('HGET', KEYS[1], 'agreements')
+            or redis.call('HGET', KEYS[2], 'agreedAt') ~= redis.call('HGET', KEYS[1], 'agreedAt') then
             return {'REQUIRED_TERMS_AGREEMENT_REQUIRED'}
         end
         if redis.call('HGET', KEYS[2], 'adultConfirmed') ~= 'true' then
@@ -98,7 +103,8 @@ public class RedisOAuthSignupStateStore implements OAuthSignupStateStore {
             return {'OAUTH_SIGNUP_IN_PROGRESS'}
         end
         return {'CLAIMED', provider, subject, redis.call('HGET', KEYS[2], 'email'),
-            redis.call('HGET', KEYS[2], 'phone')}
+            redis.call('HGET', KEYS[2], 'phone'), redis.call('HGET', KEYS[2], 'agreements'),
+            redis.call('HGET', KEYS[2], 'agreedAt')}
         """, List.class);
 
     private static final DefaultRedisScript<Long> RELEASE = new DefaultRedisScript<>("""
@@ -119,24 +125,40 @@ public class RedisOAuthSignupStateStore implements OAuthSignupStateStore {
     }
 
     @Override
-    public Prepared prepare(String id, String phone, String email, UserRole role) {
-        List<?> result = redis.execute(PREPARE, sessionKeys(id), id, role.name(), phone,
-            email == null ? "" : email, email == null ? "0" : "1");
+    public Prepared prepare(String id, String phone, String email, UserRole role, SignupTermsConsent consent) {
+        List<?> result = redis.execute(
+                PREPARE,
+                sessionKeys(id),
+                id,
+                role.name(),
+                phone,
+                email == null ? "" : email,
+                email == null ? "0" : "1",
+                consent.encoded(),
+                consent.agreedAt().toString());
         String status = status(result);
         if (!status.equals("CREATED") && !status.equals("EXISTING")) fail(status);
-        return new Prepared(id, (String) result.get(1), Boolean.parseBoolean((String) result.get(2)),
-            status.equals("CREATED"));
+        return new Prepared(
+                id, (String) result.get(1), Boolean.parseBoolean((String) result.get(2)), status.equals("CREATED"));
     }
 
     @Override
     public Claimed claim(String id, String owner, UserRole role) {
-        List<?> result = redis.execute(CLAIM, List.of(
-            OAuthRedisKeys.signupSession(id), SignupRedisKeys.session(id), claimKey(id)),
-            id, role.name(), owner, Long.toString(properties.getSignupClaimLease().toMillis()));
+        List<?> result = redis.execute(
+                CLAIM,
+                List.of(OAuthRedisKeys.signupSession(id), SignupRedisKeys.session(id), claimKey(id)),
+                id,
+                role.name(),
+                owner,
+                Long.toString(properties.getSignupClaimLease().toMillis()));
         String status = status(result);
         if (!status.equals("CLAIMED")) fail(status);
-        return new Claimed(OAuthProvider.valueOf((String) result.get(1)), (String) result.get(2),
-            (String) result.get(3), (String) result.get(4));
+        return new Claimed(
+                OAuthProvider.valueOf((String) result.get(1)),
+                (String) result.get(2),
+                (String) result.get(3),
+                (String) result.get(4),
+                SignupTermsConsent.decode((String) result.get(5), (String) result.get(6)));
     }
 
     @Override
@@ -146,12 +168,19 @@ public class RedisOAuthSignupStateStore implements OAuthSignupStateStore {
 
     @Override
     public void cleanup(String id, String owner) {
-        redis.execute(CLEANUP, List.of(
-            OAuthRedisKeys.signupSession(id), SignupRedisKeys.session(id), claimKey(id),
-            SignupRedisKeys.challenge(id, VerificationChannel.EMAIL),
-            SignupRedisKeys.cooldown(id, VerificationChannel.EMAIL),
-            SignupRedisKeys.challenge(id, VerificationChannel.PHONE),
-            SignupRedisKeys.cooldown(id, VerificationChannel.PHONE)), owner);
+        redis.execute(
+                CLEANUP,
+                List.of(
+                        OAuthRedisKeys.signupSession(id),
+                        SignupRedisKeys.session(id),
+                        claimKey(id),
+                        SignupRedisKeys.challenge(id, VerificationChannel.EMAIL),
+                        SignupRedisKeys.cooldown(id, VerificationChannel.EMAIL),
+                        SignupRedisKeys.challenge(id, VerificationChannel.PHONE),
+                        SignupRedisKeys.cooldown(id, VerificationChannel.PHONE),
+                        SignupRedisKeys.pendingChallenge(id, VerificationChannel.EMAIL),
+                        SignupRedisKeys.pendingChallenge(id, VerificationChannel.PHONE)),
+                owner);
     }
 
     private static List<String> sessionKeys(String id) {

@@ -18,22 +18,27 @@ public class OAuthFrontendRedirectService {
     }
 
     public void redirect(HttpServletResponse response, String resultCode) throws IOException {
-        String redirectUri = UriComponentsBuilder
-            .fromUriString(properties.getFrontendRedirectUri())
-            .queryParam("code", resultCode)
-            .build()
-            .encode()
-            .toUriString();
+        String redirectUri = UriComponentsBuilder.fromUriString(properties.getFrontendRedirectUri())
+                .queryParam("code", resultCode)
+                .build()
+                .encode()
+                .toUriString();
         response.sendRedirect(redirectUri);
     }
 
+    public void redirectWithLimitError(HttpServletResponse response, String error, Long retryAfter) throws IOException {
+        var uri = UriComponentsBuilder.fromUriString(properties.getFrontendRedirectUri())
+                .queryParam("error", error);
+        if (retryAfter != null) uri.queryParam("retryAfter", retryAfter);
+        response.sendRedirect(uri.build().encode().toUriString());
+    }
+
     public void redirectWithFallbackError(HttpServletResponse response) throws IOException {
-        String redirectUri = UriComponentsBuilder
-            .fromUriString(properties.getFrontendRedirectUri())
-            .queryParam("error", FALLBACK_ERROR)
-            .build()
-            .encode()
-            .toUriString();
+        String redirectUri = UriComponentsBuilder.fromUriString(properties.getFrontendRedirectUri())
+                .queryParam("error", FALLBACK_ERROR)
+                .build()
+                .encode()
+                .toUriString();
         response.sendRedirect(redirectUri);
     }
 }

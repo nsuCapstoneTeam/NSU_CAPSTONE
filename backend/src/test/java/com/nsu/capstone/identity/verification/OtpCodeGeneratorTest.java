@@ -26,12 +26,17 @@ class OtpCodeGeneratorTest {
 
     private SignupVerificationProperties properties() {
         return new SignupVerificationProperties(
-            Duration.ofMinutes(5),
-            Duration.ofSeconds(60),
-            5,
-            6,
-            "test-secret",
-            List.of("service-terms:v1")
-        );
+                Duration.ofMinutes(5),
+                Duration.ofSeconds(60),
+                5,
+                6,
+                "test-secret",
+                List.of("service-terms:v1"),
+                5,
+                20,
+                10,
+                300,
+                80,
+                10);
     }
 }

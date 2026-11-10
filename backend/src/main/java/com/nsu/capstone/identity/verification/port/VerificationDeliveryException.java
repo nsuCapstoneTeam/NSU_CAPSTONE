@@ -2,11 +2,20 @@ package com.nsu.capstone.identity.verification.port;
 
 public class VerificationDeliveryException extends RuntimeException {
 
-    public VerificationDeliveryException(String message) {
-        super(message);
+    public enum Outcome {
+        REJECTED,
+        NOT_SENT,
+        UNKNOWN
     }
 
-    public VerificationDeliveryException(String message, Throwable cause) {
-        super(message, cause);
+    private final Outcome outcome;
+
+    public VerificationDeliveryException(Outcome outcome) {
+        super("인증 코드 발송 결과: " + outcome);
+        this.outcome = outcome;
+    }
+
+    public Outcome outcome() {
+        return outcome;
     }
 }

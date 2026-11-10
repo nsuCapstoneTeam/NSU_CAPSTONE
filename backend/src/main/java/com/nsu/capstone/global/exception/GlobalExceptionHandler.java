@@ -20,30 +20,25 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException exception) {
         ErrorCode errorCode = exception.getErrorCode();
-        return ResponseEntity
-            .status(errorCode.getHttpStatus())
-            .body(ErrorResponse.from(errorCode));
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(errorCode.getHttpStatus());
+        if (exception.getRetryAfterSeconds() != null) {
+            response.header(
+                    HttpHeaders.RETRY_AFTER, exception.getRetryAfterSeconds().toString());
+        }
+        return response.body(ErrorResponse.from(errorCode));
     }
 
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
-        MethodArgumentNotValidException exception,
-        HttpHeaders headers,
-        HttpStatusCode status,
-        WebRequest request
-    ) {
+            MethodArgumentNotValidException exception, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         ErrorCode errorCode = ErrorCode.VALIDATION_ERROR;
-        return ResponseEntity
-            .status(errorCode.getHttpStatus())
-            .body(ErrorResponse.from(errorCode));
+        return ResponseEntity.status(errorCode.getHttpStatus()).body(ErrorResponse.from(errorCode));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException exception) {
         ErrorCode errorCode = ErrorCode.ACCESS_DENIED;
-        return ResponseEntity
-            .status(errorCode.getHttpStatus())
-            .body(ErrorResponse.from(errorCode));
+        return ResponseEntity.status(errorCode.getHttpStatus()).body(ErrorResponse.from(errorCode));
     }
 
     @ExceptionHandler(Exception.class)
@@ -51,8 +46,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.error("Unexpected server error", exception);
 
         ErrorCode errorCode = ErrorCode.INTERNAL_SERVER_ERROR;
-        return ResponseEntity
-            .status(errorCode.getHttpStatus())
-            .body(ErrorResponse.from(errorCode));
+        return ResponseEntity.status(errorCode.getHttpStatus()).body(ErrorResponse.from(errorCode));
     }
 }

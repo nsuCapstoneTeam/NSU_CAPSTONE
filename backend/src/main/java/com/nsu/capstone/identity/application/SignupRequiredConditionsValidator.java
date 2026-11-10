@@ -19,7 +19,7 @@ public class SignupRequiredConditionsValidator {
         if (!signupSession.phoneVerified()) {
             throw new BusinessException(ErrorCode.PHONE_VERIFICATION_REQUIRED);
         }
-        if (!signupSession.requiredTermsAgreed()) {
+        if (!signupSession.requiredTermsAgreed() || signupSession.consent() == null) {
             throw new BusinessException(ErrorCode.REQUIRED_TERMS_AGREEMENT_REQUIRED);
         }
         if (!signupSession.adultConfirmed()) {

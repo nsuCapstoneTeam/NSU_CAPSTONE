@@ -24,74 +24,65 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class LoginControllerTest {
 
-    private static final UUID USER_ID =
-        UUID.fromString("0199f278-cc35-7c24-9d82-0242ac120011");
+    private static final UUID USER_ID = UUID.fromString("0199f278-cc35-7c24-9d82-0242ac120011");
 
-    @Mock LoginService loginService;
+    @Mock
+    LoginService loginService;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        mockMvc = MockMvcBuilders
-            .standaloneSetup(new LoginController(loginService))
-            .setControllerAdvice(new GlobalExceptionHandler())
-            .build();
+        mockMvc = MockMvcBuilders.standaloneSetup(new LoginController(loginService))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test
     void returnsAccessTokenAndDatabaseUserInformation() throws Exception {
-        when(loginService.login("artist@example.com", "password"))
-            .thenReturn(new LoginResponse(
-                "access-token",
-                "Bearer",
-                1800,
-                USER_ID,
-                UserRole.ARTIST,
-                UserStatus.ACTIVE
-            ));
+        when(loginService.login("artist@example.com", "password", "127.0.0.1"))
+                .thenReturn(
+                        new LoginResponse("access-token", "Bearer", 1800, USER_ID, UserRole.ARTIST, UserStatus.ACTIVE));
 
-        mockMvc.perform(post("/api/v1/auth/login")
-                .contentType(APPLICATION_JSON)
-                .content("""
+        mockMvc.perform(post("/api/v1/auth/login").contentType(APPLICATION_JSON).content("""
                     {"email":"artist@example.com","password":"password"}
                     """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.*", hasSize(6)))
-            .andExpect(jsonPath("$.accessToken").value("access-token"))
-            .andExpect(jsonPath("$.tokenType").value("Bearer"))
-            .andExpect(jsonPath("$.expiresIn").value(1800))
-            .andExpect(jsonPath("$.userId").value(USER_ID.toString()))
-            .andExpect(jsonPath("$.role").value("ARTIST"))
-            .andExpect(jsonPath("$.status").value("ACTIVE"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.*", hasSize(6)))
+                .andExpect(jsonPath("$.accessToken").value("access-token"))
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.expiresIn").value(1800))
+                .andExpect(jsonPath("$.userId").value(USER_ID.toString()))
+                .andExpect(jsonPath("$.role").value("ARTIST"))
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
     }
 
     @Test
     void returnsUniformUnauthorizedResponseForAuthenticationFailure() throws Exception {
-        when(loginService.login("user@example.com", "wrong"))
-            .thenThrow(new BusinessException(ErrorCode.INVALID_LOGIN_CREDENTIALS));
+        when(loginService.login("user@example.com", "wrong", "127.0.0.1"))
+                .thenThrow(new BusinessException(ErrorCode.INVALID_LOGIN_CREDENTIALS));
 
         mockMvc.perform(post("/api/v1/auth/login")
-                .contentType(APPLICATION_JSON)
-                .content("{\"email\":\"user@example.com\",\"password\":\"wrong\"}"))
-            .andExpect(status().isUnauthorized())
-            .andExpect(jsonPath("$.code").value("INVALID_LOGIN_CREDENTIALS"));
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"email\":\"user@example.com\",\"password\":\"wrong\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_LOGIN_CREDENTIALS"));
     }
 
     @Test
     void validatesEmailAndNonBlankPasswordWithoutMinimumLengthRule() throws Exception {
         mockMvc.perform(post("/api/v1/auth/login")
-                .contentType(APPLICATION_JSON)
-                .content("{\"email\":\"invalid\",\"password\":\"\"}"))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"email\":\"invalid\",\"password\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
 
-        when(loginService.login("user@example.com", "short"))
-            .thenThrow(new BusinessException(ErrorCode.INVALID_LOGIN_CREDENTIALS));
+        when(loginService.login("user@example.com", "short", "127.0.0.1"))
+                .thenThrow(new BusinessException(ErrorCode.INVALID_LOGIN_CREDENTIALS));
         mockMvc.perform(post("/api/v1/auth/login")
-                .contentType(APPLICATION_JSON)
-                .content("{\"email\":\"user@example.com\",\"password\":\"short\"}"))
-            .andExpect(status().isUnauthorized());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"email\":\"user@example.com\",\"password\":\"short\"}"))
+                .andExpect(status().isUnauthorized());
     }
 }

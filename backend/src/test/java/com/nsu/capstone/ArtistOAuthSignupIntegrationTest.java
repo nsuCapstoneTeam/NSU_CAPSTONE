@@ -8,17 +8,20 @@ import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.application.*;
 import com.nsu.capstone.identity.domain.*;
 import com.nsu.capstone.identity.oauth.*;
+import com.nsu.capstone.identity.oauth.OAuthOpaqueValueService;
 import com.nsu.capstone.identity.presentation.dto.ArtistSignupResponse;
 import com.nsu.capstone.identity.repository.*;
 import com.nsu.capstone.identity.signup.*;
 import com.nsu.capstone.identity.support.UuidV7Generator;
 import com.nsu.capstone.identity.verification.*;
-import com.nsu.capstone.identity.verification.terms.TermVersion;
 import java.time.*;
 import java.util.*;
+import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,7 +62,7 @@ class ArtistOAuthSignupIntegrationTest {
     OAuthResultService results;
 
     @Autowired
-    com.nsu.capstone.identity.oauth.OAuthOpaqueValueService opaqueValues;
+    OAuthOpaqueValueService opaqueValues;
 
     private static final String BINDING_NONCE = "binding-nonce";
 
@@ -88,22 +91,40 @@ class ArtistOAuthSignupIntegrationTest {
     @MockitoSpyBean
     RedisOAuthSignupStateStore stateSpy;
 
+    @Autowired
+    StringRedisTemplate requestLimitRedis;
+
+    @BeforeEach
+    void resetPublicRequestBudget() {
+        for (String kind : List.of("session", "oauth", "login", "login-failure")) {
+            var keys = requestLimitRedis.keys("signup:limit:v2:" + kind + ":*");
+            if (!keys.isEmpty()) requestLimitRedis.delete(keys);
+        }
+    }
+
     @Test
     void verifiedEmailIsFixedAndPreparationIsIdempotentWithoutResettingLimitsOrTtl() {
         String id = oauth("verified", true);
         redis.expire(OAuthRedisKeys.signupSession(id), Duration.ofSeconds(20));
-        var prepared = service.prepare(id, "01012345678", null);
+        var prepared = service.prepare(id, "01012345678", null, SignupTestTerms.agreements(), "127.0.0.1");
         assertTrue(prepared.created());
         assertEquals(id, prepared.signupSessionId());
         assertTrue(prepared.emailVerified());
-        assertError(ErrorCode.VALIDATION_ERROR, () -> service.prepare(id, "01012345678", ""));
+        assertError(
+                ErrorCode.VALIDATION_ERROR,
+                () -> service.prepare(id, "01012345678", "", SignupTestTerms.agreements(), "127.0.0.1"));
         assertEquals(
                 redis.getExpire(OAuthRedisKeys.signupSession(id), TimeUnit.MILLISECONDS),
                 redis.getExpire(SignupRedisKeys.session(id), TimeUnit.MILLISECONDS),
                 20);
         assertFalse(users.existsByEmail(prepared.email()));
-        assertError(ErrorCode.VALIDATION_ERROR, () -> service.prepare(id, "01012345678", "other@example.com"));
-        assertError(ErrorCode.VALIDATION_ERROR, () -> service.prepare(id, "01099999999", null));
+        assertError(
+                ErrorCode.VALIDATION_ERROR,
+                () -> service.prepare(
+                        id, "01012345678", "other@example.com", SignupTestTerms.agreements(), "127.0.0.1"));
+        assertError(
+                ErrorCode.VALIDATION_ERROR,
+                () -> service.prepare(id, "01099999999", null, SignupTestTerms.agreements(), "127.0.0.1"));
         var session = sessions.findById(id).orElseThrow();
         assertEquals(SignupMethod.OAUTH, session.signupMethod());
         assertEquals(ChallengeIssueResult.ISSUED, issue(session, VerificationChannel.PHONE));
@@ -111,9 +132,13 @@ class ArtistOAuthSignupIntegrationTest {
         redis.opsForHash().put(challenge, "failedAttempts", "3");
         var before = redis.opsForHash().entries(challenge);
         long expiresAt = redis.getExpire(SignupRedisKeys.session(id), TimeUnit.MILLISECONDS);
-        assertFalse(service.prepare(id, "01012345678", prepared.email()).created());
+        assertFalse(service.prepare(id, "01012345678", prepared.email(), SignupTestTerms.agreements(), "127.0.0.1")
+                .created());
         assertEquals(before, redis.opsForHash().entries(challenge));
-        assertTrue(redis.hasKey(SignupRedisKeys.cooldown(id, VerificationChannel.PHONE)));
+        assertTrue(challenges.retryAfterCooldown(
+                        VerificationChannel.PHONE,
+                        digests.rateLimitDestinationDigest(VerificationChannel.PHONE, session.phone()))
+                > 0);
         assertTrue(redis.getExpire(SignupRedisKeys.session(id), TimeUnit.MILLISECONDS) <= expiresAt);
         assertFalse(sessions.findById(id).orElseThrow().phoneVerified());
     }
@@ -122,8 +147,9 @@ class ArtistOAuthSignupIntegrationTest {
     void concurrentPreparationHasOneCreatorAndCannotReplaceBoundInput() throws Exception {
         String id = oauth("prepare-race", false);
         String email = email(id);
-        var results =
-                race(() -> service.prepare(id, "01012345678", email), () -> service.prepare(id, "01012345678", email));
+        var results = race(
+                () -> service.prepare(id, "01012345678", email, SignupTestTerms.agreements(), "127.0.0.1"),
+                () -> service.prepare(id, "01012345678", email, SignupTestTerms.agreements(), "127.0.0.1"));
         assertEquals(
                 2,
                 results.stream()
@@ -135,7 +161,10 @@ class ArtistOAuthSignupIntegrationTest {
                         .map(OAuthSignupStateStore.Prepared.class::cast)
                         .filter(OAuthSignupStateStore.Prepared::created)
                         .count());
-        assertError(ErrorCode.VALIDATION_ERROR, () -> service.prepare(id, "01012345678", "replacement@example.com"));
+        assertError(
+                ErrorCode.VALIDATION_ERROR,
+                () -> service.prepare(
+                        id, "01012345678", "replacement@example.com", SignupTestTerms.agreements(), "127.0.0.1"));
         assertEquals(email, sessions.findById(id).orElseThrow().email());
     }
 
@@ -167,29 +196,33 @@ class ArtistOAuthSignupIntegrationTest {
         for (boolean flag : List.of(false, true)) {
             String id = UUID.randomUUID().toString();
             oauthSessions.save(new OAuthSignupSession(id, OAuthProvider.KAKAO, id, null, flag, Instant.now()));
-            assertError(ErrorCode.VALIDATION_ERROR, () -> service.prepare(id, "01012345678", null));
+            assertError(
+                    ErrorCode.VALIDATION_ERROR,
+                    () -> service.prepare(id, "01012345678", null, SignupTestTerms.agreements(), "127.0.0.1"));
             String email = id + "@example.com";
-            assertFalse(service.prepare(id, "01012345678", email).emailVerified());
+            assertFalse(service.prepare(id, "01012345678", email, SignupTestTerms.agreements(), "127.0.0.1")
+                    .emailVerified());
             assertError(ErrorCode.EMAIL_VERIFICATION_REQUIRED, () -> service.signup(id));
             confirm(id, VerificationChannel.EMAIL);
-            assertTrue(service.prepare(id, "01012345678", email).emailVerified());
+            assertTrue(service.prepare(id, "01012345678", email, SignupTestTerms.agreements(), "127.0.0.1")
+                    .emailVerified());
         }
         String id = oauth("unverified", false);
-        assertError(ErrorCode.VALIDATION_ERROR, () -> service.prepare(id, "01012345678", null));
-        assertFalse(service.prepare(id, "01012345678", "chosen-" + id + "@example.com")
+        assertError(
+                ErrorCode.VALIDATION_ERROR,
+                () -> service.prepare(id, "01012345678", null, SignupTestTerms.agreements(), "127.0.0.1"));
+        assertFalse(service.prepare(
+                        id, "01012345678", "chosen-" + id + "@example.com", SignupTestTerms.agreements(), "127.0.0.1")
                 .emailVerified());
     }
 
     @Test
     void completesThroughExistingVerificationAndLogsInUsingExistingOAuthFlow() {
         String id = oauth("complete", false);
-        service.prepare(id, "01012345678", id + "@example.com");
+        service.prepare(id, "01012345678", id + "@example.com", SignupTestTerms.agreements(), "127.0.0.1");
         confirm(id, VerificationChannel.EMAIL);
         confirm(id, VerificationChannel.PHONE);
-        verification.agreeRequiredTerms(
-                id,
-                List.of(new TermVersion("service-terms", "v1"), new TermVersion("privacy-policy", "v1")),
-                UserRole.ARTIST);
+
         verification.confirmAdult(id, LocalDate.of(2000, 1, 1), UserRole.ARTIST);
         var response = service.signup(id);
         User user = users.findById(response.userId()).orElseThrow();
@@ -208,7 +241,7 @@ class ArtistOAuthSignupIntegrationTest {
         assertFalse(redis.hasKey(SignupRedisKeys.session(id)));
         for (var channel : VerificationChannel.values()) {
             assertFalse(redis.hasKey(SignupRedisKeys.challenge(id, channel)));
-            assertFalse(redis.hasKey(SignupRedisKeys.cooldown(id, channel)));
+            assertFalse(redis.hasKey(SignupRedisKeys.pendingChallenge(id, channel)));
         }
         var result = results.exchange(
                 login.completeAuthentication(
@@ -273,16 +306,21 @@ class ArtistOAuthSignupIntegrationTest {
         assertError(ErrorCode.SIGNUP_SESSION_INVALID, () -> localPartner.signup(id, "password"));
         assertError(
                 ErrorCode.SIGNUP_SESSION_INVALID,
-                () -> states.prepare(id, "01012345678", null, UserRole.EVENT_PARTNER));
+                () -> states.prepare(id, "01012345678", null, UserRole.EVENT_PARTNER, SignupTestTerms.consent()));
         redis.delete(SignupRedisKeys.session(id));
-        assertError(ErrorCode.SIGNUP_SESSION_INVALID, () -> service.prepare(id, "01012345678", null));
+        assertError(
+                ErrorCode.SIGNUP_SESSION_INVALID,
+                () -> service.prepare(id, "01012345678", null, SignupTestTerms.agreements(), "127.0.0.1"));
         assertError(ErrorCode.SIGNUP_SESSION_INVALID, () -> service.signup(id));
         String expired = ready("expired");
         redis.delete(OAuthRedisKeys.signupSession(expired));
         assertError(ErrorCode.SIGNUP_SESSION_INVALID, () -> service.signup(expired));
-        assertError(ErrorCode.SIGNUP_SESSION_INVALID, () -> service.prepare(expired, "01012345678", null));
+        assertError(
+                ErrorCode.SIGNUP_SESSION_INVALID,
+                () -> service.prepare(expired, "01012345678", null, SignupTestTerms.agreements(), "127.0.0.1"));
         String local = localArtist
-                .createSession(UUID.randomUUID() + "@example.com", "01012345678")
+                .createSession(
+                        UUID.randomUUID() + "@example.com", "01012345678", SignupTestTerms.agreements(), "127.0.0.1")
                 .signupSessionId();
         assertError(ErrorCode.SIGNUP_SESSION_INVALID, () -> service.signup(local));
     }
@@ -362,7 +400,7 @@ class ArtistOAuthSignupIntegrationTest {
         String a = ready("race-a");
         String b = oauth("race-b", false);
         String secondEmail = sameEmail ? email(a) : email(b);
-        service.prepare(b, "01012345678", secondEmail);
+        service.prepare(b, "01012345678", secondEmail, SignupTestTerms.agreements(), "127.0.0.1");
         completeFlags(b);
         if (!sameEmail) redis.opsForHash().put(OAuthRedisKeys.signupSession(b), "providerUserId", a);
         CyclicBarrier beforeInsert = new CyclicBarrier(2);
@@ -403,7 +441,7 @@ class ArtistOAuthSignupIntegrationTest {
 
     private String ready(String prefix) {
         String id = oauth(prefix, true);
-        service.prepare(id, "01012345678", null);
+        service.prepare(id, "01012345678", null, SignupTestTerms.agreements(), "127.0.0.1");
         completeFlags(id);
         return id;
     }
@@ -411,27 +449,35 @@ class ArtistOAuthSignupIntegrationTest {
     private void completeFlags(String id) {
         sessions.markEmailVerified(id, UserRole.ARTIST);
         sessions.markPhoneVerified(id, UserRole.ARTIST);
-        sessions.markRequiredTermsAgreed(id, UserRole.ARTIST);
         sessions.markAdultConfirmed(id, UserRole.ARTIST);
     }
 
     private void confirm(String id, VerificationChannel channel) {
         SignupSession session = sessions.findById(id).orElseThrow();
         assertEquals(ChallengeIssueResult.ISSUED, issue(session, channel));
-        if (channel == VerificationChannel.EMAIL) verification.confirmEmailCode(id, "123456", UserRole.ARTIST);
-        else verification.confirmPhoneCode(id, "123456", UserRole.ARTIST);
+        if (channel == VerificationChannel.EMAIL)
+            verification.confirmEmailCode(id, "123456", UserRole.ARTIST, "127.0.0.1");
+        else verification.confirmPhoneCode(id, "123456", UserRole.ARTIST, "127.0.0.1");
     }
 
     private ChallengeIssueResult issue(SignupSession session, VerificationChannel channel) {
         String destination = channel == VerificationChannel.EMAIL ? session.email() : session.phone();
-        return challenges.issue(
+        String recipient = digests.rateLimitDestinationDigest(channel, destination);
+        redis.delete("signup:limit:cooldown:" + channel.keyPart() + ":" + recipient);
+        ChallengeIssueResult result = challenges.issue(
                 session.signupSessionId(),
                 UserRole.ARTIST,
                 channel,
                 digests.codeDigest(session.signupSessionId(), channel, destination, "generation", "123456"),
                 digests.destinationDigest(channel, destination),
                 "generation",
-                Instant.now());
+                Instant.now(),
+                recipient,
+                digests.clientIpDigest("127.0.0.1"));
+        if (result == ChallengeIssueResult.ISSUED) {
+            challenges.promote(session.signupSessionId(), channel, "generation");
+        }
+        return result;
     }
 
     private String email(String id) {
@@ -442,7 +488,7 @@ class ArtistOAuthSignupIntegrationTest {
         return OAuthRedisKeys.signupSession(id) + ":claim";
     }
 
-    private void assertError(ErrorCode expected, org.junit.jupiter.api.function.Executable action) {
+    private void assertError(ErrorCode expected, Executable action) {
         assertEquals(expected, assertThrows(BusinessException.class, action).getErrorCode());
     }
 

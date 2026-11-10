@@ -3,141 +3,152 @@ package com.nsu.capstone.identity.verification.adapter.solapi;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
+import com.nsu.capstone.identity.verification.config.SolapiSmsProperties;
 import com.nsu.capstone.identity.verification.port.VerificationDeliveryException;
-import com.solapi.sdk.message.dto.response.MultipleDetailMessageSentResponse;
-import com.solapi.sdk.message.exception.SolapiApiKeyException;
-import com.solapi.sdk.message.exception.SolapiEmptyResponseException;
-import com.solapi.sdk.message.exception.SolapiMessageNotReceivedException;
-import com.solapi.sdk.message.exception.SolapiUnknownException;
-import com.solapi.sdk.message.model.FailedMessage;
-import com.solapi.sdk.message.model.Message;
-import com.solapi.sdk.message.service.DefaultMessageService;
+import com.nsu.capstone.identity.verification.port.VerificationDeliveryException.Outcome;
+import com.sun.net.httpserver.HttpServer;
+import java.net.ConnectException;
+import java.net.InetSocketAddress;
+import java.net.http.HttpClient;
+import java.net.http.HttpConnectTimeoutException;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
-import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
 
-@ExtendWith(MockitoExtension.class)
 class SolapiSmsSenderTest {
 
+    private static final String BASE_URL = "https://api.solapi.com";
+    private static final String SEND_URL = BASE_URL + "/messages/v4/send-many/detail";
     private static final String FROM = "0212345678";
     private static final String TO = "01012345678";
     private static final String CODE = "123456";
-    private static final String SECRET = "provider-secret";
 
-    @Mock DefaultMessageService messageService;
-
+    private MockRestServiceServer server;
     private SolapiSmsSender sender;
 
     @BeforeEach
     void setUp() {
-        sender = new SolapiSmsSender(messageService, FROM);
+        RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
+        server = MockRestServiceServer.bindTo(builder).build();
+        sender = new SolapiSmsSender(builder.build(), properties());
+    }
+
+    private SolapiSmsProperties properties() {
+        SolapiSmsProperties properties = new SolapiSmsProperties();
+        properties.setApiKey("test-key");
+        properties.setApiSecret("test-secret");
+        properties.setFromNumber(FROM);
+        return properties;
     }
 
     @Test
-    void sendsConfiguredMessageWithOtpAndValidity() throws Exception {
-        when(messageService.send(any(Message.class))).thenReturn(successfulResponse());
+    void sendsSignedSingleMessage() {
+        server.expect(requestTo(SEND_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header(
+                        "Authorization",
+                        Matchers.matchesPattern(
+                                "HMAC-SHA256 apiKey=test-key, date=.+Z, salt=[0-9a-f]{32}, signature=[0-9a-f]{64}")))
+                .andExpect(jsonPath("$.messages[0].from").value(FROM))
+                .andExpect(jsonPath("$.messages[0].to").value(TO))
+                .andExpect(jsonPath("$.messages[0].text").value(Matchers.containsString(CODE)))
+                .andRespond(
+                        withStatus(HttpStatus.OK).contentType(APPLICATION_JSON).body("{\"failedMessageList\":[]}"));
+        send();
+        server.verify();
+    }
 
-        sender.sendVerificationCode(TO, CODE, Duration.ofMinutes(5));
-
-        ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
-        verify(messageService).send(captor.capture());
-        Message message = captor.getValue();
-        assertEquals(FROM, message.getFrom());
-        assertEquals(TO, message.getTo());
-        assertTrue(message.getText().contains(CODE));
-        assertTrue(message.getText().contains("5분"));
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', textBlock = """
+        BAD_REQUEST | {"error":"raw-provider-response"} | REJECTED
+        TOO_MANY_REQUESTS | {"error":"raw-provider-response"} | REJECTED
+        OK | {"failedMessageList":[{"statusCode":"3040"}]} | REJECTED
+        SERVICE_UNAVAILABLE | {"error":"raw-provider-response"} | UNKNOWN
+        OK | {} | UNKNOWN
+        OK | not-json | UNKNOWN
+        """)
+    void classifiesProviderResponses(HttpStatus status, String body, Outcome expected) {
+        server.expect(requestTo(SEND_URL))
+                .andRespond(withStatus(status).contentType(APPLICATION_JSON).body(body));
+        assertFailure(expected);
     }
 
     @Test
-    void convertsMessageNotReceivedExceptionWithoutExposingSensitiveValues() throws Exception {
-        when(messageService.send(any(Message.class))).thenThrow(
-            new SolapiMessageNotReceivedException(SECRET + " " + CODE)
-        );
+    void distinguishesConnectionFailureAndReadTimeout() {
+        server.expect(requestTo(SEND_URL)).andRespond(withException(new ConnectException("connection refused")));
+        server.expect(requestTo(SEND_URL))
+                .andRespond(withException(new HttpConnectTimeoutException("connect timeout")));
+        server.expect(requestTo(SEND_URL)).andRespond(withException(new HttpTimeoutException("read timeout")));
 
-        assertSanitizedDeliveryFailure();
+        assertFailure(Outcome.NOT_SENT);
+        assertFailure(Outcome.NOT_SENT);
+        assertFailure(Outcome.UNKNOWN);
+        server.verify();
     }
 
     @Test
-    void convertsApiKeyExceptionWithoutExposingSensitiveValues() throws Exception {
-        when(messageService.send(any(Message.class))).thenAnswer(invocation -> {
-            throw new SolapiApiKeyException(SECRET + " " + CODE);
+    void classifiesDelayedHttpResponseAsUnknown() throws Exception {
+        HttpServer provider = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        CountDownLatch received = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        provider.createContext("/messages/v4/send-many/detail", exchange -> {
+            try (exchange) {
+                exchange.getRequestBody().readAllBytes();
+                received.countDown();
+                release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
         });
-
-        assertSanitizedDeliveryFailure();
+        provider.start();
+        try {
+            JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(2))
+                    .build());
+            factory.setReadTimeout(Duration.ofSeconds(1));
+            RestClient client = RestClient.builder()
+                    .requestFactory(factory)
+                    .baseUrl("http://127.0.0.1:" + provider.getAddress().getPort())
+                    .build();
+            SolapiSmsSender localSender = new SolapiSmsSender(client, properties());
+            VerificationDeliveryException failure = assertThrows(
+                    VerificationDeliveryException.class,
+                    () -> localSender.sendVerificationCode(TO, CODE, Duration.ofMinutes(5)));
+            assertEquals(0, received.getCount());
+            assertEquals(Outcome.UNKNOWN, failure.outcome());
+        } finally {
+            release.countDown();
+            provider.stop(0);
+        }
     }
 
-    @Test
-    void convertsUnknownProviderExceptionWithoutExposingSensitiveValues() throws Exception {
-        when(messageService.send(any(Message.class))).thenThrow(
-            new SolapiUnknownException("raw-provider-response " + SECRET + " " + CODE)
-        );
-
-        assertSanitizedDeliveryFailure();
-    }
-
-    @Test
-    void convertsEmptyProviderResponseExceptionWithoutExposingSensitiveValues() throws Exception {
-        when(messageService.send(any(Message.class))).thenThrow(
-            new SolapiEmptyResponseException(SECRET + " " + CODE)
-        );
-
-        assertSanitizedDeliveryFailure();
-    }
-
-    @Test
-    void doesNotHideUnexpectedProgrammingException() throws Exception {
-        IllegalStateException unexpected = new IllegalStateException("unexpected");
-        when(messageService.send(any(Message.class))).thenThrow(unexpected);
-
-        IllegalStateException thrown = assertThrows(
-            IllegalStateException.class,
-            () -> sender.sendVerificationCode(TO, CODE, Duration.ofMinutes(5))
-        );
-
-        assertEquals(unexpected, thrown);
-    }
-
-    @Test
-    void acceptsSuccessfulResponseWithoutMessageList() throws Exception {
-        when(messageService.send(any(Message.class)))
-            .thenReturn(new MultipleDetailMessageSentResponse());
-
+    private void send() {
         sender.sendVerificationCode(TO, CODE, Duration.ofMinutes(5));
     }
 
-    @Test
-    void convertsFailedProviderResult() throws Exception {
-        MultipleDetailMessageSentResponse response = new MultipleDetailMessageSentResponse();
-        response.setFailedMessageList(List.of(new FailedMessage()));
-        when(messageService.send(any(Message.class))).thenReturn(response);
-
-        assertSanitizedDeliveryFailure();
-    }
-
-    private void assertSanitizedDeliveryFailure() {
-        VerificationDeliveryException exception = assertThrows(
-            VerificationDeliveryException.class,
-            () -> sender.sendVerificationCode(TO, CODE, Duration.ofMinutes(5))
-        );
-
-        assertFalse(exception.getMessage().contains(SECRET));
-        assertFalse(exception.getMessage().contains(CODE));
-        assertFalse(exception.getMessage().contains(TO));
-    }
-
-    private MultipleDetailMessageSentResponse successfulResponse() {
-        MultipleDetailMessageSentResponse response = new MultipleDetailMessageSentResponse();
-        response.setFailedMessageList(List.of());
-        return response;
+    private void assertFailure(Outcome expected) {
+        VerificationDeliveryException failure = assertThrows(VerificationDeliveryException.class, this::send);
+        assertEquals(expected, failure.outcome());
+        assertFalse(failure.getMessage().contains(TO));
+        assertFalse(failure.getMessage().contains("raw-provider-response"));
     }
 }

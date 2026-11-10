@@ -14,9 +14,11 @@ import com.jayway.jsonpath.JsonPath;
 import com.nsu.capstone.identity.application.OAuthLoginService;
 import com.nsu.capstone.identity.domain.OAuthProvider;
 import com.nsu.capstone.identity.domain.User;
+import com.nsu.capstone.identity.oauth.OAuthOpaqueValueService;
 import com.nsu.capstone.identity.oauth.OAuthUserIdentity;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.support.UuidV7Generator;
+import jakarta.servlet.http.Cookie;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -56,7 +59,7 @@ class LoginFlowIntegrationTest {
     OAuthLoginService oauthLoginService;
 
     @Autowired
-    com.nsu.capstone.identity.oauth.OAuthOpaqueValueService opaqueValueService;
+    OAuthOpaqueValueService opaqueValueService;
 
     @Autowired
     JdbcTemplate jdbcTemplate;
@@ -68,6 +71,17 @@ class LoginFlowIntegrationTest {
     void setUp() {
         jdbcTemplate.update("DELETE FROM oauth_accounts");
         userRepository.deleteAll();
+    }
+
+    @Autowired
+    StringRedisTemplate requestLimitRedis;
+
+    @BeforeEach
+    void resetPublicRequestBudget() {
+        for (String kind : List.of("session", "oauth", "login", "login-failure")) {
+            var keys = requestLimitRedis.keys("signup:limit:v2:" + kind + ":*");
+            if (!keys.isEmpty()) requestLimitRedis.delete(keys);
+        }
     }
 
     @Test
@@ -111,7 +125,7 @@ class LoginFlowIntegrationTest {
 
         MvcResult exchangeResult = mockMvc.perform(post("/api/v1/auth/oauth/result")
                         .contentType(APPLICATION_JSON)
-                        .cookie(new jakarta.servlet.http.Cookie("__Host-NSU_OAUTH_BINDING", "binding-nonce"))
+                        .cookie(new Cookie("__Host-NSU_OAUTH_BINDING", "binding-nonce"))
                         .content("{\"code\":\"" + resultCode + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.type").value("LOGIN"))
