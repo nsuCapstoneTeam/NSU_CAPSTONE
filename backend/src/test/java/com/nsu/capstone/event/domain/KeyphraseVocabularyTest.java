@@ -57,15 +57,15 @@ class KeyphraseVocabularyTest {
     }
 
     @Test
-    @DisplayName("모든 조각은 앞 공백 하나 뒤에 영문자로 시작해 영문자로 끝나는 출력 가능한 ASCII다")
-    void everyPieceIsPrintableAsciiBetweenLetters() {
+    @DisplayName("모든 조각은 앞 공백 하나 뒤에 영문자·공백·승인 문장부호(& - ,)만 쓰고 영문자로 시작해 끝난다")
+    void everyPieceUsesOnlyLettersSpacesAndApprovedPunctuation() {
         List<String> pieces =
                 KeyphraseVocabulary.slotPieces().stream().flatMap(List::stream).toList();
 
         assertThat(pieces).isNotEmpty();
         assertThat(pieces).allSatisfy(piece -> {
-            assertThat(piece).matches(" [A-Za-z][\\x20-\\x7E]*[A-Za-z]");
-            assertThat(piece).doesNotContain("<", "|", "  ");
+            assertThat(piece).matches(" [A-Za-z][A-Za-z &,-]*[A-Za-z]");
+            assertThat(piece).doesNotContain("  ");
         });
     }
 
