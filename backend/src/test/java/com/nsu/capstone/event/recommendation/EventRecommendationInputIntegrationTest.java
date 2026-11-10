@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.event.EventIntegrationTestBase;
+import com.nsu.capstone.event.domain.EventType;
+import com.nsu.capstone.event.domain.Genre;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.domain.User;
@@ -53,8 +55,8 @@ class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
 
         assertThat(snapshot.eligibility().start()).isEqualTo(LocalDateTime.of(2026, 11, 6, 18, 0));
         assertThat(snapshot.eligibility().regionCode()).isEqualTo("11680");
-        assertThat(snapshot.aiSource().eventType()).isEqualTo("대학 축제");
-        assertThat(snapshot.aiSource().genres()).containsExactly("팝·대중가요", "록");
+        assertThat(snapshot.conditions().eventType()).isEqualTo(EventType.UNIVERSITY_FESTIVAL);
+        assertThat(snapshot.conditions().genres()).containsExactly(Genre.POP, Genre.ROCK);
     }
 
     @Test

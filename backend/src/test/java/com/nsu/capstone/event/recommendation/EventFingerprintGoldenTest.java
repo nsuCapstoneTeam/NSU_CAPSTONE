@@ -26,6 +26,10 @@ import org.junit.jupiter.params.provider.MethodSource;
  * 지문은 아직 저장되지 않지만(NSU-63 전), 저장하기 시작한 뒤 값이 바뀌면 옛 추천이 모두 isEventChanged = true가 된다.
  * artistType이 null인 벡터만 리팩터링 전과 값이 다르다. null 표기를 정규 문자열 구현의 -1;로 통일했기
  * 때문이다(ADR event_management/04 결정 5). 이 벡터는 같은 형식을 독립적으로 계산해 얻었다.
+ *
+ * <p>NSU-11(ADR recommendation_search_input/00 결정 8)에서 지문에서 description을 뺐다. 모든 벡터가 이 이유로만
+ * 바뀌었다: 같은 계산 모델(파이썬)이 옛 값 6종을 그대로 재현한 뒤, 설명만 뺀 값이 새 값과 일치함을 확인했다.
+ * 지문은 아직 저장되지 않아(NSU-63 전) 데이터 영향이 없다.
  */
 @DisplayName("행사 지문 golden 값")
 class EventFingerprintGoldenTest {
@@ -39,25 +43,25 @@ class EventFingerprintGoldenTest {
     static Stream<Arguments> golden() {
         return Stream.of(
             Arguments.of("기본값", sample(),
-                "29cc7c165579801bc824c4033c9626047a77e0752ac89c5b96328ad4d80efbb0"),
+                "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
             Arguments.of("details를 채워도 같다(지문 밖)", sampleWithDetails(),
-                "29cc7c165579801bc824c4033c9626047a77e0752ac89c5b96328ad4d80efbb0"),
+                "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
             Arguments.of("artistType null은 -1;로 적는다", with(b -> b.artistType = null),
-                "39605a1595965c3303179ead7ccce8de9721cec81116e6b66b9f6bdb3a3cdbcd"),
+                "6fbbad97baf70e5255e4eacfcd8fdc834bc6bbe04dfca1bfe71997712e3a6670"),
             Arguments.of("장르 [ROCK, POP]은 [POP, ROCK]과 같다",
                 with(b -> b.genres = List.of(Genre.ROCK, Genre.POP)),
-                "29cc7c165579801bc824c4033c9626047a77e0752ac89c5b96328ad4d80efbb0"),
+                "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
             Arguments.of("장르 3개", with(b -> b.genres = List.of(Genre.TROT, Genre.ROCK, Genre.POP)),
-                "8bf3b248d476950715d4f7d0a10323bd66b333a75f1c7fa4f8f68e3705915dea"),
+                "7439fff047dbd45ef1849e36f8c8fd84bba632f803c07903b978138f3aff533b"),
             Arguments.of("장르 1개", with(b -> b.genres = List.of(Genre.JAZZ)),
-                "d17cff8ab66bd3be159230c945bc51382d1d63b48cd19e3bbe5e21e28a73ba4c"),
-            Arguments.of("설명에 이모지", with(b -> b.description = "무대 🎵 공연"),
-                "6cad0dfa4c67222b712bfb5be3ce05b99b2b4177049932bc042201adff126c5a"),
+                "35bb323ff41b8903548891ae2864a2963f5d2d232452882c69cf75c1b0697bcf"),
+            Arguments.of("설명은 지문 밖이라 이모지를 넣어도 기본값과 같다", with(b -> b.description = "무대 🎵 공연"),
+                "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
             Arguments.of("DJ + 일렉트로닉", with(b -> {
                     b.artistType = ArtistType.DJ;
                     b.genres = List.of(Genre.ELECTRONIC);
                 }),
-                "5b413a0d3151103fe041c31f87e5f9e315232cc6bf3343fd8ac3f960f7ceba5b")
+                "72d0540b722c513f8ce8a7422b2030b6a74bd7f8bc56e00d91d520922e9e79e5")
         );
     }
 
@@ -75,6 +79,6 @@ class EventFingerprintGoldenTest {
 
         assertThat(event.getStartAt()).isEqualTo(Instant.parse("2026-11-06T09:00:00Z"));
         assertThat(EventFingerprint.of(event).value())
-            .isEqualTo("29cc7c165579801bc824c4033c9626047a77e0752ac89c5b96328ad4d80efbb0");
+            .isEqualTo("464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47");
     }
 }
