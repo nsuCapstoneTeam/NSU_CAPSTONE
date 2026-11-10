@@ -10,11 +10,11 @@
 | 홈 소개와 이용 순서 | `src/features/home/home-page.jsx` |
 | 홈 CLAP 설명·경량 시각 요소·비교 그래픽 | `src/features/home/components/` |
 | 로그인 화면(아티스트·행사 관계자) | `src/features/auth/components/artist-login.jsx`, `organizer-login.jsx` |
-| 로그인 왼쪽 역할 전환 CD·역할 표시 칸 | `src/features/auth/components/role-cd.jsx`, `role-cd.css` |
+| 로그인 CD 화면 틀(CD·네온 링·라벨)과 역할 전환 버튼 | `src/features/auth/components/cd-login-stage.jsx`, `cd-login.css`, `role-switch.jsx`, `cd-login-motion.js` |
 | 로그인 애니메이션(등장·흔들림·로딩·버튼 반응) | `src/features/auth/components/login-motion.css` |
-| 회원가입 역할 선택 | `src/features/auth/components/role-selection.jsx` |
+| 회원가입 역할 선택 | `src/features/auth/components/signup-role-select.jsx` |
 | 역할별 회원가입·가입 완료·접근 안내 | `src/features/auth/pages/` |
-| 회원가입 공통 부품 (인증 칸·선택 버튼·진행 표시·빠진 항목 카드) | `src/features/auth/components/signup-fields.jsx` |
+| 회원가입 공통 부품 (인증 칸·빠진 항목 카드·필수 표시) | `src/features/auth/components/signup-fields.jsx` |
 | 행사 조건 입력과 추천 결과 | `src/features/matching/matching-page.jsx` |
 | 매칭 계산·샘플 데이터 | `src/features/matching/matching.js` |
 | 추천 결과 목록·곡 듣기 CD 카드·추천 이유 슬라이드 | `src/features/matching/components/song-result-list.jsx`와 같은 폴더의 `song-row.jsx`, `listen-card.jsx`, `reason-slider.jsx` |
@@ -42,7 +42,7 @@
 
 저장: `App` → `useStoredState` → `local-demo-store` → 브라우저 localStorage.
 
-로그인 역할 전환: `RoleCd` 클릭 → CD 회전(0.65초) → `onChangeRole` → `App`이 `artist-login` ↔ `organizer-login` 전환 → 새 화면의 CD가 서서히 멈춤. 기존 역할 탭(`auth-role-tabs`)은 CD로 대체되어 삭제했습니다.
+로그인 역할 전환: `RoleSwitch`('회원가입' 위 버튼) 클릭 → 라벨이 동전처럼 반쯤 뒤집힘(`useCoinFlip`, `cd-login-motion.js`) → `onChangeRole` → `App`이 `artist-login` ↔ `organizer-login` 전환 → 새 화면에서 나머지 반을 뒤집으며 들어옴. 움직임 줄이기 설정이면 뒤집는 대신 짧게 흐려졌다 나타납니다.
 
 현재 CLAP·본인인증·서버 저장은 연결 전입니다. 점수는 샘플 조건 계산이며, 파일 정리는 계산식이나 저장 키를 변경하지 않습니다. Three.js는 초기 화면 용량을 줄이기 위해 제거했고 CLAP 영역은 CSS 기반으로 표시합니다.
 
@@ -52,8 +52,8 @@
 
 | 대상 | 규칙 | 예 |
 | --- | --- | --- |
-| 사용자 정의 파일·폴더 | lowercase kebab-case | `clap-hero.jsx`, `clap-hero.css` |
-| React 컴포넌트 식별자 | PascalCase | `ClapHero`, `ArtistLogin` |
+| 사용자 정의 파일·폴더 | lowercase kebab-case | `cd-login-stage.jsx`, `cd-login.css` |
+| React 컴포넌트 식별자 | PascalCase | `CdLoginStage`, `ArtistLogin` |
 | React 훅 파일 / 식별자 | kebab-case / use + camelCase | `use-stored-state.js` / `useStoredState` |
 | 설정·도구 표준 파일 | 도구가 요구하는 이름 유지 | `README.md`, `package.json`, `vite.config.js` |
 | 변수·함수 | camelCase | `matchArtists`, `toggleSaved` |
