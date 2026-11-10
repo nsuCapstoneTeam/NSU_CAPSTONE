@@ -111,7 +111,7 @@
    - NSU-63은 검증되지 않은 매핑으로 AI를 부르지 않는다. 이를 테스트로 강제하고, 그때의 응답은 NSU-63이 정한다. 매핑 버전 저장은 사후 추적일 뿐, 검증 안 된 순위가 정상 결과로 보이는 것을 막지 못하기 때문이다(설계 리뷰 2026-11-10).
 7. **snapshot은 음악 조건을 싣는다.** `EventSnapshot`은 `(eligibility, conditions, fingerprint)`이고 `AiEventSource`는 지운다. 행사 경로의 검색 문구는 `Keyphrase.of(snapshot.conditions())`로만 만든다(014 결정 4).
 8. **지문에서 `description`을 뺀다.** 지문은 "추천에 쓴 행사 정보"이고(02 §4.3), 행사 설명은 이제 추천에 쓰지 않는다(`EVT-042`). 지문에는 검색 문구가 아니라 고른 **코드**를 넣는다. 그래서 매핑 버전을 올려도 `isEventChanged`가 켜지지 않는다.
-9. **코드는 경계에서 바꾼다.** 문자열 코드는 `MusicChoice.parse`/`parseAll`이 enum으로 바꾼다. 목록 밖의 값은 `BusinessException(VALIDATION_ERROR)`, 곧 `400`이다. `MusicConditions`를 만들 수 있으면 이미 유효하다. 검색 문구를 만드는 동안에는 예외가 나지 않는다.
+9. **코드는 경계에서 바꾼다.** 문자열 코드는 `MusicChoice.parse`/`parseAll`이 enum으로 바꾼다. 목록 밖의 값은 `BusinessException(VALIDATION_ERROR)`, 곧 `400`이다. `parse(null)`은 `null`(고르지 않음)이고, `parseAll(null)`은 빈 목록(요청에서 장르를 생략한 경우)이다. 목록 안의 `null`과 중복은 `400`이다. `MusicConditions`를 만들 수 있으면 이미 유효하다. 검색 문구를 만드는 동안에는 예외가 나지 않는다.
 10. **모두 `event.domain`에 둔다.** 영어 문구와 문장 틀은 package-private 클래스 `KeyphraseVocabulary` 한 파일에 모은다. enum에는 코드만 두고 영어 문구를 붙이지 않는다. 의존 방향은 그대로 `recommendation → event`다.
 
 ### NSU-11이 하는 일과 하지 않는 일
@@ -197,11 +197,11 @@ final class KeyphraseVocabulary {          // package-private, 매핑표 v1 전�
 
 ### 길이 증명
 
-1. 테스트 전용 `com.knuddels:jtokkit:1.1.0`의 `R50K_BASE`(GPT-2 BPE)로 센다. 운영 코드에는 들어가지 않는다. 같은 값을 내는지는 AI 저장소 calibration evidence(`docs/experiments/audio-similarity-calibration/text-embedding-evidence.json`)의 16문장 실제 토큰 수와 맞춰 확인한다.
+1. 테스트 전용 `com.knuddels:jtokkit:1.1.0`의 `R50K_BASE`(GPT-2 BPE)로 센다. 운영 코드에는 들어가지 않는다. 같은 값을 내는지는 AI 저장소 calibration evidence(`docs/experiments/audio-similarity-calibration/text-embedding-evidence.json`)의 16문장 실제 토큰 수와 맞춰 확인한다. 끝 표시를 포함한 토큰 수는 `countTokensOrdinary(text + " ") + 1`이며, 16문장 모두 일치했다(구현 2026-11-10).
 2. 칸 조각은 빈 문자열이거나 `" "`+영문자로 시작해 영문자로 끝난다. 문장은 비어 있지 않은 조각을 이은 뒤 맨 앞 공백 하나를 뗀 것이다. GPT-2 사전 분할은 `" "`+글자 앞에서 끊기므로, 문장의 토큰 수 = (첫 조각을 공백 없이 센 토큰 수) + (나머지 조각을 공백 붙여 센 토큰 수의 합)이다.
    - 같은 낱말도 앞 공백 유무에 따라 토큰 수가 다르다. 설계 리뷰(2026-11-10)에서 `instrumental music`은 끝 표시 포함 6토큰인데, 모든 조각을 공백 붙여 센 합은 4토큰이었다.
    - 앞쪽 축을 고르지 않으면 어느 칸이든 첫 조각이 될 수 있다. 표본 조합에 앞쪽 축을 뺀 경우를 넣어 위 계산과 실제가 같은지 확인한다.
-3. 상한 = Σ 칸마다 max(그 칸 조각을 공백 붙여 센 토큰 수, 공백 떼고 센 토큰 수) + 2(끝 표시 앞 공백 1, `<|endoftext|>` 1) ≤ 77. 어느 칸이 첫 조각이 돼도 실제 토큰 수는 이 값을 넘지 않는다. 조합의 곱(v1 약 22만 개)이 아니라 조각 수의 합(장르 칸 175개를 포함해 약 200개)만 센다. v1에서 가장 긴 조합은 손 추정으로 약 30토큰이고, 실제 값은 테스트가 보고한다.
+3. 상한 = Σ 칸마다 max(그 칸 조각을 공백 붙여 센 토큰 수, 공백 떼고 센 토큰 수) + 2(끝 표시 앞 공백 1, `<|endoftext|>` 1) ≤ 77. 어느 칸이 첫 조각이 돼도 실제 토큰 수는 이 값을 넘지 않는다. 조합의 곱(v1 약 22만 개)이 아니라 조각 수의 합(장르 칸 175개를 포함해 약 200개)만 센다. v1의 상한은 테스트로 잰 32토큰이다(한도 77).
 
 ### 그릴링에서 고른 것 (2026-11-10)
 
