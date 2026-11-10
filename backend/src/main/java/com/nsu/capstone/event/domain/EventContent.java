@@ -34,7 +34,6 @@ public record EventContent(
     private static final Duration MAX_WINDOW = Duration.ofHours(24);
     private static final long MAX_BUDGET = 1_000_000_000L;
     private static final int MAX_AUDIENCE = 1_000_000;
-    private static final int MAX_GENRES = 3;
     /** 형식만 본다. 목록에 있는지는 DB가 필요하므로 서비스가 본다. */
     private static final Pattern REGION_CODE = Pattern.compile("\\d{5}");
 
@@ -157,7 +156,7 @@ public record EventContent(
 
     private static List<Genre> inTableOrder(List<Genre> genres) {
         nonNull(genres);
-        check(!genres.isEmpty() && genres.size() <= MAX_GENRES);
+        check(!genres.isEmpty() && genres.size() <= MusicConditions.MAX_GENRES);
         EnumSet<Genre> distinct = EnumSet.noneOf(Genre.class);
         for (Genre genre : genres) {
             check(genre != null && distinct.add(genre));
