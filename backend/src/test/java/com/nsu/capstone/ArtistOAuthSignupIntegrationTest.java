@@ -272,6 +272,9 @@ class ArtistOAuthSignupIntegrationTest {
         confirm(id, VerificationChannel.PHONE);
 
         verification.confirmAdult(id, LocalDate.of(2000, 1, 1), UserRole.ARTIST);
+        for (var channel : VerificationChannel.values()) {
+            redis.opsForHash().put(SignupRedisKeys.preservedChallenge(id, channel), "generationId", "preserved");
+        }
         var response = service.signup(id);
         User user = users.findById(response.userId()).orElseThrow();
         assertEquals(7, user.getId().version());
@@ -290,6 +293,7 @@ class ArtistOAuthSignupIntegrationTest {
         for (var channel : VerificationChannel.values()) {
             assertFalse(redis.hasKey(SignupRedisKeys.challenge(id, channel)));
             assertFalse(redis.hasKey(SignupRedisKeys.pendingChallenge(id, channel)));
+            assertFalse(redis.hasKey(SignupRedisKeys.preservedChallenge(id, channel)));
         }
         var result = results.exchange(
                 login.completeAuthentication(

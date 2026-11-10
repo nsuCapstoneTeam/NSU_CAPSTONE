@@ -18,6 +18,10 @@ public final class SignupRedisKeys {
         return challenge(signupSessionId, channel) + ":pending";
     }
 
+    public static String preservedChallenge(String signupSessionId, VerificationChannel channel) {
+        return challenge(signupSessionId, channel) + ":preserved";
+    }
+
     public static String cooldown(String signupSessionId, VerificationChannel channel) {
         return session(signupSessionId) + ":cooldown:" + channel.keyPart();
     }

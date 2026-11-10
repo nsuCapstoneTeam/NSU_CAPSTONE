@@ -44,6 +44,7 @@ import com.nsu.capstone.identity.verification.VerificationChannel;
 import com.nsu.capstone.identity.verification.adult.AdultEvidenceVerifier;
 import com.nsu.capstone.identity.verification.port.EmailSender;
 import com.nsu.capstone.identity.verification.port.SmsSender;
+import com.nsu.capstone.identity.verification.port.VerificationDeliveryException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -58,6 +59,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -477,6 +481,160 @@ class VerificationChallengeStoreIntegrationTest {
         challengeStore.cancel(session.signupSessionId(), VerificationChannel.PHONE, "rejected", false);
         assertTrue(challengeStore.retryAfterCooldown(VerificationChannel.PHONE, original.destinationDigest()) > 0);
         assertEquals(ChallengeVerificationResult.VERIFIED, verify(session, VerificationChannel.PHONE, original));
+    }
+
+    @Test
+    void failedResendPreservesReceivedCodeWhenItsDeliveryResultWasLost() {
+        var channel = VerificationChannel.PHONE;
+        var session = saveSession("failed-resend-after-lost-result");
+        var first = challengeData(session, channel, CODE, "received");
+        assertEquals(ChallengeIssueResult.ISSUED, issueResult(session, channel, CODE, first.generationId()));
+        Instant started = Instant.now();
+        assertTrue(challengeStore.startDelivery(session.signupSessionId(), channel, first.generationId(), started));
+        // The provider delivered A, but the store never received its promotion.
+        Instant retryAt = started.plus(verificationProperties.resendCooldown()).plusMillis(1);
+        redisTemplate.expire(cooldownKey(channel, first.destinationDigest()), Duration.ZERO);
+        var sender = mock(SmsSender.class);
+        var otp = mock(OtpCodeGenerator.class);
+        when(otp.generate()).thenReturn("654321");
+        Mockito.doThrow(new VerificationDeliveryException(VerificationDeliveryException.Outcome.REJECTED))
+                .when(sender)
+                .sendVerificationCode(session.phone(), "654321", verificationProperties.otpTtl());
+        var service = verificationService(challengeStore, otp, sender, retryAt);
+        String ip = "192.0.2.72";
+        BusinessException wrong = assertThrows(
+                BusinessException.class,
+                () -> service.confirmPhoneCode(session.signupSessionId(), "999999", session.role(), ip));
+        assertEquals(ErrorCode.VERIFICATION_CODE_INVALID, wrong.getErrorCode());
+        long originalTtl = redisTemplate.getExpire(
+                SignupRedisKeys.pendingChallenge(session.signupSessionId(), channel), TimeUnit.MILLISECONDS);
+
+        BusinessException failure = assertThrows(
+                BusinessException.class, () -> service.sendPhoneCode(session.signupSessionId(), session.role(), ip));
+        assertEquals(ErrorCode.VERIFICATION_DELIVERY_FAILED, failure.getErrorCode());
+        var preserved = challengeStore
+                .findRecoverable(session.signupSessionId(), channel, retryAt)
+                .orElseThrow();
+        assertEquals(first.generationId(), preserved.generationId());
+        assertEquals(1, preserved.failedAttempts());
+        String preservedKey = SignupRedisKeys.preservedChallenge(session.signupSessionId(), channel);
+        long remainingTtl = redisTemplate.getExpire(preservedKey, TimeUnit.MILLISECONDS);
+        assertTrue(remainingTtl > 0 && remainingTtl <= originalTtl);
+        service.confirmPhoneCode(session.signupSessionId(), CODE, session.role(), ip);
+        assertTrue(signupSessionStore
+                .findById(session.signupSessionId())
+                .orElseThrow()
+                .phoneVerified());
+        assertFalse(redisTemplate.hasKey(preservedKey));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void verifiesOnlyActiveAndNewestRecoverableCodeWhenDeliveryRecordsAreLost(boolean newerSucceeds) {
+        var channel = VerificationChannel.PHONE;
+        var session = saveSession("successive-lost-results-" + newerSucceeds);
+        String id = session.signupSessionId();
+        var active = issue(session, channel, CODE, "active");
+        String cooldown = cooldownKey(channel, active.destinationDigest());
+        redisTemplate.expire(cooldown, Duration.ZERO);
+        String firstCode = "654321";
+        String nextCode = "345678";
+        Instant firstAt = Instant.now();
+        assertEquals(ChallengeIssueResult.ISSUED, issueResult(session, channel, firstCode, "first", firstAt));
+        assertTrue(challengeStore.startDelivery(id, channel, "first", firstAt));
+        Instant nextAt = firstAt.plus(verificationProperties.resendCooldown()).plusMillis(1);
+        redisTemplate.expire(cooldown, Duration.ZERO);
+        assertEquals(ChallengeIssueResult.ISSUED, issueResult(session, channel, nextCode, "next", nextAt));
+        assertTrue(challengeStore.startDelivery(id, channel, "next", nextAt));
+        assertEquals(
+                "first",
+                challengeStore
+                        .findRecoverable(id, channel, nextAt)
+                        .orElseThrow()
+                        .generationId());
+
+        // A late promotion cannot replace the active code or clear the newer pending code.
+        challengeStore.promote(id, channel, "first");
+        assertEquals(
+                "active", challengeStore.find(id, channel, nextAt).orElseThrow().generationId());
+        Instant eligibleAt = nextAt.plus(SignupTestTerms.timing().pendingRecovery());
+        assertEquals(
+                "next",
+                challengeStore
+                        .findRecoverable(id, channel, eligibleAt)
+                        .orElseThrow()
+                        .generationId());
+
+        var service =
+                verificationService(challengeStore, mock(OtpCodeGenerator.class), mock(SmsSender.class), eligibleAt);
+        String ip = "192.0.2.73";
+        BusinessException wrong = assertThrows(
+                BusinessException.class, () -> service.confirmPhoneCode(id, firstCode, session.role(), ip));
+        assertEquals(ErrorCode.VERIFICATION_CODE_INVALID, wrong.getErrorCode());
+        assertEquals(
+                1, challengeStore.find(id, channel, eligibleAt).orElseThrow().failedAttempts());
+        assertEquals(
+                1,
+                challengeStore
+                        .findRecoverable(id, channel, eligibleAt)
+                        .orElseThrow()
+                        .failedAttempts());
+        String preservedKey = SignupRedisKeys.preservedChallenge(id, channel);
+        assertEquals("0", redisTemplate.opsForHash().get(preservedKey, "failedAttempts"));
+
+        if (newerSucceeds) {
+            challengeStore.promote(id, channel, "next");
+            challengeStore.cancel(id, channel, "first", false);
+            assertEquals(
+                    "next",
+                    challengeStore.find(id, channel, eligibleAt).orElseThrow().generationId());
+            assertTrue(challengeStore.findRecoverable(id, channel, eligibleAt).isEmpty());
+            assertFalse(redisTemplate.hasKey(preservedKey));
+            service.confirmPhoneCode(id, nextCode, session.role(), ip);
+        } else {
+            challengeStore.cancel(id, channel, "next", false);
+            assertEquals(
+                    "first",
+                    challengeStore
+                            .findRecoverable(id, channel, eligibleAt)
+                            .orElseThrow()
+                            .generationId());
+            service.confirmPhoneCode(id, firstCode, session.role(), ip);
+        }
+        assertTrue(signupSessionStore.findById(id).orElseThrow().phoneVerified());
+        assertFalse(redisTemplate.hasKey(preservedKey));
+    }
+
+    @ParameterizedTest
+    @EnumSource(VerificationChannel.class)
+    void thirdIssuanceKeepsOnlyLatestRecoverableCodeAndLateFailureMatchesItsGeneration(VerificationChannel channel) {
+        var session = saveSession("third-issuance-" + channel.keyPart());
+        String id = session.signupSessionId();
+        String cooldown = cooldownKey(
+                channel, challengeData(session, channel, CODE, "first").destinationDigest());
+        Instant firstAt = Instant.now();
+        assertEquals(ChallengeIssueResult.ISSUED, issueResult(session, channel, CODE, "first", firstAt));
+        assertTrue(challengeStore.startDelivery(id, channel, "first", firstAt));
+
+        Instant secondAt = firstAt.plus(verificationProperties.resendCooldown()).plusMillis(1);
+        redisTemplate.expire(cooldown, Duration.ZERO);
+        assertEquals(ChallengeIssueResult.ISSUED, issueResult(session, channel, "654321", "second", secondAt));
+        assertTrue(challengeStore.startDelivery(id, channel, "second", secondAt));
+
+        Instant thirdAt = secondAt.plus(verificationProperties.resendCooldown()).plusMillis(1);
+        redisTemplate.expire(cooldown, Duration.ZERO);
+        assertEquals(ChallengeIssueResult.ISSUED, issueResult(session, channel, "345678", "third", thirdAt));
+        challengeStore.cancel(id, channel, "first", false);
+        assertEquals(
+                "second",
+                challengeStore
+                        .findRecoverable(id, channel, thirdAt)
+                        .orElseThrow()
+                        .generationId());
+
+        challengeStore.cancel(id, channel, "second", false);
+        assertTrue(challengeStore.findRecoverable(id, channel, thirdAt).isEmpty());
+        assertTrue(challengeStore.startDelivery(id, channel, "third", thirdAt));
     }
 
     @Test
@@ -1012,6 +1170,11 @@ class VerificationChallengeStoreIntegrationTest {
 
     private ChallengeIssueResult issueResult(
             SignupSession session, VerificationChannel channel, String code, String generationId) {
+        return issueResult(session, channel, code, generationId, Instant.now());
+    }
+
+    private ChallengeIssueResult issueResult(
+            SignupSession session, VerificationChannel channel, String code, String generationId, Instant issuedAt) {
         ChallengeData data = challengeData(session, channel, code, generationId);
         return challengeStore.issue(
                 session.signupSessionId(),
@@ -1020,7 +1183,7 @@ class VerificationChallengeStoreIntegrationTest {
                 data.codeDigest(),
                 data.destinationDigest(),
                 generationId,
-                Instant.now(),
+                issuedAt,
                 data.destinationDigest(),
                 testIpDigest);
     }

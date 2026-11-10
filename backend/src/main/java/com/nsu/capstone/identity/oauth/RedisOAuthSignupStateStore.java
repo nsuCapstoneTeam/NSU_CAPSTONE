@@ -189,7 +189,9 @@ public class RedisOAuthSignupStateStore implements OAuthSignupStateStore {
                         SignupRedisKeys.challenge(id, VerificationChannel.PHONE),
                         SignupRedisKeys.cooldown(id, VerificationChannel.PHONE),
                         SignupRedisKeys.pendingChallenge(id, VerificationChannel.EMAIL),
-                        SignupRedisKeys.pendingChallenge(id, VerificationChannel.PHONE)),
+                        SignupRedisKeys.pendingChallenge(id, VerificationChannel.PHONE),
+                        SignupRedisKeys.preservedChallenge(id, VerificationChannel.EMAIL),
+                        SignupRedisKeys.preservedChallenge(id, VerificationChannel.PHONE)),
                 owner);
     }
 
