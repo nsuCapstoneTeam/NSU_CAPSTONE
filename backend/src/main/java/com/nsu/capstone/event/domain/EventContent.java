@@ -14,22 +14,21 @@ import java.util.regex.Pattern;
  * genres는 03 §3.3 표의 순서로 정렬되어 있다.
  */
 public record EventContent(
-    String name,
-    EventType eventType,
-    LocalDateTime start,
-    LocalDateTime end,
-    int performanceMinutes,
-    String venue,
-    String regionCode,
-    ArtistType artistType,
-    List<Genre> genres,
-    long budgetMin,
-    long budgetMax,
-    int expectedAudience,
-    String description,
-    Visibility visibility,
-    EventDetails details
-) {
+        String name,
+        EventType eventType,
+        LocalDateTime start,
+        LocalDateTime end,
+        int performanceMinutes,
+        String venue,
+        String regionCode,
+        ArtistType artistType,
+        List<Genre> genres,
+        long budgetMin,
+        long budgetMax,
+        int expectedAudience,
+        String description,
+        Visibility visibility,
+        EventDetails details) {
 
     private static final Duration MAX_WINDOW = Duration.ofHours(24);
     private static final long MAX_BUDGET = 1_000_000_000L;
@@ -62,31 +61,31 @@ public record EventContent(
      */
     public String requestHash() {
         return CanonicalDigest.start()
-            .text(name)
-            .code(eventType)
-            .time(start)
-            .time(end)
-            .number(performanceMinutes)
-            .text(venue)
-            .text(regionCode)
-            .code(artistType)
-            .codeSet(genres)
-            .number(budgetMin)
-            .number(budgetMax)
-            .number(expectedAudience)
-            .text(description)
-            .code(visibility)
-            .text(details.rehearsal())
-            .text(details.stageSize())
-            .flag(details.paProvided())
-            .text(details.microphones())
-            .text(details.instruments())
-            .flag(details.waitingRoomProvided())
-            .flag(details.mealProvided())
-            .flag(details.transportationFeeProvided())
-            .flag(details.accommodationProvided())
-            .text(details.otherConditions())
-            .hex();
+                .text(name)
+                .code(eventType)
+                .time(start)
+                .time(end)
+                .number(performanceMinutes)
+                .text(venue)
+                .text(regionCode)
+                .code(artistType)
+                .codeSet(genres)
+                .number(budgetMin)
+                .number(budgetMax)
+                .number(expectedAudience)
+                .text(description)
+                .code(visibility)
+                .text(details.rehearsal())
+                .text(details.stageSize())
+                .flag(details.paProvided())
+                .text(details.microphones())
+                .text(details.instruments())
+                .flag(details.waitingRoomProvided())
+                .flag(details.mealProvided())
+                .flag(details.transportationFeeProvided())
+                .flag(details.accommodationProvided())
+                .text(details.otherConditions())
+                .hex();
     }
 
     /**
@@ -141,17 +140,16 @@ public record EventContent(
      */
     private static EventDetails normalized(EventDetails details) {
         return new EventDetails(
-            optionalText(details.rehearsal(), 100),
-            optionalText(details.stageSize(), 100),
-            details.paProvided(),
-            optionalText(details.microphones(), 100),
-            optionalText(details.instruments(), 100),
-            details.waitingRoomProvided(),
-            details.mealProvided(),
-            details.transportationFeeProvided(),
-            details.accommodationProvided(),
-            optionalText(details.otherConditions(), 500)
-        );
+                optionalText(details.rehearsal(), 100),
+                optionalText(details.stageSize(), 100),
+                details.paProvided(),
+                optionalText(details.microphones(), 100),
+                optionalText(details.instruments(), 100),
+                details.waitingRoomProvided(),
+                details.mealProvided(),
+                details.transportationFeeProvided(),
+                details.accommodationProvided(),
+                optionalText(details.otherConditions(), 500));
     }
 
     private static List<Genre> inTableOrder(List<Genre> genres) {

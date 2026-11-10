@@ -46,22 +46,21 @@ class FingerprintSnapshotAgreementTest {
 
     /** 03 §8.2(snapshot)·§8.3(지문) 표를 컴포넌트 이름으로 옮긴 것. 추천 입력이면 지문도 바뀐다. */
     static final Map<String, Role> ROLE = Map.ofEntries(
-        entry("name", Role.NONE),
-        entry("eventType", Role.MUSIC_CONDITIONS),
-        entry("start", Role.ELIGIBILITY),
-        entry("end", Role.ELIGIBILITY),
-        entry("performanceMinutes", Role.ELIGIBILITY),
-        entry("venue", Role.NONE),
-        entry("regionCode", Role.ELIGIBILITY),
-        entry("artistType", Role.ELIGIBILITY),
-        entry("genres", Role.MUSIC_CONDITIONS),
-        entry("budgetMin", Role.ELIGIBILITY),
-        entry("budgetMax", Role.ELIGIBILITY),
-        entry("expectedAudience", Role.NONE),
-        entry("description", Role.NONE),
-        entry("visibility", Role.NONE),
-        entry("details", Role.NONE)
-    );
+            entry("name", Role.NONE),
+            entry("eventType", Role.MUSIC_CONDITIONS),
+            entry("start", Role.ELIGIBILITY),
+            entry("end", Role.ELIGIBILITY),
+            entry("performanceMinutes", Role.ELIGIBILITY),
+            entry("venue", Role.NONE),
+            entry("regionCode", Role.ELIGIBILITY),
+            entry("artistType", Role.ELIGIBILITY),
+            entry("genres", Role.MUSIC_CONDITIONS),
+            entry("budgetMin", Role.ELIGIBILITY),
+            entry("budgetMax", Role.ELIGIBILITY),
+            entry("expectedAudience", Role.NONE),
+            entry("description", Role.NONE),
+            entry("visibility", Role.NONE),
+            entry("details", Role.NONE));
 
     static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-18T01:00:00Z"), ZoneId.of("Asia/Seoul"));
 
@@ -82,24 +81,27 @@ class FingerprintSnapshotAgreementTest {
         EventSnapshot before = snapshot(base);
 
         for (String component : names(EventContent.class)) {
-            EventSnapshot after = snapshot(
-                rebuildWith(EventContent.class, base, component, value(alternate(), component)));
+            EventSnapshot after =
+                    snapshot(rebuildWith(EventContent.class, base, component, value(alternate(), component)));
             Role role = ROLE.get(component);
 
             boolean eligibilityChanged = !after.eligibility().equals(before.eligibility());
             boolean conditionsChanged = !after.conditions().equals(before.conditions());
-            boolean keyphraseChanged = !Keyphrase.of(after.conditions()).text()
-                .equals(Keyphrase.of(before.conditions()).text());
+            boolean keyphraseChanged = !Keyphrase.of(after.conditions())
+                    .text()
+                    .equals(Keyphrase.of(before.conditions()).text());
             boolean fingerprintChanged = !after.fingerprint().equals(before.fingerprint());
 
-            assertThat(eligibilityChanged).as("%s이 eligibility를 바꾸는가", component)
-                .isEqualTo(role == Role.ELIGIBILITY);
-            assertThat(conditionsChanged).as("%s이 conditions를 바꾸는가", component)
-                .isEqualTo(role == Role.MUSIC_CONDITIONS);
-            assertThat(keyphraseChanged).as("%s이 검색 문장을 바꾸는가", component)
-                .isEqualTo(conditionsChanged);
-            assertThat(fingerprintChanged).as("%s이 지문을 바꾸는가", component)
-                .isEqualTo(eligibilityChanged || conditionsChanged);
+            assertThat(eligibilityChanged)
+                    .as("%s이 eligibility를 바꾸는가", component)
+                    .isEqualTo(role == Role.ELIGIBILITY);
+            assertThat(conditionsChanged)
+                    .as("%s이 conditions를 바꾸는가", component)
+                    .isEqualTo(role == Role.MUSIC_CONDITIONS);
+            assertThat(keyphraseChanged).as("%s이 검색 문장을 바꾸는가", component).isEqualTo(conditionsChanged);
+            assertThat(fingerprintChanged)
+                    .as("%s이 지문을 바꾸는가", component)
+                    .isEqualTo(eligibilityChanged || conditionsChanged);
         }
     }
 }

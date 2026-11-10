@@ -42,27 +42,38 @@ class EventFingerprintGoldenTest {
 
     static Stream<Arguments> golden() {
         return Stream.of(
-            Arguments.of("기본값", sample(),
-                "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
-            Arguments.of("details를 채워도 같다(지문 밖)", sampleWithDetails(),
-                "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
-            Arguments.of("artistType null은 -1;로 적는다", with(b -> b.artistType = null),
-                "6fbbad97baf70e5255e4eacfcd8fdc834bc6bbe04dfca1bfe71997712e3a6670"),
-            Arguments.of("장르 [ROCK, POP]은 [POP, ROCK]과 같다",
-                with(b -> b.genres = List.of(Genre.ROCK, Genre.POP)),
-                "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
-            Arguments.of("장르 3개", with(b -> b.genres = List.of(Genre.TROT, Genre.ROCK, Genre.POP)),
-                "7439fff047dbd45ef1849e36f8c8fd84bba632f803c07903b978138f3aff533b"),
-            Arguments.of("장르 1개", with(b -> b.genres = List.of(Genre.JAZZ)),
-                "35bb323ff41b8903548891ae2864a2963f5d2d232452882c69cf75c1b0697bcf"),
-            Arguments.of("설명은 지문 밖이라 이모지를 넣어도 기본값과 같다", with(b -> b.description = "무대 🎵 공연"),
-                "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
-            Arguments.of("DJ + 일렉트로닉", with(b -> {
-                    b.artistType = ArtistType.DJ;
-                    b.genres = List.of(Genre.ELECTRONIC);
-                }),
-                "72d0540b722c513f8ce8a7422b2030b6a74bd7f8bc56e00d91d520922e9e79e5")
-        );
+                Arguments.of("기본값", sample(), "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
+                Arguments.of(
+                        "details를 채워도 같다(지문 밖)",
+                        sampleWithDetails(),
+                        "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
+                Arguments.of(
+                        "artistType null은 -1;로 적는다",
+                        with(b -> b.artistType = null),
+                        "6fbbad97baf70e5255e4eacfcd8fdc834bc6bbe04dfca1bfe71997712e3a6670"),
+                Arguments.of(
+                        "장르 [ROCK, POP]은 [POP, ROCK]과 같다",
+                        with(b -> b.genres = List.of(Genre.ROCK, Genre.POP)),
+                        "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
+                Arguments.of(
+                        "장르 3개",
+                        with(b -> b.genres = List.of(Genre.TROT, Genre.ROCK, Genre.POP)),
+                        "7439fff047dbd45ef1849e36f8c8fd84bba632f803c07903b978138f3aff533b"),
+                Arguments.of(
+                        "장르 1개",
+                        with(b -> b.genres = List.of(Genre.JAZZ)),
+                        "35bb323ff41b8903548891ae2864a2963f5d2d232452882c69cf75c1b0697bcf"),
+                Arguments.of(
+                        "설명은 지문 밖이라 이모지를 넣어도 기본값과 같다",
+                        with(b -> b.description = "무대 🎵 공연"),
+                        "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
+                Arguments.of(
+                        "DJ + 일렉트로닉",
+                        with(b -> {
+                            b.artistType = ArtistType.DJ;
+                            b.genres = List.of(Genre.ELECTRONIC);
+                        }),
+                        "72d0540b722c513f8ce8a7422b2030b6a74bd7f8bc56e00d91d520922e9e79e5"));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -79,6 +90,6 @@ class EventFingerprintGoldenTest {
 
         assertThat(event.getStartAt()).isEqualTo(Instant.parse("2026-11-06T09:00:00Z"));
         assertThat(EventFingerprint.of(event).value())
-            .isEqualTo("464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47");
+                .isEqualTo("464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47");
     }
 }

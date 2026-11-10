@@ -20,19 +20,18 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import java.util.stream.Stream;
 
 /** 추천 입력 snapshot과 isEventChanged 지문(03 행사 API §8.2·§8.3). */
 @DisplayName("추천 입력 snapshot과 지문")
 class EventSnapshotTest {
 
-    static final Clock CLOCK =
-        Clock.fixed(Instant.parse("2026-10-18T01:00:00Z"), ZoneId.of("Asia/Seoul"));
+    static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-18T01:00:00Z"), ZoneId.of("Asia/Seoul"));
 
     static Event event(EventContent content) {
         return Event.register(UUID.randomUUID(), UUID.randomUUID(), content, CLOCK);
@@ -56,7 +55,7 @@ class EventSnapshotTest {
     @DisplayName("artistType이 null이면 '상관없음'으로 보고 null 그대로 둔다")
     void eligibilityInputKeepsNullArtistTypeAsAnyType() {
         EligibilityInput input =
-            EventSnapshot.of(event(with(b -> b.artistType = null))).eligibility();
+                EventSnapshot.of(event(with(b -> b.artistType = null))).eligibility();
 
         assertThat(input.artistType()).isNull();
     }
@@ -87,14 +86,13 @@ class EventSnapshotTest {
 
     static Stream<Arguments> fieldsOutsideTheFingerprint() {
         return Stream.of(
-            Arguments.of("name", (Consumer<Builder>) b -> b.name = "다른 이름"),
-            Arguments.of("venue", (Consumer<Builder>) b -> b.venue = "다른 장소"),
-            Arguments.of("description", (Consumer<Builder>) b -> b.description = "다른 설명"),
-            Arguments.of("expectedAudience", (Consumer<Builder>) b -> b.expectedAudience = 1),
-            Arguments.of("visibility", (Consumer<Builder>) b -> b.visibility = Visibility.PRIVATE),
-            Arguments.of("details", (Consumer<Builder>) b -> b.details =
-                new EventDetails("리허설", null, true, null, null, null, null, null, null, "기타"))
-        );
+                Arguments.of("name", (Consumer<Builder>) b -> b.name = "다른 이름"),
+                Arguments.of("venue", (Consumer<Builder>) b -> b.venue = "다른 장소"),
+                Arguments.of("description", (Consumer<Builder>) b -> b.description = "다른 설명"),
+                Arguments.of("expectedAudience", (Consumer<Builder>) b -> b.expectedAudience = 1),
+                Arguments.of("visibility", (Consumer<Builder>) b -> b.visibility = Visibility.PRIVATE),
+                Arguments.of("details", (Consumer<Builder>) b ->
+                        b.details = new EventDetails("리허설", null, true, null, null, null, null, null, null, "기타")));
     }
 
     @ParameterizedTest(name = "{0}을 바꿔도 지문은 같다")
@@ -108,19 +106,18 @@ class EventSnapshotTest {
 
     static Stream<Arguments> fieldsInsideTheFingerprint() {
         return Stream.of(
-            Arguments.of("startDate", (Consumer<Builder>) b -> b.start = LocalDateTime.of(2026, 11, 5, 19, 30)),
-            Arguments.of("startTime", (Consumer<Builder>) b -> b.start = LocalDateTime.of(2026, 11, 6, 17, 30)),
-            Arguments.of("endDate", (Consumer<Builder>) b -> b.end = LocalDateTime.of(2026, 11, 7, 17, 0)),
-            Arguments.of("endTime", (Consumer<Builder>) b -> b.end = LocalDateTime.of(2026, 11, 6, 19, 30)),
-            Arguments.of("performanceMinutes", (Consumer<Builder>) b -> b.performanceMinutes = 41),
-            Arguments.of("regionCode", (Consumer<Builder>) b -> b.regionCode = "11650"),
-            Arguments.of("budgetMin", (Consumer<Builder>) b -> b.budgetMin = 300001),
-            Arguments.of("budgetMax", (Consumer<Builder>) b -> b.budgetMax = 500001),
-            Arguments.of("artistType", (Consumer<Builder>) b -> b.artistType = ArtistType.DJ),
-            Arguments.of("artistType을 상관없음으로", (Consumer<Builder>) b -> b.artistType = null),
-            Arguments.of("eventType", (Consumer<Builder>) b -> b.eventType = EventType.WEDDING),
-            Arguments.of("genres", (Consumer<Builder>) b -> b.genres = List.of(Genre.POP, Genre.JAZZ))
-        );
+                Arguments.of("startDate", (Consumer<Builder>) b -> b.start = LocalDateTime.of(2026, 11, 5, 19, 30)),
+                Arguments.of("startTime", (Consumer<Builder>) b -> b.start = LocalDateTime.of(2026, 11, 6, 17, 30)),
+                Arguments.of("endDate", (Consumer<Builder>) b -> b.end = LocalDateTime.of(2026, 11, 7, 17, 0)),
+                Arguments.of("endTime", (Consumer<Builder>) b -> b.end = LocalDateTime.of(2026, 11, 6, 19, 30)),
+                Arguments.of("performanceMinutes", (Consumer<Builder>) b -> b.performanceMinutes = 41),
+                Arguments.of("regionCode", (Consumer<Builder>) b -> b.regionCode = "11650"),
+                Arguments.of("budgetMin", (Consumer<Builder>) b -> b.budgetMin = 300001),
+                Arguments.of("budgetMax", (Consumer<Builder>) b -> b.budgetMax = 500001),
+                Arguments.of("artistType", (Consumer<Builder>) b -> b.artistType = ArtistType.DJ),
+                Arguments.of("artistType을 상관없음으로", (Consumer<Builder>) b -> b.artistType = null),
+                Arguments.of("eventType", (Consumer<Builder>) b -> b.eventType = EventType.WEDDING),
+                Arguments.of("genres", (Consumer<Builder>) b -> b.genres = List.of(Genre.POP, Genre.JAZZ)));
     }
 
     @ParameterizedTest(name = "{0}을 바꾸면 지문이 달라진다")
@@ -138,10 +135,11 @@ class EventSnapshotTest {
         EventFingerprint original = EventFingerprint.of(event(sample()));
 
         assertThat(EventFingerprint.of(event(with(b -> b.genres = List.of(Genre.ROCK, Genre.POP)))))
-            .isEqualTo(original);
+                .isEqualTo(original);
         EventFingerprint changed = EventFingerprint.of(event(with(b -> b.regionCode = "11650")));
         assertThat(changed).isNotEqualTo(original);
-        assertThat(EventFingerprint.of(event(with(b -> b.regionCode = "11680")))).isEqualTo(original);
+        assertThat(EventFingerprint.of(event(with(b -> b.regionCode = "11680"))))
+                .isEqualTo(original);
     }
 
     @Test

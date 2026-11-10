@@ -8,8 +8,7 @@ import java.time.LocalDateTime;
  */
 public final class EventDigests {
 
-    private EventDigests() {
-    }
+    private EventDigests() {}
 
     /**
      * isEventChanged 지문(03 행사 API §8.3). 추천의 입력인 9개 값만 아래 순서로 쓴다: 시간대, 공연시간,
@@ -18,15 +17,15 @@ public final class EventDigests {
      */
     public static String recommendationFingerprint(Event event) {
         return CanonicalDigest.start()
-            .time(LocalDateTime.ofInstant(event.getStartAt(), Event.ZONE))
-            .time(LocalDateTime.ofInstant(event.getEndAt(), Event.ZONE))
-            .number(event.getPerformanceMinutes())
-            .text(event.getRegionCode())
-            .number(event.getBudgetMin())
-            .number(event.getBudgetMax())
-            .code(event.getArtistType())
-            .code(event.getEventType())
-            .codeSet(event.getGenres())
-            .hex();
+                .time(LocalDateTime.ofInstant(event.getStartAt(), Event.ZONE))
+                .time(LocalDateTime.ofInstant(event.getEndAt(), Event.ZONE))
+                .number(event.getPerformanceMinutes())
+                .text(event.getRegionCode())
+                .number(event.getBudgetMin())
+                .number(event.getBudgetMax())
+                .code(event.getArtistType())
+                .code(event.getEventType())
+                .codeSet(event.getGenres())
+                .hex();
     }
 }
