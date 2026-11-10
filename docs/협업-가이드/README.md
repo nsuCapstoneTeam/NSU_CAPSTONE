@@ -185,4 +185,15 @@ CodeRabbit은 보조 리뷰어이며 최종 승인과 Squash Merge는 사람이 
 - 비밀번호 등 민감한 설정에는 저장소에 기본값을 작성하지 않는다.
 - 운영 환경의 민감한 설정은 Spring Boot Externalized Configuration 원칙에 따라 실행 환경에서 주입하며 저장소, JAR 및 컨테이너 이미지에 포함하지 않는다.
 
+## 10. Backend 코드 스타일 (Lombok)
+
+- Lombok 사용은 선택이다. 쓸 때는 `@RequiredArgsConstructor`, `@Getter`, `@NoArgsConstructor(access = AccessLevel.PROTECTED)`, `@Slf4j` 4개를 권장한다.
+- 권장 4개 밖의 Lombok(`@Data`, `@ToString`, `@EqualsAndHashCode`, `@Setter`, `@Builder`, `@AllArgsConstructor`, `@Value` 등)은 쓰지 않기를 권한다. 특히 `@Data`·`@ToString`·`@EqualsAndHashCode`·`@Setter`는 엔티티의 전화번호·비밀번호 해시가 로그에 남거나, JPA 엔티티 비교가 틀어질 수 있다.
+- 김동엽이 만든 운영 코드 파일(`backend/src/main/java`)은 `backend/src/test/resources/lombok-style-files.txt`에 있고, 테스트와 PR 검사(`backend-lint`)가 이 스타일을 검사한다. 이 파일들을 고칠 때는 Lombok 스타일을 따른다. 이 파일들에 권장 4개 밖의 Lombok을 쓰거나, Lombok이 그대로 대신할 수 있는 값 생성자·단순 getter·logger 선언을 손으로 쓰면 테스트가 실패한다.
+- 다른 사람이 만든 파일을 고칠 때는 그 파일의 기존 스타일을 따른다. 손으로 쓴 getter가 있는 파일에 Lombok을 섞지 않는다.
+- `backend-lint`는 Gradle 컴파일도 한다. 컴파일이 안 되는 PR은 이 검사에서 실패한다.
+- 이유와 세부 규칙은 [ADR backend_code_style/00](../adr/backend_code_style/00_lombok_usage.md)에 있다.
+
+---
+
 필요한 규칙이 실제로 생길 때만 이 문서를 확장한다.

@@ -8,6 +8,7 @@ import com.nsu.capstone.trust.profile.domain.TrustProfile;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,16 +19,13 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Trust Profile")
 @RestController
 @RequestMapping("/api/v1/artists/{artistId}/trust-profile")
+@RequiredArgsConstructor
 public class TrustProfileController {
 
     private static final Pattern CANONICAL_UUID =
             Pattern.compile("\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12}");
 
     private final TrustProfileQueryService queryService;
-
-    public TrustProfileController(TrustProfileQueryService queryService) {
-        this.queryService = queryService;
-    }
 
     @GetMapping
     public TrustProfile getTrustProfile(@PathVariable String artistId, @AuthenticationPrincipal Jwt caller) {

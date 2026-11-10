@@ -11,6 +11,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -20,24 +22,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public class EventService {
 
     private final EventRepository eventRepository;
     private final RegionRepository regionRepository;
     private final EventAccess access;
     private final Clock clock;
-
-    EventService(
-        EventRepository eventRepository,
-        RegionRepository regionRepository,
-        EventAccess access,
-        Clock clock
-    ) {
-        this.eventRepository = eventRepository;
-        this.regionRepository = regionRepository;
-        this.access = access;
-        this.clock = clock;
-    }
 
     @Transactional(readOnly = true)
     public Event get(UUID eventId, UUID viewerId) {
@@ -48,8 +39,7 @@ public class EventService {
     @Transactional(readOnly = true)
     public Page<Event> listMine(UUID eventPartnerId, EventPeriod period, int page, int size) {
         Instant now = clock.instant();
-        Sort.Direction direction =
-            period == EventPeriod.UPCOMING ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Sort.Direction direction = period == EventPeriod.UPCOMING ? Sort.Direction.ASC : Sort.Direction.DESC;
         Sort sort = Sort.by(direction, "startAt").and(Sort.by(Sort.Direction.ASC, "id"));
         PageRequest pageable = PageRequest.of(page, size, sort);
 
@@ -57,7 +47,7 @@ public class EventService {
         // 전체 개수만 구해 마지막 페이지를 넘긴 요청과 같게 빈 페이지로 답한다.
         if ((long) page * size > Integer.MAX_VALUE) {
             long total = query(eventPartnerId, period, now, PageRequest.of(0, 1, sort))
-                .getTotalElements();
+                    .getTotalElements();
             return new PageImpl<>(List.of(), pageable, total);
         }
         return query(eventPartnerId, period, now, pageable);
@@ -65,10 +55,10 @@ public class EventService {
 
     private Page<Event> query(UUID eventPartnerId, EventPeriod period, Instant now, Pageable pageable) {
         return period == EventPeriod.UPCOMING
-            ? eventRepository.findByEventPartnerIdAndDeletedAtIsNullAndStartAtGreaterThan(
-                eventPartnerId, now, pageable)
-            : eventRepository.findByEventPartnerIdAndDeletedAtIsNullAndStartAtLessThanEqual(
-                eventPartnerId, now, pageable);
+                ? eventRepository.findByEventPartnerIdAndDeletedAtIsNullAndStartAtGreaterThan(
+                        eventPartnerId, now, pageable)
+                : eventRepository.findByEventPartnerIdAndDeletedAtIsNullAndStartAtLessThanEqual(
+                        eventPartnerId, now, pageable);
     }
 
     @Transactional

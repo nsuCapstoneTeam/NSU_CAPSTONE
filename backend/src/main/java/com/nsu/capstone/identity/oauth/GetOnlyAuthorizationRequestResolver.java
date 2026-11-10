@@ -1,6 +1,7 @@
 package com.nsu.capstone.identity.oauth;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
@@ -12,13 +13,10 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
  * Redis 저장이 일어난다. GET이 아니면 null을 돌려 필터 체인이 이어지게 하고,
  * 공개 경로가 아니므로 401 AUTHENTICATION_REQUIRED가 된다(ADR authentication/00).
  */
+@RequiredArgsConstructor
 public class GetOnlyAuthorizationRequestResolver implements OAuth2AuthorizationRequestResolver {
 
     private final OAuth2AuthorizationRequestResolver delegate;
-
-    public GetOnlyAuthorizationRequestResolver(OAuth2AuthorizationRequestResolver delegate) {
-        this.delegate = delegate;
-    }
 
     @Override
     public OAuth2AuthorizationRequest resolve(HttpServletRequest request) {
