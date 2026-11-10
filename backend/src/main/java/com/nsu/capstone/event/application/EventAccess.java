@@ -8,12 +8,15 @@ import com.nsu.capstone.global.exception.ErrorCode;
 import java.time.Clock;
 import java.util.Optional;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
  * id로 행사 하나를 읽는 유일한 길(ADR event_management/04).
  */
 @Component
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 public class EventAccess {
 
     /**
@@ -33,11 +36,21 @@ public class EventAccess {
         /** 추천 입력(03 §8.1). 행사를 한 번 읽어 고정할 뿐이라 잠그지 않는다(03 §8.4). */
         RECOMMEND(Lock.NONE, Who.OWNER, State.OPEN_AND_NOT_STARTED);
 
-        private enum Lock { NONE, WRITE }
+        private enum Lock {
+            NONE,
+            WRITE
+        }
 
-        private enum Who { VIEWER, OWNER }
+        private enum Who {
+            VIEWER,
+            OWNER
+        }
 
-        private enum State { ANY, OPEN_AND_NOT_STARTED, CANCEL_IS_REPEATABLE }
+        private enum State {
+            ANY,
+            OPEN_AND_NOT_STARTED,
+            CANCEL_IS_REPEATABLE
+        }
 
         private final Lock lock;
         private final Who who;
@@ -86,12 +99,6 @@ public class EventAccess {
     private final CanViewPrivateEvent seat;
     private final Clock clock;
 
-    EventAccess(EventRepository events, CanViewPrivateEvent seat, Clock clock) {
-        this.events = events;
-        this.seat = seat;
-        this.clock = clock;
-    }
-
     /**
      * 행사를 읽어 {@code operation}이 허용되는지 판정하고 돌려준다. 없거나 삭제됐으면 404다. UPDATE·CANCEL·
      * DELETE는 행을 잠그고 읽는다(잠금은 트랜잭션이 필요하다). 잠금은 판정 전에 잡히므로 등록자가 아닌 사람의
@@ -99,8 +106,8 @@ public class EventAccess {
      */
     public Event load(UUID eventId, UUID userId, Operation operation) {
         Optional<Event> found = operation.locksRow()
-            ? events.findWithLockByIdAndDeletedAtIsNull(eventId)
-            : events.findByIdAndDeletedAtIsNull(eventId);
+                ? events.findWithLockByIdAndDeletedAtIsNull(eventId)
+                : events.findByIdAndDeletedAtIsNull(eventId);
         Event event = found.orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
         operation.admit(event, userId, seat, clock);
         return event;
