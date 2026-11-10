@@ -24,4 +24,9 @@ public final class Keyphrase {
     public int mappingVersion() {
         return mappingVersion;
     }
+
+    /** AI 담당이 검증한 매핑 버전으로 만든 문장일 때만 true다. NSU-63은 false면 AI를 부르지 않는다. */
+    public boolean mappingVerified() {
+        return KeyphraseVocabulary.isVerified(mappingVersion, KeyphraseVocabulary.VERIFIED_MAPPING_VERSION);
+    }
 }

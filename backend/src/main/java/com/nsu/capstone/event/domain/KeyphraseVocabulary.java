@@ -21,6 +21,14 @@ final class KeyphraseVocabulary {
 
     private KeyphraseVocabulary() {}
 
+    /**
+     * 검증된 매핑 버전과 같을 때만 검증된 것이다. 문구를 바꿔 {@link #MAPPING_VERSION}을 올리면 두 번호가 달라져
+     * 자동으로 검증되지 않은 것이 된다.
+     */
+    static boolean isVerified(int mappingVersion, int verifiedMappingVersion) {
+        return verifiedMappingVersion != 0 && mappingVersion == verifiedMappingVersion;
+    }
+
     static String sentence(MusicConditions conditions) {
         return String.join("", pieces(conditions)).substring(1);
     }
