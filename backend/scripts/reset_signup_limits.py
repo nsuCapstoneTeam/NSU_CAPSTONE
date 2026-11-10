@@ -15,6 +15,8 @@ import sys
 from zoneinfo import ZoneInfo
 
 PREFIX = "signup:limit:v2:"
+RECOVERY_SCRIPT = (Path(__file__).resolve().parents[1]
+                   / "src/main/resources/redis/recover-unsent-signup-reservation.lua")
 KINDS = ("destination", "attempt", "ip", "ip-email", "total-phone", "total-email",
          "session", "oauth", "login", "login-failure")
 # Character.isWhitespace used by Java String.strip excludes nonbreaking spaces.
@@ -132,6 +134,26 @@ class RedisCli:
                 return
 
 
+def recover_unsent(redis, reservation, encoded, record):
+    pending = record.get("pending")
+    indexes = record.get("indexes")
+    if (record.get("key") != reservation or not isinstance(pending, str)
+            or not isinstance(indexes, list) or not all(isinstance(key, str) for key in indexes)):
+        raise ValueError("발송 예약 형식이 올바르지 않아 초기화를 중단했습니다")
+    keys = [reservation, pending, *record["counters"], *indexes]
+    try:
+        script = RECOVERY_SCRIPT.read_text(encoding="utf-8")
+    except OSError:
+        raise ValueError("발송 예약 복구 스크립트를 읽지 못해 초기화를 중단했습니다") from None
+    script += """
+local time = redis.call('TIME')
+local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+if redis.call('EXISTS', KEYS[1]) == 0 then return 1 end
+return recoverUnsentReservation(ARGV[1], declaredKeys(KEYS), now)
+"""
+    return redis.run("EVAL", script, str(len(keys)), *keys, encoded) == 1
+
+
 def reset(redis, pattern, apply=False):
     keys = sorted(set(redis.scan(pattern)))
     if apply and keys:
@@ -142,13 +164,17 @@ def reset(redis, pattern, apply=False):
             if encoded is None:
                 continue
             try:
-                counters = json.loads(encoded)
+                record = json.loads(encoded)
             except (TypeError, ValueError):
                 raise ValueError("발송 예약을 확인하지 못해 초기화를 중단했습니다") from None
+            counters = record.get("counters") if isinstance(record, dict) else record
             if not isinstance(counters, list) or not all(isinstance(key, str) for key in counters):
                 raise ValueError("발송 예약 형식이 올바르지 않아 초기화를 중단했습니다")
-            if targets.intersection(counters):
-                raise ValueError("관련 발송 예약이 남아 있습니다. 결과 정리 또는 OTP TTL 만료 후 다시 실행하세요")
+            if not targets.intersection(counters):
+                continue
+            if isinstance(record, dict) and recover_unsent(redis, reservation, encoded, record):
+                continue
+            raise ValueError("관련 발송 예약이 남아 있습니다. 복구 대기 시간 또는 발송 결과 정리 후 다시 실행하세요")
         removed = 0
         for index in range(0, len(keys), 200):
             removed += redis.run("UNLINK", *keys[index:index + 200])

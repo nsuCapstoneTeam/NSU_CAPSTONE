@@ -3,8 +3,13 @@ package com.nsu.capstone;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.nsu.capstone.identity.signup.SignupRateLimitKeys;
+import com.nsu.capstone.identity.signup.SignupRedisKeys;
+import com.nsu.capstone.identity.signup.SignupSession;
+import com.nsu.capstone.identity.signup.SignupSessionStore;
 import com.nsu.capstone.identity.signup.SignupVerificationProperties;
+import com.nsu.capstone.identity.verification.ChallengeIssueResult;
 import com.nsu.capstone.identity.verification.OtpDigestService;
+import com.nsu.capstone.identity.verification.VerificationChallengeStore;
 import com.nsu.capstone.identity.verification.VerificationChannel;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
@@ -30,6 +35,12 @@ class SignupLimitAdminIntegrationTest {
 
     @Autowired
     OtpDigestService digests;
+
+    @Autowired
+    SignupSessionStore sessions;
+
+    @Autowired
+    VerificationChallengeStore challenges;
 
     @Autowired
     SignupVerificationProperties properties;
@@ -101,6 +112,51 @@ class SignupLimitAdminIntegrationTest {
         assertFalse(redis.hasKey(target));
         for (String key : List.of(otherRecipient, otherWindow, cooldown))
             assertEquals("5", redis.opsForValue().get(key));
+    }
+
+    @Test
+    void resetRecoversExpiredUnsentReservationBeforeRemovingOnlySelectedCounter() throws Exception {
+        String id = "admin-unsent-" + UUID.randomUUID();
+        String address = id + "@example.com";
+        var channel = VerificationChannel.EMAIL;
+        var session = SignupSession.createArtist(id, address, "01012345678").withConsent(SignupTestTerms.consent());
+        sessions.save(session);
+        ZoneId seoul = ZoneId.of("Asia/Seoul");
+        ZonedDateTime dayStart =
+                ZonedDateTime.now(seoul).minusDays(2).toLocalDate().atStartOfDay(seoul);
+        Instant issuedAt = dayStart.plusHours(12).toInstant();
+        String recipient = digests.rateLimitDestinationDigest(channel, address);
+        String ip = digests.clientIpDigest("192.0.2.17");
+        assertEquals(
+                ChallengeIssueResult.ISSUED,
+                challenges.issue(id, session.role(), channel, "digest", recipient, "lost", issuedAt, recipient, ip));
+        String pending = SignupRedisKeys.pendingChallenge(id, channel);
+        redis.expire(pending, Duration.ZERO);
+        String reservation = pending + ":lost";
+        String target = SignupRateLimitKeys.counter("destination", dayStart.toInstant(), recipient);
+        String ipCounter = SignupRateLimitKeys.counter("ip", issuedAt, ip);
+        assertEquals("1", redis.opsForValue().get(ipCounter));
+        assertTrue(redis.hasKey(reservation));
+
+        var applied = run(
+                address + "\n",
+                "--kind",
+                "destination",
+                "--window-start",
+                dayStart.toOffsetDateTime().toString(),
+                "--channel",
+                "email",
+                "--recipient",
+                "--apply",
+                "--quiesced");
+        assertEquals(0, applied.code(), applied.output());
+        assertFalse(redis.hasKey(target));
+        assertFalse(redis.hasKey(reservation));
+        assertEquals("0", redis.opsForValue().get(ipCounter));
+
+        redis.opsForValue().set(target, "1", Duration.ofMinutes(5));
+        challenges.cancel(id, channel, "lost", true);
+        assertEquals("1", redis.opsForValue().get(target));
     }
 
     @Test

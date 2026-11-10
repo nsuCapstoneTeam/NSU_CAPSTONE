@@ -7,25 +7,46 @@ import com.nsu.capstone.identity.signup.SignupRateLimitKeys;
 import com.nsu.capstone.identity.signup.SignupRedisKeys;
 import com.nsu.capstone.identity.signup.SignupVerificationProperties;
 import com.nsu.capstone.identity.verification.config.VerificationTimingProperties;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
+import tools.jackson.databind.json.JsonMapper;
 
 @Repository
 public class RedisVerificationChallengeStore implements VerificationChallengeStore {
 
     private static final long COUNTER_GRACE_MILLIS = 600_000;
+    private static final JsonMapper JSON = new JsonMapper();
+
+    private static final DefaultRedisScript<List> DUE_RESERVATIONS_SCRIPT = new DefaultRedisScript<>("""
+        local seen = {}
+        local due = {}
+        for _, key in ipairs(KEYS) do
+            for _, raw in ipairs(redis.call('ZRANGE', key, '-inf', ARGV[1], 'BYSCORE', 'LIMIT', 0, 128)) do
+                if not seen[raw] then
+                    seen[raw] = true
+                    due[#due + 1] = raw
+                end
+            end
+        end
+        return due
+        """, List.class);
 
     private static final String REFUND_SCRIPT = """
         local function refund(reservationKey, refundAll)
             local reservation = redis.call('GETDEL', reservationKey)
             if not reservation then return end
-            local counters = cjson.decode(reservation)
+            local record = cjson.decode(reservation)
+            local counters = record.counters or record
             local count = refundAll and #counters or 1
             for index = 1, count do
                 local key = counters[index]
@@ -43,7 +64,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         """;
 
     private static final DefaultRedisScript<List> ISSUE_SCRIPT =
-            new DefaultRedisScript<>(REFUND_SCRIPT + """
+            new DefaultRedisScript<>(REFUND_SCRIPT + recoveryScript() + """
         local sessionTtl = redis.call('PTTL', KEYS[1])
         if sessionTtl <= 0 or redis.call('HGET', KEYS[1], 'role') ~= ARGV[1] then
             return {1}
@@ -53,13 +74,26 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
             or (redis.call('HGET', KEYS[1], 'agreements') or '') == '' then return {5} end
         if redis.call('HGET', KEYS[1], ARGV[2]) == 'true' then return {2} end
 
+        local counterCount = tonumber(ARGV[12])
+        local lastCounter = 6 + counterCount
+        local nowArg = 13 + 2 * counterCount
+        local now = tonumber(ARGV[nowArg])
+        local declared = declaredKeys(KEYS)
+        for index = nowArg + 1, #ARGV do
+            recoverUnsentReservation(ARGV[index], declared, now)
+        end
+        -- Do not make a quota decision using counters whose recovery is incomplete.
+        for index = lastCounter + 1, lastCounter + counterCount do
+            if redis.call('ZCOUNT', KEYS[index], '-inf', now) > 0 then return {6} end
+        end
+
         local recoverAt = redis.call('HGET', KEYS[2], 'recoverAt')
-        if recoverAt and tonumber(recoverAt) <= tonumber(ARGV[#ARGV]) then discardUnsent(KEYS[2]) end
+        if recoverAt and tonumber(recoverAt) <= now then discardUnsent(KEYS[2]) end
         local retry = math.max(redis.call('PTTL', KEYS[3]), redis.call('PTTL', KEYS[4]))
         local attemptLimit = tonumber(redis.call('GET', KEYS[5]) or '0') >= tonumber(ARGV[10])
         if attemptLimit then retry = math.max(retry, tonumber(ARGV[11])) end
-        for index = 7, #KEYS do
-            local limitArg = 12 + 2 * (index - 7)
+        for index = 7, lastCounter do
+            local limitArg = 13 + 2 * (index - 7)
             if tonumber(redis.call('GET', KEYS[index]) or '0') >= tonumber(ARGV[limitArg]) then
                 retry = math.max(retry, tonumber(ARGV[limitArg + 1]))
             end
@@ -70,14 +104,31 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         end
 
         local counters = {}
-        for index = 7, #KEYS do
+        local indexes = {}
+        local expiresAt = {}
+        local lastExpiry = 0
+        local time = redis.call('TIME')
+        local redisNow = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+        for index = 7, lastCounter do
             local key = KEYS[index]
-            local ttl = tonumber(ARGV[13 + 2 * (index - 7)]) + 600000
-            if redis.call('INCR', key) == 1 then redis.call('PEXPIRE', key, ttl) end
+            local expiry = redis.call('PEXPIRETIME', key)
+            if expiry <= 0 then expiry = redisNow + tonumber(ARGV[14 + 2 * (index - 7)]) + 600000 end
             counters[#counters + 1] = key
+            indexes[#indexes + 1] = KEYS[index + counterCount]
+            expiresAt[#expiresAt + 1] = expiry
+            lastExpiry = math.max(lastExpiry, expiry)
+        end
+        local reservation = cjson.encode({key = KEYS[6], pending = KEYS[2], generation = ARGV[5],
+            counters = counters, indexes = indexes, recoverAt = tonumber(ARGV[9]),
+            refundUntil = redisNow + tonumber(ARGV[7])})
+        redis.call('SET', KEYS[6], reservation, 'PXAT', lastExpiry)
+        for index, key in ipairs(counters) do
+            redis.call('INCR', key)
+            redis.call('PEXPIREAT', key, expiresAt[index])
+            redis.call('ZADD', indexes[index], ARGV[9], reservation)
+            redis.call('PEXPIREAT', indexes[index], expiresAt[index])
         end
         local challengeTtl = math.min(sessionTtl, tonumber(ARGV[7]))
-        redis.call('SET', KEYS[6], cjson.encode(counters), 'PX', tonumber(ARGV[7]))
         discardUnsent(KEYS[2])
         redis.call('DEL', KEYS[2])
         redis.call('HSET', KEYS[2],
@@ -96,6 +147,12 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         if redis.call('PTTL', KEYS[2]) <= 0 or redis.call('HGET', KEYS[2], ARGV[3]) == 'true' then return 0 end
         local reserveUntil = tonumber(redis.call('HGET', KEYS[1], 'recoverAt'))
         if reserveUntil <= tonumber(ARGV[4]) then return 0 end
+        local raw = redis.call('GET', KEYS[3])
+        if not raw then return 0 end
+        local record = cjson.decode(raw)
+        if record.counters then
+            redis.call('SET', KEYS[3], cjson.encode(record.counters), 'PXAT', record.refundUntil)
+        end
         redis.call('HSET', KEYS[1], 'dispatching', 'true', 'recoverAt', ARGV[2])
         return 1
         """, Long.class);
@@ -256,6 +313,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
                 number(issuedAt.toEpochMilli() + timing.pendingRecovery().toMillis()),
                 number(properties.destinationIpDailyAttempts()),
                 number(dayMillis),
+                channel == VerificationChannel.EMAIL ? "4" : "3",
                 number(properties.destinationDailyLimit()),
                 number(dayMillis),
                 number(properties.ipHourlyLimit()),
@@ -271,7 +329,27 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
             args.add(number(hourMillis));
         }
 
-        args.add(number(issuedAt.toEpochMilli()));
+        String now = number(issuedAt.toEpochMilli());
+        List<String> indexes = keys.subList(6, keys.size()).stream()
+                .map(key -> "signup:reservation-index:" + key)
+                .toList();
+        keys.addAll(indexes);
+        args.add(now);
+        List<?> due = redisTemplate.execute(DUE_RESERVATIONS_SCRIPT, indexes, now);
+        if (due != null && !due.isEmpty()) {
+            var recoveryKeys = new LinkedHashSet<String>();
+            for (Object member : due) {
+                String raw = (String) member;
+                var reservation = JSON.readTree(raw);
+                recoveryKeys.add(reservation.path("key").asText());
+                recoveryKeys.add(reservation.path("pending").asText());
+                reservation.path("counters").forEach(key -> recoveryKeys.add(key.asText()));
+                reservation.path("indexes").forEach(key -> recoveryKeys.add(key.asText()));
+                args.add(raw);
+            }
+            recoveryKeys.removeAll(keys);
+            keys.addAll(recoveryKeys);
+        }
         List<?> result = redisTemplate.execute(ISSUE_SCRIPT, keys, args.toArray());
         return switch (status(result)) {
             case 0 -> {
@@ -287,6 +365,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
             case 3 -> throw rateLimit(ErrorCode.VERIFICATION_REQUEST_LIMIT_EXCEEDED, result);
             case 4 -> throw rateLimit(ErrorCode.VERIFICATION_ATTEMPT_LIMIT_EXCEEDED, result);
             case 5 -> throw new BusinessException(ErrorCode.REQUIRED_TERMS_NOT_AGREED);
+            case 6 -> throw new BusinessException(ErrorCode.VERIFICATION_DELIVERY_FAILED);
             default -> throw new IllegalStateException("인증 코드 발급 결과를 확인할 수 없습니다");
         };
     }
@@ -298,7 +377,8 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
                 START_SCRIPT,
                 List.of(
                         SignupRedisKeys.pendingChallenge(signupSessionId, channel),
-                        SignupRedisKeys.session(signupSessionId)),
+                        SignupRedisKeys.session(signupSessionId),
+                        reservationKey(signupSessionId, channel, generationId)),
                 generationId,
                 number(now.toEpochMilli() + timing.pendingRecovery().toMillis()),
                 channel.sessionField(),
@@ -510,6 +590,15 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
 
     private static int status(List<?> result) {
         return result == null ? -1 : ((Number) result.get(0)).intValue();
+    }
+
+    private static String recoveryScript() {
+        try {
+            return new ClassPathResource("redis/recover-unsent-signup-reservation.lua")
+                    .getContentAsString(StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Cannot load signup reservation recovery script", exception);
+        }
     }
 
     private static String number(long value) {

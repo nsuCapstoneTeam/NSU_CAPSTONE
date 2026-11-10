@@ -143,6 +143,54 @@ class ArtistOAuthSignupIntegrationTest {
         assertFalse(sessions.findById(id).orElseThrow().phoneVerified());
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void completesSignupWithLegacyVerifiedEmail(boolean suppliesEmail) {
+        String id = oauth("legacy-email", true);
+        String email = email(id);
+        String original = " " + email.toUpperCase(Locale.ROOT) + " ";
+        String oauthKey = OAuthRedisKeys.signupSession(id);
+        redis.opsForHash().put(oauthKey, "email", original);
+        assertError(
+                ErrorCode.VALIDATION_ERROR,
+                () -> service.prepare(
+                        id, "01023456789", "other@example.com", SignupTestTerms.agreements(), "127.0.0.1"));
+        assertEquals(original, redis.opsForHash().get(oauthKey, "email"));
+
+        String phone = suppliesEmail ? "01023456789" : "01023456780";
+        var prepared =
+                service.prepare(id, phone, suppliesEmail ? original : null, SignupTestTerms.agreements(), "127.0.0.1");
+        assertTrue(prepared.emailVerified());
+        assertEquals(email, prepared.email());
+        assertEquals(email, redis.opsForHash().get(oauthKey, "email"));
+        assertEquals(email, redis.opsForHash().get(oauthKey, "signupEmail"));
+        assertEquals(email, sessions.findById(id).orElseThrow().email());
+        confirm(id, VerificationChannel.PHONE);
+        verification.confirmAdult(id, LocalDate.of(2000, 1, 1), UserRole.ARTIST);
+
+        var response = service.signup(id);
+        assertEquals(email, users.findById(response.userId()).orElseThrow().getEmail());
+    }
+
+    @Test
+    void legacyLinkedSessionWithoutNewConsentRequiresRestart() {
+        String id = oauth("legacy-linked", true);
+        service.prepare(id, "01012345678", null, SignupTestTerms.agreements(), "127.0.0.1");
+        String oauthKey = OAuthRedisKeys.signupSession(id);
+        String signupKey = SignupRedisKeys.session(id);
+        String original = email(id).toUpperCase(Locale.ROOT);
+        redis.opsForHash().putAll(oauthKey, Map.of("email", original, "signupEmail", original));
+        redis.opsForHash().delete(oauthKey, "agreements", "agreedAt");
+        redis.opsForHash().put(signupKey, "email", original);
+
+        assertError(
+                ErrorCode.SIGNUP_SESSION_INVALID,
+                () -> service.prepare(id, "01012345678", null, SignupTestTerms.agreements(), "127.0.0.1"));
+        assertError(ErrorCode.SIGNUP_SESSION_INVALID, () -> service.signup(id));
+        assertEquals(original, redis.opsForHash().get(oauthKey, "email"));
+        assertFalse(redis.opsForHash().hasKey(oauthKey, "agreements"));
+    }
+
     @Test
     void concurrentPreparationHasOneCreatorAndCannotReplaceBoundInput() throws Exception {
         String id = oauth("prepare-race", false);
@@ -347,7 +395,11 @@ class ArtistOAuthSignupIntegrationTest {
 
     @Test
     void duplicateEmailRollsBackReleasesClaimAndAllowsRetry() {
-        String id = ready("duplicate-email");
+        String id = oauth("duplicate-email", true);
+        redis.opsForHash()
+                .put(OAuthRedisKeys.signupSession(id), "email", email(id).toUpperCase(Locale.ROOT));
+        service.prepare(id, "01012345678", null, SignupTestTerms.agreements(), "127.0.0.1");
+        completeFlags(id);
         User existing = users.saveAndFlush(User.createArtist(ids.generate(), email(id), "hash", "01011111111"));
         assertError(ErrorCode.EMAIL_ALREADY_EXISTS, () -> service.signup(id));
         assertFalse(redis.hasKey(claimKey(id)));

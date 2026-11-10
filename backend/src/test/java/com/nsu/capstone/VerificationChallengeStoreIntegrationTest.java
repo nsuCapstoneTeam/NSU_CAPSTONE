@@ -28,6 +28,8 @@ import com.nsu.capstone.identity.presentation.ArtistSignupVerificationController
 import com.nsu.capstone.identity.presentation.dto.ArtistSignupResponse;
 import com.nsu.capstone.identity.presentation.dto.EventPartnerSignupResponse;
 import com.nsu.capstone.identity.repository.UserRepository;
+import com.nsu.capstone.identity.signup.SignupRateLimitKeys;
+import com.nsu.capstone.identity.signup.SignupRedisKeys;
 import com.nsu.capstone.identity.signup.SignupSession;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
 import com.nsu.capstone.identity.signup.SignupVerificationProperties;
@@ -557,6 +559,155 @@ class VerificationChallengeStoreIntegrationTest {
                 .isEmpty());
         assertEquals("0", redisTemplate.opsForValue().get(counter));
         assertEquals(ChallengeVerificationResult.VERIFIED, verify(session, VerificationChannel.PHONE, first));
+    }
+
+    @Test
+    void retriesAcrossSessionsAndMidnightRefundExpiredUnsentReservationOnlyOnce() throws Exception {
+        var channel = VerificationChannel.EMAIL;
+        SignupSession original = saveSession("expired-unsent");
+        SignupSession replacement = SignupSession.createArtist("replacement-unsent", original.email(), original.phone())
+                .withConsent(SignupTestTerms.consent());
+        signupSessionStore.save(replacement);
+        Instant beforeMidnight = Instant.parse("2026-11-10T14:59:59Z");
+        Instant retryAt = beforeMidnight.plus(verificationProperties.otpTtl()).plusSeconds(1);
+        String recipient = digestService.rateLimitDestinationDigest(channel, original.email());
+        String generation = "unsent";
+        assertEquals(
+                ChallengeIssueResult.ISSUED,
+                challengeStore.issue(
+                        original.signupSessionId(),
+                        original.role(),
+                        channel,
+                        "digest",
+                        recipient,
+                        generation,
+                        beforeMidnight,
+                        recipient,
+                        testIpDigest));
+        String pending = SignupRedisKeys.pendingChallenge(original.signupSessionId(), channel);
+        String reservation = pending + ":" + generation;
+        assertTrue(redisTemplate.getExpire(reservation, TimeUnit.MILLISECONDS)
+                > verificationProperties.otpTtl().toMillis());
+        redisTemplate.expire(pending, Duration.ZERO);
+        redisTemplate.expire(cooldownKey(channel, recipient), Duration.ZERO);
+        assertFalse(redisTemplate.hasKey(pending));
+        String oldCounter =
+                SignupRateLimitKeys.counter("destination", Instant.parse("2026-11-09T15:00:00Z"), recipient);
+        String newCounter =
+                SignupRateLimitKeys.counter("destination", Instant.parse("2026-11-10T15:00:00Z"), recipient);
+        assertEquals("1", redisTemplate.opsForValue().get(oldCounter));
+
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var tasks = List.of(original, replacement).stream()
+                    .map(session -> executor.submit(() -> {
+                        try {
+                            return challengeStore.issue(
+                                    session.signupSessionId(),
+                                    session.role(),
+                                    channel,
+                                    "retry-digest",
+                                    recipient,
+                                    UUID.randomUUID().toString(),
+                                    retryAt,
+                                    recipient,
+                                    testIpDigest);
+                        } catch (BusinessException failure) {
+                            assertEquals(ErrorCode.VERIFICATION_REQUEST_LIMIT_EXCEEDED, failure.getErrorCode());
+                            return null;
+                        }
+                    }))
+                    .toList();
+            int issued = 0;
+            for (var task : tasks) if (task.get(5, TimeUnit.SECONDS) == ChallengeIssueResult.ISSUED) issued++;
+            assertEquals(1, issued);
+        }
+        assertFalse(redisTemplate.hasKey(reservation));
+        assertEquals("0", redisTemplate.opsForValue().get(oldCounter));
+        assertEquals("1", redisTemplate.opsForValue().get(newCounter));
+        assertFalse(challengeStore.startDelivery(original.signupSessionId(), channel, generation, retryAt));
+    }
+
+    @Test
+    void retryFromDifferentRecipientKeepsStartedReservationAndRefundsUnsentSharedCounters() {
+        var channel = VerificationChannel.PHONE;
+        var started = saveSession("started-shared-window");
+        var unsent = saveSession("unsent-shared-window");
+        var retry = saveSession("retry-shared-window");
+        Instant now = Instant.parse("2026-11-13T12:00:00Z");
+        for (SignupSession session : List.of(started, unsent)) {
+            String recipient = digestService.rateLimitDestinationDigest(channel, session.phone());
+            assertEquals(
+                    ChallengeIssueResult.ISSUED,
+                    challengeStore.issue(
+                            session.signupSessionId(),
+                            session.role(),
+                            channel,
+                            "digest",
+                            recipient,
+                            session.signupSessionId(),
+                            now,
+                            recipient,
+                            testIpDigest));
+        }
+        assertTrue(challengeStore.startDelivery(started.signupSessionId(), channel, started.signupSessionId(), now));
+        for (SignupSession session : List.of(started, unsent)) {
+            redisTemplate.expire(SignupRedisKeys.pendingChallenge(session.signupSessionId(), channel), Duration.ZERO);
+        }
+        String recipient = digestService.rateLimitDestinationDigest(channel, retry.phone());
+        assertEquals(
+                ChallengeIssueResult.ISSUED,
+                challengeStore.issue(
+                        retry.signupSessionId(),
+                        retry.role(),
+                        channel,
+                        "retry",
+                        recipient,
+                        "retry",
+                        now.plus(verificationProperties.otpTtl()).plusSeconds(1),
+                        recipient,
+                        testIpDigest));
+        String ipCounter = SignupRateLimitKeys.counter("ip", now, testIpDigest);
+        assertEquals("2", redisTemplate.opsForValue().get(ipCounter));
+    }
+
+    @Test
+    void drainsLargeRecoveryBacklogWithinPreflightBudgetWithoutSendingEarly() {
+        var channel = VerificationChannel.PHONE;
+        Instant issuedAt = Instant.parse("2026-11-14T12:00:00Z");
+        String totalCounter = SignupRateLimitKeys.counter("total-phone", Instant.parse("2026-11-13T15:00:00Z"), "all");
+        for (int index = 0; index < 129; index++) {
+            var session = saveSession("recovery-backlog-" + index);
+            String recipient = digestService.rateLimitDestinationDigest(channel, session.phone());
+            assertEquals(
+                    ChallengeIssueResult.ISSUED,
+                    challengeStore.issue(
+                            session.signupSessionId(),
+                            session.role(),
+                            channel,
+                            "digest",
+                            recipient,
+                            session.signupSessionId(),
+                            issuedAt,
+                            recipient,
+                            "backlog-ip-" + index));
+        }
+        assertEquals("129", redisTemplate.opsForValue().get(totalCounter));
+        var retry = saveSession("recovery-backlog-retry");
+        var sender = mock(SmsSender.class);
+        var otp = mock(OtpCodeGenerator.class);
+        when(otp.generate()).thenReturn(CODE);
+        var service = verificationService(challengeStore, otp, sender, issuedAt.plusSeconds(20));
+
+        BusinessException failure = assertThrows(
+                BusinessException.class,
+                () -> service.sendPhoneCode(retry.signupSessionId(), retry.role(), "192.0.2.71"));
+        assertEquals(ErrorCode.VERIFICATION_DELIVERY_FAILED, failure.getErrorCode());
+        verifyNoInteractions(sender);
+        assertEquals("1", redisTemplate.opsForValue().get(totalCounter));
+
+        service.sendPhoneCode(retry.signupSessionId(), retry.role(), "192.0.2.71");
+        Mockito.verify(sender).sendVerificationCode(retry.phone(), CODE, verificationProperties.otpTtl());
+        assertEquals("1", redisTemplate.opsForValue().get(totalCounter));
     }
 
     @Test

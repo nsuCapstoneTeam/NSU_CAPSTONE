@@ -4,6 +4,7 @@ import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.domain.OAuthProvider;
 import com.nsu.capstone.identity.domain.UserRole;
+import com.nsu.capstone.identity.signup.SignupIdentityNormalizer;
 import com.nsu.capstone.identity.signup.SignupRedisKeys;
 import com.nsu.capstone.identity.signup.SignupTermsConsent;
 import com.nsu.capstone.identity.verification.VerificationChannel;
@@ -32,6 +33,8 @@ public class RedisOAuthSignupStateStore implements OAuthSignupStateStore {
             or redis.call('HGET', KEYS[2], 'phone') ~= redis.call('HGET', KEYS[1], 'signupPhone') then
             return {'SIGNUP_SESSION_INVALID'}
         end
+        if not redis.call('HGET', KEYS[1], 'agreedAt')
+            or not redis.call('HGET', KEYS[1], 'agreements') then return {'SIGNUP_SESSION_INVALID'} end
         local providerEmail = redis.call('HGET', KEYS[1], 'email')
         if providerEmail and providerEmail ~= ''
             and redis.call('HGET', KEYS[1], 'emailVerified') == 'true'
@@ -46,13 +49,14 @@ public class RedisOAuthSignupStateStore implements OAuthSignupStateStore {
             or redis.call('HGET', KEYS[1], 'oauthSignupSessionId') ~= ARGV[1] then
             return {'SIGNUP_SESSION_INVALID'}
         end
-        local providerEmail = redis.call('HGET', KEYS[1], 'email')
-        local verified = providerEmail and providerEmail ~= ''
-            and redis.call('HGET', KEYS[1], 'emailVerified') == 'true'
+        local providerEmail = redis.call('HGET', KEYS[1], 'email') or ''
+        if providerEmail ~= ARGV[8] and providerEmail ~= ARGV[9] then return {'SIGNUP_SESSION_INVALID'} end
+        local verified = providerEmail ~= '' and redis.call('HGET', KEYS[1], 'emailVerified') == 'true'
         local email = ARGV[4]
         if verified then
-            if ARGV[5] == '1' and email ~= providerEmail then return {'VALIDATION_ERROR'} end
-            email = providerEmail
+            if ARGV[9] == '' then return {'SIGNUP_SESSION_INVALID'} end
+            if ARGV[5] == '1' and email ~= ARGV[9] then return {'VALIDATION_ERROR'} end
+            email = ARGV[9]
         elseif email == '' then
             return {'VALIDATION_ERROR'}
         end
@@ -66,6 +70,7 @@ public class RedisOAuthSignupStateStore implements OAuthSignupStateStore {
             end
             return {'EXISTING', email, redis.call('HGET', KEYS[2], 'emailVerified')}
         end
+        if verified and providerEmail ~= email then redis.call('HSET', KEYS[1], 'email', email) end
         redis.call('HSET', KEYS[1], 'linkedSessionId', ARGV[1], 'signupRole', ARGV[2],
             'signupEmail', email, 'signupPhone', ARGV[3], 'agreements', ARGV[6], 'agreedAt', ARGV[7])
         redis.call('HSET', KEYS[2], 'signupSessionId', ARGV[1], 'oauthSignupSessionId', ARGV[1],
@@ -126,16 +131,21 @@ public class RedisOAuthSignupStateStore implements OAuthSignupStateStore {
 
     @Override
     public Prepared prepare(String id, String phone, String email, UserRole role, SignupTermsConsent consent) {
+        List<String> keys = sessionKeys(id);
+        String providerEmail = (String) redis.opsForHash().get(keys.getFirst(), "email");
+        if (providerEmail == null) providerEmail = "";
         List<?> result = redis.execute(
                 PREPARE,
-                sessionKeys(id),
+                keys,
                 id,
                 role.name(),
                 phone,
                 email == null ? "" : email,
                 email == null ? "0" : "1",
                 consent.encoded(),
-                consent.agreedAt().toString());
+                consent.agreedAt().toString(),
+                providerEmail,
+                SignupIdentityNormalizer.email(providerEmail));
         String status = status(result);
         if (!status.equals("CREATED") && !status.equals("EXISTING")) fail(status);
         return new Prepared(
