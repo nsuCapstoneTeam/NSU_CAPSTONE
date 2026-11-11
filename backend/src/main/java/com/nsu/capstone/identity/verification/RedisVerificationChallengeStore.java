@@ -24,6 +24,8 @@ import tools.jackson.databind.json.JsonMapper;
 @Repository
 public class RedisVerificationChallengeStore implements VerificationChallengeStore {
 
+    private static final String WRITE_SCRIPT = "#!lua\n";
+
     private static final long COUNTER_GRACE_MILLIS = 600_000;
     private static final JsonMapper JSON = new JsonMapper();
 
@@ -42,6 +44,12 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         """, List.class);
 
     private static final String REFUND_SCRIPT = """
+        local function releaseDelivery(pendingKey, generation, deliveryKey)
+            if generation and redis.call('GET', deliveryKey) == pendingKey .. ':' .. generation then
+                redis.call('DEL', deliveryKey)
+            end
+        end
+
         local function refund(reservationKey, refundAll)
             local reservation = redis.call('GETDEL', reservationKey)
             if not reservation then return end
@@ -54,10 +62,11 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
             end
         end
 
-        local function discardUnsent(pendingKey)
+        local function discardUnsent(pendingKey, deliveryKey)
             local generation = redis.call('HGET', pendingKey, 'generationId')
             if generation and redis.call('HGET', pendingKey, 'dispatching') ~= 'true' then
                 refund(pendingKey .. ':' .. generation, true)
+                releaseDelivery(pendingKey, generation, deliveryKey)
                 redis.call('DEL', pendingKey)
             end
         end
@@ -76,8 +85,8 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         end
         """;
 
-    private static final DefaultRedisScript<List> ISSUE_SCRIPT =
-            new DefaultRedisScript<>(REFUND_SCRIPT + RECOVERABLE_SCRIPT + recoveryScript() + """
+    private static final DefaultRedisScript<List> ISSUE_SCRIPT = new DefaultRedisScript<>(
+            WRITE_SCRIPT + REFUND_SCRIPT + RECOVERABLE_SCRIPT + recoveryScript() + """
         local sessionTtl = redis.call('PTTL', KEYS[1])
         if sessionTtl <= 0 or redis.call('HGET', KEYS[1], 'role') ~= ARGV[1] then
             return {1}
@@ -100,9 +109,12 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
             if redis.call('ZCOUNT', KEYS[index], '-inf', now) > 0 then return {6} end
         end
 
+        local deliveryKey = KEYS[lastCounter + counterCount + 2]
         local recoverAt = redis.call('HGET', KEYS[2], 'recoverAt')
-        if recoverAt and tonumber(recoverAt) <= now then discardUnsent(KEYS[2]) end
-        local retry = math.max(redis.call('PTTL', KEYS[3]), redis.call('PTTL', KEYS[4]))
+        if recoverAt and tonumber(recoverAt) <= now then discardUnsent(KEYS[2], deliveryKey) end
+        local retry = math.max(redis.call('PTTL', KEYS[3]), redis.call('PTTL', KEYS[4]),
+            redis.call('PTTL', deliveryKey), redis.call('PTTL', KEYS[2]),
+            redis.call('PTTL', KEYS[lastCounter + counterCount + 1]))
         local attemptLimit = tonumber(redis.call('GET', KEYS[5]) or '0') >= tonumber(ARGV[10])
         if attemptLimit then retry = math.max(retry, tonumber(ARGV[11])) end
         for index = 7, lastCounter do
@@ -132,7 +144,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
             lastExpiry = math.max(lastExpiry, expiry)
         end
         local reservation = cjson.encode({key = KEYS[6], pending = KEYS[2], generation = ARGV[5],
-            counters = counters, indexes = indexes, recoverAt = tonumber(ARGV[9]),
+            counters = counters, indexes = indexes, deliveryKey = deliveryKey, recoverAt = tonumber(ARGV[9]),
             refundUntil = redisNow + tonumber(ARGV[7])})
         redis.call('SET', KEYS[6], reservation, 'PXAT', lastExpiry)
         for index, key in ipairs(counters) do
@@ -142,25 +154,24 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
             redis.call('PEXPIREAT', indexes[index], expiresAt[index])
         end
         local challengeTtl = math.min(sessionTtl, tonumber(ARGV[7]))
-        discardUnsent(KEYS[2])
-        if isRecoverable(KEYS[2], now) then
-            redis.call('RENAME', KEYS[2], KEYS[lastCounter + counterCount + 1])
-        else
-            redis.call('DEL', KEYS[2])
-        end
         redis.call('HSET', KEYS[2],
             'codeDigest', ARGV[3], 'destinationDigest', ARGV[4], 'generationId', ARGV[5],
-            'issuedAt', ARGV[6], 'failedAttempts', '0', 'recoverAt', ARGV[9], 'dispatching', 'false')
+            'issuedAt', ARGV[6], 'failedAttempts', '0', 'recoverAt', ARGV[9], 'dispatching', 'false',
+            'deliveryKey', deliveryKey)
         redis.call('PEXPIRE', KEYS[2], challengeTtl)
+        redis.call('SET', deliveryKey, KEYS[6], 'PX', challengeTtl)
         if tonumber(ARGV[8]) > 0 then
             redis.call('SET', KEYS[3], ARGV[5], 'PX', ARGV[8])
         end
         return {0}
         """, List.class);
 
-    private static final DefaultRedisScript<Long> START_SCRIPT = new DefaultRedisScript<>("""
+    private static final DefaultRedisScript<Long> START_SCRIPT =
+            new DefaultRedisScript<>(WRITE_SCRIPT + """
         if redis.call('HGET', KEYS[1], 'generationId') ~= ARGV[1] then return 0 end
         if redis.call('HGET', KEYS[1], 'dispatching') == 'true' then return 0 end
+        local deliveryKey = redis.call('HGET', KEYS[1], 'deliveryKey')
+        if deliveryKey and (deliveryKey ~= KEYS[4] or redis.call('GET', KEYS[4]) ~= KEYS[3]) then return 0 end
         if redis.call('PTTL', KEYS[2]) <= 0 or redis.call('HGET', KEYS[2], ARGV[3]) == 'true' then return 0 end
         local reserveUntil = tonumber(redis.call('HGET', KEYS[1], 'recoverAt'))
         if reserveUntil <= tonumber(ARGV[4]) then return 0 end
@@ -175,10 +186,10 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         """, Long.class);
 
     private static final DefaultRedisScript<List> FIND_SCRIPT =
-            new DefaultRedisScript<>(REFUND_SCRIPT + RECOVERABLE_SCRIPT + """
+            new DefaultRedisScript<>(WRITE_SCRIPT + REFUND_SCRIPT + RECOVERABLE_SCRIPT + """
         local recoverAt = redis.call('HGET', KEYS[2], 'recoverAt')
         local now = tonumber(ARGV[1])
-        if recoverAt and tonumber(recoverAt) <= now then discardUnsent(KEYS[2]) end
+        if recoverAt and tonumber(recoverAt) <= now then discardUnsent(KEYS[2], KEYS[4]) end
         local key = KEYS[1]
         if ARGV[2] == 'recoverable' then
             key = recoverableChallenge(KEYS[2], KEYS[3], now)
@@ -189,11 +200,12 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         """, List.class);
 
     private static final DefaultRedisScript<List> VERIFY_SCRIPT =
-            new DefaultRedisScript<>(REFUND_SCRIPT + RECOVERABLE_SCRIPT + """
+            new DefaultRedisScript<>(WRITE_SCRIPT + REFUND_SCRIPT + RECOVERABLE_SCRIPT + """
         if redis.call('EXISTS', KEYS[1]) == 0
             or redis.call('HGET', KEYS[1], 'role') ~= ARGV[1] then return {2} end
         if redis.call('HGET', KEYS[1], ARGV[2]) == 'true' then
-            discardUnsent(KEYS[4])
+            discardUnsent(KEYS[4], KEYS[6])
+            releaseDelivery(KEYS[4], redis.call('HGET', KEYS[4], 'generationId'), KEYS[6])
             redis.call('DEL', KEYS[2], KEYS[4], KEYS[5])
             return {1}
         end
@@ -248,14 +260,15 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
             if blocked then return {5} end
             return {4}
         end
-        discardUnsent(KEYS[4])
+        discardUnsent(KEYS[4], KEYS[6])
+        releaseDelivery(KEYS[4], redis.call('HGET', KEYS[4], 'generationId'), KEYS[6])
         redis.call('DEL', KEYS[2], KEYS[4], KEYS[5])
         redis.call('HSET', KEYS[1], ARGV[2], 'true')
         return {0}
         """, List.class);
 
     private static final DefaultRedisScript<Long> FINISH_SCRIPT =
-            new DefaultRedisScript<>(REFUND_SCRIPT + """
+            new DefaultRedisScript<>(WRITE_SCRIPT + REFUND_SCRIPT + """
         if redis.call('HGET', KEYS[2], 'generationId') == ARGV[1] then
             if ARGV[2] == 'promote' then
                 redis.call('RENAME', KEYS[2], KEYS[1])
@@ -266,6 +279,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         elseif ARGV[2] ~= 'promote' and redis.call('HGET', KEYS[4], 'generationId') == ARGV[1] then
             redis.call('DEL', KEYS[4])
         end
+        releaseDelivery(KEYS[2], ARGV[1], KEYS[5])
         if ARGV[2] == 'promote' then
             redis.call('DEL', KEYS[3])
         else
@@ -350,6 +364,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
                 .toList();
         keys.addAll(indexes);
         keys.add(SignupRedisKeys.preservedChallenge(signupSessionId, channel));
+        keys.add(SignupRedisKeys.pendingDelivery(channel, rateLimitDestinationDigest));
         args.add(now);
         List<?> due = redisTemplate.execute(DUE_RESERVATIONS_SCRIPT, indexes, now);
         if (due != null && !due.isEmpty()) {
@@ -359,6 +374,8 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
                 var reservation = JSON.readTree(raw);
                 recoveryKeys.add(reservation.path("key").asText());
                 recoveryKeys.add(reservation.path("pending").asText());
+                if (reservation.has("deliveryKey"))
+                    recoveryKeys.add(reservation.path("deliveryKey").asText());
                 reservation.path("counters").forEach(key -> recoveryKeys.add(key.asText()));
                 reservation.path("indexes").forEach(key -> recoveryKeys.add(key.asText()));
                 args.add(raw);
@@ -394,7 +411,8 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
                 List.of(
                         SignupRedisKeys.pendingChallenge(signupSessionId, channel),
                         SignupRedisKeys.session(signupSessionId),
-                        reservationKey(signupSessionId, channel, generationId)),
+                        reservationKey(signupSessionId, channel, generationId),
+                        deliveryKey(signupSessionId, channel)),
                 generationId,
                 number(now.toEpochMilli() + timing.pendingRecovery().toMillis()),
                 channel.sessionField(),
@@ -420,7 +438,8 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
                 List.of(
                         SignupRedisKeys.challenge(signupSessionId, channel),
                         SignupRedisKeys.pendingChallenge(signupSessionId, channel),
-                        SignupRedisKeys.preservedChallenge(signupSessionId, channel)),
+                        SignupRedisKeys.preservedChallenge(signupSessionId, channel),
+                        deliveryKey(signupSessionId, channel)),
                 number(now.toEpochMilli()),
                 source);
         if (values == null || values.isEmpty() || values.get(0) == null) {
@@ -529,7 +548,8 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
                         SignupRedisKeys.challenge(signupSessionId, channel),
                         attemptKey(rateLimitDestinationDigest, ipDigest, windows),
                         SignupRedisKeys.pendingChallenge(signupSessionId, channel),
-                        SignupRedisKeys.preservedChallenge(signupSessionId, channel)),
+                        SignupRedisKeys.preservedChallenge(signupSessionId, channel),
+                        SignupRedisKeys.pendingDelivery(channel, rateLimitDestinationDigest)),
                 expectedRole.name(),
                 channel.sessionField(),
                 generationId,
@@ -578,9 +598,16 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
                         SignupRedisKeys.challenge(signupSessionId, channel),
                         SignupRedisKeys.pendingChallenge(signupSessionId, channel),
                         reservationKey(signupSessionId, channel, generationId),
-                        SignupRedisKeys.preservedChallenge(signupSessionId, channel)),
+                        SignupRedisKeys.preservedChallenge(signupSessionId, channel),
+                        deliveryKey(signupSessionId, channel)),
                 generationId,
                 action);
+    }
+
+    private String deliveryKey(String signupSessionId, VerificationChannel channel) {
+        String pending = SignupRedisKeys.pendingChallenge(signupSessionId, channel);
+        Object key = redisTemplate.opsForHash().get(pending, "deliveryKey");
+        return key == null ? pending + ":delivery" : (String) key;
     }
 
     private static String reservationKey(String signupSessionId, VerificationChannel channel, String generationId) {

@@ -141,6 +141,48 @@ class SolapiSmsSenderTest {
         }
     }
 
+    @Test
+    void preparationFailureIsSanitizedBeforeHttpExecution() {
+        var client = org.mockito.Mockito.mock(RestClient.class);
+        org.mockito.Mockito.when(client.post()).thenThrow(new IllegalStateException("raw-provider-response " + TO));
+        var failure = assertThrows(
+                VerificationDeliveryException.class,
+                () -> new SolapiSmsSender(client, properties()).sendVerificationCode(TO, CODE, Duration.ofMinutes(5)));
+        assertEquals(Outcome.PREPARATION_FAILED, failure.outcome());
+        org.junit.jupiter.api.Assertions.assertNull(failure.getCause());
+        assertFalse(failure.toString().contains(TO));
+    }
+
+    @Test
+    void responseExceptionStatusIsUsedWithoutLeakingItsBodyOrCause() {
+        server.expect(requestTo(SEND_URL)).andRespond(request -> {
+            throw org.springframework.web.client.HttpClientErrorException.create(
+                    HttpStatus.BAD_REQUEST,
+                    "raw-provider-response " + TO,
+                    org.springframework.http.HttpHeaders.EMPTY,
+                    ("raw-provider-response " + CODE).getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        });
+        var failure = assertThrows(VerificationDeliveryException.class, this::send);
+        assertEquals(Outcome.REJECTED, failure.outcome());
+        org.junit.jupiter.api.Assertions.assertNull(failure.getCause());
+        assertFalse(failure.toString().contains(TO));
+        assertFalse(failure.toString().contains(CODE));
+        assertFalse(failure.toString().contains("raw-provider-response"));
+    }
+
+    @Test
+    void unexpectedRequestExecutionFailureIsSanitizedWithoutItsCause() {
+        server.expect(requestTo(SEND_URL)).andRespond(request -> {
+            throw new IllegalArgumentException("raw-provider-response " + TO + " " + CODE);
+        });
+        var failure = assertThrows(VerificationDeliveryException.class, this::send);
+        assertEquals(Outcome.UNKNOWN, failure.outcome());
+        org.junit.jupiter.api.Assertions.assertNull(failure.getCause());
+        assertFalse(failure.toString().contains(TO));
+        assertFalse(failure.toString().contains("raw-provider-response"));
+    }
+
     private void send() {
         sender.sendVerificationCode(TO, CODE, Duration.ofMinutes(5));
     }

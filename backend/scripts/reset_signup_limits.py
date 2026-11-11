@@ -141,6 +141,10 @@ def recover_unsent(redis, reservation, encoded, record):
             or not isinstance(indexes, list) or not all(isinstance(key, str) for key in indexes)):
         raise ValueError("발송 예약 형식이 올바르지 않아 초기화를 중단했습니다")
     keys = [reservation, pending, *record["counters"], *indexes]
+    if "deliveryKey" in record:
+        if not isinstance(record["deliveryKey"], str):
+            raise ValueError("발송 예약 형식이 올바르지 않아 초기화를 중단했습니다")
+        keys.append(record["deliveryKey"])
     try:
         script = RECOVERY_SCRIPT.read_text(encoding="utf-8")
     except OSError:

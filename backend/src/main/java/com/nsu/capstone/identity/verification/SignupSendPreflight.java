@@ -9,6 +9,8 @@ import java.util.function.Supplier;
 
 /** Runs only Redis work; provider calls always remain on the requesting thread. */
 public class SignupSendPreflight implements AutoCloseable {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SignupSendPreflight.class);
+
     private final SignupSessionStore sessions;
     private final VerificationChallengeStore challenges;
     private final SignupSendRedisProperties properties;
@@ -73,6 +75,21 @@ public class SignupSendPreflight implements AutoCloseable {
         } catch (TimeoutException | RejectedExecutionException exception) {
             // An uncertain Redis write may still finish. Leave its reservation to recovery.
             throw failure();
+        }
+    }
+
+    /** Best effort only: failure, rejection or process exit can leave a conservative reservation. */
+    public void cancelUnsentLater(String id, VerificationChannel channel, String generation) {
+        try {
+            executor.execute(() -> {
+                try {
+                    challenges.cancel(id, channel, generation, true);
+                } catch (RuntimeException failure) {
+                    log.warn("가입 인증 미발송 예약 보상 실패. 채널: {}", channel);
+                }
+            });
+        } catch (RejectedExecutionException failure) {
+            log.warn("가입 인증 미발송 예약 보상 작업 거절. 채널: {}", channel);
         }
     }
 

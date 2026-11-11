@@ -19,6 +19,30 @@ import org.junit.jupiter.api.Test;
 
 class SignupSendPreflightTest {
     @Test
+    void rejectedOrFailedCompensationNeverEscapesToTheCaller() throws Exception {
+        var sessions = mock(SignupSessionStore.class);
+        var challenges = mock(VerificationChallengeStore.class);
+        var attempted = new CountDownLatch(1);
+        doAnswer(call -> {
+                    attempted.countDown();
+                    throw new org.springframework.dao.QueryTimeoutException("unavailable");
+                })
+                .when(challenges)
+                .cancel(anyString(), any(), anyString(), eq(true));
+        var preflight = new SignupSendPreflight(
+                sessions,
+                challenges,
+                new SignupSendRedisProperties(Duration.ofMillis(200), Duration.ofMillis(250), Duration.ofMillis(800)),
+                () -> {});
+        preflight.cancelUnsentLater("session", VerificationChannel.EMAIL, "generation");
+        assertTrue(attempted.await(1, TimeUnit.SECONDS));
+        preflight.close();
+        reset(challenges);
+        assertDoesNotThrow(() -> preflight.cancelUnsentLater("session", VerificationChannel.EMAIL, "generation"));
+        verifyNoInteractions(challenges);
+    }
+
+    @Test
     void sharedDeadlineIncludesEarlierStagesAndLateReservationNeverStartsDelivery() throws Exception {
         var sessions = mock(SignupSessionStore.class);
         var challenges = mock(VerificationChallengeStore.class);

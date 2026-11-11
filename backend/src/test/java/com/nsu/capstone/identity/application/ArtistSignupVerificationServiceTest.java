@@ -109,6 +109,51 @@ class ArtistSignupVerificationServiceTest {
     }
 
     @Test
+    void preparationFailureLogsOnlySafeMetadataAndDoesNotCountAsProviderFailure() {
+        when(codeGenerator.generate()).thenReturn(CODE);
+        when(challengeStore.issue(
+                        anyString(),
+                        any(),
+                        any(),
+                        anyString(),
+                        anyString(),
+                        anyString(),
+                        any(),
+                        anyString(),
+                        anyString()))
+                .thenReturn(ChallengeIssueResult.ISSUED);
+        when(challengeStore.startDelivery(anyString(), any(), anyString(), any()))
+                .thenReturn(true);
+        var unsafe = new IllegalArgumentException("raw-provider-response " + EMAIL + " " + PHONE + " " + CODE);
+        doThrow(new VerificationDeliveryException(VerificationDeliveryException.Outcome.PREPARATION_FAILED, unsafe))
+                .when(emailSender)
+                .sendVerificationCode(anyString(), anyString(), any());
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(SignupVerificationService.class);
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            var failure = assertThrows(
+                    IllegalStateException.class, () -> service.sendEmailCode(SESSION_ID, UserRole.ARTIST, "127.0.0.1"));
+            assertNull(failure.getCause());
+            verify(challengeStore).cancel(anyString(), any(), anyString(), eq(true));
+            verify(alerts, never()).providerFailure(any());
+            org.junit.jupiter.api.Assertions.assertFalse(appender.list.isEmpty());
+            for (var event : appender.list) {
+                String text = event.getFormattedMessage();
+                org.junit.jupiter.api.Assertions.assertFalse(text.contains(EMAIL)
+                        || text.contains(PHONE)
+                        || text.contains(CODE)
+                        || text.contains("raw-provider-response"));
+                assertNull(event.getThrowableProxy());
+            }
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
     void sendsEmailCodeOnlyToSessionEmail() {
         when(codeGenerator.generate()).thenReturn(CODE);
         when(challengeStore.issue(

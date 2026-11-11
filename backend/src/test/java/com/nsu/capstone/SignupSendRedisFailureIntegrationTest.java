@@ -37,6 +37,9 @@ class SignupSendRedisFailureIntegrationTest {
     @Qualifier("redisContainer")
     GenericContainer<?> redis;
 
+    @Autowired
+    org.springframework.data.redis.core.StringRedisTemplate template;
+
     @MockitoSpyBean
     SignupSendPreflight preflight;
 
@@ -110,6 +113,40 @@ class SignupSendRedisFailureIntegrationTest {
         long millis = (System.nanoTime() - start) / 1_000_000;
         System.out.println("SIGNUP_REDIS_FAILURE " + phase + " elapsed_ms=" + millis);
         assertTrue(millis < 1000, "Response exceeded 1 second: " + millis);
+    }
+
+    @Test
+    void oomCannotAllowTheCorrectCodeAfterAnUncountedWrongCode() throws Exception {
+        String id = session();
+        mvc.perform(post("/api/v1/auth/signup/artist/session/email-verification/send")
+                        .contentType("application/json")
+                        .content("{\"signupSessionId\":\"" + id + "\"}"))
+                .andExpect(status().isAccepted());
+        var sent = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(email).sendVerificationCode(anyString(), sent.capture(), any());
+        String code = sent.getValue();
+        String key = SignupRedisKeys.challenge(id, VerificationChannel.EMAIL);
+        long ttl = template.getExpire(key, java.util.concurrent.TimeUnit.MILLISECONDS);
+        redis.execInContainer("redis-cli", "CONFIG", "SET", "maxmemory", "1");
+        try {
+            for (String candidate : new String[] {code.equals("000000") ? "111111" : "000000", code}) {
+                mvc.perform(post("/api/v1/auth/signup/artist/session/email-verification/confirm")
+                                .contentType("application/json")
+                                .content("{\"signupSessionId\":\"" + id + "\",\"code\":\"" + candidate + "\"}"))
+                        .andExpect(status().isServiceUnavailable())
+                        .andExpect(jsonPath("$.code").value("RATE_LIMIT_UNAVAILABLE"));
+            }
+        } finally {
+            redis.execInContainer("redis-cli", "CONFIG", "SET", "maxmemory", "268435456");
+        }
+        assertFalse(sessions.findById(id).orElseThrow().emailVerified());
+        assertEquals("0", template.opsForHash().get(key, "failedAttempts"));
+        assertTrue(template.getExpire(key, java.util.concurrent.TimeUnit.MILLISECONDS) > 0);
+        assertTrue(template.getExpire(key, java.util.concurrent.TimeUnit.MILLISECONDS) <= ttl);
+        mvc.perform(post("/api/v1/auth/signup/artist/session/email-verification/confirm")
+                        .contentType("application/json")
+                        .content("{\"signupSessionId\":\"" + id + "\",\"code\":\"" + code + "\"}"))
+                .andExpect(status().isNoContent());
     }
 
     @Test

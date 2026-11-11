@@ -324,6 +324,35 @@ class SignupHardeningIntegrationTest {
     }
 
     @Test
+    void emailMigrationNormalizesExistingRowsAndKeepsTheConstraint() throws Exception {
+        String migration = new ClassPathResource("db/migration/V8__normalize_user_email.sql")
+                .getContentAsString(StandardCharsets.UTF_8);
+        jdbc.execute((ConnectionCallback<Void>) connection -> {
+            try (var statement = connection.createStatement()) {
+                statement.execute("CREATE TEMP TABLE users (email text NOT NULL)");
+                try {
+                    statement.execute(
+                            "INSERT INTO pg_temp.users VALUES (' Artist@Example.com '), ('event@example.com')");
+                    statement.execute(migration);
+                    try (var rows = statement.executeQuery("SELECT email FROM pg_temp.users ORDER BY email")) {
+                        assertTrue(rows.next());
+                        assertEquals("artist@example.com", rows.getString(1));
+                        assertTrue(rows.next());
+                        assertEquals("event@example.com", rows.getString(1));
+                        assertFalse(rows.next());
+                    }
+                    assertThrows(
+                            SQLException.class,
+                            () -> statement.execute("INSERT INTO pg_temp.users VALUES ('New@example.com')"));
+                } finally {
+                    statement.execute("DROP TABLE pg_temp.users");
+                }
+            }
+            return null;
+        });
+    }
+
+    @Test
     void emailMigrationRefusesCollisionsWithoutModifyingOriginalRows() throws Exception {
         String migration = new ClassPathResource("db/migration/V8__normalize_user_email.sql")
                 .getContentAsString(StandardCharsets.UTF_8);

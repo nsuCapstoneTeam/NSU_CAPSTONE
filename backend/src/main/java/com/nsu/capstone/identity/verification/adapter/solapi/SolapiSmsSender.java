@@ -37,15 +37,18 @@ public class SolapiSmsSender implements SmsSender {
 
     @Override
     public void sendVerificationCode(String phone, String code, Duration validity) {
-        String authorization = authorization();
-        String text = "[NSU-EventMatch] 인증번호 " + code + " (유효시간 " + validity.toMinutes() + "분)";
         SendResponse response = VerificationHttpResponse.read(
-                restClient
-                        .post()
-                        .uri("/messages/v4/send-many/detail")
-                        .header(HttpHeaders.AUTHORIZATION, authorization)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body(Map.of("messages", List.of(Map.of("from", fromNumber, "to", phone, "text", text)))),
+                () -> {
+                    String authorization = authorization();
+                    String text = "[NSU-EventMatch] 인증번호 " + code + " (유효시간 " + validity.toMinutes() + "분)";
+                    return restClient
+                            .post()
+                            .uri("/messages/v4/send-many/detail")
+                            .header(HttpHeaders.AUTHORIZATION, authorization)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body(VerificationHttpResponse.jsonBody(Map.of(
+                                    "messages", List.of(Map.of("from", fromNumber, "to", phone, "text", text)))));
+                },
                 SendResponse.class);
         if (response == null || response.failedMessageList() == null) {
             throw new VerificationDeliveryException(Outcome.UNKNOWN);

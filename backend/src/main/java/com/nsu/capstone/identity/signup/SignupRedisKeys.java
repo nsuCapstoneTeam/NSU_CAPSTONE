@@ -22,6 +22,10 @@ public final class SignupRedisKeys {
         return challenge(signupSessionId, channel) + ":preserved";
     }
 
+    public static String pendingDelivery(VerificationChannel channel, String recipientDigest) {
+        return "signup:limit:pending:" + channel.keyPart() + ":" + recipientDigest;
+    }
+
     public static String cooldown(String signupSessionId, VerificationChannel channel) {
         return session(signupSessionId) + ":cooldown:" + channel.keyPart();
     }

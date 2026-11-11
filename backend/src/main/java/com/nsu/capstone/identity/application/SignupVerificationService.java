@@ -79,11 +79,15 @@ public class SignupVerificationService {
     }
 
     public void confirmEmailCode(String signupSessionId, String code, UserRole expectedRole, String remoteAddress) {
-        SignupSession session = signupSession(signupSessionId, expectedRole);
-        if (session.emailVerified()) {
-            return;
+        try {
+            SignupSession session = signupSession(signupSessionId, expectedRole);
+            if (session.emailVerified()) {
+                return;
+            }
+            verify(session, expectedRole, VerificationChannel.EMAIL, session.email(), code, remoteAddress);
+        } catch (DataAccessException failure) {
+            throw new BusinessException(ErrorCode.RATE_LIMIT_UNAVAILABLE);
         }
-        verify(session, expectedRole, VerificationChannel.EMAIL, session.email(), code, remoteAddress);
     }
 
     public void sendPhoneCode(String signupSessionId, UserRole expectedRole, String remoteAddress) {
@@ -96,11 +100,15 @@ public class SignupVerificationService {
     }
 
     public void confirmPhoneCode(String signupSessionId, String code, UserRole expectedRole, String remoteAddress) {
-        SignupSession session = signupSession(signupSessionId, expectedRole);
-        if (session.phoneVerified()) {
-            return;
+        try {
+            SignupSession session = signupSession(signupSessionId, expectedRole);
+            if (session.phoneVerified()) {
+                return;
+            }
+            verify(session, expectedRole, VerificationChannel.PHONE, session.phone(), code, remoteAddress);
+        } catch (DataAccessException failure) {
+            throw new BusinessException(ErrorCode.RATE_LIMIT_UNAVAILABLE);
         }
-        verify(session, expectedRole, VerificationChannel.PHONE, session.phone(), code, remoteAddress);
     }
 
     public void confirmAdult(String signupSessionId, LocalDate birthDate, UserRole expectedRole) {
@@ -165,14 +173,18 @@ public class SignupVerificationService {
             String generationId,
             String recipient,
             long deadline) {
-        boolean started = preflight.await(
-                deadline,
-                () -> preflight.challenges().startDelivery(signupSessionId, channel, generationId, Instant.now(clock)));
-        if (!started) {
-            throw new BusinessException(ErrorCode.VERIFICATION_DELIVERY_FAILED);
+        try {
+            boolean started = preflight.await(
+                    deadline,
+                    () -> preflight
+                            .challenges()
+                            .startDelivery(signupSessionId, channel, generationId, Instant.now(clock)));
+            if (!started) throw new BusinessException(ErrorCode.VERIFICATION_DELIVERY_FAILED);
+            preflight.check(deadline);
+        } catch (BusinessException failure) {
+            preflight.cancelUnsentLater(signupSessionId, channel, generationId);
+            throw failure;
         }
-
-        preflight.check(deadline);
         try {
             if (channel == VerificationChannel.EMAIL) {
                 emailSender.sendVerificationCode(destination, code, properties.otpTtl());
@@ -181,9 +193,17 @@ public class SignupVerificationService {
                         digestService.canonicalMobileNumber(destination), code, properties.otpTtl());
             }
         } catch (VerificationDeliveryException exception) {
-            alerts.providerFailure(channel);
+            if (exception.failureType() != null)
+                log.error(
+                        "가입 인증 발송 예외. 채널: {}, 원인 타입: {}, 위치: {}",
+                        channel,
+                        exception.failureType(),
+                        exception.failureLocation());
+            if (exception.outcome() != VerificationDeliveryException.Outcome.PREPARATION_FAILED)
+                alerts.providerFailure(channel);
             switch (exception.outcome()) {
                 case UNKNOWN -> log.warn("가입 인증 코드 발송 결과를 확인할 수 없습니다. 채널: {}", channel);
+                case PREPARATION_FAILED -> throw preparationFailure(signupSessionId, channel, generationId);
                 case REJECTED, NOT_SENT ->
                     throw deliveryFailure(
                             signupSessionId,
@@ -193,19 +213,25 @@ public class SignupVerificationService {
                             exception.outcome() == VerificationDeliveryException.Outcome.NOT_SENT);
             }
         } catch (RuntimeException exception) {
-            alerts.providerFailure(channel);
-            try {
-                challengeStore.cancel(signupSessionId, channel, generationId, true);
-            } catch (DataAccessException cleanupFailure) {
-                log.warn("가입 인증 코드의 미발송 예약을 정리하지 못했습니다. 채널: {}", channel);
-            }
-            throw new IllegalStateException("가입 인증 코드 요청을 준비하지 못했습니다");
+            var safe = new VerificationDeliveryException(
+                    VerificationDeliveryException.Outcome.PREPARATION_FAILED, exception);
+            log.error("가입 인증 발송 준비 예외. 채널: {}, 원인 타입: {}, 위치: {}", channel, safe.failureType(), safe.failureLocation());
+            throw preparationFailure(signupSessionId, channel, generationId);
         }
         try {
             challengeStore.promote(signupSessionId, channel, generationId);
         } catch (DataAccessException exception) {
             log.warn("가입 인증 코드 발송 결과를 저장하지 못했습니다. 채널: {}", channel);
         }
+    }
+
+    private IllegalStateException preparationFailure(String id, VerificationChannel channel, String generation) {
+        try {
+            challengeStore.cancel(id, channel, generation, true);
+        } catch (DataAccessException cleanupFailure) {
+            log.warn("가입 인증 코드의 미발송 예약을 정리하지 못했습니다. 채널: {}", channel);
+        }
+        return new IllegalStateException("가입 인증 코드 요청을 준비하지 못했습니다");
     }
 
     private BusinessException deliveryFailure(

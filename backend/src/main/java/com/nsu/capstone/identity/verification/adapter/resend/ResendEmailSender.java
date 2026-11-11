@@ -22,11 +22,18 @@ public class ResendEmailSender implements EmailSender {
 
     @Override
     public void sendVerificationCode(String email, String code, Duration validity) {
-        ResendEmailRequest request =
-                new ResendEmailRequest(fromEmail, List.of(email), SUBJECT, messageText(code, validity));
-
         ResendEmailResponse response = VerificationHttpResponse.read(
-                restClient.post().uri("/emails").body(request), ResendEmailResponse.class);
+                () -> {
+                    var request =
+                            new ResendEmailRequest(fromEmail, List.of(email), SUBJECT, messageText(code, validity));
+                    byte[] body = VerificationHttpResponse.jsonBody(request);
+                    return restClient
+                            .post()
+                            .uri("/emails")
+                            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                            .body(body);
+                },
+                ResendEmailResponse.class);
         if (response == null || response.id() == null || response.id().isBlank()) {
             throw new VerificationDeliveryException(Outcome.UNKNOWN);
         }
