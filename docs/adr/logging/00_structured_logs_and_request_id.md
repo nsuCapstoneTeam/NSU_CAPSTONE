@@ -1,0 +1,295 @@
+# ADR: backend 구조화 로그와 요청 ID(requestId)
+
+- 상태: **Proposed** (설계 리뷰와 PR 리뷰에서 확정)
+- 결정일: **2026-11-11** (NSU-146). 사람 결정(김동엽, grill): 응답 헤더 `X-Request-Id`만 내보내고 에러 본문은 그대로 둔다, 이름은 `requestId`, 들어온 ID는 믿지 않는다, 기본 형식은 logstash JSON, 내부 UUID는 로그에 남겨도 된다, 앱 안의 남은 유출 경로는 이번에 고친다, 로그 테스트는 새 CI job으로 돌린다
+- 요구사항: SSOT 최종 승인 v1.17.1(현재 리비전 v1.19 초안)에는 앱 로그·요청 ID·로그 마스킹 규칙이 없다. 관련 항목은 `SEC-120`(OAuth Access Token 평문 저장 금지), `MVP-128`(초기에 Elasticsearch 등 미개발)이다
+- 설계 과정: `/pstack:architect`(조사 10건, 구조가 다른 후보 2개, 합성)를 거쳐 사람 판단 항목만 grill로 정했다. 합성 결과는 [Synthesis decision](#synthesis-decision)에 있다
+- 설계 리뷰: Codex adversarial review(grill `20261111T084617Z-c1f27111`) 1회차 지적 2건(루트 TRACE에서 Hibernate `org.hibernate.orm.jdbc.extract`가 조회 값을 찍음, 자식 로거에 직접 준 DEBUG가 부모 고정을 우회함)을 Decision 7-2·7-3에 반영했다. 결과: 금지 목록 대신, 배포에서 우리 코드 밖 로거를 모두 INFO 이상으로 강제한다
+- 관련: [API 공통 규칙 §8·§11](../../api/00_conventions.md), [ADR-007](../ADR-007-spring-backend-global-exception-handling.md), [recommendation_eligibility/00](../recommendation_eligibility/00_eligibility_rules.md) Consequences, [identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md)(로그 속 개인정보, 초기화 runbook), [backend_code_style/00](../backend_code_style/00_lombok_usage.md), [authentication/00](../authentication/00_csrf_protection_for_bearer_api.md) Decision 6, Linear 서버 협의 010·017, NSU-63(AI client), NSU-123(SMS 발송), NSU-129(시연 서버 공개 조건), NSU-133(처리방침), NSU-135(CI 전체 테스트), NSU-147(`/actuator/health`)
+
+---
+
+## Decision
+
+1. **요청 ID는 필터 하나가 만들고 지운다.**
+   - `global.logging.RequestIdFilter`(`OncePerRequestFilter`, `@Order(HIGHEST_PRECEDENCE)`)가 Spring Security 체인 밖, 그보다 앞에서 돈다. `REQUEST`·`ERROR`·`ASYNC` 디스패치를 모두 거친다(`shouldNotFilterErrorDispatch()`·`shouldNotFilterAsyncDispatch()`가 `false`).
+   - 서버가 요청마다 `UUID.randomUUID()`로 만든다. 값은 요청 속성에 한 번 저장하고, Tomcat의 `/error` 디스패치는 그 값을 다시 쓴다. 그래서 한 요청의 ID는 하나다. 앞선 필터가 `sendError`를 불러 `REQUEST` 디스패치에서 값을 못 만든 경우만 `ERROR` 디스패치에서 새로 만든다.
+   - 디스패치를 시작할 때와 끝날 때 MDC를 비운다. 앞 요청이 남긴 키(예: NSU-63의 `eventId`)가 다음 요청 로그에 섞이지 않는다.
+   - **들어온 `X-Request-Id`·`traceparent`는 읽지 않는다**(사람 결정). PR #208이 `X-Forwarded-*`를 기본으로 믿지 않은 것과 같은 이유다. 배포 nginx는 응답 헤더를 자기 접근 로그에 적어 같은 ID로 연결한다(Decision 9).
+2. **서버가 처리한 모든 응답에 `X-Request-Id` 헤더를 붙인다. 에러 본문은 그대로다**(사람 결정).
+   - 필터가 `chain.doFilter` 전에 붙인다. 그래서 `{code, message}` 에러, Spring 표준 `ProblemDetail`, Boot `/error`, OAuth `302`, 401/403(응답을 바로 커밋하는 Security 처리기)에 모두 실린다.
+   - 앱에 닿기 전에 끝난 응답(Tomcat이 앱에 넘기기 전에 거절한 요청, nginx가 직접 만든 `502`)에는 없다. 계약은 클라이언트가 이를 처리하도록 적는다(`docs/api/00` §11).
+   - 에러 본문(ADR-007, `docs/api/00` §8)은 바꾸지 않는다. 계약은 `docs/api/00` §11에 하위 호환 추가로 적는다. Scalar 첫 화면 설명(`OpenApiConfig`)에도 한 줄 적는다.
+   - 화면에 "문의 코드"로 보여 줄지, 사용자가 어디로 알릴지는 **정하지 않았다**. 문의 창구나 사용자 테스트 준비 때 정한다. 프런트는 이번에 할 일이 없다.
+3. **이름은 `requestId`다**(사람 결정).
+   - MDC 키와 JSON 필드는 `requestId`, HTTP 헤더는 `X-Request-Id`다. 서버 협의 010·017의 AI 오류 본문 필드 `requestId`, 헤더 `X-Request-Id`와 같다. 그래서 Spring 로그와 AI 로그를 한 검색어로 찾는다.
+   - `traceId`는 쓰지 않는다. 나중에 Micrometer Tracing을 붙이면 그 라이브러리가 MDC `traceId`를 쓰므로 한 키에 두 주인이 생긴다.
+4. **배포 로그는 Spring Boot 내장 logstash JSON이다**(사람 결정).
+   - `config/logging.properties`(새 파일, `application.properties`에서 import): `logging.structured.format.console=${LOG_FORMAT:logstash}`. 설정이 없으면 JSON이다. 배포에서 변수를 빠뜨려도 AC1이 깨지지 않는다(`OAUTH_BINDING_COOKIE_SECURE:true`와 같은 방향).
+   - 한 줄에 JSON 하나다. `@timestamp`, `level`, `logger_name`, `message`, `requestId`가 필드다. MDC 값은 Boot가 자동으로 필드로 넣는다.
+   - logstash를 고른 이유: 필드가 평평해 Datadog이 `level`을 상태로 기본 인식하고, Grafana Loki·CloudWatch도 그대로 읽는다. 수집 도구는 정하지 않았다(범위 밖). 형식은 설정 한 줄이라 도구를 정할 때 바꿀 수 있다.
+   - 로컬은 `.env`에 `LOG_FORMAT=`(빈 값)을 두면 Boot 평문이고, `logging.pattern.correlation=[%X{requestId:-}] `로 줄마다 요청 ID가 붙는다. `.env.example`에 이 줄을 넣는다.
+   - `logging.structured.json.stacktrace.max-length=8192`. 오류 줄이 Docker json-file 드라이버의 줄 분할(16 KiB)에 걸리지 않게 한다.
+5. **요청이 끝날 때 한 줄을 남긴다.**
+   - 디스패치마다 `요청 처리 완료: <메서드> <경로> -> <상태> (<ms>ms)`를 남긴다. 상태가 400 이상이면 INFO, 아니면 DEBUG다. 지금 401/403과 `ResponseEntityExceptionHandler`가 처리하는 500 세 종류는 로그를 한 줄도 남기지 않는다. 이 줄이 있어야 그 경로에서 ID를 확인할 수 있다.
+   - 경로에서 쿼리 문자열은 빼고 256자까지만 남긴다. IP, 헤더, 본문은 남기지 않는다.
+6. **필터 밖으로 나온 예외는 필터가 ID와 함께 남긴다.**
+   - 아직 응답을 커밋하지 않은 `REQUEST` 디스패치에서 예외가 나오면, 필터가 ID를 붙여 ERROR로 한 번 남기고 Tomcat이 하던 것과 같은 500과 `/error` 디스패치로 바꾼다(`ERROR_EXCEPTION` 속성, `sendError(500)`). 그래서 Tomcat이 필터 밖에서 쓰던 ID 없는 `Servlet.service() … threw exception` 줄이 생기지 않는다.
+   - 커밋한 뒤나 `ERROR`·`ASYNC` 디스패치 안에서 나온 예외는 남기고 다시 던진다. 클라이언트 연결 끊김(`DisconnectedClientHelper`)은 남기지 않고 그대로 넘긴다.
+7. **개인정보는 로그에 나오는 곳에서 가리지 않고, 나오기 전에 막는다.**
+   - 금지 값: 이메일, 전화번호, 이름, 생년월일, 비밀번호와 그 해시, JWT, 인증번호(OTP), OAuth `code`·`state`·`nonce`·PKCE verifier·결과 코드·결합 쿠키, 가입 세션 ID, 비밀키·API 키·client secret, CI·DI.
+   - 허용: 내부 UUID(회원·아티스트·행사·곡·요청 ID)(사람 결정). 우리 DB와 합치면 사람을 알아볼 수 있으므로, 처리방침에 접속 기록으로 적는다(NSU-133). 시연 서버 초기화 때 로그도 지운다(NSU-129, identity_verification/00).
+   - 막는 방법:
+     1. pgjdbc `logServerErrorDetail=false`(`config/database.properties`, `spring.datasource.hikari.data-source-properties.*`). PostgreSQL `Detail`(`Key (email)=(…)`, `Failing row contains (…)`)이 예외 메시지에 붙지 않는다. 지금 기본 설정에서 유일하게 확인된 유출(Hibernate `org.hibernate.orm.jdbc.error` WARN과 `GlobalExceptionHandler` ERROR)이 여기서 막힌다. 제약 이름은 본 메시지에 남아 기존 분류(`ArtistOAuthSignupService`의 `getConstraintName()`)는 그대로 동작한다.
+     2. INFO에서도 원문을 찍는 Tomcat 로거 두 개를 `config/logging.properties`에서 WARN으로 고정한다. `org.apache.tomcat.util.http`(잘못된 쿠키 원문), `org.apache.coyote.http11.Http11Processor`(잘못된 요청 주소와 쿼리 문자열)다.
+     3. **배포 형식(JSON)에서는 `com.nsu.capstone` 밖의 모든 로거와 루트를 INFO보다 낮게 둘 수 없다.**
+        - 앱이 요청을 받기 전에(싱글톤을 만든 뒤, 웹 서버가 시작하기 전) `LoggingSystem`에 설정된 레벨을 모두 본다. INFO보다 낮은 것은 루트, 상위 패키지, 그 아래 자식 로거에 직접 준 레벨을 가리지 않고 INFO로 올린다. 올린 로거 이름을 ERROR 한 줄로 남긴다.
+        - 그래서 `DEBUG=true`, `TRACE=true`, `LOGGING_LEVEL_ROOT=TRACE`, `logging.level.web=DEBUG`, `LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB_CLIENT=DEBUG`, `logging.level.org.hibernate.orm.jdbc.extract=TRACE` 중 무엇을 줘도 프레임워크·라이브러리가 본문, 바인드 값, 조회 값, 헤더를 찍지 않는다.
+        - 위험한 로거를 하나씩 고정하는 금지 목록은 쓰지 않는다. 빠진 로거(Hibernate `org.hibernate.orm.jdbc.extract`의 조회 값 TRACE)나 자식 로거에 직접 준 레벨(Logback은 자식의 명시 레벨을 부모보다 먼저 쓴다)로 뚫리기 때문이다(설계 리뷰 1회차 지적).
+        - 우리 코드(`com.nsu.capstone`)는 DEBUG로 열 수 있다. 우리 코드의 로그 인자는 정적 검사(Decision 8)가 레벨과 상관없이 막는다.
+        - 시작을 막지는 않는다(장애 대응 중 재시작 실패를 피한다). 로컬 평문에서는 적용하지 않는다(개발자 컴퓨터와 테스트 데이터).
+        - 실행 중에 레벨을 바꾸는 길은 열지 않는다. actuator `loggers` 엔드포인트를 웹에 노출하지 않는다(지금 기본값은 `health`만). 설정 테스트가 노출 목록에 `loggers`가 없음을 확인한다.
+     4. `spring.mvc.log-resolved-exception=false`. DevTools가 켜는 거절 값 WARN(이메일·전화번호·인증번호)을 끈다.
+     5. 앱 안의 남은 경로를 미루지 않고 막는다(사람 결정).
+        - `RedisOAuth2AuthorizationRequestRepository`: 이 이슈에서 고친다. 역직렬화 실패를 원인 예외 없이 예외 클래스 이름만 담아 감싼다(`artist-oauth-signup.md:141`과 같은 방식). 강석윤 님 파일이므로 기존 스타일을 지키고 PR에서 알린다.
+        - `SolapiSmsSender`: SDK가 선언하지 않은 예외(OkHttp `IOException`, kotlinx `SerializationException`)가 `GlobalExceptionHandler`까지 가서 제공자 응답 일부(전화번호)를 메시지째 남기고, 인증 요청 정리도 건너뛴다. 그런데 진행 중인 NSU-123(강석윤 님)이 SMS를 `RestClient`로 바꾸며 이 파일을 대체한다. 그래서 어디서 고칠지 강석윤 님께 묻는다(2026-11-11 Slack `#dev`, 사람 결정). NSU-123이 맡으면 그 이슈의 요구사항은 세 가지다: 발송 실패 예외에 제공자 응답·전화번호를 원인으로 넘기지 않는다, `RestClientResponseException`의 메시지(응답 본문 포함)를 로그·예외 메시지에 넣지 않는다, 선언하지 않은 예외도 `VerificationDeliveryException`으로 바꿔 정리를 타게 한다. 맡지 않으면 이 이슈에서 SDK 코드를 고친다. 답이 오면 이 항목을 확정한다.
+   - 앱 밖 로그는 배포 이슈의 요구사항으로 지금 추가한다(사람 결정, Decision 9).
+8. **규칙은 테스트로 강제한다.**
+   - 정적 검사 `LogSafetyChecker`(`global.codestyle`, `LombokStyleChecker`처럼 JDK 파서로 읽음)가 `src/main/java` 전체를 검사한다.
+     - S1: `System.out`·`System.err`·`printStackTrace()` 금지(Logback을 거치지 않아 JSON이 아니다). `trust/simulation/ReliabilitySimulator`만 허용한다.
+     - S2: 로그 호출 인자와 예외 생성자 인자에 민감한 이름(email, phone, password, token, otp, secret, …)의 변수·필드·메서드를 넘기면 실패한다. 문자열 상수와 ALL_CAPS 상수는 제외한다.
+     - S2b: DTO·record를 통째로 로그에 넘기면 실패한다(`toString`이 모든 필드를 찍는다).
+     - S3: `@EnableWebSecurity(debug = true)` 금지.
+     - S4: `global.logging` 밖에서 MDC 키 `requestId`를 쓰거나 지우는 코드, `MDC.clear()`·`MDC.setContextMap(..)`, 문자열 `"X-Request-Id"`를 쓰면 실패한다. 요청 ID와 헤더 이름의 주인은 하나다.
+     - S5: `@Async`·`@EnableAsync`·`Executors.new*`를 쓰면 실패한다. 다른 스레드로 넘어가면 MDC가 없어 요청 ID가 끊긴다. 처음 필요한 이슈가 MDC를 넘기는 `TaskDecorator`를 이 모듈에 만들고 이 규칙을 그에 맞게 바꾼다.
+   - 실제 흐름 테스트 `LogPrivacyIntegrationTest`(Testcontainers): 가짜 값(이메일, 전화번호, 비밀번호, 인증번호, JWT)을 중복 가입·NOT NULL 위반·가입·인증·로그인 흐름에 넣고, 잡힌 모든 로그 줄(메시지, MDC, 예외)에 그 값이 없는지 본다. 그리고 Hibernate의 제약 위반 줄(`uk_users_email`)이 실제로 남았는지도 본다. 유출 경로가 조용히 사라져 테스트가 헛돌지 않게 한다.
+   - 그 밖의 테스트 목록과 순서는 아래 [테스트](#테스트)에 있다.
+9. **CI와 배포 요구사항**(사람 결정).
+   - 새 CI job `backend-log-safety`가 PR마다 `./gradlew test --tests 'com.nsu.capstone.global.logging.*'`를 돌린다(`ubuntu-latest`는 Docker가 있어 Testcontainers가 돈다). 정적 검사는 기존 `backend-lint`의 `global.codestyle.*` 단계에서 돈다. NSU-135가 전체 테스트를 CI에 올리면 그 job에 합친다(`shortcut:` 주석).
+   - 배포 이슈에 지금 추가할 요구사항: PostgreSQL `log_error_verbosity=terse`(서버 로그에서 `DETAIL` 제외), nginx 접근 로그에서 OAuth 콜백의 쿼리 문자열(`code`·`state`) 제외, nginx 접근 로그에 `$upstream_http_x_request_id` 기록, nginx가 자기 `X-Request-Id`를 응답에 더하지 않음(헤더가 두 개가 된다), 배포 환경에 `LOG_FORMAT`·`DEBUG`·`TRACE`·`com.nsu.capstone` 밖 로거의 `LOGGING_LEVEL_*`를 두지 않음(두어도 Decision 7-3이 INFO로 올리지만, 시작할 때 ERROR가 남는다).
+10. **AI 서버 호출(NSU-63)은 `RequestIdInterceptor`를 AI client에만 붙인다.**
+    - `RequestIdInterceptor`(이 모듈의 유일한 public 타입)는 지금 요청의 ID를 `X-Request-Id`로 보낸다. 요청 스레드 밖에서는 헤더를 보내지 않는다.
+    - 전역 `RestClientCustomizer`로 붙이지 않는다. 그러면 자동 구성 builder를 쓰는 Resend 등 외부 업체에도 내부 ID가 간다.
+    - 헤더가 없을 때 AI 서버의 동작(017 미결정 9번)과 017 문서의 상태 표기 불일치는 NSU-63이 AI 담당에게 확인한다.
+
+### 사용 예
+
+backend README의 "로그" 절에 넣을 내용이다.
+
+- 로그는 SLF4J로 남긴다. 파일 주인의 스타일(`@Slf4j` 또는 `LoggerFactory`)을 따른다. 요청 ID, JSON, 시각은 자동으로 붙는다.
+- 이메일·전화번호·토큰·인증번호·비밀키와 DTO·record 통째는 로그와 예외 메시지에 넣지 않는다. CI의 `LogSafetyChecker`와 `LogPrivacyIntegrationTest`가 막는다.
+- 로컬에서 평문으로 보려면 `.env`에 `LOG_FORMAT=`(빈 값)을 둔다.
+- 요청 하나의 로그는 `requestId`로 찾는다. 응답 헤더 `X-Request-Id`와 같은 값이다.
+- MDC에 다른 키를 넣을 때는 `try (var ignored = MDC.putCloseable("eventId", id)) { … }`를 쓴다. `MDC.clear()`는 쓰지 않는다.
+
+기존 로그 한 줄(`RegionNormalizer:47`, 코드는 그대로)이 배포에서는 이렇게 나온다. 필드 순서는 Boot가 정한다.
+
+```json
+{"@timestamp":"2026-11-11T15:00:28.512+09:00","@version":"1","message":"지역 목록에 없는 EVENT_PARTNER 프로필 지역 코드: 29","logger_name":"com.nsu.capstone.partner.profile.application.RegionNormalizer","thread_name":"http-nio-8080-exec-3","level":"WARN","level_value":30000,"requestId":"0f8c1b9e-5d0a-4c55-9a43-2b1f3c7d9e10"}
+{"@timestamp":"…","message":"요청 처리 완료: PUT /api/v1/me/event-partner-profile -> 400 (31ms)","logger_name":"com.nsu.capstone.global.logging.RequestIdFilter","level":"INFO",…,"requestId":"0f8c1b9e-5d0a-4c55-9a43-2b1f3c7d9e10"}
+```
+
+로컬(`LOG_FORMAT=`):
+
+```text
+2026-11-11T15:00:28.512+09:00  WARN 4242 --- [nsu-capstone] [nio-8080-exec-3] [0f8c1b9e-5d0a-4c55-9a43-2b1f3c7d9e10] c.n.c.p.p.application.RegionNormalizer   : 지역 목록에 없는 EVENT_PARTNER 프로필 지역 코드: 29
+```
+
+NSU-63이 AI client를 만들 때:
+
+```java
+@Bean
+AiRecommendClient aiRecommendClient(RestClient.Builder builder, AiServerProperties properties) {
+    RestClient restClient = builder.clone()
+            .baseUrl(properties.baseUrl())
+            .requestInterceptor(new RequestIdInterceptor())   // X-Request-Id (서버 협의 017)
+            .build();
+    return new AiRecommendClient(restClient);
+}
+```
+
+### 타입 스케치
+
+```java
+// global/logging/RequestId.java — package-private. 이름과 값의 주인
+final class RequestId {
+    static final String HEADER = "X-Request-Id";   // 서버 협의 017
+    static final String MDC_KEY = "requestId";
+    static String generate();                       // UUID.randomUUID().toString()
+    static Optional<String> current();              // MDC에서 읽음. 요청 스레드 밖이면 empty
+}
+
+// global/logging/RequestIdFilter.java — package-private @Component @Order(HIGHEST_PRECEDENCE)
+class RequestIdFilter extends OncePerRequestFilter {
+    private record Tag(String requestId, long startNanos) {}   // 요청 속성에 한 번 저장
+    protected boolean shouldNotFilterErrorDispatch();          // false
+    protected boolean shouldNotFilterAsyncDispatch();          // false
+    protected void doFilterInternal(HttpServletRequest, HttpServletResponse, FilterChain);
+        // tagFor → MDC.clear·put → 헤더(없을 때만) → chain → catch: handledAsServerError → finally: logCompletion, MDC.clear
+    private static Tag tagFor(HttpServletRequest);             // 있으면 재사용, 없으면 생성
+    private boolean handledAsServerError(HttpServletRequest, HttpServletResponse, Exception);
+    private static void logCompletion(HttpServletRequest, HttpServletResponse, Tag);   // 400 이상 INFO, 아니면 DEBUG
+}
+
+// global/logging/RequestIdInterceptor.java — public. NSU-63이 AI client에만 붙인다
+public final class RequestIdInterceptor implements ClientHttpRequestInterceptor {
+    public ClientHttpResponse intercept(HttpRequest, byte[], ClientHttpRequestExecution);
+        // RequestId.current().ifPresent(id -> headers.set(RequestId.HEADER, id))
+}
+
+// global/logging/ 배포 로거 레벨 하한(Decision 7-3) — package-private, 웹 서버 시작 전에 한 번
+// 배포 형식이면 LoggingSystem에 설정된 레벨 중 com.nsu.capstone 밖에서 INFO보다 낮은 것을 모두 INFO로 올리고 ERROR 한 줄
+
+// test: global/codestyle/LogSafetyChecker.java — S1~S5, LombokStyleChecker와 같은 파서
+static List<Violation> check(String relativePath, String source);
+```
+
+모듈 지도:
+
+```text
+backend/src/main/java/com/nsu/capstone/global/logging/   RequestId, RequestIdFilter, RequestIdInterceptor, 배포 로거 레벨 검사
+backend/src/main/resources/application.properties        + classpath:config/logging.properties
+backend/src/main/resources/config/logging.properties     새 파일(형식, correlation, stacktrace, 로거 레벨, log-resolved-exception)
+backend/src/main/resources/config/database.properties    + logServerErrorDetail=false
+backend/src/main/java/.../SolapiSmsSender.java            (강석윤 님 답에 따라) 선언하지 않은 SDK 예외도 원인 없이 변환
+backend/src/main/java/.../RedisOAuth2AuthorizationRequestRepository.java  역직렬화 실패를 원인 없이 감쌈
+backend/src/main/java/.../global/config/OpenApiConfig.java  첫 화면 설명에 X-Request-Id 한 줄
+backend/src/test/java/com/nsu/capstone/global/logging/   LogCapture, Sentinel, 테스트들
+backend/src/test/java/com/nsu/capstone/global/codestyle/ LogSafetyChecker, LogSafetyFiles, 테스트
+backend/src/test/resources/lombok-style-files.txt         + 새 main 파일(김동엽 작성)
+backend/.env.example, backend/README.md                  LOG_FORMAT, "로그" 절
+.github/workflows/ci.yml                                 + job backend-log-safety
+docs/api/00_conventions.md                               + §11 요청 ID
+docs/adr/recommendation_eligibility/00_eligibility_rules.md  NSU-63 MDC 메모 갱신
+```
+
+새 의존성은 없다.
+
+### 테스트
+
+동작 하나에 테스트 하나를 쓰고, 실패를 확인한 뒤 구현한다(AGENTS.md). 첫 실패 테스트는 AC마다 하나다.
+
+| AC | 첫 실패 테스트 | 넣는 것 → 확인하는 것 | 실패 이유(지금) |
+|---|---|---|---|
+| 1 | `StructuredLoggingTest`(Docker 없음) | 배포와 같은 설정(OS 환경 변수 없음)으로 Boot `StructuredLogEncoder`를 만들고 WARN 한 건(두 줄 메시지, MDC `requestId`) → 형식이 `logstash`, 출력이 정확히 한 줄 JSON, `@timestamp`·`level`·`logger_name`·`message`·`requestId` 있음 | 형식 설정이 없다 |
+| 2 | `RequestIdFilterTest`(Docker 없음, MockMvc + 실제 필터) | 로그 두 줄을 남기는 요청 → 응답에 `X-Request-Id`, 그 스레드의 모든 줄(완료 줄 포함)이 같은 `requestId`, 끝난 뒤 MDC 비어 있음 | 헤더와 필드가 없다 |
+| 3 | `LogPrivacyIntegrationTest`(Testcontainers) | 가짜 이메일로 중복 가입 → 500, 어떤 줄에도 그 이메일 없음, Hibernate 제약 위반 줄은 있음 | Hibernate WARN과 `GlobalExceptionHandler`가 이메일을 남긴다 |
+| 3(정적) | `LogSafetyCheckerTest`(Docker 없음) | `log.info("가입 요청 {}", email);` → S2 위반 1건 | 검사기가 없다 |
+| 4 | `RequestIdInterceptorTest`(Docker 없음) | 실제 필터 뒤 엔드포인트가 NSU-63 방식 `RestClient`(`MockRestServiceServer`)로 호출 → 나가는 `X-Request-Id`가 들어온 응답의 `X-Request-Id`와 같음 | 인터셉터가 없다 |
+
+이어서 쓸 테스트(한 번에 하나씩):
+
+- AC1: `LOG_FORMAT=`이면 평문에 `[requestId]`, S1(`System.out`).
+- AC2 필터: 같은 스레드의 두 요청 사이에 ID와 `eventId`가 섞이지 않음, `GlobalExceptionHandler` ERROR 줄의 ID, `ERROR` 디스패치가 같은 ID를 씀, 값 없는 `ERROR` 디스패치는 새 ID, 빠져나온 예외는 ID와 함께 한 번 남고 500, 커밋 뒤 예외는 남기고 다시 던짐, 연결 끊김은 ERROR 없이 넘김, 완료 줄에 쿼리 문자열 없음, 2xx 완료 줄은 DEBUG, **들어온 `X-Request-Id: attacker-chosen`과 `traceparent`는 ID가 되지 않고 어떤 줄에도 없음**.
+- AC2 Security(`@WebMvcTest`, `RoleAuthorizationSecurityTest` 설정 복사): 토큰 없음·잘못된 토큰 401, URL 403·`@PreAuthorize` 403에서 헤더가 커밋된 응답에 있고, 완료 줄이 같은 ID이고, 본문은 정확히 `{code,message}`(`$.* hasSize(2)`).
+- AC2 실제 Tomcat(`RANDOM_PORT`): 방화벽 거절(`/test/log-probe/a;b`)의 두 디스패치가 같은 ID, 필터 사이에서 던진 예외가 ID 있는 ERROR 한 줄이고 `Servlet.service()` 줄이 없음.
+- 계약 §11: Spring 표준 400(`ProblemDetail`, 잘못된 JSON)과 OAuth 시작 `302`에도 `X-Request-Id`가 있음.
+- AC3: NOT NULL 위반, 가입·인증·로그인 흐름의 가짜 값, 배포 형식에서 `logging.level.root=TRACE`, `debug=true`, `trace=true`, `logging.level.web=DEBUG`, `logging.level.org.springframework.web.client=DEBUG`, `logging.level.org.hibernate.orm.jdbc.extract=TRACE`를 줘도 시작 뒤 `com.nsu.capstone` 밖 모든 로거의 실효 레벨이 INFO 이상이고 ERROR 한 줄이 남음, 같은 상태에서 `com.nsu.capstone`에 준 DEBUG는 그대로임, 평문 형식에서는 레벨을 바꾸지 않음, **실제 흐름**: 루트 TRACE와 `web.client=DEBUG`를 준 배포 형식 컨텍스트에서 로그인(이메일로 회원 조회)과 Resend 발송(가짜 이메일·인증번호)을 해도 어떤 줄에도 가짜 값이 없음(Logback 레벨은 JVM 전체에 걸리므로 테스트가 끝나면 원래대로 돌린다), actuator 웹 노출 목록에 `loggers`가 없음, 커밋한 설정에 DEBUG·TRACE·접근 로그·`log-request-details`가 없고 pgjdbc 설정이 있음, (이 이슈가 맡을 때만) `SolapiSmsSender`가 `SerializationException`(전화번호가 든 메시지)을 원인 없이 `VerificationDeliveryException`으로 바꿈, `RedisOAuth2AuthorizationRequestRepository`의 역직렬화 실패에 원래 메시지가 없음, `LogSafetyChecker` 나머지 규칙(S2b·S3·S4·S5), `src/main/java` 전체가 규칙을 지킴.
+- 기존 경합 테스트(`ArtistOAuthSignupIntegrationTest:359-396`, `EventIdempotencyIntegrationTest`)를 다시 돌려, Detail을 꺼도 제약 분류가 그대로인지 확인한다.
+
+구현할 때 한 번 확인할 것: 부트 jar를 JSON으로 띄웠을 때 Java 25가 JSON 아닌 줄(native access 경고 등)을 stderr에 찍는지 본다. 찍으면 JVM 옵션으로 끈다.
+
+## Context
+
+- NSU-144의 `backend-verify`가 "로그·에러 응답"을 판정하지 못했다(Unknown). 레포에 로그 설정, MDC, 요청 ID가 없다. 결정으로 뺀 것이 아니라 다루지 않아 비어 있던 것이다(PR #77에서 관측 설정을 "실제 설정이 생길 때까지" 미뤘다).
+- 한 요청은 같은 스레드에서 필터를 두 번 지날 수 있다. `REQUEST` 디스패치 뒤 `sendError`나 빠져나온 예외가 있으면 Tomcat이 `/error`로 `ERROR` 디스패치를 다시 연다. 그 사이에 Tomcat이 필터 밖에서 자기 ERROR 줄을 쓴다. Micrometer Observation 범위는 `REQUEST` 디스패치뿐이다.
+- 401/403 처리기(`JsonAuthenticationEntryPoint`·`JsonAccessDeniedHandler`)는 Security 필터 체인 안에서 응답을 바로 커밋하고 로그를 남기지 않는다.
+- 기본 로그 레벨에서 확인된 개인정보 유출은 앱 코드가 아니라 프레임워크에서 나온다. pgjdbc가 PostgreSQL `Detail`을 예외 메시지에 붙이고, Hibernate가 앱이 오류를 분류하기 전에 WARN으로 남긴다. `DEBUG` 환경 변수 하나(`false`가 아닌 모든 값)로 본문 로그(이메일, 비밀번호, 인증번호, Resend 본문, OAuth 토큰 요청 폼)가 열린다.
+- Security 필터 목록을 정확히 고정한 테스트(`LoginFlowIntegrationTest`, `OAuthAuthorizationFlowIntegrationTest`)가 있다. 에러 본문을 정확히 `{code, message}`로 고정한 단언이 5개 파일에 10곳 있다.
+- 레포는 Spring 프로필을 쓰지 않는다. 환경 차이는 `config/*.properties`의 `${ENV:기본값}`으로 만든다.
+- CI는 Spotless와 `global.codestyle.*` 테스트만 돌린다. NSU-135(전체 테스트 CI)는 Todo이고 담당자가 없다.
+- 12월 중순 동의를 받은 실제 학생·아티스트 데이터로 사용자 테스트를 할 계획이다. 시연 서버 로그의 개인정보가 실제 문제가 된다.
+
+## Rationale
+
+### 요청 ID를 누가 갖는가
+
+| 관점 | 필터 하나(채택) | Micrometer Tracing(Brave) | Tomcat Valve | `HandlerInterceptor` | Security 체인 안의 필터 |
+|---|---|---|---|---|---|
+| 정확성 | `REQUEST`·`ERROR` 디스패치, 401/403, Tomcat 줄(Decision 6)까지 같은 ID | `ERROR` 디스패치와 Tomcat 줄은 범위 밖이라 결국 필터가 필요 | 두 디스패치와 Tomcat 줄까지 | Security 체인(401/403)을 놓침 | 방화벽 줄과 `ERROR` 디스패치를 놓침 |
+| 보안 | 들어온 헤더를 읽지 않음 | 기본으로 들어온 `traceparent`를 믿음. 끄려면 설정 필요. Resend에 `traceparent`가 감 | 필터와 같음 | 차이 없음 | 차이 없음 |
+| 성능 | 요청마다 UUID 하나(약 1µs), MDC 쓰기 몇 번 | span 생성과 MDC 쓰기, 비슷한 수준 | 필터와 같음 | 같음 | 같음 |
+| 메모리 | 차이 없음 | 워커 스레드마다 Brave thread-local | 차이 없음 | 차이 없음 | 차이 없음 |
+| 확장성 | 나중에 분산 추적을 붙여도 `requestId` 필드는 그대로 | 분산 추적으로 넘어가기 쉬움 | Tomcat 전용 | 같음 | 같음 |
+| 운영 부담 | 새 의존성 없음 | 런타임 산출물 약 10개, 샘플링·전파 설정 | MockMvc·`@WebMvcTest`가 Valve를 돌리지 않아 테스트가 어려움 | 낮음 | 고정 테스트 2개가 깨짐 |
+| 사용자 경험 | 차이 없음 | 차이 없음 | 차이 없음 | 차이 없음 | 차이 없음 |
+| 구현량 | 타입 3개 | 의존성과 설정, 그리고 필터 | Valve와 별도 ID 출처 | 작음 | 작음 |
+
+### 개인정보: 출처에서 막기와 출력에서 가리기
+
+| 관점 | 출처에서 막기(채택) | 출력에서 가리기(정규식 마스킹) |
+|---|---|---|
+| 정확성 | 유출 경로를 없앤다. 테스트가 "고쳐짐"을 증명한다 | 모양이 있는 값(이메일, 전화번호)만 찾는다. 인증번호·결과 코드·세션 ID는 못 찾는다. 가린 줄과 고친 줄을 테스트로 구별할 수 없다 |
+| 보안 | 배포에서는 어떤 레벨 설정으로도 프레임워크·라이브러리가 본문·바인드 값·조회 값을 찍지 않는다 | 평문 출력은 가리지 않는다 |
+| 성능 | 추가 비용 없음 | 줄마다 정규식 여러 개 |
+| 메모리 | 차이 없음 | 차이 없음 |
+| 확장성 | 새 경로는 정적 검사와 테스트로 잡는다 | 새 모양의 값은 규칙을 더해야 한다 |
+| 운영 부담 | 배포에서는 프레임워크 로그를 DEBUG로 볼 수 없다(우리 코드만 가능). 프레임워크 문제는 로컬에서 재현한다 | DEBUG를 열 수 있다 |
+| 사용자 경험 | 차이 없음 | 차이 없음 |
+| 구현량 | 설정, 검사기, 테스트 | customizer와 규칙 목록 |
+
+### 사람 결정의 근거
+
+- **헤더만 내보낸다.** 헤더는 네 가지 응답 모양과 `302`에 모두 닿는다. 에러 본문 필드는 처리할 곳이 세 군데(`ErrorResponse`, `ProblemDetail`용 `createResponseEntity`, Boot `ErrorAttributes`)이고, `302`에는 넣을 수 없고, 고정 단언 10곳과 NSU-96 AC를 바꾸고, ADR-007 개정에 강석윤 님 합의가 필요하다. 문의 창구가 아직 없으므로 화면 표시는 그때 정한다.
+- **들어온 ID를 믿지 않는다.** 믿으면 클라이언트가 남의 번호를 흉내 내거나 같은 번호를 계속 써서 로그 검색을 흐릴 수 있다. nginx와의 연결은 응답 헤더를 로그에 적어 해결한다. 프록시 값만 믿는 방식(배포 전용 스위치)은 nginx 설정이 생긴 뒤 다시 볼 수 있다.
+- **logstash JSON이 기본이다.** 배포에서 실수해도 JSON이 나오고, 후보 도구(Datadog 등)가 추가 설정 없이 읽는다. 개발자는 `.env` 한 줄로 지금과 같은 평문을 본다.
+- **내부 UUID는 허용한다.** 장애 때 대상을 바로 찾는다. 사람을 직접 가리키는 값은 모두 막는다. `950ab56`이 Eligibility 로그에서 ID를 뺀 것은 "그 로그에는 개수만 필요해서"였다. `docs/api/01_trust_profile.md:343`의 아티스트 ID 경고 로그는 이 결정과 맞다.
+- **앱 안의 남은 경로는 이번에 고친다.** AC3(앱 로그) 안이고 고칠 곳이 작다. 앱 밖 로그는 시연 서버를 열기 전 조건으로 배포 이슈에 건다.
+- **새 CI job을 둔다.** "원칙은 테스트로 강제한다"는 규칙에 맞는다. PR마다 1~2분이 는다.
+
+## Synthesis decision
+
+architect가 구조가 다른 후보 두 개를 만들고 채점 기준(AC 증명, 재사용·인터페이스 깊이, 개인정보 규칙의 강도, ID의 보안, 다음 기여자가 틀리기 어려운 정도)으로 골랐다. 두 후보 모두 Claude라 다른 계열 심판은 없었다. 다른 계열 검증은 설계 리뷰(Codex)가 맡는다.
+
+- **바탕: 후보 2**(필터 하나, 의존성 없음, 출처에서 막기). 핵심 경로가 Spring Boot 4.1.1·Spring Framework 7.0.9 소스로 확인됐고, 새 의존성이 없다.
+- **두 후보가 같았던 것(그대로 채택):** 가장 바깥 필터가 `REQUEST`·`ERROR`를 거치고 요청 속성으로 ID를 넘긴다, 헤더를 chain 전에 붙인다, 완료 줄, 빠져나온 예외를 필터가 남기고 500으로 바꾼다, 헤더만 내보낸다, 들어온 ID를 믿지 않는다, JSON 기본과 `LOG_FORMAT=` 로컬 해제, `requestId`, AI client에만 인터셉터, `global.logging` 테스트를 CI에서 돌린다.
+- **후보 1에서 가져온 것:** 완료 줄을 400 이상은 INFO, 아니면 DEBUG로(헬스 체크 소음 방지), `stacktrace.max-length=8192`, 개인정보 테스트의 양성 대조(Hibernate 줄이 실제로 남았는지), 들어온 헤더가 ID가 되지 않는 테스트, `"X-Request-Id"` 문자열을 이 모듈 밖에서 금지(S4).
+- **후보 1에서 버린 것:** Micrometer Tracing을 ID 출처로 쓰기(의존성 약 10개를 늘려도 필터가 필요하고 ID의 주인이 둘이 된다), JSON 출력 마스킹(위 비교표), MDC 스냅샷 복원(양쪽 끝에서 비우는 쪽이 풀 스레드에서 더 엄격하다).
+- grill 뒤 바뀐 것: 형식을 ECS에서 logstash로 바꿨다(사람 결정). 배포 로거 레벨 하한(Decision 7-3)과 S5(비동기 금지)를 더했다. 둘 다 원칙을 테스트로 강제하려는 기술 결정이다.
+- 설계 리뷰 1회차 뒤 바뀐 것: 후보 2의 "본문 로거 목록 고정"을 "배포에서 우리 코드 밖 로거 전부 INFO 이상"으로 바꿨다. 목록 방식은 빠진 로거와 자식 로거 설정으로 뚫렸다.
+
+## Consequences
+
+- 모든 응답에 헤더 하나가 는다. 기존 클라이언트를 깨지 않는다(`docs/api/00` §1).
+- 테스트 콘솔 출력도 기본은 JSON이다. `LogCapture`는 형식과 무관하다. `logging.structured.format.console`가 있으면 Boot 배너가 꺼진다(빈 값이어도 같다).
+- 배포에서는 `com.nsu.capstone` 밖의 로거를 DEBUG·TRACE로 볼 수 없다. 프레임워크 문제는 로컬(평문)에서 재현해 본다. 로컬 평문에는 제한이 없다.
+- 제약 위반 로그에 충돌 값이 남지 않는다. 제약 이름은 남는다.
+- 400 이상 응답마다 INFO 한 줄(JSON 약 300바이트)이 는다. `ERROR` 디스패치 경로는 두 줄이다.
+- 커밋 전 `REQUEST` 디스패치에서 빠져나온 예외는 Tomcat 대신 필터가 남긴다. 클라이언트가 받는 응답은 같아야 하고, 실제 Tomcat 테스트가 지금 상태를 먼저 기록한다(익명 `/error`가 401이 되는지는 소스로 추론만 했다).
+- ID가 없는 줄이 남는다: 다른 스레드(Lettuce, HikariCP, JDK HttpClient 내부), Coyote 파싱 오류, 시작·종료. 비동기 작업은 S5로 막아 두었다.
+- 새 종류의 개인정보(예: NSU-105 PortOne의 이름·생년월일·CI·DI)를 다루는 이슈는 S2 이름 목록과 가짜 값 테스트를 늘린다.
+- 강석윤 님 파일 `RedisOAuth2AuthorizationRequestRepository`를 고친다. PR에서 알린다. `SolapiSmsSender`는 강석윤 님 답에 따라 NSU-123이나 이 이슈에서 고친다.
+- Linear에 남길 일: NSU-146 문구(`traceId` → `requestId`), 용어집 "요청 ID", 배포 이슈의 로그 요구사항(Decision 9), NSU-133 처리방침의 접속 기록, NSU-63 인터셉터와 017 확인, NSU-135 job 합치기.
+
+## Excluded
+
+- 로그 수집·저장 인프라와 도구 선택(Datadog 등): 배포 설계 때 정한다. 정할 때 비용(GB당 과금)과 국외 이전(처리방침 위탁 목록)을 함께 본다.
+- 지표 내보내기와 actuator 노출: recommendation_eligibility/00이 배포 설계로 미뤘다.
+- 감사 로그(SSOT `AUDIT-099`): 앱 로그와 별개다.
+- `/actuator/health` 401: NSU-147.
+- AI client 구현: NSU-63.
+- 화면의 "문의 코드" 표시와 신고 절차: 문의 창구·사용자 테스트 준비 때 정한다.
+- 에러 본문의 `requestId` 필드.
+- 분산 추적(Micrometer Tracing)과 다른 스레드로의 MDC 전파.
+
+## Reused
+
+- Spring Boot 4.1.1 내장 구조화 로그(`logging.structured.*`, logstash 형식)와 `logging.pattern.correlation`.
+- Spring Framework `OncePerRequestFilter`, `DisconnectedClientHelper`, `ClientHttpRequestInterceptor`. JDK `UUID`.
+- pgjdbc `logServerErrorDetail`, HikariCP `data-source-properties`.
+- `LombokStyleChecker`의 JDK 파서 방식(정적 검사), `OutputCaptureExtension` 선례(`EventPartnerProfileApiIntegrationTest:238-248`), `TestcontainersConfiguration`, `MockRestServiceServer`(`ResendEmailSenderTest` 방식).
+
+## Rejected Alternatives
+
+- Micrometer Tracing(Brave 또는 OpenTelemetry bridge)을 ID 출처로 쓰기: 위 비교표.
+- Tomcat Valve가 ID 갖기: MockMvc·`@WebMvcTest`가 Valve를 돌리지 않는다.
+- `ObservationHandler`나 `ServerHttpObservationFilter#onScopeOpened`: `ERROR` 디스패치를 못 다룬다.
+- Security 체인 안의 필터, `HandlerInterceptor`: 위 비교표.
+- 정규식 마스킹(`StructuredLoggingJsonMembersCustomizer`), `logstash-logback-encoder`의 마스킹: 위 비교표. 후자는 의존성도 는다.
+- 에러 본문에 `requestId`: 사람 결정의 근거.
+- 들어온 `X-Request-Id` 받기(UUID 형식 검사, 또는 nginx 값만): 사람 결정의 근거.
+- ECS 형식, 평문 기본: 사람 결정의 근거.
+- MDC 스냅샷 복원: 앞 요청이 남긴 키를 다시 설치할 수 있다.
+- 전역 `RestClientCustomizer`로 `X-Request-Id` 붙이기: 외부 업체에도 내부 ID가 간다.
+- 본문을 찍는 프레임워크 로거를 목록으로 고정하기(금지 목록): 목록에서 빠진 로거(`org.hibernate.orm.jdbc.extract` 등)와 자식 로거에 직접 준 레벨로 뚫린다(설계 리뷰 1회차 지적).
+- 배포에서 낮은 레벨이 있으면 시작을 막기: 장애 대응 중 재시작이 실패한다. 올리고 ERROR를 남긴다.
