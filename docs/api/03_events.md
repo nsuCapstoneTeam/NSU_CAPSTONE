@@ -5,7 +5,7 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 - 구현 이슈: NSU-54 (행사 일정·행사 정보 CRUD), NSU-58 (행사 정보와 추천 요청 연동), NSU-99 (등록 멱등 키, 선택정보 불리언 이름)
 - 요구사항: SSOT v1.16(2026-10-18 문서 전체 최종 승인) `EVT-041`~`EVT-044`, `SEC-100`, `DOMAIN-108`, `AI-MATCH-050`·`051`, `ART-028`·`029`
 - 결정 기록: [00 행사 단위와 시간대](../adr/event_management/00_event_unit_and_time_window.md), [01 지역 코드 표준](../adr/event_management/01_region_code_standard.md), [02 행사 소프트 삭제](../adr/event_management/02_event_soft_delete.md), [03 행사 등록 멱등 키](../adr/event_management/03_event_registration_idempotency_key.md)
-- 관련 계약: [02 추천 응답](./02_recommendation_trust_and_new_artist.md), 서버 협의 [012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)·[014](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)
+- 관련 계약: [02 추천 응답](./02_recommendation_trust_and_new_artist.md), 서버 협의 [012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)·[014](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)·[016](https://linear.app/nsu-capstone/document/016-spring-canonical-검색-입력-생성-및-ai-입력-책임-분리-29ac49c33ada)·[017](https://linear.app/nsu-capstone/document/017-spring-canonical-검색-입력-기반-ai-recommend-server-요청응답-계약-f96a57425124). 검색 문구의 재료(§8.2)와 지문(§8.3)은 SSOT v1.17(2026-11-05 승인) `AI-MATCH-050`·`EVT-042`와 [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)을 따른다
 - 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
 - 공통 규칙: [00_conventions.md](./00_conventions.md). 에러 형식과 공통 `code`는 [ADR-007](../adr/ADR-007-spring-backend-global-exception-handling.md)을 따른다
 
@@ -108,7 +108,7 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 
 ### 3.3 분류 값
 
-분류 값은 UPPER_SNAKE 코드로 주고받는다. 아래 표의 한국어 이름은 화면 표시와 AI 원문(§8.2)에 쓴다. enum 규칙(00 §3)을 따르므로 값은 추가될 수 있고, 삭제와 의미 변경은 breaking change다.
+분류 값은 UPPER_SNAKE 코드로 주고받는다. 아래 표의 한국어 이름은 화면 표시에 쓴다. 검색 문구(§8.2)에 쓰는 영어 문구는 [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)이 정한다. enum 규칙(00 §3)을 따르므로 값은 추가될 수 있고, 삭제와 의미 변경은 breaking change다.
 
 **행사 종류** `eventType` — 행사와 [EVENT_PARTNER 프로필](./05_event_partner_profile.md)의 주요 행사 종류가 쓴다. 값을 더할 때는 두 테이블의 `CHECK`를 같은 마이그레이션에서 고친다.
 
@@ -429,7 +429,7 @@ Authorization: Bearer {accessToken}
 ```
 
 - NSU-58의 "매칭 요청"은 이 추천 요청이다. 문서에서는 "추천 요청"으로 쓴다. "매칭"은 Offer 수락(매칭 성사)과 헷갈리기 때문이다.
-- 조건을 바꿔 추천받으려면 행사를 고친 뒤 다시 요청한다. 분위기·템포 같은 요구는 `description`에 쓰면 AI가 해석한다(서버 협의 012 결정 3.2).
+- 조건을 바꿔 추천받으려면 행사를 고친 뒤 다시 요청한다. 행사 설명은 추천 검색 입력에 쓰지 않는다(SSOT `EVT-042` v1.17). 분위기·템포·보컬 같은 음악 조건은 NSU-121에서 행사 필드로 받는다(서버 협의 016).
 - 추천 결과 응답, 다시 보기, 재생 주소, 잠금과 생성 횟수 제한은 02를 따른다.
 
 ### 8.1 추천을 만들 수 있는 조건
@@ -445,14 +445,14 @@ Authorization: Bearer {accessToken}
 
 ### 8.2 snapshot
 
-생성을 시작할 때 행사를 한 번 읽어 고정한다(서버 협의 014 결정 4). Eligibility, AI 원문, 지문을 모두 이 snapshot으로 만든다.
+생성을 시작할 때 행사를 한 번 읽어 고정한다(서버 협의 014 결정 4). Eligibility, 검색 문구, 지문을 모두 이 snapshot으로 만든다.
 
 | 용도 | 행사 필드 |
 |---|---|
 | Eligibility 입력(`AI-MATCH-051`) | 시간대(`startDate`·`startTime`·`endDate`·`endTime`), `performanceMinutes`, `regionCode`, `budgetMin`·`budgetMax`, `artistType` |
-| AI 원문(서버 협의 012 결정 3.2) | `description`, `eventType`의 이름, `genres`의 이름(§3.3) |
+| 검색 문구의 재료(서버 협의 016) | `eventType`, `genres` (NSU-121 이후 분위기·템포·보컬) |
 
-- AI에는 코드가 아니라 §3.3 표의 한국어 이름을 보낸다. AI 요청에서 이 값들을 담는 필드 모양(문자열, 목록)은 NSU-63에서 AI 담당과 정한다.
+- Spring은 이 값으로 영문 검색 문구를 만들어 AI에 보낸다(02 §1.0, [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)). AI 요청의 필드는 서버 협의 017(Accepted)을 따르고, 구현은 NSU-63이 한다.
 - 예산을 어떻게 판정할지(범위가 겹치는지, 출연료 최소가 예산 최대 이하인지)는 NSU-48에서 정한다.
 
 ### 8.3 `isEventChanged` 지문
@@ -461,7 +461,7 @@ Authorization: Bearer {accessToken}
 
 | 바뀌면 `true` | 바뀌어도 `false` |
 |---|---|
-| `startDate`, `startTime`, `endDate`, `endTime`, `performanceMinutes`, `regionCode`, `budgetMin`, `budgetMax`, `artistType`, `description`, `eventType`, `genres` | `name`, `venue`, `expectedAudience`, `visibility`, `details` |
+| `startDate`, `startTime`, `endDate`, `endTime`, `performanceMinutes`, `regionCode`, `budgetMin`, `budgetMax`, `artistType`, `eventType`, `genres` | `name`, `venue`, `expectedAudience`, `visibility`, `details`, `description` |
 
 - `genres`는 순서와 관계없이 같은 집합이면 같은 값이다.
 - 값을 바꿨다가 원래대로 되돌리면 `false`다(02 §4.3).
@@ -652,7 +652,7 @@ HTTP/1.1 422 Unprocessable Content
 | 열람 | 다른 사용자의 PUBLIC 조회 `200`, PRIVATE 조회 `404`. 다른 사용자의 PUBLIC 수정 `403`, PRIVATE 수정 `404` |
 | 역할 | ARTIST의 등록·내 행사 목록은 `403`. ARTIST가 멱등 키 없이 등록해도 `403`(역할을 키보다 먼저 검사) |
 | 목록 | 시작 = 지금인 행사는 `PAST`. `UPCOMING` 오름차순, `PAST` 내림차순. `size = 101`은 `400`, 끝을 넘은 `page`는 `items: []` |
-| 지문 | `name`·`details` 수정은 `isEventChanged = false`, `endDate`·`regionCode` 수정은 `true`. `genres` 순서만 바꾸면 `false` |
+| 지문 | `name`·`details`·`description` 수정은 `isEventChanged = false`, `endDate`·`regionCode` 수정은 `true`. `genres` 순서만 바꾸면 `false` |
 | 생성 중 변경 | AI 응답을 기다리는 동안 행사를 취소하면 결과가 저장되고 `201`. 삭제하면 결과가 저장되고 `404`이며, 그 결과가 하루 5회 계산에 들어간다. `name`만 고치면 생성 응답의 `isEventChanged = false`, `endDate`를 고치면 `true`. 저장 직전 횟수 재확인에서 한도를 넘으면 행사를 지웠어도 `429`이고 저장하지 않는다 |
 | 비공개 | PRIVATE으로 등록할 수 있다. 등록자는 `200`, 다른 사용자는 `404`. 오래된 화면의 PUT으로 PUBLIC으로 되돌아가는 것은 알려진 위험이다(§5.4) |
 | 멱등 키 형식 | 키가 없으면 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다. 따옴표로 감싼 값, 대문자 UUID, UUID가 아닌 값도 `VALIDATION_ERROR`다. UUIDv4와 UUIDv7은 통과 |
@@ -672,7 +672,7 @@ HTTP/1.1 422 Unprocessable Content
 | [02 추천 응답](./02_recommendation_trust_and_new_artist.md) | §0의 미정 항목 2개(요청 본문, 취소·삭제된 행사)를 이 문서 §5.2·§8로 넘기고, §0.1·§1·§4.3·§5·§5.2에 행사 상태, 필드 이름, 검사 순서, 생성 중 변경(§8.4)을 반영한다 | 이 변경에 포함 |
 | [00 공통 규칙](./00_conventions.md) | `/me` 경로, 상태 전이용 1:1 하위 자원, 지역 코드 예외, 날짜·시:분 형식, 페이지네이션 | 이 변경에 포함 |
 | 용어집 (Linear) | 행사, 행사 시간대·공연시간, 행사 취소·행사 삭제, 추천 요청(피할 표현: 매칭 요청) | 설계 리뷰 뒤 반영 |
-| 프런트 | `date`를 시작·종료 날짜로 나누고 예산을 원 단위로 바꾼다. 한국어 값을 코드로, 지역을 두 단계 선택으로 바꾸고 선택정보 칸을 더한다. PRIVATE 안내 문구를 지금의 동작("등록한 사람만 볼 수 있어요")으로 바꾼다. localStorage 대신 API를 쓴다. 매칭 화면의 분위기·템포·리듬 입력은 행사 설명으로 옮긴다 | 프런트 담당과 협의 |
+| 프런트 | `date`를 시작·종료 날짜로 나누고 예산을 원 단위로 바꾼다. 한국어 값을 코드로, 지역을 두 단계 선택으로 바꾸고 선택정보 칸을 더한다. PRIVATE 안내 문구를 지금의 동작("등록한 사람만 볼 수 있어요")으로 바꾼다. localStorage 대신 API를 쓴다. 매칭 화면의 분위기·템포·리듬 입력은 음악 조건 선택(분위기·템포·보컬, NSU-121·125)으로 바꾼다 | 프런트 담당과 협의 |
 
 ### 12.1 등록 멱등 키와 불리언 이름 (NSU-99, 2026-10-18)
 

@@ -817,6 +817,8 @@ V1에서는 리뷰와 별점을 **Artist Reliability 계산에서 제외**합니
 
 **상태: [확정]**
 
+> 2026-11-10 변경: AI 입력은 행사 원문이 아니라 Spring이 음악 조건으로 만든 검색 문구이고, AI는 요청을 해석하지 않는다([recommendation_search_input/00](../recommendation_search_input/00_canonical_keyphrase.md)). 아래 그림의 "행사 요청(Event 원문)"과 "요청 해석"은 이 결정 전 흐름이다.
+
 현재 추천 시스템은 다음 흐름을 가집니다([서버 협의 012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba), 2026-10-10 Accepted). 순위는 AI 서버가 음악 유사도만으로 정하고, Trust Profile은 추천 결과에 표시만 합니다([D39](./04_final_policy_decisions.md#d39-display-only)).
 
 ```mermaid
