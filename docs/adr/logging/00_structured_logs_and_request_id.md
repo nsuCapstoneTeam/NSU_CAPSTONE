@@ -4,7 +4,7 @@
 - 결정일: **2026-11-11** (NSU-146). 사람 결정(김동엽, grill): 응답 헤더 `X-Request-Id`만 내보내고 에러 본문은 그대로 둔다, 이름은 `requestId`, 들어온 ID는 믿지 않는다, 기본 형식은 logstash JSON, 내부 UUID는 로그에 남겨도 된다, 앱 안의 남은 유출 경로는 이번에 고친다, 로그 테스트는 새 CI job으로 돌린다
 - 요구사항: SSOT 최종 승인 v1.17.1(현재 리비전 v1.19 초안)에는 앱 로그·요청 ID·로그 마스킹 규칙이 없다. 관련 항목은 `SEC-120`(OAuth Access Token 평문 저장 금지), `MVP-128`(초기에 Elasticsearch 등 미개발)이다
 - 설계 과정: `/pstack:architect`(조사 10건, 구조가 다른 후보 2개, 합성)를 거쳐 사람 판단 항목만 grill로 정했다. 합성 결과는 [Synthesis decision](#synthesis-decision)에 있다
-- 설계 리뷰: Codex adversarial review(grill `20261111T084617Z-c1f27111`) 1회차 지적 2건(루트 TRACE에서 Hibernate `org.hibernate.orm.jdbc.extract`가 조회 값을 찍음, 자식 로거에 직접 준 DEBUG가 부모 고정을 우회함)을 Decision 7-2·7-3에 반영했다. 결과: 금지 목록 대신, 배포에서 우리 코드 밖 로거를 모두 INFO 이상으로 강제한다
+- 설계 리뷰: Codex adversarial review(grill `20261111T084617Z-c1f27111`) 1회차 지적 2건(루트 TRACE에서 Hibernate `org.hibernate.orm.jdbc.extract`가 조회 값을 찍음, 자식 로거에 직접 준 DEBUG가 부모 고정을 우회함)을 Decision 7-2·7-3에 반영했다. 결과: 금지 목록 대신, 배포에서 우리 코드 밖 로거를 모두 INFO 이상으로 강제한다. 2회차 지적 1건(Tomcat 로거의 WARN 고정을 환경 변수·자식 로거 설정이 덮어써 INFO에서 잘못된 쿠키 원문이 남음)을 Decision 7-2·7-3에 반영했다. 결과: 그 두 로거와 자식은 배포에서 WARN 하한을 강제한다
 - 관련: [API 공통 규칙 §8·§11](../../api/00_conventions.md), [ADR-007](../ADR-007-spring-backend-global-exception-handling.md), [recommendation_eligibility/00](../recommendation_eligibility/00_eligibility_rules.md) Consequences, [identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md)(로그 속 개인정보, 초기화 runbook), [backend_code_style/00](../backend_code_style/00_lombok_usage.md), [authentication/00](../authentication/00_csrf_protection_for_bearer_api.md) Decision 6, Linear 서버 협의 010·017, NSU-63(AI client), NSU-123(SMS 발송), NSU-129(시연 서버 공개 조건), NSU-133(처리방침), NSU-135(CI 전체 테스트), NSU-147(`/actuator/health`)
 
 ---
@@ -41,9 +41,10 @@
    - 허용: 내부 UUID(회원·아티스트·행사·곡·요청 ID)(사람 결정). 우리 DB와 합치면 사람을 알아볼 수 있으므로, 처리방침에 접속 기록으로 적는다(NSU-133). 시연 서버 초기화 때 로그도 지운다(NSU-129, identity_verification/00).
    - 막는 방법:
      1. pgjdbc `logServerErrorDetail=false`(`config/database.properties`, `spring.datasource.hikari.data-source-properties.*`). PostgreSQL `Detail`(`Key (email)=(…)`, `Failing row contains (…)`)이 예외 메시지에 붙지 않는다. 지금 기본 설정에서 유일하게 확인된 유출(Hibernate `org.hibernate.orm.jdbc.error` WARN과 `GlobalExceptionHandler` ERROR)이 여기서 막힌다. 제약 이름은 본 메시지에 남아 기존 분류(`ArtistOAuthSignupService`의 `getConstraintName()`)는 그대로 동작한다.
-     2. INFO에서도 원문을 찍는 Tomcat 로거 두 개를 `config/logging.properties`에서 WARN으로 고정한다. `org.apache.tomcat.util.http`(잘못된 쿠키 원문), `org.apache.coyote.http11.Http11Processor`(잘못된 요청 주소와 쿼리 문자열)다.
-     3. **배포 형식(JSON)에서는 `com.nsu.capstone` 밖의 모든 로거와 루트를 INFO보다 낮게 둘 수 없다.**
-        - 앱이 요청을 받기 전에(싱글톤을 만든 뒤, 웹 서버가 시작하기 전) `LoggingSystem`에 설정된 레벨을 모두 본다. INFO보다 낮은 것은 루트, 상위 패키지, 그 아래 자식 로거에 직접 준 레벨을 가리지 않고 INFO로 올린다. 올린 로거 이름을 ERROR 한 줄로 남긴다.
+     2. INFO에서도 원문을 찍는 Tomcat 로거 두 개를 `config/logging.properties`에서 WARN으로 고정한다. `org.apache.tomcat.util.http`(잘못된 쿠키 원문, `Cookie.logInvalidHeader`), `org.apache.coyote.http11.Http11Processor`(잘못된 요청 주소와 쿼리 문자열)다. 설정 파일 값은 환경 변수나 자식 로거 설정이 덮어쓸 수 있으므로, 배포에서는 7-3이 이 두 로거와 그 자식의 하한을 WARN으로 강제한다(설계 리뷰 2회차 지적).
+     3. **배포 형식(JSON)에서는 로거마다 레벨 하한을 강제한다.**
+        - 하한은 두 가지다. `org.apache.tomcat.util.http`와 `org.apache.coyote.http11.Http11Processor`, 그리고 그 아래 모든 자식 로거는 **WARN**이다. INFO에서도 원문을 찍기 때문이다. 그 밖에 `com.nsu.capstone` 밖의 모든 로거와 루트는 **INFO**다. 하한 표는 한 곳(이 검사기)에만 두고, 7-2의 설정 값과 같은지 테스트가 확인한다.
+        - 앱이 요청을 받기 전에(싱글톤을 만든 뒤, 웹 서버가 시작하기 전) `LoggingSystem`에 설정된 레벨을 모두 본다. 하한보다 낮은 것은 루트, 상위 패키지, 그 아래 자식 로거에 직접 준 레벨을 가리지 않고 하한으로 올린다. 설정 파일, 환경 변수, 명령행 등 어디서 왔는지 따지지 않는다. 올린 로거 이름을 ERROR 한 줄로 남긴다.
         - 그래서 `DEBUG=true`, `TRACE=true`, `LOGGING_LEVEL_ROOT=TRACE`, `logging.level.web=DEBUG`, `LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB_CLIENT=DEBUG`, `logging.level.org.hibernate.orm.jdbc.extract=TRACE` 중 무엇을 줘도 프레임워크·라이브러리가 본문, 바인드 값, 조회 값, 헤더를 찍지 않는다.
         - 위험한 로거를 하나씩 고정하는 금지 목록은 쓰지 않는다. 빠진 로거(Hibernate `org.hibernate.orm.jdbc.extract`의 조회 값 TRACE)나 자식 로거에 직접 준 레벨(Logback은 자식의 명시 레벨을 부모보다 먼저 쓴다)로 뚫리기 때문이다(설계 리뷰 1회차 지적).
         - 우리 코드(`com.nsu.capstone`)는 DEBUG로 열 수 있다. 우리 코드의 로그 인자는 정적 검사(Decision 8)가 레벨과 상관없이 막는다.
@@ -66,7 +67,7 @@
    - 그 밖의 테스트 목록과 순서는 아래 [테스트](#테스트)에 있다.
 9. **CI와 배포 요구사항**(사람 결정).
    - 새 CI job `backend-log-safety`가 PR마다 `./gradlew test --tests 'com.nsu.capstone.global.logging.*'`를 돌린다(`ubuntu-latest`는 Docker가 있어 Testcontainers가 돈다). 정적 검사는 기존 `backend-lint`의 `global.codestyle.*` 단계에서 돈다. NSU-135가 전체 테스트를 CI에 올리면 그 job에 합친다(`shortcut:` 주석).
-   - 배포 이슈에 지금 추가할 요구사항: PostgreSQL `log_error_verbosity=terse`(서버 로그에서 `DETAIL` 제외), nginx 접근 로그에서 OAuth 콜백의 쿼리 문자열(`code`·`state`) 제외, nginx 접근 로그에 `$upstream_http_x_request_id` 기록, nginx가 자기 `X-Request-Id`를 응답에 더하지 않음(헤더가 두 개가 된다), 배포 환경에 `LOG_FORMAT`·`DEBUG`·`TRACE`·`com.nsu.capstone` 밖 로거의 `LOGGING_LEVEL_*`를 두지 않음(두어도 Decision 7-3이 INFO로 올리지만, 시작할 때 ERROR가 남는다).
+   - 배포 이슈에 지금 추가할 요구사항: PostgreSQL `log_error_verbosity=terse`(서버 로그에서 `DETAIL` 제외), nginx 접근 로그에서 OAuth 콜백의 쿼리 문자열(`code`·`state`) 제외, nginx 접근 로그에 `$upstream_http_x_request_id` 기록, nginx가 자기 `X-Request-Id`를 응답에 더하지 않음(헤더가 두 개가 된다), 배포 환경에 `LOG_FORMAT`·`DEBUG`·`TRACE`·`com.nsu.capstone` 밖 로거의 `LOGGING_LEVEL_*`를 두지 않음(두어도 Decision 7-3이 하한으로 올리지만, 시작할 때 ERROR가 남는다).
 10. **AI 서버 호출(NSU-63)은 `RequestIdInterceptor`를 AI client에만 붙인다.**
     - `RequestIdInterceptor`(이 모듈의 유일한 public 타입)는 지금 요청의 ID를 `X-Request-Id`로 보낸다. 요청 스레드 밖에서는 헤더를 보내지 않는다.
     - 전역 `RestClientCustomizer`로 붙이지 않는다. 그러면 자동 구성 builder를 쓰는 Resend 등 외부 업체에도 내부 ID가 간다.
@@ -138,7 +139,8 @@ public final class RequestIdInterceptor implements ClientHttpRequestInterceptor 
 }
 
 // global/logging/ 배포 로거 레벨 하한(Decision 7-3) — package-private, 웹 서버 시작 전에 한 번
-// 배포 형식이면 LoggingSystem에 설정된 레벨 중 com.nsu.capstone 밖에서 INFO보다 낮은 것을 모두 INFO로 올리고 ERROR 한 줄
+// 배포 형식이면 LoggingSystem에 설정된 레벨을 하한 표와 비교해 낮은 것을 하한으로 올리고 ERROR 한 줄
+// 하한 표: org.apache.tomcat.util.http·org.apache.coyote.http11.Http11Processor와 자식 = WARN, 그 밖의 com.nsu.capstone 밖 로거와 루트 = INFO
 
 // test: global/codestyle/LogSafetyChecker.java — S1~S5, LombokStyleChecker와 같은 파서
 static List<Violation> check(String relativePath, String source);
@@ -184,7 +186,7 @@ docs/adr/recommendation_eligibility/00_eligibility_rules.md  NSU-63 MDC 메모 �
 - AC2 Security(`@WebMvcTest`, `RoleAuthorizationSecurityTest` 설정 복사): 토큰 없음·잘못된 토큰 401, URL 403·`@PreAuthorize` 403에서 헤더가 커밋된 응답에 있고, 완료 줄이 같은 ID이고, 본문은 정확히 `{code,message}`(`$.* hasSize(2)`).
 - AC2 실제 Tomcat(`RANDOM_PORT`): 방화벽 거절(`/test/log-probe/a;b`)의 두 디스패치가 같은 ID, 필터 사이에서 던진 예외가 ID 있는 ERROR 한 줄이고 `Servlet.service()` 줄이 없음.
 - 계약 §11: Spring 표준 400(`ProblemDetail`, 잘못된 JSON)과 OAuth 시작 `302`에도 `X-Request-Id`가 있음.
-- AC3: NOT NULL 위반, 가입·인증·로그인 흐름의 가짜 값, 배포 형식에서 `logging.level.root=TRACE`, `debug=true`, `trace=true`, `logging.level.web=DEBUG`, `logging.level.org.springframework.web.client=DEBUG`, `logging.level.org.hibernate.orm.jdbc.extract=TRACE`를 줘도 시작 뒤 `com.nsu.capstone` 밖 모든 로거의 실효 레벨이 INFO 이상이고 ERROR 한 줄이 남음, 같은 상태에서 `com.nsu.capstone`에 준 DEBUG는 그대로임, 평문 형식에서는 레벨을 바꾸지 않음, **실제 흐름**: 루트 TRACE와 `web.client=DEBUG`를 준 배포 형식 컨텍스트에서 로그인(이메일로 회원 조회)과 Resend 발송(가짜 이메일·인증번호)을 해도 어떤 줄에도 가짜 값이 없음(Logback 레벨은 JVM 전체에 걸리므로 테스트가 끝나면 원래대로 돌린다), actuator 웹 노출 목록에 `loggers`가 없음, 커밋한 설정에 DEBUG·TRACE·접근 로그·`log-request-details`가 없고 pgjdbc 설정이 있음, (이 이슈가 맡을 때만) `SolapiSmsSender`가 `SerializationException`(전화번호가 든 메시지)을 원인 없이 `VerificationDeliveryException`으로 바꿈, `RedisOAuth2AuthorizationRequestRepository`의 역직렬화 실패에 원래 메시지가 없음, `LogSafetyChecker` 나머지 규칙(S2b·S3·S4·S5), `src/main/java` 전체가 규칙을 지킴.
+- AC3: NOT NULL 위반, 가입·인증·로그인 흐름의 가짜 값, 배포 형식에서 `logging.level.root=TRACE`, `debug=true`, `trace=true`, `logging.level.web=DEBUG`, `logging.level.org.springframework.web.client=DEBUG`, `logging.level.org.hibernate.orm.jdbc.extract=TRACE`를 줘도 시작 뒤 `com.nsu.capstone` 밖 모든 로거의 실효 레벨이 INFO 이상이고 ERROR 한 줄이 남음, 같은 상태에서 `com.nsu.capstone`에 준 DEBUG는 그대로임, 배포 형식에서 `logging.level.org.apache.tomcat.util.http=DEBUG`·`INFO`, 자식 `logging.level.org.apache.tomcat.util.http.parser.Cookie=INFO`, `logging.level.org.apache.coyote.http11.Http11Processor=TRACE`를 줘도 실효 레벨이 WARN임, 하한 표의 WARN 로거가 `config/logging.properties`의 WARN 설정과 같음, **실제 Tomcat 흐름**(`RANDOM_PORT`): 위처럼 Tomcat 로거를 낮춘 배포 형식에서 가짜 값이 든 잘못된 쿠키와 잘못된 요청 주소(쿼리에 가짜 값)를 보내도 어떤 줄에도 가짜 값이 없음, 평문 형식에서는 레벨을 바꾸지 않음, **실제 흐름**: 루트 TRACE와 `web.client=DEBUG`를 준 배포 형식 컨텍스트에서 로그인(이메일로 회원 조회)과 Resend 발송(가짜 이메일·인증번호)을 해도 어떤 줄에도 가짜 값이 없음(Logback 레벨은 JVM 전체에 걸리므로 테스트가 끝나면 원래대로 돌린다), actuator 웹 노출 목록에 `loggers`가 없음, 커밋한 설정에 DEBUG·TRACE·접근 로그·`log-request-details`가 없고 pgjdbc 설정이 있음, (이 이슈가 맡을 때만) `SolapiSmsSender`가 `SerializationException`(전화번호가 든 메시지)을 원인 없이 `VerificationDeliveryException`으로 바꿈, `RedisOAuth2AuthorizationRequestRepository`의 역직렬화 실패에 원래 메시지가 없음, `LogSafetyChecker` 나머지 규칙(S2b·S3·S4·S5), `src/main/java` 전체가 규칙을 지킴.
 - 기존 경합 테스트(`ArtistOAuthSignupIntegrationTest:359-396`, `EventIdempotencyIntegrationTest`)를 다시 돌려, Detail을 꺼도 제약 분류가 그대로인지 확인한다.
 
 구현할 때 한 번 확인할 것: 부트 jar를 JSON으로 띄웠을 때 Java 25가 JSON 아닌 줄(native access 경고 등)을 stderr에 찍는지 본다. 찍으면 JVM 옵션으로 끈다.
@@ -247,6 +249,7 @@ architect가 구조가 다른 후보 두 개를 만들고 채점 기준(AC 증�
 - **후보 1에서 버린 것:** Micrometer Tracing을 ID 출처로 쓰기(의존성 약 10개를 늘려도 필터가 필요하고 ID의 주인이 둘이 된다), JSON 출력 마스킹(위 비교표), MDC 스냅샷 복원(양쪽 끝에서 비우는 쪽이 풀 스레드에서 더 엄격하다).
 - grill 뒤 바뀐 것: 형식을 ECS에서 logstash로 바꿨다(사람 결정). 배포 로거 레벨 하한(Decision 7-3)과 S5(비동기 금지)를 더했다. 둘 다 원칙을 테스트로 강제하려는 기술 결정이다.
 - 설계 리뷰 1회차 뒤 바뀐 것: 후보 2의 "본문 로거 목록 고정"을 "배포에서 우리 코드 밖 로거 전부 INFO 이상"으로 바꿨다. 목록 방식은 빠진 로거와 자식 로거 설정으로 뚫렸다.
+- 설계 리뷰 2회차 뒤 바뀐 것: 하한을 로거마다 둘 수 있게 했다. INFO에서도 원문을 찍는 Tomcat 로거 두 개와 그 자식은 WARN 하한이다.
 
 ## Consequences
 
