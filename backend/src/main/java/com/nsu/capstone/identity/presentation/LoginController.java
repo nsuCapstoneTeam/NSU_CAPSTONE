@@ -5,6 +5,7 @@ import com.nsu.capstone.identity.presentation.dto.LoginRequest;
 import com.nsu.capstone.identity.presentation.dto.LoginResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,7 +25,7 @@ public class LoginController {
     }
 
     @PostMapping
-    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
-        return loginService.login(request.email(), request.password());
+    public LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
+        return loginService.login(request.email(), request.password(), servletRequest.getRemoteAddr());
     }
 }

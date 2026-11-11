@@ -66,7 +66,6 @@ public class SecurityConfig {
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, basePath + "/session/phone-verification/send"),
                 PathPatternRequestMatcher.pathPattern(
                         HttpMethod.POST, basePath + "/session/phone-verification/confirm"),
-                PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, basePath + "/session/required-terms-agreement"),
                 PathPatternRequestMatcher.pathPattern(HttpMethod.POST, basePath + "/session/adult-confirmation"));
     }
 

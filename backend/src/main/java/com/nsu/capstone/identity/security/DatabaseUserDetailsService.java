@@ -2,6 +2,7 @@ package com.nsu.capstone.identity.security;
 
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.repository.UserRepository;
+import com.nsu.capstone.identity.signup.SignupIdentityNormalizer;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -20,8 +21,9 @@ public class DatabaseUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        User user = userRepository.findByEmail(email)
-            .orElseThrow(() -> new UsernameNotFoundException(USER_NOT_FOUND));
+        User user = userRepository
+                .findByEmail(SignupIdentityNormalizer.email(email))
+                .orElseThrow(() -> new UsernameNotFoundException(USER_NOT_FOUND));
 
         if (user.getPasswordHash() == null) {
             throw new UsernameNotFoundException(USER_NOT_FOUND);

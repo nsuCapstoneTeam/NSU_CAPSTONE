@@ -175,7 +175,7 @@ class OpenApiDocsIntegrationTest {
             }
         }
 
-        assertThat(publicApis).hasSize(20);
+        assertThat(publicApis).hasSize(18);
         assertThat(publicApisWithAuth).isEmpty();
         assertThat(otherApis).hasSize(11);
         assertThat(otherApisWithOverride).isEmpty();

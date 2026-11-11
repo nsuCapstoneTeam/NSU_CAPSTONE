@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.nsu.capstone.SignupTestTerms;
 import com.nsu.capstone.global.exception.GlobalExceptionHandler;
 import com.nsu.capstone.identity.application.EventPartnerSignupService;
 import com.nsu.capstone.identity.domain.UserRole;
@@ -38,35 +39,35 @@ class EventPartnerSignupControllerTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        mockMvc = MockMvcBuilders
-            .standaloneSetup(new EventPartnerSignupController(signupService))
-            .setControllerAdvice(new GlobalExceptionHandler())
-            .build();
+        mockMvc = MockMvcBuilders.standaloneSetup(new EventPartnerSignupController(signupService))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test
     void createsEventPartnerSignupSession() throws Exception {
-        when(signupService.createSession("partner@example.com", "01012345678"))
-            .thenReturn(new CreateEventPartnerSignupSessionResponse("session-id"));
+        when(signupService.createSession(
+                        "partner@example.com", "01012345678", SignupTestTerms.agreements(), "127.0.0.1"))
+                .thenReturn(new CreateEventPartnerSignupSessionResponse("session-id"));
 
         mockMvc.perform(post("/api/v1/auth/signup/event-partner/session")
-                .contentType(APPLICATION_JSON)
-                .content("""
-                    {"email":"partner@example.com","phone":"01012345678"}
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                    {"email":"partner@example.com","phone":"01012345678","agreements":[{"id":"service","version":"v1"},{"id":"privacy","version":"v1"}]}
                     """))
-            .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.*", hasSize(1)))
-            .andExpect(jsonPath("$.signupSessionId").value("session-id"));
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.*", hasSize(1)))
+                .andExpect(jsonPath("$.signupSessionId").value("session-id"));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"", "1234567"})
     void rejectsBlankOrShortPassword(String password) throws Exception {
         mockMvc.perform(post("/api/v1/auth/signup/event-partner")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\",\"password\":\"" + password + "\"}"))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\",\"password\":\"" + password + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @ParameterizedTest
@@ -75,21 +76,17 @@ class EventPartnerSignupControllerTest {
         when(signupService.signup("session-id", password)).thenReturn(response());
 
         mockMvc.perform(post("/api/v1/auth/signup/event-partner")
-                .contentType(APPLICATION_JSON)
-                .content("{\"signupSessionId\":\"session-id\",\"password\":\"" + password + "\"}"))
-            .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.userId").value(USER_ID.toString()))
-            .andExpect(jsonPath("$.role").value("EVENT_PARTNER"))
-            .andExpect(jsonPath("$.status").value("ACTIVE"))
-            .andExpect(content().string(not(containsString("password"))));
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"signupSessionId\":\"session-id\",\"password\":\"" + password + "\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.userId").value(USER_ID.toString()))
+                .andExpect(jsonPath("$.role").value("EVENT_PARTNER"))
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(content().string(not(containsString("password"))));
     }
 
     private EventPartnerSignupResponse response() {
         return new EventPartnerSignupResponse(
-            USER_ID,
-            "partner@example.com",
-            UserRole.EVENT_PARTNER,
-            UserStatus.ACTIVE
-        );
+                USER_ID, "partner@example.com", UserRole.EVENT_PARTNER, UserStatus.ACTIVE);
     }
 }

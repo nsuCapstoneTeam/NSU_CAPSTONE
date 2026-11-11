@@ -5,8 +5,10 @@ import com.nsu.capstone.identity.presentation.dto.ArtistSignupRequest;
 import com.nsu.capstone.identity.presentation.dto.ArtistSignupResponse;
 import com.nsu.capstone.identity.presentation.dto.CreateArtistSignupSessionRequest;
 import com.nsu.capstone.identity.presentation.dto.CreateArtistSignupSessionResponse;
+import com.nsu.capstone.identity.presentation.dto.TermAgreementRequest;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,9 +32,16 @@ public class ArtistSignupController {
     @PostMapping("/session")
     @ResponseStatus(HttpStatus.CREATED)
     public CreateArtistSignupSessionResponse createSession(
-        @Valid @RequestBody CreateArtistSignupSessionRequest request
-    ) {
-        return artistSignupService.createSession(request.email(), request.phone());
+            @Valid @RequestBody CreateArtistSignupSessionRequest request, HttpServletRequest servletRequest) {
+        return artistSignupService.createSession(
+                request.email(),
+                request.phone(),
+                request.agreements() == null
+                        ? null
+                        : request.agreements().stream()
+                                .map(TermAgreementRequest::toTermVersion)
+                                .toList(),
+                servletRequest.getRemoteAddr());
     }
 
     @PostMapping

@@ -5,8 +5,10 @@ import com.nsu.capstone.identity.presentation.dto.ArtistOAuthSignupRequest;
 import com.nsu.capstone.identity.presentation.dto.ArtistSignupResponse;
 import com.nsu.capstone.identity.presentation.dto.CreateArtistOAuthSignupSessionRequest;
 import com.nsu.capstone.identity.presentation.dto.CreateArtistOAuthSignupSessionResponse;
+import com.nsu.capstone.identity.presentation.dto.TermAgreementRequest;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,11 +31,20 @@ public class ArtistOAuthSignupController {
 
     @PostMapping("/session")
     public ResponseEntity<CreateArtistOAuthSignupSessionResponse> prepare(
-        @Valid @RequestBody CreateArtistOAuthSignupSessionRequest request) {
-        var prepared = service.prepare(request.oauthSignupSessionId(), request.phone(), request.email());
+            @Valid @RequestBody CreateArtistOAuthSignupSessionRequest request, HttpServletRequest servletRequest) {
+        var prepared = service.prepare(
+                request.oauthSignupSessionId(),
+                request.phone(),
+                request.email(),
+                request.agreements() == null
+                        ? null
+                        : request.agreements().stream()
+                                .map(TermAgreementRequest::toTermVersion)
+                                .toList(),
+                servletRequest.getRemoteAddr());
         return ResponseEntity.status(prepared.created() ? HttpStatus.CREATED : HttpStatus.OK)
-            .body(new CreateArtistOAuthSignupSessionResponse(prepared.signupSessionId(),
-                prepared.email(), prepared.emailVerified()));
+                .body(new CreateArtistOAuthSignupSessionResponse(
+                        prepared.signupSessionId(), prepared.email(), prepared.emailVerified()));
     }
 
     @PostMapping

@@ -4,7 +4,7 @@
 - 기준: SSOT AUTH-006, AUTH-008, AUTH-157~160
 - Provider 인증/callback과 기존 계정 로그인은 NSU-75의 구현을 사용한다.
 
-이 문서는 현재 구현의 API 계약과 Backend 내부 처리 방식을 설명한다.
+이 문서는 API 계약과 Backend 내부 처리 방식을 설명한다. 2026-11-11 보완한 가입 인증 재발송·Redis 확인 장애 계약은 PR #219 HEAD `16455a9` 이후 미커밋 변경에 구현·로컬 자동 검증 반영했으며 통합 배포 전이다. SSOT `AUTH-006`·`SEC-118` v1.21 초안(팀 확인 전)에 연결되며 기존 요구의 승인 상태를 변경하지 않는다.
 제품 요구사항의 기준 원문은 Linear SSOT이며, Spring Boot–AI 서버 간 공통협의 문서가 아니다.
 
 ## API 계약
@@ -35,7 +35,7 @@ OAuth 콜백과 결과 교환은 OAuth를 시작한 브라우저에서만 성공
 {"oauthSignupSessionId":"<server-issued opaque ID>","phone":"01012345678","email":"artist@example.com","agreements":[{"id":"service","version":"v1"},{"id":"privacy","version":"v1"},{"id":"demo-notice","version":"v1"},{"id":"overseas-transfer","version":"v1"}]}
 ```
 
-- ID·phone·agreements는 필수다. 필수 약관이 빠지면 `400 REQUIRED_TERMS_NOT_AGREED`다. `agreements`는 [signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1의 약관 ID·버전을 쓴다(위 예시는 `DEMO` 기준). 이 필드는 구현 전이며, NSU-123 배포 전까지 지금 서버는 `agreements` 없이 준비하고 약관 PUT으로 동의를 받는다. email은 Provider 이메일이 없거나 미검증이면 필수다.
+- ID·phone·agreements는 필수다. 필수 약관이 빠지면 `400 REQUIRED_TERMS_NOT_AGREED`다. `agreements`는 [signup-terms-and-send-limits.md](./signup-terms-and-send-limits.md) §1.1의 약관 ID·버전을 쓴다(위 예시는 `DEMO` 기준). 이 필드는 백엔드에 구현됐으며 프론트 NSU-129와 같은 배포로 반영한다. 약관 PUT은 제거됐다. email은 Provider 이메일이 없거나 미검증이면 필수다.
 - 검증된 Provider 이메일은 생략하거나 동일 값만 보낼 수 있다.
 - 서버는 ARTIST/OAUTH를 고정한다. Provider 식별정보·role·인증 완료 boolean은 입력으로 사용하지 않는다.
 - 최초 생성은 201, 같은 입력의 재요청은 200이다. 응답은 아래 세 필드다.
@@ -44,7 +44,7 @@ OAuth 콜백과 결과 교환은 OAuth를 시작한 브라우저에서만 성공
 {"signupSessionId":"<same OAuth session ID>","email":"artist@example.com","emailVerified":true}
 ```
 
-재요청은 이메일·휴대폰·역할·인증 상태·OTP 실패 횟수·cooldown을 바꾸거나 초기화하지 않는다.
+재요청은 이메일·휴대폰·역할·동의 내용·동의 시각·인증 상태·OTP 실패 횟수·cooldown을 바꾸거나 초기화하지 않는다. 같은 ID·버전 목록은 순서와 관계없이 같은 동의로 취급하고, 다른 유효한 동의 목록이면 `400 VALIDATION_ERROR`다. 누락·모르는 ID·버전 오류는 약관 검증 오류로 거절한다.
 미검증 이메일은 준비 단계에서 고정한 주소에 기존 서비스 이메일 인증을 수행한다.
 입력 변경 API는 제공하지 않는다.
 
@@ -98,6 +98,8 @@ Profile/Trust, 외부 음악 플랫폼 연결, Refresh Token은 이번 범위에
 3. 준비 요청에서 필수 약관 동의(`agreements`)를 함께 보낸다. 준비 응답의 `signupSessionId`로 기존 인증·성인 확인 API를 호출한다. 두 세션 ID는 같은 값이다.
 4. 필수조건 완료 후 `oauthSignupSessionId`로 최종 가입 API를 호출한다.
 5. 가입 후 같은 Provider 계정으로 기존 OAuth 로그인 흐름을 진행하여 토큰을 발급받는다.
+
+메일·휴대폰 인증의 시간·한도·교체·환불·Redis 장애 응답은 [가입 API 계약](./signup-terms-and-send-limits.md) §1.2·§1.6을 따른다. 재발송 요청만으로 기존 코드를 폐기하지 않는다. 같은 정규화 수신처·채널에 결과 미정 코드가 있으면 OAuth 준비·가입 세션을 새로 만들어도 재발송은 `429 VERIFICATION_REQUEST_LIMIT_EXCEEDED`이며 새 코드·차감·제공자 호출이 없다. 결과 정리 또는 원래 코드 만료 등 공통 계약의 해제 조건을 따르며 확인은 원래 발급 세션에서 한다. `Retry-After`는 다른 제한과 함께 가장 늦은 해제 시각까지다. 인증 확인 중 Redis 장애에서는 `503 RATE_LIMIT_UNAVAILABLE`로 막고 인증 완료로 전환하지 않는다.
 
 같은 입력의 준비 재요청은 인증 상태를 초기화하지 않는다. 최종 가입 성공 응답이 유실되면
 가입 요청으로 동일 응답을 재현하지 않고 기존 OAuth 로그인으로 복구한다.
