@@ -1,10 +1,10 @@
 # ADR: backend 구조화 로그와 요청 ID(requestId)
 
 - 상태: **Proposed** (설계 리뷰와 PR 리뷰에서 확정)
-- 결정일: **2026-11-11** (NSU-146). 사람 결정(김동엽, grill): 응답 헤더 `X-Request-Id`만 내보내고 에러 본문은 그대로 둔다, 이름은 `requestId`, 들어온 ID는 믿지 않는다, 기본 형식은 logstash JSON, 내부 UUID는 로그에 남겨도 된다, 앱 안의 남은 유출 경로는 이번에 고친다, 로그 테스트는 새 CI job으로 돌린다
+- 결정일: **2026-11-11** (NSU-146). 사람 결정(김동엽, grill): 응답 헤더 `X-Request-Id`만 내보내고 에러 본문은 그대로 둔다, 이름은 `requestId`, 들어온 ID는 믿지 않는다, 기본 형식은 logstash JSON, 내부 UUID는 로그에 남겨도 된다, 앱 안의 남은 유출 경로는 이번에 고친다, 로그 테스트는 새 CI job으로 돌린다, 개인정보 규칙은 서비스가 받거나 만드는 값에 적용하고 요청자가 경로에 직접 넣은 글자는 뺀다(설계 리뷰 4회차 뒤)
 - 요구사항: SSOT 최종 승인 v1.17.1(현재 리비전 v1.19 초안)에는 앱 로그·요청 ID·로그 마스킹 규칙이 없다. 관련 항목은 `SEC-120`(OAuth Access Token 평문 저장 금지), `MVP-128`(초기에 Elasticsearch 등 미개발)이다
 - 설계 과정: `/pstack:architect`(조사 10건, 구조가 다른 후보 2개, 합성)를 거쳐 사람 판단 항목만 grill로 정했다. 합성 결과는 [Synthesis decision](#synthesis-decision)에 있다
-- 설계 리뷰: Codex adversarial review(grill `20261111T084617Z-c1f27111`) 1회차 지적 2건(루트 TRACE에서 Hibernate `org.hibernate.orm.jdbc.extract`가 조회 값을 찍음, 자식 로거에 직접 준 DEBUG가 부모 고정을 우회함)을 Decision 7-2·7-3에 반영했다. 결과: 금지 목록 대신, 배포에서 우리 코드 밖 로거를 모두 INFO 이상으로 강제한다. 2회차 지적 1건(Tomcat 로거의 WARN 고정을 환경 변수·자식 로거 설정이 덮어써 INFO에서 잘못된 쿠키 원문이 남음)을 Decision 7-2·7-3에 반영했다. 결과: 그 두 로거와 자식은 배포에서 WARN 하한을 강제한다. 3회차 지적 2건(JDK HttpClient 디버그 옵션이 INFO로 API 키 헤더를 찍음, 완료 줄의 원본 경로에 사용자가 넣은 개인정보가 남음)을 Decision 5·7-3·9에 반영했다. 결과: `jdk.httpclient.HttpClient` WARN 하한, 배포에서 JVM 디버그 옵션이 있으면 시작하지 않음, 완료 줄은 경로 패턴(없으면 `UNMATCHED`)
+- 설계 리뷰: Codex adversarial review(grill `20261111T084617Z-c1f27111`) 1회차 지적 2건(루트 TRACE에서 Hibernate `org.hibernate.orm.jdbc.extract`가 조회 값을 찍음, 자식 로거에 직접 준 DEBUG가 부모 고정을 우회함)을 Decision 7-2·7-3에 반영했다. 결과: 금지 목록 대신, 배포에서 우리 코드 밖 로거를 모두 INFO 이상으로 강제한다. 2회차 지적 1건(Tomcat 로거의 WARN 고정을 환경 변수·자식 로거 설정이 덮어써 INFO에서 잘못된 쿠키 원문이 남음)을 Decision 7-2·7-3에 반영했다. 결과: 그 두 로거와 자식은 배포에서 WARN 하한을 강제한다. 3회차 지적 2건(JDK HttpClient 디버그 옵션이 INFO로 API 키 헤더를 찍음, 완료 줄의 원본 경로에 사용자가 넣은 개인정보가 남음)을 Decision 5·7-3·9에 반영했다. 결과: `jdk.httpclient.HttpClient` WARN 하한, 배포에서 JVM 디버그 옵션이 있으면 시작하지 않음, 완료 줄은 경로 패턴(없으면 `UNMATCHED`). 4회차 지적 1건(Spring `ResourceHandlerUtils`가 `/v3/api-docs/WEB-INF/…` 경로를 WARN으로 찍음)은 막지 않고 AC3의 경계를 정했다(사람 결정, Decision 7). 요청자가 경로에 직접 넣은 글자는 대상이 아니다. 보안 경고를 없애면 공격 신호가 사라지고, 같은 경로가 nginx 접근 로그에도 남기 때문이다
 - 관련: [API 공통 규칙 §8·§11](../../api/00_conventions.md), [ADR-007](../ADR-007-spring-backend-global-exception-handling.md), [recommendation_eligibility/00](../recommendation_eligibility/00_eligibility_rules.md) Consequences, [identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md)(로그 속 개인정보, 초기화 runbook), [backend_code_style/00](../backend_code_style/00_lombok_usage.md), [authentication/00](../authentication/00_csrf_protection_for_bearer_api.md) Decision 6, Linear 서버 협의 010·017, NSU-63(AI client), NSU-123(SMS 발송), NSU-129(시연 서버 공개 조건), NSU-133(처리방침), NSU-135(CI 전체 테스트), NSU-147(`/actuator/health`)
 
 ---
@@ -38,6 +38,10 @@
    - 커밋한 뒤나 `ERROR`·`ASYNC` 디스패치 안에서 나온 예외는 남기고 다시 던진다. 클라이언트 연결 끊김(`DisconnectedClientHelper`)은 남기지 않고 그대로 넘긴다.
 7. **개인정보는 로그에 나오는 곳에서 가리지 않고, 나오기 전에 막는다.**
    - 금지 값: 이메일, 전화번호, 이름, 생년월일, 비밀번호와 그 해시, JWT, 인증번호(OTP), OAuth `code`·`state`·`nonce`·PKCE verifier·결과 코드·결합 쿠키, 가입 세션 ID, 비밀키·API 키·client secret, CI·DI.
+   - 경계(사람 결정, 설계 리뷰 4회차): 이 규칙은 서비스가 받거나 만드는 개인정보에 적용한다. 요청 본문·헤더·쿠키·인증 값, DB 값, 외부 제공자 응답, 우리 코드의 로그 인자가 여기에 든다. 요청자가 요청 주소의 경로에 직접 넣은 글자는 대상이 아니다. 서비스는 그 값을 개인정보로 받거나 쓰지 않는다.
+     - 그래서 프레임워크가 경로 조작 시도 같은 보안 경고에 경로를 그대로 찍는 줄(예: Spring `ResourceHandlerUtils`의 WARN, `/v3/api-docs/WEB-INF/…`)과 nginx 접근 로그의 경로는 남긴다. 공격을 알아차리는 신호이고, JSON 이스케이프로 로그 위조는 막힌다. 시연 서버를 초기화할 때 다른 로그와 함께 지운다(NSU-129).
+     - 우리 코드가 만드는 줄은 이 경계와 상관없이 주소 원문을 쓰지 않는다(완료 줄은 경로 패턴, Decision 5).
+     - 쿼리 문자열은 이 경계에 넣지 않는다. OAuth `code`·`state`처럼 서비스가 받는 값이 들어가기 때문이다.
    - 허용: 내부 UUID(회원·아티스트·행사·곡·요청 ID)(사람 결정). 우리 DB와 합치면 사람을 알아볼 수 있으므로, 처리방침에 접속 기록으로 적는다(NSU-133). 시연 서버 초기화 때 로그도 지운다(NSU-129, identity_verification/00).
    - 막는 방법:
      1. pgjdbc `logServerErrorDetail=false`(`config/database.properties`, `spring.datasource.hikari.data-source-properties.*`). PostgreSQL `Detail`(`Key (email)=(…)`, `Failing row contains (…)`)이 예외 메시지에 붙지 않는다. 지금 기본 설정에서 유일하게 확인된 유출(Hibernate `org.hibernate.orm.jdbc.error` WARN과 `GlobalExceptionHandler` ERROR)이 여기서 막힌다. 제약 이름은 본 메시지에 남아 기존 분류(`ArtistOAuthSignupService`의 `getConstraintName()`)는 그대로 동작한다.
@@ -190,7 +194,7 @@ docs/adr/recommendation_eligibility/00_eligibility_rules.md  NSU-63 MDC 메모 �
 - AC2 Security(`@WebMvcTest`, `RoleAuthorizationSecurityTest` 설정 복사): 토큰 없음·잘못된 토큰 401, URL 403·`@PreAuthorize` 403에서 헤더가 커밋된 응답에 있고, 완료 줄이 같은 ID이고, 본문은 정확히 `{code,message}`(`$.* hasSize(2)`).
 - AC2 실제 Tomcat(`RANDOM_PORT`): 방화벽 거절(`/test/log-probe/a;b`)의 두 디스패치가 같은 ID, 필터 사이에서 던진 예외가 ID 있는 ERROR 한 줄이고 `Servlet.service()` 줄이 없음.
 - 계약 §11: Spring 표준 400(`ProblemDetail`, 잘못된 JSON)과 OAuth 시작 `302`에도 `X-Request-Id`가 있음.
-- AC3: NOT NULL 위반, 가입·인증·로그인 흐름의 가짜 값, 배포 형식에서 `logging.level.root=TRACE`, `debug=true`, `trace=true`, `logging.level.web=DEBUG`, `logging.level.org.springframework.web.client=DEBUG`, `logging.level.org.hibernate.orm.jdbc.extract=TRACE`를 줘도 시작 뒤 `com.nsu.capstone` 밖 모든 로거의 실효 레벨이 INFO 이상이고 ERROR 한 줄이 남음, 같은 상태에서 `com.nsu.capstone`에 준 DEBUG는 그대로임, 배포 형식에서 `logging.level.org.apache.tomcat.util.http=DEBUG`·`INFO`, 자식 `logging.level.org.apache.tomcat.util.http.parser.Cookie=INFO`, `logging.level.org.apache.coyote.http11.Http11Processor=TRACE`를 줘도 실효 레벨이 WARN임, 하한 표의 WARN 로거가 `config/logging.properties`의 WARN 설정과 같음, 배포 형식에서 `logging.level.jdk.httpclient.HttpClient=INFO`를 줘도 실효 레벨이 WARN임, **별도 JVM 프로세스**: 배포 형식과 `-Djdk.httpclient.HttpClient.log=headers`(또는 `jdk.internal.httpclient.debug`·`javax.net.debug`)로 띄우면 옵션 이름을 담은 오류로 시작이 멈춤, **별도 JVM 프로세스**: `-Djdk.httpclient.HttpClient.log=headers`를 준 프로세스에서 하한 표를 적용한 로깅으로 실제 JDK `HttpClient`가 가짜 `Authorization` 값을 담아 로컬 서버를 불러도 출력에 그 값이 없음(시작 검사를 거치지 않는 경로의 방어), **경로에 넣은 개인정보**: 토큰 없이 `GET /api/v1/events/<가짜 이메일>`(401)과 없는 경로 `GET /api/v1/<가짜 이메일>`(404)을 보내도 어떤 줄에도 가짜 이메일이 없음, **실제 Tomcat 흐름**(`RANDOM_PORT`): 위처럼 Tomcat 로거를 낮춘 배포 형식에서 가짜 값이 든 잘못된 쿠키와 잘못된 요청 주소(쿼리에 가짜 값)를 보내도 어떤 줄에도 가짜 값이 없음, 평문 형식에서는 레벨을 바꾸지 않음, **실제 흐름**: 루트 TRACE와 `web.client=DEBUG`를 준 배포 형식 컨텍스트에서 로그인(이메일로 회원 조회)과 Resend 발송(가짜 이메일·인증번호)을 해도 어떤 줄에도 가짜 값이 없음(Logback 레벨은 JVM 전체에 걸리므로 테스트가 끝나면 원래대로 돌린다), actuator 웹 노출 목록에 `loggers`가 없음, 커밋한 설정에 DEBUG·TRACE·접근 로그·`log-request-details`가 없고 pgjdbc 설정이 있음, (이 이슈가 맡을 때만) `SolapiSmsSender`가 `SerializationException`(전화번호가 든 메시지)을 원인 없이 `VerificationDeliveryException`으로 바꿈, `RedisOAuth2AuthorizationRequestRepository`의 역직렬화 실패에 원래 메시지가 없음, `LogSafetyChecker` 나머지 규칙(S2b·S3·S4·S5), `src/main/java` 전체가 규칙을 지킴.
+- AC3: NOT NULL 위반, 가입·인증·로그인 흐름의 가짜 값, 배포 형식에서 `logging.level.root=TRACE`, `debug=true`, `trace=true`, `logging.level.web=DEBUG`, `logging.level.org.springframework.web.client=DEBUG`, `logging.level.org.hibernate.orm.jdbc.extract=TRACE`를 줘도 시작 뒤 `com.nsu.capstone` 밖 모든 로거의 실효 레벨이 INFO 이상이고 ERROR 한 줄이 남음, 같은 상태에서 `com.nsu.capstone`에 준 DEBUG는 그대로임, 배포 형식에서 `logging.level.org.apache.tomcat.util.http=DEBUG`·`INFO`, 자식 `logging.level.org.apache.tomcat.util.http.parser.Cookie=INFO`, `logging.level.org.apache.coyote.http11.Http11Processor=TRACE`를 줘도 실효 레벨이 WARN임, 하한 표의 WARN 로거가 `config/logging.properties`의 WARN 설정과 같음, 배포 형식에서 `logging.level.jdk.httpclient.HttpClient=INFO`를 줘도 실효 레벨이 WARN임, **별도 JVM 프로세스**: 배포 형식과 `-Djdk.httpclient.HttpClient.log=headers`(또는 `jdk.internal.httpclient.debug`·`javax.net.debug`)로 띄우면 옵션 이름을 담은 오류로 시작이 멈춤, **별도 JVM 프로세스**: `-Djdk.httpclient.HttpClient.log=headers`를 준 프로세스에서 하한 표를 적용한 로깅으로 실제 JDK `HttpClient`가 가짜 `Authorization` 값을 담아 로컬 서버를 불러도 출력에 그 값이 없음(시작 검사를 거치지 않는 경로의 방어), **경로에 넣은 값**(Decision 7 경계): 토큰 없이 `GET /api/v1/events/<가짜 이메일>`(401), 없는 경로 `GET /api/v1/<가짜 이메일>`(404), `GET /v3/api-docs/WEB-INF/<가짜 이메일>`을 보내도 완료 줄과 `com.nsu.capstone` 로거의 줄에 가짜 이메일이 없음(프레임워크 보안 경고는 경계에 따라 남을 수 있다), **실제 Tomcat 흐름**(`RANDOM_PORT`): 위처럼 Tomcat 로거를 낮춘 배포 형식에서 가짜 값이 든 잘못된 쿠키와 잘못된 요청 주소(쿼리에 가짜 값)를 보내도 어떤 줄에도 가짜 값이 없음, 평문 형식에서는 레벨을 바꾸지 않음, **실제 흐름**: 루트 TRACE와 `web.client=DEBUG`를 준 배포 형식 컨텍스트에서 로그인(이메일로 회원 조회)과 Resend 발송(가짜 이메일·인증번호)을 해도 어떤 줄에도 가짜 값이 없음(Logback 레벨은 JVM 전체에 걸리므로 테스트가 끝나면 원래대로 돌린다), actuator 웹 노출 목록에 `loggers`가 없음, 커밋한 설정에 DEBUG·TRACE·접근 로그·`log-request-details`가 없고 pgjdbc 설정이 있음, (이 이슈가 맡을 때만) `SolapiSmsSender`가 `SerializationException`(전화번호가 든 메시지)을 원인 없이 `VerificationDeliveryException`으로 바꿈, `RedisOAuth2AuthorizationRequestRepository`의 역직렬화 실패에 원래 메시지가 없음, `LogSafetyChecker` 나머지 규칙(S2b·S3·S4·S5), `src/main/java` 전체가 규칙을 지킴.
 - 기존 경합 테스트(`ArtistOAuthSignupIntegrationTest:359-396`, `EventIdempotencyIntegrationTest`)를 다시 돌려, Detail을 꺼도 제약 분류가 그대로인지 확인한다.
 
 구현할 때 한 번 확인할 것: 부트 jar를 JSON으로 띄웠을 때 Java 25가 JSON 아닌 줄(native access 경고 등)을 stderr에 찍는지 본다. 찍으면 JVM 옵션으로 끈다.
@@ -255,6 +259,7 @@ architect가 구조가 다른 후보 두 개를 만들고 채점 기준(AC 증�
 - 설계 리뷰 1회차 뒤 바뀐 것: 후보 2의 "본문 로거 목록 고정"을 "배포에서 우리 코드 밖 로거 전부 INFO 이상"으로 바꿨다. 목록 방식은 빠진 로거와 자식 로거 설정으로 뚫렸다.
 - 설계 리뷰 2회차 뒤 바뀐 것: 하한을 로거마다 둘 수 있게 했다. INFO에서도 원문을 찍는 Tomcat 로거 두 개와 그 자식은 WARN 하한이다.
 - 설계 리뷰 3회차 뒤 바뀐 것: `jdk.httpclient.HttpClient`도 WARN 하한에 넣고, 로거를 거치지 않는 JVM 디버그 옵션은 배포에서 시작을 막는다. 완료 줄의 경로를 원본 주소에서 경로 패턴으로 바꿨다.
+- 설계 리뷰 4회차 뒤 바뀐 것: AC3의 경계를 정했다(사람 결정). 요청자가 경로에 직접 넣은 글자를 프레임워크 보안 경고가 찍는 것은 남긴다.
 
 ## Consequences
 
@@ -265,6 +270,7 @@ architect가 구조가 다른 후보 두 개를 만들고 채점 기준(AC 증�
 - 400 이상 응답마다 INFO 한 줄(JSON 약 300바이트)이 는다. `ERROR` 디스패치 경로는 두 줄이다.
 - 완료 줄에는 경로 패턴만 남는다. Security가 먼저 거절한 요청(401)과 맞는 경로가 없는 요청은 `UNMATCHED`라, 어느 주소였는지는 완료 줄로 알 수 없다. 요청 ID와 상태로 찾고, 필요하면 nginx 접근 로그(쿼리 제외)를 같은 ID로 본다.
 - 배포에서 JVM 디버그 옵션(`jdk.httpclient.HttpClient.log`, `jdk.internal.httpclient.debug`, `javax.net.debug`)을 켜면 앱이 시작하지 않는다. 외부 호출·TLS 문제는 로컬에서 재현한다.
+- 요청자가 경로에 넣은 글자는 프레임워크 보안 경고와 nginx 접근 로그에 남을 수 있다(Decision 7 경계). 시연 서버 초기화 runbook이 이 로그들도 지운다.
 - 커밋 전 `REQUEST` 디스패치에서 빠져나온 예외는 Tomcat 대신 필터가 남긴다. 클라이언트가 받는 응답은 같아야 하고, 실제 Tomcat 테스트가 지금 상태를 먼저 기록한다(익명 `/error`가 401이 되는지는 소스로 추론만 했다).
 - ID가 없는 줄이 남는다: 다른 스레드(Lettuce, HikariCP, JDK HttpClient 내부), Coyote 파싱 오류, 시작·종료. 비동기 작업은 S5로 막아 두었다.
 - 새 종류의 개인정보(예: NSU-105 PortOne의 이름·생년월일·CI·DI)를 다루는 이슈는 S2 이름 목록과 가짜 값 테스트를 늘린다.
@@ -304,3 +310,4 @@ architect가 구조가 다른 후보 두 개를 만들고 채점 기준(AC 증�
 - 본문을 찍는 프레임워크 로거를 목록으로 고정하기(금지 목록): 목록에서 빠진 로거(`org.hibernate.orm.jdbc.extract` 등)와 자식 로거에 직접 준 레벨로 뚫린다(설계 리뷰 1회차 지적).
 - 배포에서 낮은 레벨이 있으면 시작을 막기: 장애 대응 중 재시작이 실패한다. 올리고 ERROR를 남긴다. 단, 레벨로 막을 수 없는 JVM 디버그 옵션은 시작을 막는다.
 - 완료 줄에 원본 경로(쿼리만 제거하고 길이 제한): 경로에 사용자가 넣은 값이 남는다(설계 리뷰 3회차 지적). 경로 패턴을 쓴다.
+- 경로를 찍는 프레임워크 보안 경고까지 막기(`ResourceHandlerUtils` ERROR 하한 등), nginx 접근 로그에서 경로 빼기: 경로 조작 공격 신호와 장애 분석 근거가 사라진다. 비슷한 로거가 나올 때마다 하한을 더해야 한다(사람 결정, Decision 7 경계).
