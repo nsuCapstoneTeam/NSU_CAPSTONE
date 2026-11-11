@@ -4,7 +4,7 @@
 - 결정일: **2026-11-11** (NSU-146). 사람 결정(김동엽, grill): 응답 헤더 `X-Request-Id`만 내보내고 에러 본문은 그대로 둔다, 이름은 `requestId`, 들어온 ID는 믿지 않는다, 기본 형식은 logstash JSON, 내부 UUID는 로그에 남겨도 된다, 앱 안의 남은 유출 경로는 이번에 고친다, 로그 테스트는 새 CI job으로 돌린다, 개인정보 규칙은 서비스가 받거나 만드는 값에 적용하고 요청자가 경로에 직접 넣은 글자는 뺀다(설계 리뷰 4회차 뒤)
 - 요구사항: SSOT 최종 승인 v1.17.1(현재 리비전 v1.19 초안)에는 앱 로그·요청 ID·로그 마스킹 규칙이 없다. 관련 항목은 `SEC-120`(OAuth Access Token 평문 저장 금지), `MVP-128`(초기에 Elasticsearch 등 미개발)이다
 - 설계 과정: `/pstack:architect`(조사 10건, 구조가 다른 후보 2개, 합성)를 거쳐 사람 판단 항목만 grill로 정했다. 합성 결과는 [Synthesis decision](#synthesis-decision)에 있다
-- 설계 리뷰: Codex adversarial review(grill `20261111T084617Z-c1f27111`) 1회차 지적 2건(루트 TRACE에서 Hibernate `org.hibernate.orm.jdbc.extract`가 조회 값을 찍음, 자식 로거에 직접 준 DEBUG가 부모 고정을 우회함)을 Decision 7-2·7-3에 반영했다. 결과: 금지 목록 대신, 배포에서 우리 코드 밖 로거를 모두 INFO 이상으로 강제한다. 2회차 지적 1건(Tomcat 로거의 WARN 고정을 환경 변수·자식 로거 설정이 덮어써 INFO에서 잘못된 쿠키 원문이 남음)을 Decision 7-2·7-3에 반영했다. 결과: 그 두 로거와 자식은 배포에서 WARN 하한을 강제한다. 3회차 지적 2건(JDK HttpClient 디버그 옵션이 INFO로 API 키 헤더를 찍음, 완료 줄의 원본 경로에 사용자가 넣은 개인정보가 남음)을 Decision 5·7-3·9에 반영했다. 결과: `jdk.httpclient.HttpClient` WARN 하한, 배포에서 JVM 디버그 옵션이 있으면 시작하지 않음, 완료 줄은 경로 패턴(없으면 `UNMATCHED`). 4회차 지적 1건(Spring `ResourceHandlerUtils`가 `/v3/api-docs/WEB-INF/…` 경로를 WARN으로 찍음)은 막지 않고 AC3의 경계를 정했다(사람 결정, Decision 7). 요청자가 경로에 직접 넣은 글자는 대상이 아니다. 보안 경고를 없애면 공격 신호가 사라지고, 같은 경로가 nginx 접근 로그에도 남기 때문이다
+- 설계 리뷰: Codex adversarial review(grill `20261111T084617Z-c1f27111`) 1회차 지적 2건(루트 TRACE에서 Hibernate `org.hibernate.orm.jdbc.extract`가 조회 값을 찍음, 자식 로거에 직접 준 DEBUG가 부모 고정을 우회함)을 Decision 7-2·7-3에 반영했다. 결과: 금지 목록 대신, 배포에서 우리 코드 밖 로거를 모두 INFO 이상으로 강제한다. 2회차 지적 1건(Tomcat 로거의 WARN 고정을 환경 변수·자식 로거 설정이 덮어써 INFO에서 잘못된 쿠키 원문이 남음)을 Decision 7-2·7-3에 반영했다. 결과: 그 두 로거와 자식은 배포에서 WARN 하한을 강제한다. 3회차 지적 2건(JDK HttpClient 디버그 옵션이 INFO로 API 키 헤더를 찍음, 완료 줄의 원본 경로에 사용자가 넣은 개인정보가 남음)을 Decision 5·7-3·9에 반영했다. 결과: `jdk.httpclient.HttpClient` WARN 하한, 배포에서 JVM 디버그 옵션이 있으면 시작하지 않음, 완료 줄은 경로 패턴(없으면 `UNMATCHED`). 4회차 지적 1건(Spring `ResourceHandlerUtils`가 `/v3/api-docs/WEB-INF/…` 경로를 WARN으로 찍음)은 막지 않고 AC3의 경계를 정했다(사람 결정, Decision 7). 요청자가 경로에 직접 넣은 글자는 대상이 아니다. 보안 경고를 없애면 공격 신호가 사라지고, 같은 경로가 nginx 접근 로그에도 남기 때문이다. 5회차 지적 1건(nginx 오류 로그가 OAuth 콜백의 쿼리를 남김)을 Decision 9에 반영했다. 결과: 접근 로그는 모든 요청에서 쿼리를 빼고, 콜백과 프론트 결과 주소의 오류 로그는 `crit`로 올린다. 프론트 결과 주소의 결과 코드는 이번에 함께 찾아 넣었다
 - 관련: [API 공통 규칙 §8·§11](../../api/00_conventions.md), [ADR-007](../ADR-007-spring-backend-global-exception-handling.md), [recommendation_eligibility/00](../recommendation_eligibility/00_eligibility_rules.md) Consequences, [identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md)(로그 속 개인정보, 초기화 runbook), [backend_code_style/00](../backend_code_style/00_lombok_usage.md), [authentication/00](../authentication/00_csrf_protection_for_bearer_api.md) Decision 6, Linear 서버 협의 010·017, NSU-63(AI client), NSU-123(SMS 발송), NSU-129(시연 서버 공개 조건), NSU-133(처리방침), NSU-135(CI 전체 테스트), NSU-147(`/actuator/health`)
 
 ---
@@ -72,7 +72,11 @@
    - 그 밖의 테스트 목록과 순서는 아래 [테스트](#테스트)에 있다.
 9. **CI와 배포 요구사항**(사람 결정).
    - 새 CI job `backend-log-safety`가 PR마다 `./gradlew test --tests 'com.nsu.capstone.global.logging.*'`를 돌린다(`ubuntu-latest`는 Docker가 있어 Testcontainers가 돈다). 정적 검사는 기존 `backend-lint`의 `global.codestyle.*` 단계에서 돈다. NSU-135가 전체 테스트를 CI에 올리면 그 job에 합친다(`shortcut:` 주석).
-   - 배포 이슈에 지금 추가할 요구사항: PostgreSQL `log_error_verbosity=terse`(서버 로그에서 `DETAIL` 제외), nginx 접근 로그에서 OAuth 콜백의 쿼리 문자열(`code`·`state`) 제외, nginx 접근 로그에 `$upstream_http_x_request_id` 기록, nginx가 자기 `X-Request-Id`를 응답에 더하지 않음(헤더가 두 개가 된다), 배포 환경에 `LOG_FORMAT`·`DEBUG`·`TRACE`·`com.nsu.capstone` 밖 로거의 `LOGGING_LEVEL_*`를 두지 않음(두어도 Decision 7-3이 하한으로 올리지만, 시작할 때 ERROR가 남는다), JVM 디버그 옵션(`jdk.httpclient.HttpClient.log`, `jdk.internal.httpclient.debug`, `javax.net.debug`)을 두지 않음(두면 앱이 시작하지 않는다).
+   - 배포 이슈에 지금 추가할 요구사항: PostgreSQL `log_error_verbosity=terse`(서버 로그에서 `DETAIL` 제외), nginx 로그(아래), nginx가 자기 `X-Request-Id`를 응답에 더하지 않음(헤더가 두 개가 된다), 배포 환경에 `LOG_FORMAT`·`DEBUG`·`TRACE`·`com.nsu.capstone` 밖 로거의 `LOGGING_LEVEL_*`를 두지 않음(두어도 Decision 7-3이 하한으로 올리지만, 시작할 때 ERROR가 남는다), JVM 디버그 옵션(`jdk.httpclient.HttpClient.log`, `jdk.internal.httpclient.debug`, `javax.net.debug`)을 두지 않음(두면 앱이 시작하지 않는다).
+   - nginx 로그 요구사항. OAuth 콜백(`/api/v1/auth/oauth/callback/{registrationId}`)의 `code`·`state`와, 콜백 뒤 브라우저가 받는 프론트 주소(`OAUTH_FRONTEND_REDIRECT_URI`)의 OAuth 결과 코드가 쿼리 문자열로 오기 때문이다(설계 리뷰 5회차 지적).
+     - 접근 로그는 모든 요청에서 쿼리 없이 경로(`$uri`)만 남기고, `$upstream_http_x_request_id`를 함께 남겨 앱 로그의 `requestId`와 잇는다.
+     - 오류 로그: 위 두 경로의 location은 `error_log`를 `crit`로 둔다. nginx는 upstream 시간 초과·연결 끊김 같은 오류를 `error` 레벨로 남기면서 쿼리가 든 원래 요청 줄을 붙이고, 그 줄은 가릴 수 없다. 이 두 경로의 장애는 접근 로그의 상태(502·504), `$upstream_status`, `$request_time`과 앱 로그로 본다.
+     - 확인(시연 서버를 열기 전): 콜백을 처리하는 중에 upstream을 멈추거나 끊어 502·504를 낸 뒤, 가짜 `code`·`state`·결과 코드가 접근 로그와 오류 로그 어디에도 없는지 본다.
 10. **AI 서버 호출(NSU-63)은 `RequestIdInterceptor`를 AI client에만 붙인다.**
     - `RequestIdInterceptor`(이 모듈의 유일한 public 타입)는 지금 요청의 ID를 `X-Request-Id`로 보낸다. 요청 스레드 밖에서는 헤더를 보내지 않는다.
     - 전역 `RestClientCustomizer`로 붙이지 않는다. 그러면 자동 구성 builder를 쓰는 Resend 등 외부 업체에도 내부 ID가 간다.
@@ -260,6 +264,7 @@ architect가 구조가 다른 후보 두 개를 만들고 채점 기준(AC 증�
 - 설계 리뷰 2회차 뒤 바뀐 것: 하한을 로거마다 둘 수 있게 했다. INFO에서도 원문을 찍는 Tomcat 로거 두 개와 그 자식은 WARN 하한이다.
 - 설계 리뷰 3회차 뒤 바뀐 것: `jdk.httpclient.HttpClient`도 WARN 하한에 넣고, 로거를 거치지 않는 JVM 디버그 옵션은 배포에서 시작을 막는다. 완료 줄의 경로를 원본 주소에서 경로 패턴으로 바꿨다.
 - 설계 리뷰 4회차 뒤 바뀐 것: AC3의 경계를 정했다(사람 결정). 요청자가 경로에 직접 넣은 글자를 프레임워크 보안 경고가 찍는 것은 남긴다.
+- 설계 리뷰 5회차 뒤 바뀐 것: nginx 요구사항을 접근 로그에서 오류 로그까지 넓히고, 쿼리 제외를 모든 요청으로 바꿨다.
 
 ## Consequences
 
