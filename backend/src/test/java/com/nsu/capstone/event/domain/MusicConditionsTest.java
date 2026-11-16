@@ -57,6 +57,13 @@ class MusicConditionsTest {
     }
 
     @Test
+    @DisplayName("행사 종류가 기타(OTHER)뿐이면 고르지 않은 것이라 400이다")
+    void rejectsChoosingOnlyOtherEventType() {
+        assertValidationError(() -> new MusicConditions(EventType.OTHER, null, null, null, null));
+        assertValidationError(() -> new MusicConditions(EventType.OTHER, List.of(), null, null, null));
+    }
+
+    @Test
     @DisplayName("한 축만 골라도 유효하다")
     void oneAxisIsEnough() {
         assertThat(new MusicConditions(EventType.WEDDING, null, null, null, null))

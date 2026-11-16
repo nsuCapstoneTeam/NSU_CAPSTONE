@@ -25,7 +25,8 @@ public record MusicConditions(EventType eventType, List<Genre> genres, Mood mood
         if (genres.size() > MAX_GENRES || genres.size() != Set.copyOf(genres).size()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
-        if (eventType == null && genres.isEmpty() && mood == null && tempo == null && vocal == null) {
+        boolean eventTypeChosen = eventType != null && eventType != EventType.OTHER;
+        if (!eventTypeChosen && genres.isEmpty() && mood == null && tempo == null && vocal == null) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
     }

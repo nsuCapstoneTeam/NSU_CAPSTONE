@@ -74,7 +74,7 @@ class KeyphraseTokenBudgetTest {
                 for (Tempo tempo : orNothing(Tempo.values())) {
                     for (Vocal vocal : orNothing(Vocal.values())) {
                         for (List<Genre> genres : genreChoices) {
-                            boolean nothingChosen = eventType == null
+                            boolean nothingChosen = (eventType == null || eventType == EventType.OTHER)
                                     && mood == null
                                     && tempo == null
                                     && vocal == null
