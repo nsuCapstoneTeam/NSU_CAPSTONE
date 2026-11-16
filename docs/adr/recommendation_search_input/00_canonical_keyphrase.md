@@ -21,7 +21,7 @@
    | 템포 | 0~1 | 같음 |
    | 보컬 | 0~1 | 같음 |
 
-   - 다섯 축 중 하나도 고르지 않은 조건은 만들 수 없다(`400 VALIDATION_ERROR`). 행사 경로에서는 행사 종류·장르가 필수라 생기지 않는다. 즉시 추천의 필수 항목은 NSU-122가 정하며, 그때 이 규칙을 다시 볼 수 있다.
+   - 다섯 축 중 하나도 고르지 않은 조건은 만들 수 없다(`400 VALIDATION_ERROR`). 행사 종류 `OTHER`(기타)는 문장에서 빠지므로(결정 3) 고르지 않은 것으로 센다. 그래서 `OTHER`만 고른 조건도 `400`이다. 그렇지 않으면 검색 문구가 `music` 한 단어가 된다(PR #218 CodeRabbit 리뷰). 행사 경로에서는 행사 종류·장르가 필수라 생기지 않는다. 즉시 추천의 필수 항목은 NSU-122가 정하며, 그때 이 규칙을 다시 볼 수 있다.
    - 축과 값은 이 ADR이 정하고, NSU-121은 행사에 저장하는 형식만 정한다. `EVT-042`는 "선택 항목은 NSU-121에서 정한다"고 적었지만, 매핑표 초안에 축이 필요해 순서를 당겼다.
 3. **초안 매핑표 v1.** 코드는 API·DB 값이고, 영어 문구는 Spring 안에서만 쓴다. 문구를 바꿔도 API는 깨지지 않는다. 화면 이름은 프런트가 쓰는 표시 이름이다.
 
@@ -166,7 +166,7 @@ public sealed interface MusicChoice permits EventType, Genre, Mood, Tempo, Vocal
 }
 
 public record MusicConditions(EventType eventType, List<Genre> genres, Mood mood, Tempo tempo, Vocal vocal) {
-    // 장르는 0~3개·중복 없음·선언 순서로 정규화, null → 빈 목록. 다섯 축 중 하나 이상 선택. 어기면 400.
+    // 장르는 0~3개·중복 없음·선언 순서로 정규화, null → 빈 목록. 다섯 축 중 하나 이상 선택(OTHER만은 선택 아님). 어기면 400.
 }
 
 public final class Keyphrase {
