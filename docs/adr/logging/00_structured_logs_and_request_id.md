@@ -72,6 +72,7 @@
    - 그 밖의 테스트 목록과 순서는 아래 [테스트](#테스트)에 있다.
 9. **CI와 배포 요구사항**(사람 결정).
    - 새 CI job `backend-log-safety`가 PR마다 `./gradlew test --tests 'com.nsu.capstone.global.logging.*'`를 돌린다(`ubuntu-latest`는 Docker가 있어 Testcontainers가 돈다). 정적 검사는 기존 `backend-lint`의 `global.codestyle.*` 단계에서 돈다. NSU-135가 전체 테스트를 CI에 올리면 그 job에 합친다(`shortcut:` 주석).
+   - 아래 배포 요구사항(PostgreSQL, nginx, 환경 변수, JVM 옵션)과 그 확인은 NSU-129(MVP 시연 준비)의 완료 조건으로 넘긴다(2026-11-16 사람 결정). 배포 설정 파일은 NSU-129가 만들고, 실제 설정으로 확인해야 하기 때문이다. NSU-146의 설계 리뷰는 앱 범위를 다룬다. 배포 쪽에서 새로 찾은 위험은 NSU-129에 적는다.
    - 배포 이슈에 지금 추가할 요구사항: PostgreSQL `log_error_verbosity=terse`(서버 로그에서 `DETAIL` 제외), nginx 로그(아래), nginx가 자기 `X-Request-Id`를 응답에 더하지 않음(헤더가 두 개가 된다), 배포 환경에 `LOG_FORMAT`·`DEBUG`·`TRACE`·`com.nsu.capstone` 밖 로거의 `LOGGING_LEVEL_*`를 두지 않음(두어도 Decision 7-3이 하한으로 올리지만, 시작할 때 ERROR가 남는다), JVM 디버그 옵션(`jdk.httpclient.HttpClient.log`, `jdk.internal.httpclient.debug`, `javax.net.debug`)을 두지 않음(두면 앱이 시작하지 않는다).
    - nginx 로그 요구사항. OAuth 콜백(`/api/v1/auth/oauth/callback/{registrationId}`)의 `code`·`state`와, 콜백 뒤 브라우저가 받는 프론트 주소(`OAUTH_FRONTEND_REDIRECT_URI`)의 OAuth 결과 코드가 쿼리 문자열로 오기 때문이다(설계 리뷰 5회차 지적).
      - 접근 로그는 모든 요청에서 쿼리 없이 경로(`$uri`)만 남기고, `$upstream_http_x_request_id`를 함께 남겨 앱 로그의 `requestId`와 잇는다. 기본 형식(`combined`)이 넣는 `$http_referer`는 넣지 않는다. Referer에 결과 화면 주소가 쿼리째 들어올 수 있다.
@@ -267,7 +268,7 @@ architect가 구조가 다른 후보 두 개를 만들고 채점 기준(AC 증�
 - 설계 리뷰 4회차 뒤 바뀐 것: AC3의 경계를 정했다(사람 결정). 요청자가 경로에 직접 넣은 글자를 프레임워크 보안 경고가 찍는 것은 남긴다.
 - 설계 리뷰 5회차 뒤 바뀐 것: nginx 요구사항을 접근 로그에서 오류 로그까지 넓히고, 쿼리 제외를 모든 요청으로 바꿨다.
 - 설계 리뷰 6회차 뒤 바뀐 것: 두 민감 경로의 nginx 오류 로그를 레벨 조정(`crit`) 대신 `/dev/null`로 보낸다.
-- 설계 리뷰 7회차 뒤 바뀐 것: 프론트 HTML에 `Referrer-Policy: no-referrer`, 접근 로그에서 `$http_referer` 제외.
+- 설계 리뷰 7회차 뒤 바뀐 것: 프론트 HTML에 `Referrer-Policy: no-referrer`, 접근 로그에서 `$http_referer` 제외. 5~7회차가 모두 아직 없는 nginx 설정의 세부 사항이어서, 배포 요구사항의 확인을 NSU-129 완료 조건으로 넘기고 설계 리뷰는 앱 범위로 마무리하기로 했다(2026-11-16 사람 결정).
 
 ## Consequences
 
