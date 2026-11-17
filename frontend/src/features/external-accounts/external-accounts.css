@@ -1,0 +1,182 @@
+/* 외부 계정 연결 (NSU-37·79): 마이페이지 관리 칸과 링크 표시 컴포넌트 */
+.ext-panel .ext-hint {
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.ext-notice {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--soft);
+  font-size: 13px;
+}
+.ext-notice.ok {
+  color: var(--green);
+}
+.ext-notice.error {
+  font-size: 13px;
+}
+.ext-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+.ext-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.ext-card h3 {
+  margin: 0;
+}
+.ext-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ext-actions .secondary,
+.ext-confirm .primary,
+.ext-confirm .secondary {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.ext-confirm {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--tint);
+  font-size: 13px;
+}
+
+/* 링크 표시 (ExternalLinks) */
+.ext-links,
+.ext-works,
+.ext-candidates {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ext-account-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ext-account-head > div {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.ext-account-head a {
+  color: var(--blue);
+}
+.ext-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+.ext-brand {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.ext-works {
+  margin-top: 10px;
+}
+.ext-works li,
+.ext-candidates li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.ext-works a,
+.ext-candidates a {
+  color: var(--blue);
+}
+.ext-source {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+.ext-source a {
+  color: var(--muted);
+}
+.ext-thumb {
+  flex: none;
+  width: 56px;
+  height: 40px;
+  border-radius: 6px;
+  background: var(--soft);
+  object-fit: cover;
+}
+.ext-account-head .ext-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+/* 작업물 고르기 */
+.ext-picker {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.ext-candidates {
+  max-height: 340px;
+  overflow-y: auto;
+}
+.ext-candidates li > button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ext-candidates li > button[aria-pressed='true'] {
+  border-color: var(--blue);
+  background: var(--tint);
+}
+.ext-order {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+}
+[aria-pressed='true'] > .ext-order {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: var(--on-blue);
+}
+.ext-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

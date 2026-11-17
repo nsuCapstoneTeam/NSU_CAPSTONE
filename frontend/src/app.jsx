@@ -5,6 +5,7 @@ import teamLogo from './assets/hallaemallae-logo.png';
 import { INITIAL_PROFILE, INITIAL_POSTS } from './data/demo-data.js';
 import useStoredState from './hooks/use-stored-state.js';
 import { pageOf, pathOf, titleOf } from './routes.js';
+import { startupLink } from './features/external-accounts/startup-link.js';
 import './app.css';
 import SignupRoleSelect from './features/auth/components/signup-role-select.jsx';
 import OrganizerLogin from './features/auth/components/organizer-login.jsx';
@@ -101,8 +102,8 @@ export default function App() {
   const [saved, setSaved, savedError] = useStoredState('hm-mvp-saved-v1', [], isSavedArtistList);
   // search: 마지막 매칭 검색 조건, notice: 화면 위 알림 문구
   const [search, setSearch] = useState(null);
-  // 마이페이지를 열 때 처음 보여 줄 탭 (보통 프로필)
-  const [myPageTab, setMyPageTab] = useState('profile');
+  // 마이페이지를 열 때 처음 보여 줄 탭 (보통 프로필). 외부 계정 연결에서 돌아왔으면 작업물
+  const [myPageTab, setMyPageTab] = useState(() => startupLink.peek()?.tab ?? 'profile');
   const [notice, setNotice] = useState('');
   // 로그인이 필요한 화면에서 로그인하러 갔다면, 로그인 후 그 화면으로 돌아감
   const [returnTo, setReturnTo] = useState(null);
