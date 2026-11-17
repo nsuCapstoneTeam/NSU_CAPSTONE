@@ -9,6 +9,11 @@ final class RedisKeys {
 
     private RedisKeys() {}
 
+    /** 연결 시작과 연결 요청 사이의 진행 값. 키에 사용자 ID가 들어가 다른 사용자의 요청은 찾지 못한다. */
+    static String authorization(String stateDigest, UUID artistId) {
+        return PREFIX + "authz:" + stateDigest + ":" + artistId;
+    }
+
     static String requestLimit(UUID artistId, long windowStartEpochSecond) {
         return PREFIX + "rl:" + artistId + ":" + windowStartEpochSecond;
     }

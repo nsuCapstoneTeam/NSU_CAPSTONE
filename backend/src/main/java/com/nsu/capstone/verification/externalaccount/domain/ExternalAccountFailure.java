@@ -4,6 +4,8 @@ package com.nsu.capstone.verification.externalaccount.domain;
 public enum ExternalAccountFailure {
     /** {@code state} 없음·만료·이미 씀, 결합 쿠키 없음·불일치, Google이 코드를 거절함 */
     EXTERNAL_ACCOUNT_AUTHORIZATION_INVALID,
+    /** 요청의 replaceExternalAccountId(연결 요청에서는 시작 때 고정한 값)가 그 플랫폼의 지금 연결과 다름 */
+    EXTERNAL_ACCOUNT_CONNECTION_CHANGED,
     /** 다른 아티스트가 같은 YouTube 채널을 연결함 */
     EXTERNAL_ACCOUNT_ALREADY_LINKED,
     /** 로그인한 Google 계정에 공개 YouTube 채널이 없음 */
