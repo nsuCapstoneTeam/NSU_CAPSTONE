@@ -100,7 +100,9 @@ CREATE TABLE identity_verifications (
 
 - 저장은 `JdbcClient`로 한다(조건부 UPDATE와 `ON CONFLICT`가 핵심이다, `EventPartnerProfileRepository`와 같은 방식). JPA 엔티티가 없어 `ddl-auto=validate`가 이 테이블을 보지 않으므로, CHECK 목록과 Java enum이 같은지 스키마 테스트로 확인한다.
 - `supabase-postgres-best-practices` 검토(2026-11-17): FK를 거는 쪽 칼럼에 모두 인덱스가 있다(시도 `user_id`는 `idx_…_user_id`, 기록 `user_id`·`attempt_id`는 유일 인덱스). 그래서 `users` 행을 지울 때 FK 검사가 테이블을 훑지 않는다. 기본키는 서버가 만든 UUIDv7이라 B-tree 끝에 쌓인다. 완료 트랜잭션은 외부 호출 없이 쓰기 두 번이다. `ON CONFLICT (user_id)`의 기준 인덱스가 회원당 하나를 지키고, 같은 시도는 같은 회원이라(복합 FK) 같은 시도·다른 시도의 동시 완료 모두 오류 없이 끝난다. 만료 정리 작업이 없어 `expires_at` 인덱스는 두지 않는다.
-- 되돌리기: 새 테이블만 만든다. 되돌리는 forward 마이그레이션은 두 테이블을 기록 → 시도 순서로 지운다. NSU-89가 `identity_verifications.id`를 참조한 뒤에는 그 FK를 먼저 지운다.
+- 되돌리기(PR 설명의 롤백 계획에도 적는다): **기본 롤백은 앱 버전만 이전으로 되돌리고, 두 테이블과 FK·데이터는 그대로 둔다.** 본인확인 기록은 무효가 되지 않는다는 전제(Linear "Eligibility와의 전제", ADR 00 "운영 단계")가 있기 때문이다. 기록을 지우면 그 확인으로 올린 곡과 NSU-89의 등록정보 일치 기록은 남는데 근거만 사라진다. 이전 버전 앱은 두 테이블을 읽지 않으므로 남아 있어도 해가 없다.
+  - V11이 적용된 DB에서 이전 버전 앱이 뜨는지(Flyway가 로컬에 없는 앞선 버전 마이그레이션을 어떻게 다루는지)는 구현 때 Testcontainers로 확인하고, 막히면 그 설정을 PR 설명의 롤백 계획에 적는다.
+  - 두 테이블을 지우는 것은 승인된 시연 서버 전체 초기화(ADR 00 "초기화 runbook", DB 통째로 삭제)뿐이다. 기능을 없애야 하면 그때 곡·등록정보 일치 같은 종속 데이터를 함께 다루는 폐기 절차를 따로 설계한다. 테이블만 지우는 forward 마이그레이션은 두지 않는다.
 
 ### 사용 예시 (다른 모듈)
 
@@ -153,6 +155,7 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 | 1 | Codex | [High] KCP V2 `identityVerificationId`는 영문·숫자 40자 이하인데 하이픈 UUID를 넘김 | 밖으로 내보내는 시도 ID를 소문자 16진수 32자 한 가지로(Decision "인증 시도", 계약 07 §1) |
 | 2 | Codex | [Medium] 요청 제한과 "동시 완료 20건 모두 200" 보장이 모순 | 보장을 요청 제한 통과 요청으로 한정, 동시성 시험을 높인 한도와 기본 한도로 나눔 |
 | 3 | Claude(Codex 한도로 대체) | [Medium] #219 계약·README·테스트가 바뀌는 목록에 없음, [Medium] 시드가 웹 없는 컨텍스트로 뜨지 않고 대안이 없음, [Low] 설정 오류 감지, [Low] §3 판정 순서와 §5 재전송 보장 모순 | Decision "환경"에 바뀌는 #219 파일과 확인 절차, 시드를 `server.port=-1`·Flyway 끔·같은 빌드로 하고 비교표·대안 추가, 로그 등급·배포 확인·reset kind, §3 순서 일반화 |
+| 4 | Codex | [High] 롤백 계획이 두 테이블을 지워 본인확인 기록과 NSU-89 근거를 잃음 | 기본 롤백은 앱 버전만, 테이블·FK·데이터는 그대로. 테이블 삭제는 승인된 전체 초기화뿐(저장 모델 "되돌리기") |
 
 - 2·3회차에 같은 종류의 지적(§3 판정 순서와 §5·§10 보장의 정합)이 이어졌다. 사례를 하나씩 고치지 않고 **일반화했다**: 계약 07 §5 첫 항목에 "§3의 판정 순서가 모든 보장보다 앞선다"는 경계를 한 번 적고, 남은 조합은 계약 07 §10의 판정 순서 조합 시험으로 넘겼다.
 
@@ -385,6 +388,7 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 | Mock 제공자를 운영 코드에 두고 설정으로 막기 | 설정이나 코드 한 줄로 다시 열 수 있다. `seed` 소스 세트에 두면 서버 jar에 없다 |
 | Mock 제공자와 시드를 `src/test`에 두고 개발 PC에서 Gradle 작업으로 돌리기 | 시연 DB·Redis 접속 정보와 이름 암호화 키를 개발 PC로 꺼내야 한다. 시연 서버에서 돌리려면 서버에 소스와 Gradle이 있어야 한다(architect 후보 1의 안, 2026-11-17 사용자 답으로 바꿈) |
 | Mock 시드를 서버 jar의 실행 옵션으로 | Mock 제공자가 서버 jar에 들어간다 |
+| 롤백 때 두 테이블을 지우는 forward 마이그레이션 | 본인확인 기록과 `MOCK` 이름이 사라지고, NSU-89 뒤에는 등록정보 일치 기록의 근거 FK까지 먼저 지워야 한다. 곡은 남는데 근거만 없어져 "본인확인은 무효가 되지 않는다"는 전제가 깨진다(2026-11-17 4회차 리뷰) |
 | 이름 암호화 키를 AWS KMS 고객 관리 키, Secrets Manager, Vault로 | 이 규모에 비해 비용·운영이 크다. KMS 고객 관리 키는 키마다 월 $1, Secrets Manager는 비밀마다 월 약 $0.40이고, Vault는 서버를 하나 더 운영해야 한다. Parameter Store 표준 등급(SecureString, AWS 관리 키)은 무료다(2026-11-17 사용자 결정) |
 | 시드를 웹 없는 앱 컨텍스트로 | `SecurityConfig`의 `HttpSecurity` 주입이 실패해 뜨지 않는다(2026-11-17 3회차 리뷰) |
 | 시드에서도 Flyway를 켜 둠 | 시드 jar가 서버보다 새 커밋이면 서버 배포 전에 시연 DB 스키마가 올라간다 |
