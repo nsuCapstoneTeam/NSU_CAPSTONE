@@ -10,6 +10,7 @@ import org.springframework.boot.logging.LoggerConfiguration;
 import org.springframework.boot.logging.LoggingSystem;
 import org.springframework.context.ApplicationListener;
 import org.springframework.core.Ordered;
+import org.springframework.core.env.Environment;
 
 /**
  * 배포에서 로그 보호 장치를 시작할 때 한 번 적용한다(ADR logging/00 Decision 7-3).
@@ -28,12 +29,18 @@ class LogSafetyListener implements ApplicationListener<ApplicationEnvironmentPre
 
     @Override
     public void onApplicationEvent(ApplicationEnvironmentPreparedEvent event) {
-        if (event.getEnvironment().getProperty(LOCAL_MODE_PROPERTY, Boolean.class, false)) {
+        if (isLocalMode(event.getEnvironment())) {
             log.warn("로컬 전용 로그 모드다. 로그 보호 장치를 건너뛴다. 배포에서 쓰지 않는다");
             return;
         }
         rejectJvmDebugOptions();
         enforceLevelFloor(LoggingSystem.get(event.getSpringApplication().getClassLoader()));
+        // Boot가 로깅을 초기화하고 레벨을 적용한 직후, 컨텍스트를 만들기 전의 출력 장치를 확인한다
+        LogDeviceCheck.failIfUnsafe();
+    }
+
+    static boolean isLocalMode(Environment environment) {
+        return environment.getProperty(LOCAL_MODE_PROPERTY, Boolean.class, false);
     }
 
     @Override

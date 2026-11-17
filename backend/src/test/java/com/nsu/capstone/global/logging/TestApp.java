@@ -2,8 +2,8 @@ package com.nsu.capstone.global.logging;
 
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.MutablePropertySources;
 import org.springframework.core.env.StandardEnvironment;
 
@@ -29,6 +29,7 @@ final class TestApp {
                 .run();
     }
 
-    @Configuration(proxyBeanMethods = false)
+    /** 다른 통합 테스트의 컴포넌트 스캔에 잡히지 않도록 @TestConfiguration으로 둔다. */
+    @TestConfiguration(proxyBeanMethods = false)
     static class EmptyConfig {}
 }
