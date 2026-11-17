@@ -147,9 +147,13 @@ ARTIST가 마이페이지에서 실명 본인확인을 받고, 자기 본인확�
 
 ## 5. 멱등·동시성·만료
 
-- 이 절의 결과는 요청 제한(§3 4번, §9)을 통과한 요청에 대한 것이다. 재전송도 요청 제한 1회로 세고, 한도를 넘은 요청은 시도 상태와 관계없이 `429 TOO_MANY_REQUESTS`다. 한도를 넘어도 시도와 기록은 바뀌지 않으므로, `Retry-After` 뒤 같은 ID로 다시 보내면 아래 결과를 받는다.
-- 같은 시도의 완료를 다시 보내면 같은 결과다. 성공한 시도는 `200`, 실패·거절한 시도는 같은 `422`, 만료는 같은 `409`이고 PortOne을 다시 부르지 않는다.
-- 같은 시도의 완료가 동시에 여러 번 오면, 요청 제한을 통과한 요청은 모두 `200`이고 기록은 하나다. 동시 요청이 PortOne을 각각 부를 수는 있다(조회는 멱등이다).
+- **§3의 판정 순서가 이 절과 §10의 모든 보장보다 앞선다.** 아래 보장은 그 보장을 정하는 순서까지 도착한 요청에만 성립한다. 앞 순서에서 끝난 요청은 시도 상태와 관계없이 그 순서의 응답을 받고, 시도와 기록을 바꾸지 않는다.
+  - 4번 요청 제한: `429 TOO_MANY_REQUESTS`(또는 `503 RATE_LIMIT_UNAVAILABLE`). 재전송도 1회로 센다. `Retry-After` 뒤 같은 ID로 다시 보내면 아래 결과를 받는다.
+  - 5번 계정 상태: `403 ACCESS_DENIED`.
+  - 6번 시도 없음·다른 회원의 시도: `404`.
+  - 7번 계정이 이미 본인확인을 마침: 어느 시도의 완료든 `200`이다. 그 시도가 실패·거절로 닫혔거나 만료됐어도 같다.
+- 계정이 아직 본인확인을 마치지 않았으면, 같은 시도의 완료를 다시 보낼 때 같은 결과다. 실패·거절한 시도는 같은 `422`, 만료는 같은 `409`이고 PortOne을 다시 부르지 않는다.
+- 같은 시도의 완료가 동시에 여러 번 오면, 4번을 통과한 요청은 모두 `200`이고 기록은 하나다. 동시 요청이 PortOne을 각각 부를 수는 있다(조회는 멱등이다).
 - 한 회원이 시도를 여러 개 열 수 있다(두 번 누름, 창을 닫고 다시 시작). 먼저 확정된 시도 하나만 기록이 된다. 그 뒤 다른 시도의 완료는 판정 7번에서 `200`이다.
 - 만료는 완료 요청이 도착한 시각으로 판정한다. `expiresAt` 전에 도착한 요청은 PortOne 응답이 늦어도 받는다.
 - 기록은 회원당 하나이고 바뀌지 않는다. 본인확인을 무효로 하는 경로는 없다(ADR 00 "운영 단계", Linear "Eligibility와의 전제").
@@ -182,7 +186,7 @@ ARTIST가 마이페이지에서 실명 본인확인을 받고, 자기 본인확�
 
 ## 7. 내부 계약
 
-HTTP로 공개하지 않는 Java 계약이다. 패키지는 `com.nsu.capstone.trust.identityverification`이고, 다른 모듈은 아래 public 타입만 import할 수 있다. 저장·제공자 타입은 package-private라 import하면 컴파일이 실패한다. 아래 블록은 공개 시그니처만 보인다(본문 생략).
+HTTP로 공개하지 않는 Java 계약이다. 패키지는 `com.nsu.capstone.verification.identity`이고(Verification 도메인은 최상위 `verification/`, ADR artist_trust_architecture/06 §19), 다른 모듈은 아래 public 타입만 import할 수 있다. 저장·제공자 타입은 package-private라 import하면 컴파일이 실패한다. 아래 블록은 공개 시그니처만 보인다(본문 생략).
 
 ```java
 public class IdentityVerifications {
@@ -213,9 +217,9 @@ public final class IdentityName { /* Unicode NFC, 앞뒤 공백 제거, 1~50자,
 | NSU-89 등록 정보 제출 04 §3.2 검사 6·6-1 | `registryMatchIdentity(artistId)` | `NotVerified` → `403 IDENTITY_VERIFICATION_REQUIRED`, `NameUnavailable` → `403 IDENTITY_NAME_UNAVAILABLE`, `Named` → 이름으로 대조하고 `ref.verificationId()`를 등록정보 일치 기록에 남긴다(Linear 작업 범위 6) |
 | NSU-127 PRIVATE 열람 | `isVerifiedArtist(viewerId)`(EVT-044의 다른 조건과 함께) | 03 §4 |
 | NSU-128 댓글 | `isVerifiedArtist(authorId)` | CMT-045 |
-| Trust Profile | 직접 부르지 않는다. 이 모듈의 `VerificationSource` 구현이 `IDENTITY`를 준다 | 01 §4.3·§7 |
+| Trust Profile | 직접 부르지 않는다. 이 모듈의 `VerificationSource` 구현이 `IDENTITY`를 주고, NSU-37이 만드는 `CompositeVerificationReader`가 다른 source와 합친다(01 §7) | 01 §4.3·§7 |
 
-- `VERIFIED_ARTIST`(`ACTIVE`만)와 Trust Profile `IDENTITY`(계정 상태를 보지 않음, 01 §4.3)는 다른 판정이다. 권한 판정에는 `IdentityVerifications`를 쓴다.
+- `VERIFIED_ARTIST`(`ACTIVE`만)와 Trust Profile `IDENTITY`는 다른 판정이다. `IDENTITY`를 주는 source는 계정 상태로 거르지 않는다. 누구의 Trust Profile을 볼 수 있는지는 01 §2·§3이 정하고, 일괄 조회는 계정 상태로 거르지 않는다(01 §7). 권한 판정에는 `IdentityVerifications`를 쓴다.
 - 이름 비교 규칙(공백 무시, 예명 등록곡은 통과 못 함)은 04 §3.2가 정하고 NSU-89가 구현한다. 이 계약은 정규화한 이름만 넘긴다.
 
 ## 8. 저장과 개인정보
@@ -229,7 +233,7 @@ public final class IdentityName { /* Unicode NFC, 앞뒤 공백 제거, 1~50자,
 | `MOCK`만: 암호화한 이름(AES-256-GCM) | PortOne 오류 본문과 메시지, 응답 `channel` 값, 요청 IP |
 
 - 로그에는 시도 ID와 결과 이유(사람을 가리키지 않는 enum)만 남긴다. 거절한 응답(`LIVE` 등)도 같다(ADR 00).
-- `MOCK` 기록은 시연 서버 안에서 돌리는 시드로만 만든다. 이름의 주인인 팀원에게 "실명을 암호화해 시연 DB에 초기화 날짜까지 저장"하는 동의를 받는다(NSU-129). 이름 암호화 키는 시연 서버 secret 저장소에만 두고 초기화 때 폐기한다(보관 위치는 답 대기, ADR 01).
+- `MOCK` 기록은 시연 서버 안에서 돌리는 시드로만 만든다. 이름의 주인인 팀원에게 "실명을 암호화해 시연 DB에 초기화 날짜까지 저장"하는 동의를 받는다(NSU-129). 이름 암호화 키는 시연 서버(AWS)에서는 Parameter Store 표준 등급에, 로컬 개발에서는 각자 환경 변수에 두고, 초기화 때 폐기한다(ADR 01).
 
 ## 9. 요청 제한
 
@@ -251,6 +255,7 @@ public final class IdentityName { /* Unicode NFC, 앞뒤 공백 제거, 1~50자,
 | 기본 한도(시간당 10)에서 시작 1건 뒤 같은 시도의 완료 20건을 동시에 보내면 정확히 9건이 `200`, 11건이 `429`와 `Retry-After`이고 기록은 하나다. `429`를 받은 요청은 시도·기록을 바꾸지 않는다 | §3·§5·§9 |
 | 만료 1초 전에 도착한 완료 요청은 PortOne 응답이 2초 걸려도 `200`이다 | §5 |
 | 이미 성공한 시도의 재전송은 같은 `200`이고 PortOne을 다시 부르지 않는다. 본인확인을 마친 계정의 시작은 `409 IDENTITY_ALREADY_VERIFIED`이고 시도가 생기지 않는다 | §3·§5 |
+| 판정 순서 조합 시험: 요청 제한 초과, 계정 `ACTIVE` 아님, 시도 없음·남의 시도, 계정이 이미 확인됨, 시도가 실패·거절로 닫힘, 시도 만료를 조합한 표의 모든 행에서 응답이 §3에서 가장 앞에 걸리는 순서의 응답과 같고, 그 순서보다 뒤의 일(시도·기록 변경, PortOne 호출)이 일어나지 않는다. 예: 실패한 시도 A 뒤 시도 B로 성공한 계정의 A 재전송은 `200` | §3·§5 |
 | 채널 판정: `key` 없는 TEST 채널은 받는다. `channel` 없음, 필수 필드 셋 각각 없음·빈 값, `LIVE`, 모르는 `type`, `pgProvider` 다름, `pgMerchantId` 다름, `key` 다름은 각각 `422 IDENTITY_VERIFICATION_REJECTED`이고 거절 이유가 남는다 | ADR 00 "출처 결정" |
 | PortOne `READY`·`404` → `409 NOT_COMPLETED`, `FAILED` → `422`, `400`·`401`·`403`·`429`·`5xx`·연결 실패·읽기 시간 초과·깨진 JSON·모르는 `status` → `503 IDENTITY_VERIFICATION_UNAVAILABLE`이고 시도는 열려 있다 | §4.2 |
 | 읽기 시간 초과는 설정한 timeout과 여유 안에 응답한다 | §4.2 |
@@ -310,7 +315,8 @@ Content-Type: application/json
 
 | 문서 | 바뀌는 곳 |
 |---|---|
-| [01 Trust Profile](./01_trust_profile.md) §7 | 정렬·중복 제거는 Assembler가 하고, 합치는 reader는 source를 한 번씩 부르고 불변식 8을 지킨다는 문구 |
 | [00 공통 규칙](./00_conventions.md) §10.1 | 태그 목록에 "실명 본인확인". 00은 지금 NSU-146이 고치고 있어, NSU-146 PR이 머지된 뒤 이 브랜치를 main에 맞추고 NSU-105 PR에서 한 줄 더한다 |
 | [00 공통 규칙](./00_conventions.md) §6 | 고치지 않는다. `identityVerificationId`의 32자 표기는 이 문서 §1에 예외와 이유를 적었다 |
+| [가입 약관·발송 한도](./signup-terms-and-send-limits.md) §1.1·§3(PR #219 판) | "기본 환경은 2종, `demo` 프로필은 4종" 문장과 그 테스트 기준 두 행. 환경 값을 `app.environment`(`DEMO`만) 하나로 모으므로 모든 서버에서 4종이 필수다(ADR 01 "환경"). #219 머지 뒤 NSU-105 PR에서 고친다 |
+| `backend/README.md`(PR #219 판) | `SIGNUP_REQUIRED_TERMS` 설명과 `SPRING_PROFILES_ACTIVE=demo` 안내를 4종 필수로. 새 설정(`APP_ENVIRONMENT` 등) 설명 |
 | SSOT·용어집 | 새 용어 "인증 시도"·"본인확인 기록"을 용어집에 더한다(Linear, 지휘 세션) |
