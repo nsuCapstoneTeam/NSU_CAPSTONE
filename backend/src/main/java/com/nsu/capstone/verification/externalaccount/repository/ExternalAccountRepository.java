@@ -146,6 +146,13 @@ public class ExternalAccountRepository {
                 .optional();
     }
 
+    public List<ExternalAccount> findByArtist(UUID artistId) {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM external_accounts WHERE artist_id = :artistId")
+                .param("artistId", artistId)
+                .query(ACCOUNT_MAPPER)
+                .list();
+    }
+
     public Optional<ExternalAccount> findById(UUID id) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM external_accounts WHERE id = :id")
                 .param("id", id)

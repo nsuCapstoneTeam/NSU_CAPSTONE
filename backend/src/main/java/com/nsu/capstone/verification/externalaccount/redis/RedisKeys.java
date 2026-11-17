@@ -15,6 +15,16 @@ final class RedisKeys {
         return PREFIX + "meta:" + provider + ":" + kind + ":" + providerId;
     }
 
+    /** YouTube 계정의 표시 정보(채널과 고른 영상). */
+    static String display(UUID externalAccountId) {
+        return PREFIX + "display:" + externalAccountId;
+    }
+
+    /** 표시 정보를 받지 못했다는 30초짜리 표시. */
+    static String displayFailed(UUID externalAccountId) {
+        return PREFIX + "display-failed:" + externalAccountId;
+    }
+
     /** 연결 시작과 연결 요청 사이의 진행 값. 키에 사용자 ID가 들어가 다른 사용자의 요청은 찾지 못한다. */
     static String authorization(String stateDigest, UUID artistId) {
         return PREFIX + "authz:" + stateDigest + ":" + artistId;

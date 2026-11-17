@@ -61,5 +61,6 @@ public record ExternalAccountProperties(
             @DefaultValue("3s") Duration writeConnectTimeout,
             @DefaultValue("5s") Duration writeReadTimeout,
             @DefaultValue("1s") Duration readConnectTimeout,
-            @DefaultValue("2s") Duration readReadTimeout) {}
+            @DefaultValue("2s") Duration readReadTimeout,
+            @DefaultValue("3s") Duration readTotalTimeout) {}
 }

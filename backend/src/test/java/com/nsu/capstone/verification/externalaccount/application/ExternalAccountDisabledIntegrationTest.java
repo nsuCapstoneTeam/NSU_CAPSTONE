@@ -11,6 +11,7 @@ import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountExcep
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
 import com.nsu.capstone.verification.externalaccount.provider.SpotifyGateway;
 import com.nsu.capstone.verification.externalaccount.provider.YoutubeGateway;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -26,6 +27,28 @@ class ExternalAccountDisabledIntegrationTest extends ExternalAccountIntegrationT
 
     @MockitoBean
     SpotifyGateway spotifyGateway;
+
+    @Test
+    void 플랫폼이_꺼져_있어도_조회는_200이고_링크만_남으며_플랫폼을_부르지_않는다() {
+        User artist = newUser(UserRole.ARTIST, "disabled-links@example.com");
+        jdbcTemplate.update(
+                "INSERT INTO external_accounts (id, artist_id, provider, provider_account_id, connected_at, refreshed_at)"
+                        + " VALUES (?, ?, 'YOUTUBE', 'UCaaaaaaaaaaaaaaaaaaaaaa', now(), now()),"
+                        + " (?, ?, 'SPOTIFY', '1vCWHaC5f2uS3yhpwWbIA6', now(), now())",
+                uuidV7Generator.generate(),
+                artist.getId(),
+                uuidV7Generator.generate(),
+                artist.getId());
+
+        List<AccountView> links = service.linksOf(artist.getId(), UserRole.ARTIST, artist.getId());
+
+        assertThat(links).hasSize(2);
+        assertThat(links).allSatisfy(view -> {
+            assertThat(view.displayName()).isNull();
+            assertThat(view.profileUrl()).startsWith("https://");
+        });
+        verifyNoInteractions(youtubeGateway, spotifyGateway);
+    }
 
     @Test
     void Spotify_연결이_꺼져_있으면_PROVIDER_DISABLED이고_Spotify를_부르지_않으며_저장하지_않는다() {

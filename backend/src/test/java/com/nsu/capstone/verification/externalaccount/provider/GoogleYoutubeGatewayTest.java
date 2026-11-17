@@ -74,9 +74,13 @@ class GoogleYoutubeGatewayTest {
                 new ExternalAccountProperties.Spotify(
                         false, null, null, "https://unused.example/token", "https://unused.example/v1"),
                 new ExternalAccountProperties.Http(
-                        Duration.ofSeconds(3), Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofSeconds(2)));
+                        Duration.ofSeconds(3),
+                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(1),
+                        Duration.ofSeconds(2),
+                        Duration.ofSeconds(3)));
         when(quota.tryReserve(any(UUID.class), eq(2))).thenReturn(true);
-        gateway = new GoogleYoutubeGateway(builder, properties, quota);
+        gateway = new GoogleYoutubeGateway(builder, builder, properties, quota);
     }
 
     @Test

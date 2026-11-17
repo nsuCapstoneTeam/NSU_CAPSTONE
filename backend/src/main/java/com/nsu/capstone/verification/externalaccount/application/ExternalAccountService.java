@@ -1,17 +1,23 @@
 package com.nsu.capstone.verification.externalaccount.application;
 
+import com.nsu.capstone.identity.application.ArtistReadAccess;
 import com.nsu.capstone.identity.application.UserIdGenerator;
+import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.oauth.OAuthOpaqueValueService;
 import com.nsu.capstone.verification.externalaccount.config.ExternalAccountProperties;
 import com.nsu.capstone.verification.externalaccount.domain.AuditActor;
 import com.nsu.capstone.verification.externalaccount.domain.AuditEvent;
 import com.nsu.capstone.verification.externalaccount.domain.AuditEventType;
 import com.nsu.capstone.verification.externalaccount.domain.AuthorizationFlow;
+import com.nsu.capstone.verification.externalaccount.domain.DisplayText;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccount;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountException;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountProvider;
+import com.nsu.capstone.verification.externalaccount.domain.ProviderLink;
+import com.nsu.capstone.verification.externalaccount.domain.SelectedWork;
 import com.nsu.capstone.verification.externalaccount.domain.SpotifyArtistUrl;
+import com.nsu.capstone.verification.externalaccount.domain.ThumbnailPolicy;
 import com.nsu.capstone.verification.externalaccount.provider.FetchedAccount;
 import com.nsu.capstone.verification.externalaccount.provider.ProviderProfile;
 import com.nsu.capstone.verification.externalaccount.provider.SpotifyGateway;
@@ -26,6 +32,10 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,6 +53,8 @@ public class ExternalAccountService {
 
     private static final String YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
 
+    private final ArtistReadAccess artistReadAccess;
+    private final DisplayInfoLoader displayInfoLoader;
     private final ExternalAccountRepository repository;
     private final AuthorizationStore authorizationStore;
     private final YoutubeGateway youtubeGateway;
@@ -90,6 +102,51 @@ public class ExternalAccountService {
                 .encode()
                 .toUriString();
         return new AuthorizationStart(authorizationUrl, now.plus(AuthorizationStore.TTL), bindingNonce);
+    }
+
+    /**
+     * 아티스트가 연결한 계정과 고른 영상을 링크로 돌려준다(06 §6). 호출 주체 규칙은 Trust Profile과 같다.
+     */
+    public List<AccountView> linksOf(UUID callerId, UserRole callerRole, UUID artistId) {
+        artistReadAccess.require(callerId, callerRole, artistId);
+        List<ExternalAccount> accounts = repository.findByArtist(artistId).stream()
+                .sorted(Comparator.comparing(ExternalAccount::provider))
+                .toList();
+        Map<UUID, List<SelectedWork>> works = new HashMap<>();
+        accounts.forEach(account -> works.put(account.id(), repository.findWorks(account.id())));
+        Map<UUID, AccountDisplay> displays = displayInfoLoader.load(callerId, accounts, works);
+        return accounts.stream()
+                .map(account -> viewOf(account, works.get(account.id()), displays.get(account.id())))
+                .toList();
+    }
+
+    private AccountView viewOf(ExternalAccount account, List<SelectedWork> works, AccountDisplay display) {
+        // 플랫폼이 응답했는데 없거나 공개가 아닌 영상은 뺀다. 응답을 못 받았으면 모두 남긴다(06 §6.4의 5·6)
+        List<WorkView> workViews = works.stream()
+                .filter(work -> display.videos() == null || display.videos().containsKey(work.providerWorkId()))
+                .map(work -> {
+                    ProviderProfile video =
+                            display.videos() == null ? null : display.videos().get(work.providerWorkId());
+                    return new WorkView(
+                            work.providerWorkId(),
+                            ProviderLink.youtubeVideo(work.providerWorkId()).value(),
+                            video == null ? null : DisplayText.clean(video.displayName(), DisplayText.TITLE_MAX),
+                            video == null ? null : ThumbnailPolicy.allowedOrNull(video.thumbnailUrl()));
+                })
+                .toList();
+        ProviderLink profileLink = account.provider() == ExternalAccountProvider.YOUTUBE
+                ? ProviderLink.youtubeChannel(account.providerAccountId())
+                : ProviderLink.spotifyArtist(account.providerAccountId());
+        ProviderProfile profile = display.account();
+        return new AccountView(
+                account.id(),
+                account.provider(),
+                account.provider() == ExternalAccountProvider.YOUTUBE,
+                profileLink.value(),
+                profile == null ? null : DisplayText.clean(profile.displayName(), DisplayText.DISPLAY_NAME_MAX),
+                profile == null ? null : ThumbnailPolicy.allowedOrNull(profile.thumbnailUrl()),
+                account.connectedAt(),
+                workViews);
     }
 
     public ConnectResult connect(UUID artistId, ConnectRequest request) {

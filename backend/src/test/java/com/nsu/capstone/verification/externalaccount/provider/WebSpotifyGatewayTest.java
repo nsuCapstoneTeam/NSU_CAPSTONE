@@ -64,7 +64,11 @@ class WebSpotifyGatewayTest {
                         "https://d.example"),
                 new ExternalAccountProperties.Spotify(true, "spotify-client", "spotify-secret", TOKEN_URI, API_BASE),
                 new ExternalAccountProperties.Http(
-                        Duration.ofSeconds(3), Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofSeconds(2)));
+                        Duration.ofSeconds(3),
+                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(1),
+                        Duration.ofSeconds(2),
+                        Duration.ofSeconds(3)));
         clock = new AdvancingClock(NOW);
         gateway = new WebSpotifyGateway(builder, properties, clock);
     }

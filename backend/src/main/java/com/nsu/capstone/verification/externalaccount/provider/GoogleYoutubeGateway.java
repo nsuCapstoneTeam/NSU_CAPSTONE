@@ -1,13 +1,16 @@
 package com.nsu.capstone.verification.externalaccount.provider;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.nsu.capstone.verification.externalaccount.config.ExternalAccountConfig;
 import com.nsu.capstone.verification.externalaccount.config.ExternalAccountProperties;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountException;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
 import com.nsu.capstone.verification.externalaccount.redis.YoutubeQuota;
 import java.net.URI;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
@@ -49,15 +52,18 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     private final ExternalAccountProperties.Youtube youtube;
     private final YoutubeQuota quota;
     private final RestClient restClient;
+    private final RestClient readRestClient;
     private final RestClientAuthorizationCodeTokenResponseClient tokenClient;
 
     public GoogleYoutubeGateway(
             @Qualifier(ExternalAccountConfig.WRITE_REST_CLIENT) RestClient.Builder writeClient,
+            @Qualifier(ExternalAccountConfig.READ_REST_CLIENT) RestClient.Builder readClient,
             ExternalAccountProperties properties,
             YoutubeQuota quota) {
         this.youtube = properties.youtube();
         this.quota = quota;
         this.restClient = writeClient.clone().build();
+        this.readRestClient = readClient.clone().build();
         // 메시지 변환기와 오류 처리기는 로그인의 토큰 클라이언트(OAuthProviderHttpConfig)와 같게 둔다
         this.tokenClient = new RestClientAuthorizationCodeTokenResponseClient();
         this.tokenClient.setRestClient(writeClient
@@ -98,6 +104,66 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
         }
         verifyPublic(channelId);
         return new FetchedAccount(channelId);
+    }
+
+    @Override
+    public YoutubeDisplay fetchDisplay(String channelId, List<String> videoIds) {
+        ProviderProfile channel = fetchChannelProfile(channelId);
+        Map<String, ProviderProfile> publicVideos = videoIds.isEmpty() ? Map.of() : fetchPublicVideos(videoIds);
+        return new YoutubeDisplay(channel, publicVideos);
+    }
+
+    private ProviderProfile fetchChannelProfile(String channelId) {
+        ChannelList channels = getWithApiKey("/channels", "snippet", channelId);
+        if (channels == null || channels.items() == null || channels.items().isEmpty()) {
+            return null;
+        }
+        ChannelList.Channel channel = channels.items().get(0);
+        return profileOf(channel.snippet());
+    }
+
+    private Map<String, ProviderProfile> fetchPublicVideos(List<String> videoIds) {
+        ChannelList videos = getWithApiKey("/videos", "snippet,status", String.join(",", videoIds));
+        Map<String, ProviderProfile> publicVideos = new LinkedHashMap<>();
+        if (videos != null && videos.items() != null) {
+            for (ChannelList.Channel video : videos.items()) {
+                boolean isPublic =
+                        video.status() != null && "public".equals(video.status().privacyStatus());
+                if (video.id() != null && isPublic) {
+                    publicVideos.put(video.id(), profileOf(video.snippet()));
+                }
+            }
+        }
+        return publicVideos;
+    }
+
+    private ChannelList getWithApiKey(String path, String part, String ids) {
+        try {
+            return readRestClient
+                    .get()
+                    .uri(UriComponentsBuilder.fromUriString(youtube.apiBaseUri() + path)
+                            .queryParam("part", part)
+                            .queryParam("id", ids)
+                            .queryParam("key", youtube.apiKey())
+                            .build()
+                            .toUri())
+                    .retrieve()
+                    .body(ChannelList.class);
+        } catch (RestClientException e) {
+            // API 키와 URL은 예외 메시지에 들어 있을 수 있어 메시지를 옮기지 않는다
+            throw unavailable("YouTube 표시 정보를 받지 못했다");
+        }
+    }
+
+    private static ProviderProfile profileOf(ChannelList.Snippet snippet) {
+        if (snippet == null) {
+            return new ProviderProfile(null, null);
+        }
+        ChannelList.Thumbnails thumbnails = snippet.thumbnails();
+        ChannelList.Thumbnail picked = thumbnails == null
+                ? null
+                : thumbnails.medium() != null ? thumbnails.medium() : thumbnails.defaultThumbnail();
+        return new ProviderProfile(snippet.title(), picked == null ? null : picked.url());
     }
 
     /** 폐기를 보내고, 실패하면 한 번 더 보낸다. 폐기를 확인했는지 돌려준다. */
@@ -216,7 +282,16 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     private record ChannelList(List<Channel> items) {
 
         @JsonIgnoreProperties(ignoreUnknown = true)
-        private record Channel(String id, Status status) {}
+        private record Channel(String id, Snippet snippet, Status status) {}
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        private record Snippet(String title, Thumbnails thumbnails) {}
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        private record Thumbnails(@JsonProperty("default") Thumbnail defaultThumbnail, Thumbnail medium) {}
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        private record Thumbnail(String url) {}
 
         @JsonIgnoreProperties(ignoreUnknown = true)
         private record Status(String privacyStatus) {}
