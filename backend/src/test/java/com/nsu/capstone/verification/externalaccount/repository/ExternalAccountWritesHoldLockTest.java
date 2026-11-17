@@ -15,7 +15,8 @@ class ExternalAccountWritesHoldLockTest {
     void 저장소의_공개_메서드는_조회와_잠금이_아니면_잠금_증표를_첫_매개변수로_받는다() {
         List<Method> writes = Arrays.stream(ExternalAccountRepository.class.getDeclaredMethods())
                 .filter(method -> Modifier.isPublic(method.getModifiers()))
-                .filter(method -> !method.getName().startsWith("find"))
+                .filter(method -> !method.getName().startsWith("find")
+                        && !method.getName().startsWith("count"))
                 .filter(method -> !method.getName().equals("lockArtist"))
                 .toList();
 

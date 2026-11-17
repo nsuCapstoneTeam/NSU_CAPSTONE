@@ -6,6 +6,8 @@ import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountExcep
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountProvider;
 import com.nsu.capstone.verification.externalaccount.domain.SelectedWork;
+import com.nsu.capstone.verification.externalaccount.domain.StaleWork;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Collection;
@@ -165,6 +167,101 @@ public class ExternalAccountRepository {
                 jdbc.sql("""
                         SELECT DISTINCT artist_id FROM external_accounts
                         WHERE provider = 'YOUTUBE' AND artist_id IN (:artistIds)""").param("artistIds", artistIds).query(UUID.class).list());
+    }
+
+    /** 확인한 지 {@code cutoff}보다 오래된 YouTube 채널 연결을 가장 오래된 것부터 돌려준다(06 §11.1). */
+    public List<ExternalAccount> findYoutubeAccountsRefreshedBefore(Instant cutoff) {
+        return jdbc.sql("SELECT " + COLUMNS
+                        + " FROM external_accounts WHERE provider = 'YOUTUBE' AND refreshed_at < :cutoff"
+                        + " ORDER BY refreshed_at")
+                .param("cutoff", OffsetDateTime.ofInstant(cutoff, ZoneOffset.UTC))
+                .query(ACCOUNT_MAPPER)
+                .list();
+    }
+
+    public List<StaleWork> findWorksRefreshedBefore(Instant cutoff) {
+        return jdbc.sql("""
+                        SELECT external_account_id, artist_id, provider_work_id, refreshed_at
+                        FROM external_account_works WHERE refreshed_at < :cutoff ORDER BY refreshed_at""")
+                .param("cutoff", OffsetDateTime.ofInstant(cutoff, ZoneOffset.UTC))
+                .query((rs, rowNum) -> new StaleWork(
+                        rs.getObject("external_account_id", UUID.class),
+                        rs.getObject("artist_id", UUID.class),
+                        rs.getString("provider_work_id"),
+                        rs.getObject("refreshed_at", OffsetDateTime.class).toInstant()))
+                .list();
+    }
+
+    /** 확인한 지 가장 오래된 YouTube 채널·영상 행의 시각. 실패 감시(3일·20일 ERROR 로그)가 쓴다. */
+    public Optional<Instant> findOldestYoutubeRefreshedAt() {
+        OffsetDateTime oldest = jdbc.sql("""
+                        SELECT min(refreshed_at) FROM (
+                            SELECT refreshed_at FROM external_accounts WHERE provider = 'YOUTUBE'
+                            UNION ALL
+                            SELECT refreshed_at FROM external_account_works) rows""").query(OffsetDateTime.class).single();
+        return Optional.ofNullable(oldest).map(OffsetDateTime::toInstant);
+    }
+
+    /** {@code cutoff}보다 오래된 YouTube 채널·영상 행의 수(감시 로그의 "대상 행 수"). */
+    public int countYoutubeRowsRefreshedBefore(Instant cutoff) {
+        Integer count = jdbc.sql("""
+                        SELECT (SELECT count(*) FROM external_accounts
+                                WHERE provider = 'YOUTUBE' AND refreshed_at < :cutoff)
+                             + (SELECT count(*) FROM external_account_works WHERE refreshed_at < :cutoff)""")
+                .param("cutoff", OffsetDateTime.ofInstant(cutoff, ZoneOffset.UTC))
+                .query(Integer.class)
+                .single();
+        return count == null ? 0 : count;
+    }
+
+    /** 그 채널의 연결일 때만 확인 시각을 바꾼다. 그사이 다른 채널로 교체됐으면 {@code false}다. */
+    public boolean refreshAccount(LockedArtist locked, UUID accountId, String channelId, Instant now) {
+        return jdbc.sql("""
+                                UPDATE external_accounts SET refreshed_at = :now
+                                WHERE id = :id AND artist_id = :artistId AND provider_account_id = :channelId""")
+                        .param("now", OffsetDateTime.ofInstant(now, ZoneOffset.UTC))
+                        .param("id", accountId)
+                        .param("artistId", locked.getArtistId())
+                        .param("channelId", channelId)
+                        .update()
+                == 1;
+    }
+
+    /** 그 채널의 연결일 때만 지운다(작업물은 cascade). 그사이 교체·해제됐으면 {@code false}다. */
+    public boolean deleteAccountOfChannel(LockedArtist locked, UUID accountId, String channelId) {
+        return jdbc.sql("""
+                                DELETE FROM external_accounts
+                                WHERE id = :id AND artist_id = :artistId AND provider_account_id = :channelId""")
+                        .param("id", accountId)
+                        .param("artistId", locked.getArtistId())
+                        .param("channelId", channelId)
+                        .update()
+                == 1;
+    }
+
+    public boolean refreshWork(LockedArtist locked, UUID accountId, String videoId, Instant now) {
+        return jdbc.sql("""
+                                UPDATE external_account_works SET refreshed_at = :now
+                                WHERE external_account_id = :accountId AND artist_id = :artistId
+                                  AND provider_work_id = :videoId""")
+                        .param("now", OffsetDateTime.ofInstant(now, ZoneOffset.UTC))
+                        .param("accountId", accountId)
+                        .param("artistId", locked.getArtistId())
+                        .param("videoId", videoId)
+                        .update()
+                == 1;
+    }
+
+    public boolean deleteWork(LockedArtist locked, UUID accountId, String videoId) {
+        return jdbc.sql("""
+                                DELETE FROM external_account_works
+                                WHERE external_account_id = :accountId AND artist_id = :artistId
+                                  AND provider_work_id = :videoId""")
+                        .param("accountId", accountId)
+                        .param("artistId", locked.getArtistId())
+                        .param("videoId", videoId)
+                        .update()
+                == 1;
     }
 
     public Optional<ExternalAccount> findById(UUID id) {

@@ -15,6 +15,16 @@ final class RedisKeys {
         return PREFIX + "meta:" + provider + ":" + kind + ":" + providerId;
     }
 
+    /** ID 확인 작업 전체의 실행 잠금(1시간 만료). */
+    static String refreshJobLock() {
+        return PREFIX + "refresh-job:lock";
+    }
+
+    /** ID 확인 작업이 끝까지 돈 마지막 시각(만료 없음). */
+    static String refreshJobLastSuccess() {
+        return PREFIX + "refresh-job:last-success";
+    }
+
     /** 작업물 후보 응답 전체. */
     static String candidates(UUID externalAccountId) {
         return PREFIX + "candidates:" + externalAccountId;

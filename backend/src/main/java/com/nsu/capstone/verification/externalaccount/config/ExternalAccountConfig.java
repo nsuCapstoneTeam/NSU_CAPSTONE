@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -16,6 +17,7 @@ import org.springframework.web.client.RestClient;
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(ExternalAccountProperties.class)
 @PropertySource("classpath:config/external-account.properties")
+@EnableScheduling
 public class ExternalAccountConfig {
 
     public static final String WRITE_REST_CLIENT = "externalAccountWriteRestClientBuilder";

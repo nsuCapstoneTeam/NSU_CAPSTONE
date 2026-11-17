@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.converter.FormHttpMessageConverter;
@@ -238,6 +239,30 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
         } catch (DateTimeParseException e) {
             return null;
         }
+    }
+
+    @Override
+    public Set<String> findPublicChannelIds(List<String> channelIds) {
+        return publicIds("/channels", channelIds);
+    }
+
+    @Override
+    public Set<String> findPublicVideoIds(List<String> videoIds) {
+        return publicIds("/videos", videoIds);
+    }
+
+    /** 응답(2xx)이 있어야 "없음"을 판정할 수 있다. 응답을 못 받으면 getWithApiKey가 예외를 던진다. */
+    private Set<String> publicIds(String path, List<String> ids) {
+        ChannelList response = getWithApiKey(path, "id,status", String.join(",", ids));
+        if (response == null || response.items() == null) {
+            return Set.of();
+        }
+        return response.items().stream()
+                .filter(item -> item.id() != null
+                        && item.status() != null
+                        && "public".equals(item.status().privacyStatus()))
+                .map(ChannelList.Channel::id)
+                .collect(Collectors.toSet());
     }
 
     /** 폐기를 보내고, 실패하면 한 번 더 보낸다. 폐기를 확인했는지 돌려준다. */
