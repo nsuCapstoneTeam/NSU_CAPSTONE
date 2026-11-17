@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
+import com.nsu.capstone.verification.externalaccount.domain.AuditActor;
+import com.nsu.capstone.verification.externalaccount.domain.AuditEventType;
+import com.nsu.capstone.verification.externalaccount.domain.AuditReason;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountProvider;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -12,6 +15,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -67,6 +71,21 @@ class ExternalAccountSchemaIntegrationTest extends ExternalAccountIntegrationTes
                 .isInstanceOf(DataIntegrityViolationException.class);
         assertThat(Arrays.stream(ExternalAccountProvider.values()).map(Enum::name))
                 .containsExactlyInAnyOrderElementsOf(allowedValues("ck_external_accounts_provider"));
+    }
+
+    @Test
+    void 감사_기록의_enum은_DB_CHECK_허용_값과_같다() {
+        assertThat(names(ExternalAccountProvider.values()))
+                .containsExactlyInAnyOrderElementsOf(allowedValues("ck_external_account_audit_events_provider"));
+        assertThat(names(AuditEventType.values()))
+                .containsExactlyInAnyOrderElementsOf(allowedValues("ck_external_account_audit_events_event_type"));
+        // actor와 reason을 한 CHECK가 함께 정한다. 두 enum의 이름을 합친 것이 CHECK 안의 값 전체다.
+        assertThat(Stream.concat(names(AuditActor.values()).stream(), names(AuditReason.values()).stream()))
+                .containsExactlyInAnyOrderElementsOf(allowedValues("ck_external_account_audit_events_actor_reason"));
+    }
+
+    private List<String> names(Enum<?>[] values) {
+        return Arrays.stream(values).map(Enum::name).toList();
     }
 
     @Test
@@ -246,7 +265,7 @@ class ExternalAccountSchemaIntegrationTest extends ExternalAccountIntegrationTes
     private List<String> allowedValues(String constraintName) {
         String definition = jdbcTemplate.queryForObject(
                 "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = ?", String.class, constraintName);
-        Matcher matcher = Pattern.compile("'([A-Z_]+)'::").matcher(definition);
+        Matcher matcher = Pattern.compile("'([A-Z0-9_]+)'::").matcher(definition);
         List<String> values = new ArrayList<>();
         while (matcher.find()) {
             values.add(matcher.group(1));
