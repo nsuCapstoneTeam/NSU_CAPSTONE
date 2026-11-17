@@ -151,6 +151,14 @@ class OpenApiDocsIntegrationTest {
     }
 
     @Test
+    @DisplayName("문서 첫 화면 설명에 모든 응답의 X-Request-Id 헤더를 적는다")
+    void describesRequestIdHeaderOnFirstPage() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.info.description")
+                        .value(allOf(containsString("X-Request-Id"), containsString("서버 로그의 requestId"))));
+    }
+
+    @Test
     @DisplayName("공개 API(가입·로그인·OAuth)에는 인증 표시가 없고, 나머지는 기본 인증을 따른다")
     void marksOnlyNonPublicApisAsAuthenticated() throws Exception {
         List<String> publicApis = new ArrayList<>();
