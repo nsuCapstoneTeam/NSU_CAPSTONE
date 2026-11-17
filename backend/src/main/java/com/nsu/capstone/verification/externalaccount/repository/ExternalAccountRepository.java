@@ -8,8 +8,11 @@ import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountProvi
 import com.nsu.capstone.verification.externalaccount.domain.SelectedWork;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
@@ -151,6 +154,17 @@ public class ExternalAccountRepository {
                 .param("artistId", artistId)
                 .query(ACCOUNT_MAPPER)
                 .list();
+    }
+
+    /** 주어진 아티스트 중 YouTube 연결이 있는 아티스트를 쿼리 한 번으로 찾는다(API 01 §7: 아티스트 수와 무관한 쿼리 수). */
+    public Set<UUID> findArtistIdsWithYoutube(Collection<UUID> artistIds) {
+        if (artistIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(
+                jdbc.sql("""
+                        SELECT DISTINCT artist_id FROM external_accounts
+                        WHERE provider = 'YOUTUBE' AND artist_id IN (:artistIds)""").param("artistIds", artistIds).query(UUID.class).list());
     }
 
     public Optional<ExternalAccount> findById(UUID id) {
