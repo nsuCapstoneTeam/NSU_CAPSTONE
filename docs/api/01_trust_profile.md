@@ -340,7 +340,7 @@ interface VerificationSource {
 ```
 
 - 합치는 `VerificationReader`는 source마다 한 번씩 부른다. 쿼리 수는 source 수로 정해지고 아티스트 수와 관계없다.
-- 합친 뒤 §4.3 순서로 정렬하고, 같은 (`type`, `provider`)는 하나만 남긴다.
+- 응답의 `verifications`는 §4.3 순서로 정렬되고, 같은 (`type`, `provider`)는 하나만 남는다. 정렬과 중복 제거는 응답을 조합하는 `TrustProfileAssembler`가 한다. 합치는 reader는 순서를 맞추지 않는다(NSU-105, [identity_verification/01](../adr/identity_verification/01_identity_verification_attempt_and_record.md)).
 - `IDENTITY`가 없는 아티스트의 `COPYRIGHT`는 버린다(§4.2 불변식 8). 정상 흐름에서는 생기지 않는 데이터 불일치라, 버릴 때 아티스트 ID를 담아 경고 로그를 남긴다.
 - source 하나가 실패하면 Trust Profile 조회 전체가 실패한다. 빠진 항목을 "확인 안 됨"으로 보여 주지 않기 위해서다.
 
