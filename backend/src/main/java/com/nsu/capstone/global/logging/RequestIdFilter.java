@@ -20,6 +20,8 @@ class RequestIdFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String requestId = RequestId.generate();
+        // 앞 요청이 지우지 않고 남긴 키(예: NSU-63의 eventId)가 이 요청 로그에 섞이지 않게 한다
+        MDC.clear();
         MDC.put(RequestId.MDC_KEY, requestId);
         response.setHeader(RequestId.HEADER, requestId);
         try {
