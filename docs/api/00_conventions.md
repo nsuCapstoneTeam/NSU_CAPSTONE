@@ -109,7 +109,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 
 | HTTP | `code` | 상황 |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | 요청 본문·파라미터 검증 실패 (ADR-007). 헤더 값에 허용하지 않는 문자(제어 문자 등)가 있어 서버가 읽기를 거절한 경우도 같다([ADR logging/00](../adr/logging/00_structured_logs_and_request_id.md) Decision 7) |
+| 400 | `VALIDATION_ERROR` | 요청 본문·파라미터 검증 실패 (ADR-007). 헤더 값에 허용하지 않는 문자(제어 문자 등)가 있어 서버가 읽기를 거절한 경우와 multipart 본문을 읽을 수 없는 경우도 같다. 업로드 크기 초과는 Spring 표준 `413`이다([ADR logging/00](../adr/logging/00_structured_logs_and_request_id.md) Decision 7) |
 | 400 | `INVALID_{대상}` | 경로 값의 형식 오류 (예: `INVALID_ARTIST_ID`) |
 | 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음, 만료, 서명 오류 |
 | 403 | `ACCESS_DENIED` | 인증은 됐지만 호출 주체에게 허용되지 않은 요청 |
