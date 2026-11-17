@@ -25,15 +25,30 @@ import org.springframework.web.util.DisconnectedClientHelper;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class RequestIdFilter extends OncePerRequestFilter {
 
+    /** Tomcat의 /error 디스패치도 한 요청이므로 처음 만든 ID를 요청 속성에 두고 다시 쓴다. */
+    private static final String REQUEST_ID_ATTRIBUTE = RequestIdFilter.class.getName() + ".REQUEST_ID";
+
+    @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        return false;
+    }
+
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         long startNanos = System.nanoTime();
-        String requestId = RequestId.generate();
+        String requestId = requestIdOf(request);
         // 앞 요청이 지우지 않고 남긴 키(예: NSU-63의 eventId)가 이 요청 로그에 섞이지 않게 한다
         MDC.clear();
         MDC.put(RequestId.MDC_KEY, requestId);
-        response.setHeader(RequestId.HEADER, requestId);
+        if (response.getHeader(RequestId.HEADER) == null) {
+            response.setHeader(RequestId.HEADER, requestId);
+        }
         try {
             filterChain.doFilter(request, response);
         } catch (IOException | ServletException | RuntimeException e) {
@@ -55,6 +70,17 @@ class RequestIdFilter extends OncePerRequestFilter {
             logCompletion(request, response, startNanos);
             MDC.clear();
         }
+    }
+
+    /** 이 요청이 이미 ID를 받았으면(REQUEST 디스패치를 거친 ERROR 디스패치) 그 값을, 아니면 새로 만든다. */
+    private static String requestIdOf(HttpServletRequest request) {
+        Object existing = request.getAttribute(REQUEST_ID_ATTRIBUTE);
+        if (existing instanceof String id) {
+            return id;
+        }
+        String id = RequestId.generate();
+        request.setAttribute(REQUEST_ID_ATTRIBUTE, id);
+        return id;
     }
 
     /** Tomcat이 클라이언트 오류로 분류하는 예외이거나, 그것을 원인으로 가진 예외. */

@@ -8,10 +8,13 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.List;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.core.env.Environment;
 
 /**
  * 실제 Tomcat에서 확인한다. MockMvc의 응답은 커밋된 뒤에도 헤더를 받지만 Tomcat은 무시하므로,
@@ -26,7 +29,34 @@ class RequestIdTomcatIntegrationTest extends EventIntegrationTestBase {
     @LocalServerPort
     int port;
 
+    @Autowired
+    Environment environment;
+
     private final HttpClient http = HttpClient.newHttpClient();
+
+    /**
+     * 방화벽(StrictHttpFirewall)이 ;를 거절하면 RequestRejectedException이 필터 밖으로 나오고 Tomcat이 /error로 두 번째 디스패치를 연다.
+     * 한 요청의 ID는 하나여야 하고, Tomcat이 ID 없이 쓰던 Servlet.service() 줄이 생기지 않아야 한다.
+     */
+    @Test
+    void 방화벽_거절의_두_디스패치는_같은_ID이고_ID_없는_Tomcat_오류_줄이_없다() throws Exception {
+        try (LogCapture capture = LogCapture.start(environment)) {
+            HttpResponse<String> response = send("/test/log-probe/a;b", null);
+
+            List<String> requestIds = response.headers().allValues("X-Request-Id");
+            assertThat(requestIds).as("응답 헤더 X-Request-Id").hasSize(1).allMatch(UUID_FORMAT.asMatchPredicate());
+            String requestId = requestIds.get(0);
+
+            List<String> filterLines = capture.lines().stream()
+                    .filter(line -> line.contains("\"logger_name\":\"" + RequestIdFilter.class.getName() + "\""))
+                    .toList();
+            assertThat(filterLines).as("필터 줄은 모두 응답 헤더와 같은 ID").allMatch(line -> line.contains(requestId));
+            assertThat(filterLines.stream().filter(line -> line.contains("요청 처리 완료")))
+                    .as("REQUEST 디스패치와 ERROR 디스패치의 완료 줄")
+                    .hasSize(2);
+            assertThat(capture.lines()).as("ID 없이 Tomcat이 쓰던 줄").noneMatch(line -> line.contains("Servlet.service()"));
+        }
+    }
 
     @Test
     void 토큰이_없는_401_응답에도_X_Request_Id가_실린다() throws Exception {
