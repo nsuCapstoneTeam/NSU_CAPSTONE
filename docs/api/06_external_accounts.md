@@ -147,7 +147,7 @@ Spotify 주소로 받는 형식: `https://open.spotify.com/artist/{id}`, `https:
 ### 5.3 처리 순서 (Spotify)
 
 1. 주소에서 아티스트 ID를 꺼낸다.
-2. Spotify `GET /v1/artists/{id}`(Client Credentials)로 존재를 확인한다. 1시간 안에 확인한 결과가 Redis에 있으면 그것을 쓴다. 없으면 `422 SPOTIFY_ARTIST_NOT_FOUND`. 시간 초과·`429`·`5xx`는 `503 EXTERNAL_PROVIDER_UNAVAILABLE`. Spotify 연결이 설정으로 꺼져 있으면(Premium 승인 전) `503 EXTERNAL_PROVIDER_DISABLED`.
+2. Spotify `GET /v1/artists/{id}`(Client Credentials)로 존재를 확인한다. 1시간 안에 확인한 결과가 Redis에 있으면 그것을 쓴다. 없으면 `422 SPOTIFY_ARTIST_NOT_FOUND`. Spotify 문서는 없는 아티스트의 응답 코드를 적지 않았다. 그래서 `404`와 `400`을 "없음"으로 본다(주소 형식은 1에서 이미 검사하므로 `400`은 존재하지 않는 ID로 본다). `401`·`403`·`429`·`5xx`·시간 초과는 `503 EXTERNAL_PROVIDER_UNAVAILABLE`이다. 이 분류는 추정이며, Spotify 키를 받으면 실제 응답으로 확인한다(구현 2026-11-18 기준 미확인). 시간 초과·`429`·`5xx`는 `503 EXTERNAL_PROVIDER_UNAVAILABLE`. Spotify 연결이 설정으로 꺼져 있으면(Premium 승인 전) `503 EXTERNAL_PROVIDER_DISABLED`.
 3. §5.2의 6과 같다. 비교 대상은 요청의 `replaceExternalAccountId`다. 다른 아티스트가 같은 Spotify 아티스트를 걸어도 막지 않는다(본인 확인이 아니다).
 
 ### 5.4 응답
