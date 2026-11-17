@@ -33,8 +33,12 @@ final class LogCapture implements AutoCloseable {
         encoderContext.putObject(Environment.class.getName(), environment);
         encoder = new StructuredLogEncoder();
         encoder.setContext(encoderContext);
-        // 배포 형식. 출력기 등 나머지 설정은 Environment의 logging.structured.json.*에서 온다
-        encoder.setFormat("logstash");
+        // 커밋한 배포 설정이 정한 형식과 출력기(logging.structured.*)를 그대로 쓴다
+        String format = environment.getProperty("logging.structured.format.console");
+        if (format == null || format.isBlank()) {
+            throw new IllegalStateException("logging.structured.format.console이 비어 있다. 배포 설정이 아니다");
+        }
+        encoder.setFormat(format);
         encoder.start();
 
         appender = new AppenderBase<>() {
