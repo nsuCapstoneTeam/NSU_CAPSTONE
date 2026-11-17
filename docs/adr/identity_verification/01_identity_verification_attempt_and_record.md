@@ -36,7 +36,7 @@ ADR 00이 정한 것(제공자, 출처 판정, `SANDBOX` 저장 항목, 요청 �
 | 이름 암호화 키 | 시연 서버를 AWS에 올리면 `IDENTITY_NAME_ENCRYPTION_KEY`를 포함한 비밀 값은 AWS Systems Manager Parameter Store 표준 등급(SecureString, AWS 관리 키, 무료)에 모은다. 그 전의 로컬 개발은 각자 환경 변수(IntelliJ 실행 설정 등)로 둔다. 어느 쪽이든 저장소·문서·Slack·로그에 적지 않는다. 초기화 runbook(NSU-129)에 이 키 삭제를 넣는다. 키를 지우면 백업에 남은 암호문도 읽을 수 없다. 시연 서버의 최종 위치는 NSU-129에서 확정한다(AWS 전제). 2026-11-17 사용자 결정(강석윤 님 의견 반영: AWS 도입 전에는 각자, 도입 뒤에는 모아서 관리) |
 | 환경 | `app.environment` 하나가 환경 값의 유일한 출처다(값은 `DEMO` 하나, 기본값 없음). NSU-129 공개 쓰기 필터도 이 값을 읽는다. PR #219가 머지되면 같은 PR에서 `ConfiguredRequiredTermsPolicy`(강석윤 님 파일)가 Spring 프로필 `demo` 대신 이 값을 읽게 고친다(2026-11-17 지휘 세션 확정: 최종 사용자 경험 차이가 없어 권장안). 서버는 `DEMO`에서만 뜨므로(ADR 00) 로컬 개발을 포함한 모든 서버에서 시연 약관 4개가 필수가 되고, #219의 "기본 환경 2종"은 없어진다. 함께 바뀌는 #219 쪽 파일: 계약 `signup-terms-and-send-limits.md` §1.1(기본 환경 문장)·§3(약관 테스트 기준 두 행), `backend/README.md` 약관 설명, `TestcontainersConfiguration`, `SignupTestTerms`, `DemoSignupTermsIntegrationTest`. `DEMO`가 아닌 약관 집합은 운영 단계 ADR이 운영 환경을 정할 때 다시 둔다 |
 | 요청 제한 | PR #219의 `RedisPublicRequestLimitStore`를 다시 쓴다. 비공개 `reserve`가 미리 만든 키 조각을 받게 바꾸고, 계정 단위 공개 메서드 하나를 더한다(kind `identity-verification`, 계정 UUID 원문). #219 머지 뒤 NSU-105 PR에서 그 파일의 기존 스타일대로 고친다(2026-11-17 확정: 사용자 경험 차이가 없어 권장안을 택함). 시작·완료 서비스가 역할·형식 검사 다음에 부른다. 보안 필터로 두지 않는다 |
-| 화면 | NSU-105는 백엔드만 한다. 화면(마이페이지 버튼, 창을 열기 전 안내, 데스크톱 팝업·모바일 redirect, 결과 안내)은 새 프론트 이슈로 이성범 님이 만든다(2026-11-17 사용자 결정). 화면이 부를 API 순서와 흐름은 계약 07 §6에 적는다 |
+| 화면 | NSU-105는 백엔드만 한다. 화면(마이페이지 버튼, 창을 열기 전 안내, 데스크톱 팝업·모바일 redirect, 결과 안내)은 NSU-149로 이성범 님이 만든다(2026-11-17 사용자 결정). 화면이 부를 API 순서와 흐름은 계약 07 §6에 적는다 |
 | 구현 순서 | PR #219 뒤에 머지한다. #219에 기대지 않는 부분(순수 판정, 채널 정책, 마이그레이션 초안과 저장, PortOne 어댑터, Trust Profile, 설정·시작 검사)은 지금 main 위에서 만든다. 요청 제한, `ErrorCode`, 컨트롤러·`SecurityConfig`, OpenAPI 테스트, 약관 정책 변경은 #219 머지 뒤에 한다. 마이그레이션은 V11이다(#219가 V8·V9, NSU-37이 V10). V10이 main에 없는 동안 V11을 먼저 적용하지 않도록 머지 순서를 지킨다 |
 
 ### 저장 모델
@@ -133,7 +133,7 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 
 | 결정 | 누가·언제 |
 |---|---|
-| NSU-105는 백엔드만 하고, 화면은 새 프론트 이슈(이성범 님)로 | 사용자, 2026-11-17 |
+| NSU-105는 백엔드만 하고, 화면은 NSU-149(이성범 님)로 | 사용자, 2026-11-17 |
 | 등록부 대조용 팀원의 실명을 암호화해 초기화 날짜까지 저장하고 동의를 다시 받는다(NSU-129) | 사용자, 2026-11-17 |
 | 비밀 값 보관: AWS 도입 뒤 Parameter Store 표준 등급, 그 전 로컬은 각자 환경 변수. KMS·Secrets Manager·Vault 안 씀. 초기화 때 키 삭제 | 사용자, 2026-11-17(강석윤 님 의견 반영) |
 | Mock 시드는 시연 서버 안에서, 실행자는 NSU-129 담당(김동엽) | 사용자, 2026-11-17 |
@@ -146,7 +146,7 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 | 모듈을 `verification.identity`로(ADR 06 §19 패키지 경계) | 설계 세션, 2026-11-17(기존 ADR을 따름) |
 | 제공자, 출처 판정, `SANDBOX` 저장 항목, 요청 제한 수치, 시연 공개 쓰기 예외, Trust Profile `IDENTITY` | ADR 00(머지됨), 다시 정하지 않는다 |
 
-범위 밖: 운영 환경·`LIVE` 채널·운영 DB(운영 단계 ADR), 등록부 대조 규칙(04 §3.2, NSU-89), PRIVATE 열람의 다른 조건(03 §4, NSU-127), 시연 배너·약관 문구(NSU-129), 화면 구현(새 프론트 이슈).
+범위 밖: 운영 환경·`LIVE` 채널·운영 DB(운영 단계 ADR), 등록부 대조 규칙(04 §3.2, NSU-89), PRIVATE 열람의 다른 조건(03 §4, NSU-127), 시연 배너·약관 문구(NSU-129), 화면 구현(NSU-149).
 
 ### 설계 리뷰 회차
 
@@ -347,7 +347,7 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 - 한 회원의 서로 다른 두 시도가 동시에 성공하면 두 시도 모두 `VERIFIED`가 되고 기록은 먼저 들어간 시도 하나만 가리킨다. 다른 시도의 완료도 `200`이다. 기록이 회원당 하나라는 불변식은 DB 유일성이 지키므로, 기록이 가리키지 않는 `VERIFIED` 시도는 감사용 흔적일 뿐 권한에 쓰이지 않는다.
 - 회원 탈퇴 기능이 생기면 두 테이블의 행을 먼저 지워야 한다(FK에 `ON DELETE`가 없다, V7 관례).
 - 기본값 없는 새 설정: `APP_ENVIRONMENT`, `IDENTITY_VERIFICATION_PROVIDER`, `PORTONE_API_SECRET`, `PORTONE_STORE_ID`, `PORTONE_CHANNEL_KEY`, `PORTONE_TEST_CHANNEL_PG_PROVIDER`, `PORTONE_TEST_CHANNEL_PG_MERCHANT_ID`, `IDENTITY_NAME_ENCRYPTION_KEY`. 시연 서버 배포 설정(NSU-129)에 넣는다.
-- AC "PortOne 테스트 채널로 본인확인 창을 띄우고, 서버 재조회로 결과를 저장한다"는 화면이 있어야 끝난다. 그래서 둘로 나눈다(제안, Linear 반영은 지휘 세션). NSU-105는 커밋하지 않는 로컬 확인 페이지로 KCP 테스트 창을 한 번 띄워, 서버 재조회와 `SANDBOX` 저장까지 실제 PortOne으로 확인한다(구현 0단계와 마지막 확인). 새 프론트 이슈는 마이페이지에서 창을 띄우고 완료 API로 본인확인을 마치는 것(데스크톱·모바일)을 확인한다.
+- AC "PortOne 테스트 채널로 본인확인 창을 띄우고, 서버 재조회로 결과를 저장한다"는 화면이 있어야 끝난다. 그래서 둘로 나눈다(2026-11-18 Linear NSU-105 작업 범위 10번과 NSU-149에 반영). NSU-105는 커밋하지 않는 로컬 확인 페이지로 KCP 테스트 창을 한 번 띄워, 서버 재조회와 `SANDBOX` 저장까지 실제 PortOne으로 확인한다(구현 0단계와 마지막 확인). NSU-149는 마이페이지에서 창을 띄우고 완료 API로 본인확인을 마치는 것(데스크톱·모바일)을 확인한다.
 - NSU-129에 넘길 일: 팀원 실명 저장 동의 다시 받기, 이름 암호화 키를 시연 서버 secret 저장소에 두기, 초기화 runbook에 키 폐기 넣기, 시연 서버 안에서 시드 jar 돌리기, 새 설정 값(아래)을 시연 서버 배포 설정에 넣기.
 - `backend/build.gradle`에 `seed` 소스 세트와 시드 jar 작업이 생긴다. `test`가 `seed` 출력을 쓴다. 시드 jar는 서버 jar와 같은 빌드에서 나온다.
 - PortOne 비밀 값·채널 설정 오류는 서버 기동으로 잡지 않는다(기동이 PortOne에 기대지 않게 한다). NSU-129 배포 체크리스트에 두 가지를 넣는다. 첫째, 배포 직후 임의의 32자 ID로 PortOne 단건 조회를 한 번 해서 `404`면 비밀 값이 맞고 `401`·`403`이면 틀렸다. 둘째, 배포 뒤 리허설에서 KCP 테스트 본인확인 한 건으로 `pgProvider`·`pgMerchantId`·채널 키를 확인한다. 실행 중의 같은 오류는 `ERROR` 로그로 남는다.
