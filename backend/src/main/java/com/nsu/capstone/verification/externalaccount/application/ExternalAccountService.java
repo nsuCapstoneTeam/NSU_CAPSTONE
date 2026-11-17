@@ -11,9 +11,13 @@ import com.nsu.capstone.verification.externalaccount.domain.ExternalAccount;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountException;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountProvider;
+import com.nsu.capstone.verification.externalaccount.domain.SpotifyArtistUrl;
 import com.nsu.capstone.verification.externalaccount.provider.FetchedAccount;
+import com.nsu.capstone.verification.externalaccount.provider.ProviderProfile;
+import com.nsu.capstone.verification.externalaccount.provider.SpotifyGateway;
 import com.nsu.capstone.verification.externalaccount.provider.YoutubeGateway;
 import com.nsu.capstone.verification.externalaccount.redis.AuthorizationStore;
+import com.nsu.capstone.verification.externalaccount.redis.ProfileCache;
 import com.nsu.capstone.verification.externalaccount.repository.ExternalAccountRepository;
 import com.nsu.capstone.verification.externalaccount.repository.LockedArtist;
 import java.nio.charset.StandardCharsets;
@@ -42,6 +46,8 @@ public class ExternalAccountService {
     private final ExternalAccountRepository repository;
     private final AuthorizationStore authorizationStore;
     private final YoutubeGateway youtubeGateway;
+    private final SpotifyGateway spotifyGateway;
+    private final ProfileCache profileCache;
     private final ExternalAccountProperties properties;
     private final OAuthOpaqueValueService opaqueValues;
     private final UserIdGenerator idGenerator;
@@ -89,7 +95,28 @@ public class ExternalAccountService {
     public ConnectResult connect(UUID artistId, ConnectRequest request) {
         return switch (request) {
             case ConnectRequest.YoutubeConnect youtube -> connectYoutube(artistId, youtube);
+            case ConnectRequest.SpotifyConnect spotify -> connectSpotify(artistId, spotify);
         };
+    }
+
+    private ConnectResult connectSpotify(UUID artistId, ConnectRequest.SpotifyConnect request) {
+        if (!properties.spotify().enabled()) {
+            throw new ExternalAccountException(
+                    ExternalAccountFailure.EXTERNAL_PROVIDER_DISABLED, "Spotify 연결이 설정으로 꺼져 있다");
+        }
+        String spotifyArtistId = SpotifyArtistUrl.parseArtistId(request.url());
+        // 1시간 안에 확인한 결과가 있으면 Spotify를 다시 부르지 않는다(06 §5.3)
+        if (profileCache
+                .get(ExternalAccountProvider.SPOTIFY, "artist", spotifyArtistId)
+                .isEmpty()) {
+            ProviderProfile profile = spotifyGateway
+                    .findArtist(spotifyArtistId)
+                    .orElseThrow(() -> new ExternalAccountException(
+                            ExternalAccountFailure.SPOTIFY_ARTIST_NOT_FOUND, "Spotify에 그 아티스트가 없다"));
+            profileCache.put(ExternalAccountProvider.SPOTIFY, "artist", spotifyArtistId, profile);
+        }
+        return transactionTemplate.execute(status ->
+                save(artistId, ExternalAccountProvider.SPOTIFY, spotifyArtistId, request.replaceExternalAccountId()));
     }
 
     private ConnectResult connectYoutube(UUID artistId, ConnectRequest.YoutubeConnect request) {

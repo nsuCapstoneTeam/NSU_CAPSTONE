@@ -12,4 +12,11 @@ public sealed interface ConnectRequest {
      * @param bindingNonce 결합 쿠키 값. 쿠키가 없으면 {@code null}
      */
     record YoutubeConnect(String state, String code, String bindingNonce) implements ConnectRequest {}
+
+    /**
+     * Spotify: 사용자가 붙여 넣은 아티스트 주소. 시작 단계가 없으므로 교체 승인이 요청에 들어 있다(06 §5.1).
+     *
+     * @param replaceExternalAccountId 교체를 승인한 지금 연결의 ID. 그 플랫폼 계정이 없으면 {@code null}
+     */
+    record SpotifyConnect(String url, java.util.UUID replaceExternalAccountId) implements ConnectRequest {}
 }

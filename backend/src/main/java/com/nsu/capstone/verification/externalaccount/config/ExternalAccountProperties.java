@@ -15,6 +15,7 @@ public record ExternalAccountProperties(
         String frontendBaseUri,
         @DefaultValue("true") boolean bindingCookieSecure,
         @DefaultValue Youtube youtube,
+        @DefaultValue Spotify spotify,
         @DefaultValue Http http) {
 
     /**
@@ -40,6 +41,20 @@ public record ExternalAccountProperties(
 
             @DefaultValue("https://www.googleapis.com/youtube/v3")
             String apiBaseUri) {}
+
+    /**
+     * Spotify 연결. 개발 모드 앱 소유자가 Premium이어야 동작하므로 승인 전에는 꺼 둔다(ADR 4번).
+     * Client Credentials로 아티스트 존재 확인과 표시 정보를 받는다.
+     */
+    public record Spotify(
+            @DefaultValue("false") boolean enabled,
+            String clientId,
+            String clientSecret,
+
+            @DefaultValue("https://accounts.spotify.com/api/token")
+            String tokenUri,
+
+            @DefaultValue("https://api.spotify.com/v1") String apiBaseUri) {}
 
     /** 외부 호출 제한 시간(ADR "외부 호출"). 쓰기 경로는 연결 3초·응답 5초, 읽기 경로는 연결 1초·응답 2초다. */
     public record Http(

@@ -1,5 +1,6 @@
 package com.nsu.capstone.verification.externalaccount.redis;
 
+import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountProvider;
 import java.util.UUID;
 
 /** 이 모듈이 Redis에 두는 키(ADR "Redis" 표). 모두 {@code extacct:}로 시작한다. */
@@ -8,6 +9,11 @@ final class RedisKeys {
     private static final String PREFIX = "extacct:";
 
     private RedisKeys() {}
+
+    /** 플랫폼에서 받은 표시 정보. kind는 계정(channel, artist)이나 영상(video)이다. */
+    static String profile(ExternalAccountProvider provider, String kind, String providerId) {
+        return PREFIX + "meta:" + provider + ":" + kind + ":" + providerId;
+    }
 
     /** 연결 시작과 연결 요청 사이의 진행 값. 키에 사용자 ID가 들어가 다른 사용자의 요청은 찾지 못한다. */
     static String authorization(String stateDigest, UUID artistId) {

@@ -71,6 +71,8 @@ class GoogleYoutubeGatewayTest {
                         TOKEN_URI,
                         REVOKE_URI,
                         API_BASE),
+                new ExternalAccountProperties.Spotify(
+                        false, null, null, "https://unused.example/token", "https://unused.example/v1"),
                 new ExternalAccountProperties.Http(
                         Duration.ofSeconds(3), Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofSeconds(2)));
         when(quota.tryReserve(any(UUID.class), eq(2))).thenReturn(true);

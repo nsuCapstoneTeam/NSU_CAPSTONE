@@ -6,6 +6,10 @@ public enum ExternalAccountFailure {
     EXTERNAL_ACCOUNT_AUTHORIZATION_INVALID,
     /** 요청의 replaceExternalAccountId(연결 요청에서는 시작 때 고정한 값)가 그 플랫폼의 지금 연결과 다름 */
     EXTERNAL_ACCOUNT_CONNECTION_CHANGED,
+    /** Spotify에 그 아티스트가 없음 */
+    SPOTIFY_ARTIST_NOT_FOUND,
+    /** Spotify 주소 형식 오류 */
+    EXTERNAL_ACCOUNT_URL_INVALID,
     /** 다른 아티스트가 같은 YouTube 채널을 연결함 */
     EXTERNAL_ACCOUNT_ALREADY_LINKED,
     /** 로그인한 Google 계정에 공개 YouTube 채널이 없음 */
