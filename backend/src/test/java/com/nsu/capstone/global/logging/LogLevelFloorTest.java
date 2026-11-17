@@ -6,14 +6,12 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import com.nsu.capstone.TestcontainersConfiguration;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
@@ -34,26 +32,21 @@ import org.springframework.context.annotation.Import;
 @Import(TestcontainersConfiguration.class)
 class LogLevelFloorTest {
 
-    /** Logback 레벨은 JVM 전체에 걸린다. 테스트 뒤 원래대로 돌려 다른 테스트에 번지지 않게 한다. */
-    private static final Map<String, Level> LEVELS_BEFORE = new HashMap<>();
+    private static Map<String, Level> levelsBefore;
 
     @BeforeAll
     static void snapshotLevels() {
-        for (Logger logger : loggerContext().getLoggerList()) {
-            LEVELS_BEFORE.put(logger.getName(), logger.getLevel());
-        }
+        levelsBefore = LoggerLevels.snapshot();
     }
 
     @AfterAll
     static void restoreLevels() {
-        for (Logger logger : loggerContext().getLoggerList()) {
-            logger.setLevel(LEVELS_BEFORE.get(logger.getName()));
-        }
+        LoggerLevels.restore(levelsBefore);
     }
 
     @Test
     void 낮은_레벨을_줘도_우리_코드_밖_로거는_INFO_이상이고_ERROR_한_줄을_남긴다(CapturedOutput output) {
-        LoggerContext context = loggerContext();
+        LoggerContext context = LoggerLevels.context();
 
         for (String name : List.of(
                 Logger.ROOT_LOGGER_NAME,
@@ -69,9 +62,5 @@ class LogLevelFloorTest {
         assertThat(context.getLogger("com.nsu.capstone").getEffectiveLevel()).isEqualTo(Level.DEBUG);
         assertThat(output.getAll().lines().filter(line -> line.contains("ERROR") && line.contains("LogSafetyListener")))
                 .hasSize(1);
-    }
-
-    private static LoggerContext loggerContext() {
-        return (LoggerContext) LoggerFactory.getILoggerFactory();
     }
 }
