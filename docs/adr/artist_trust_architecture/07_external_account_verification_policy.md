@@ -63,7 +63,7 @@ verifiedAt
 connectedAt
 ```
 
-> 2026-11-16 [external_links/00](../external_links/00_external_account_links.md) 12번: YouTube 약관(30일 안에 갱신 또는 삭제) 때문에 `displayName`·`profileUrl`·`thumbnailUrl`은 저장하지 않고 보여 줄 때 받는다. 저장은 `providerAccountId`와 연결 시각뿐이다.
+> 2026-11-16 [external_links/00](../external_links/00_external_account_links.md) 12번·14번: YouTube 약관(30일 안에 갱신 또는 삭제) 때문에 `displayName`·`profileUrl`·`thumbnailUrl`은 저장하지 않고 보여 줄 때 받는다. 저장은 `providerAccountId`, 연결 시각, ID 확인 시각뿐이고, 채널 ID도 7일마다 다시 확인한다.
 
 중요:
 
@@ -96,7 +96,7 @@ verifiedAt
 connectedAt
 ```
 
-> 2026-11-16 [external_links/00](../external_links/00_external_account_links.md) 12번: SoundCloud 약관(사용자 콘텐츠 계속 저장 금지) 때문에 `displayName`·`profileUrl`은 저장하지 않고 보여 줄 때 받는다. `providerAccountId`는 `/me`의 `urn`이다.
+> 2026-11-17 [external_links/00](../external_links/00_external_account_links.md) 13번: SoundCloud 연결은 구현하지 않았다. SoundCloud API 약관이 특정 아티스트 전용 페이지·프로필에 API 사용을 금지하기 때문이다. 이 절은 SoundCloud 허가를 받아 다시 설계할 때의 기준으로 남긴다. 그때는 약관의 저장 제한(세션 캐시만 허용)도 함께 본다.
 
 중요:
 
@@ -211,7 +211,7 @@ Provider Account ID + Verification 결과 저장
 | SoundCloud | OAuth 2.1 + PKCE | 해당 Account 접근 권한 | 없음 |
 | Spotify | Artist URL / ID | 공개 Artist Profile 존재 | 없음 |
 
-Provider 연결 결과는 `Verification` 영역에 저장하고 Reliability 관측으로 변환하지 않습니다. Trust Profile `verifications`에는 YouTube·SoundCloud만 `EXTERNAL_ACCOUNT`로 나온다. Spotify 연결은 프로필 링크이며 Verification 항목이 아니다([01 §4.3](../../api/01_trust_profile.md), [external_links/00](../external_links/00_external_account_links.md) 5번).
+Provider 연결 결과는 `Verification` 영역에 저장하고 Reliability 관측으로 변환하지 않습니다. Trust Profile `verifications`에는 YouTube만 `EXTERNAL_ACCOUNT`로 나온다. Spotify 연결은 프로필 링크이며 Verification 항목이 아니다. SoundCloud는 약관 때문에 구현하지 않았다([01 §4.3](../../api/01_trust_profile.md), [external_links/00](../external_links/00_external_account_links.md) 5번·13번).
 
 ---
 
