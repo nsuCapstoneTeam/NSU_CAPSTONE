@@ -540,7 +540,24 @@ YouTube ID 확인(14번): 매일 한 번 도는 작업이 `refreshed_at`이 7일
 ### Trust Profile 연결
 
 - `ExternalAccountVerificationSource implements VerificationSource`(01 §7)가 YouTube 행을 `EXTERNAL_ACCOUNT`·`YOUTUBE`로 돌려준다. Spotify는 `VerificationProvider`에 값이 없어 구조적으로 빠진다.
-- 합치는 `VerificationReader`가 source들을 합치고 `EmptyVerificationReader`를 대체한다. NSU-105와 먼저 머지되는 쪽이 만든다.
+- **포트와 합치는 reader는 NSU-37이 소유해 먼저 만든다**(2026-11-17 지휘 세션 결정). NSU-105는 이것을 쓰고 `IDENTITY` source만 더한다. NSU-89는 `COPYRIGHT` source를 더한다.
+
+| 타입 | 패키지·파일 | 시그니처·역할 |
+|---|---|---|
+| 포트 `VerificationSource` | `com.nsu.capstone.trust.profile.application.VerificationSource` (기존 `VerificationReader` 옆) | `Map<UUID, List<VerificationItem>> findVerifiedByArtistIds(Collection<UUID> artistIds)`. 확인이 끝난 항목만, 아티스트별로 한 번에 돌려준다. 항목이 없는 아티스트는 키가 없어도 된다. 빈 입력이면 빈 Map. 출처 도메인마다 bean 하나 |
+| 합치는 reader `CompositeVerificationReader` | `com.nsu.capstone.trust.profile.infrastructure.CompositeVerificationReader`, `implements VerificationReader` | Spring이 주입한 `List<VerificationSource>`를 받는다. `EmptyVerificationReader`는 지운다. source가 하나도 없으면 빈 Map |
+| 이 모듈의 source | `com.nsu.capstone.verification.externalaccount.application.ExternalAccountVerificationSource` | YouTube 연결 행 → `VerificationItem(EXTERNAL_ACCOUNT, YOUTUBE)` |
+
+합치는 규칙은 01 §7을 그대로 따르고, 모두 테스트로 강제한다. `IDENTITY`·`COPYRIGHT` source가 아직 없어도 테스트용 가짜 source로 시험한다.
+
+| 규칙(01 §7·§4.2·§4.3) | 테스트 |
+|---|---|
+| source마다 한 번만 부른다. 쿼리 수가 아티스트 수와 무관하다 | 가짜 source의 호출 횟수가 아티스트 1명·100명에서 모두 1번 |
+| 합친 뒤 §4.3 표 순서로 정렬, `EXTERNAL_ACCOUNT`끼리는 `provider` 사전순 | 가짜 source들이 뒤섞인 순서로 준 항목이 `IDENTITY`, `EXTERNAL_ACCOUNT`(`SOUNDCLOUD` 다음 `YOUTUBE`), `COPYRIGHT`, … 순서로 나온다 |
+| 같은 (`type`, `provider`)는 하나만 | 두 source가 같은 항목을 주면 1개 |
+| `IDENTITY`가 없는 아티스트의 `COPYRIGHT`는 버리고, 아티스트 ID를 담아 경고 로그 | `COPYRIGHT`만 있는 아티스트는 그 항목이 빠지고 경고 로그 1줄. `IDENTITY`가 있으면 남는다 |
+| source 하나가 실패하면 전체가 실패한다(빠진 항목을 "확인 안 됨"으로 보이지 않기 위해) | 가짜 source 하나가 예외를 던지면 `findVerifiedByArtistIds`가 예외로 끝나고 부분 결과를 돌려주지 않는다 |
+| source가 없으면 빈 결과 | source 목록이 비면 빈 Map |
 - 접근 규칙(6번)은 `TrustProfileQueryService`의 규칙을 `identity/application/ArtistReadAccess`로 뽑아 Trust Profile(NSU-70)과 이 API가 함께 쓴다.
 
 ### 프론트 범위
