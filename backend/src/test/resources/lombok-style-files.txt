@@ -35,6 +35,7 @@ src/main/java/com/nsu/capstone/event/region/RegionRepository.java
 src/main/java/com/nsu/capstone/event/repository/EventRepository.java
 src/main/java/com/nsu/capstone/global/config/OpenApiConfig.java
 src/main/java/com/nsu/capstone/global/logging/LogSafetyListener.java
+src/main/java/com/nsu/capstone/global/logging/MessagelessStackTracePrinter.java
 src/main/java/com/nsu/capstone/global/logging/RequestId.java
 src/main/java/com/nsu/capstone/global/logging/RequestIdFilter.java
 src/main/java/com/nsu/capstone/global/logging/RequestIdInterceptor.java
