@@ -8,8 +8,16 @@ public class ExternalAccountException extends RuntimeException {
 
     private final ExternalAccountFailure failure;
 
+    /** 다시 시도해도 되는 때까지 남은 초. 429의 {@code Retry-After}가 된다. 해당 없으면 0이다. */
+    private final long retryAfterSeconds;
+
     public ExternalAccountException(ExternalAccountFailure failure, String message) {
+        this(failure, message, 0);
+    }
+
+    public ExternalAccountException(ExternalAccountFailure failure, String message, long retryAfterSeconds) {
         super(message);
         this.failure = failure;
+        this.retryAfterSeconds = retryAfterSeconds;
     }
 }

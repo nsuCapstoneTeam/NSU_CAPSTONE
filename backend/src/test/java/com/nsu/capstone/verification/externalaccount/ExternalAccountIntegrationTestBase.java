@@ -2,9 +2,11 @@ package com.nsu.capstone.verification.externalaccount;
 
 import com.nsu.capstone.event.EventIntegrationTestBase;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -12,6 +14,18 @@ public abstract class ExternalAccountIntegrationTestBase extends EventIntegratio
 
     @Autowired
     protected PlatformTransactionManager transactionManager;
+
+    @Autowired
+    protected StringRedisTemplate redis;
+
+    /** 이 모듈이 Redis에 남긴 키가 다음 테스트에 새지 않게 지운다. */
+    @AfterEach
+    void deleteExternalAccountRedisKeys() {
+        Set<String> keys = redis.keys("extacct:*");
+        if (keys != null && !keys.isEmpty()) {
+            redis.delete(keys);
+        }
+    }
 
     /** 호출마다 새 트랜잭션을 열어 실행하고 커밋한다. */
     protected <T> T inTransaction(Supplier<T> work) {
