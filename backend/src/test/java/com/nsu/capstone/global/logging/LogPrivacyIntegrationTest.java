@@ -73,6 +73,24 @@ class LogPrivacyIntegrationTest extends EventIntegrationTestBase {
         }
     }
 
+    /** AC2: GlobalExceptionHandler가 남기는 ERROR 줄도 응답 헤더와 같은 요청 ID를 가진다. */
+    @Test
+    void GlobalExceptionHandler의_ERROR_줄이_응답_헤더와_같은_요청_ID를_가진다() throws Exception {
+        try (LogCapture capture = LogCapture.start(environment)) {
+            String requestId = mockMvc.perform(
+                            post(PROBE + "/not-null-violation").header("Authorization", bearer(partner)))
+                    .andExpect(status().isInternalServerError())
+                    .andReturn()
+                    .getResponse()
+                    .getHeader("X-Request-Id");
+
+            assertThat(capture.lines())
+                    .anyMatch(line -> line.contains("GlobalExceptionHandler")
+                            && line.contains("\"level\":\"ERROR\"")
+                            && line.contains("\"requestId\":\"" + requestId + "\""));
+        }
+    }
+
     /**
      * 저장소가 읽다가 실패하면 Jackson 예외 메시지에 읽던 JSON 조각(여기서는 이메일)이 든다. 원인 예외를 달고 던지면 그 메시지가 상위로 전파되므로,
      * 예외 클래스 이름만 담아 원인 없이 감싼다(artist-oauth-signup.md와 같은 방식).
