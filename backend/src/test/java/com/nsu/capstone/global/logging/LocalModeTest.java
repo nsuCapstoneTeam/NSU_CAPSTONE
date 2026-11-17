@@ -31,6 +31,11 @@ class LocalModeTest {
                 .isEmpty();
         assertThat(result.output().lines().filter(line -> line.contains("WARN") && line.contains("로컬 전용 로그 모드")))
                 .hasSize(1);
+        // 평문은 줄마다 요청 ID를 붙인다. 개발자가 로컬에서 한 요청의 로그를 따라가는 길이다
+        assertThat(result.output().lines().filter(line -> line.contains("상관 ID 확인")))
+                .singleElement()
+                .asString()
+                .contains("[" + ForkedMain.CORRELATION_ID + "]");
     }
 
     /** 대조: 같은 레벨 요청이 로컬 모드가 아니면 INFO로 올라가고, 한 줄 JSON이며, 로컬 모드 WARN은 없다. */

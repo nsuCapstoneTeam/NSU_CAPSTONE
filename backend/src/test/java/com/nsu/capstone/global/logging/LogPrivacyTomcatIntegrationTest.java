@@ -143,6 +143,26 @@ class LogPrivacyTomcatIntegrationTest extends EventIntegrationTestBase {
     }
 
     /**
+     * multipart는 끈다(spring.servlet.multipart.enabled=false). Boot는 컨트롤러를 고르기 전에 multipart를 파싱하는데, 파일 이름에 든 값이
+     * MultipartException의 원인에 남기 때문이다(ADR 10회차 지적). 끄면 요청이 파싱되지 않고 JSON 전용 경로가 415로 거절한다.
+     */
+    @Test
+    void multipart_파일_이름에_든_가짜_이메일과_NUL은_어떤_줄에도_없다() throws IOException {
+        String body = "--b\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + Sentinel.EMAIL
+                + "\u0000.txt\"\r\nContent-Type: text/plain\r\n\r\ndata\r\n--b--\r\n";
+        RawHttp.Response response = RawHttp.send(
+                port,
+                RawHttp.bytes("POST /api/v1/events HTTP/1.1\r\nHost: localhost\r\nAuthorization: " + bearer(partner)
+                        + "\r\nContent-Type: multipart/form-data; boundary=b\r\nContent-Length: " + body.length()
+                        + "\r\nConnection: close\r\n\r\n" + body));
+
+        assertThat(response.status()).as("multipart를 파싱하지 않아 JSON 전용 경로가 거절").isEqualTo(415);
+        assertThat(capture.loggersContaining(Sentinel.EMAIL))
+                .as("가짜 값이 든 줄의 로거")
+                .isEmpty();
+    }
+
+    /**
      * 응답을 이미 보낸(flush) 뒤에는 필터가 500으로 바꿀 수 없다. 필터가 정적 메시지로 감싸 다시 던지고, Tomcat은 그 메시지를 로그 문장에
      * 넣는다. 원래 예외 메시지(가짜 이메일)는 Tomcat 줄과 필터 줄의 message·stack_trace 어디에도 없어야 한다.
      */
