@@ -20,12 +20,18 @@ class LogSafetyListener implements ApplicationListener<ApplicationEnvironmentPre
 
     private static final String OWN_PACKAGE = "com.nsu.capstone";
 
+    private static final String LOCAL_MODE_PROPERTY = "nsu.logging.local-mode";
+
     /** INFO에서도 원문을 찍는 로거. 이 로거와 그 아래 모든 자식 로거의 하한은 WARN이다. */
     static final List<String> WARN_FLOOR_LOGGERS = List.of(
             "org.apache.tomcat.util.http", "org.apache.coyote.http11.Http11Processor", "jdk.httpclient.HttpClient");
 
     @Override
     public void onApplicationEvent(ApplicationEnvironmentPreparedEvent event) {
+        if (event.getEnvironment().getProperty(LOCAL_MODE_PROPERTY, Boolean.class, false)) {
+            log.warn("로컬 전용 로그 모드다. 로그 보호 장치를 건너뛴다. 배포에서 쓰지 않는다");
+            return;
+        }
         rejectJvmDebugOptions();
         enforceLevelFloor(LoggingSystem.get(event.getSpringApplication().getClassLoader()));
     }
