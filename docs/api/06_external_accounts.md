@@ -8,7 +8,7 @@
 - 관련 계약: [01 Trust Profile](./01_trust_profile.md) §2 호출 주체, §4.3 `verifications`, §7 `VerificationSource`
 - 공통 규칙: [00_conventions.md](./00_conventions.md). 에러 형식과 공통 `code`는 [ADR-007](../adr/ADR-007-spring-backend-global-exception-handling.md)을 따른다
 
-> 상태: 2026-11-16 NSU-37 설계 세션에서 정했다. 2026-11-17 설계 리뷰 지적으로 교체 승인(§3·§5.2)과 YouTube ID 확인 작업(§11.1)을 고쳤고, 사용자 결정으로 SoundCloud를 뺐다(ADR 13번).
+> 상태: 2026-11-16 NSU-37 설계 세션에서 정했다. 2026-11-17 설계 리뷰 지적으로 교체 승인(§3·§5.2)과 YouTube ID 확인 작업(§11.1)을 고쳤고, 사용자 결정으로 SoundCloud를 뺐다(ADR 13번). 같은 날 2회차 지적으로 토큰 폐기 확인(§5.2의 4), 요청 제한과 YouTube 하루 예산(§11.2), 아티스트 잠금(§11.3)을 더했다.
 
 ---
 
@@ -37,6 +37,7 @@
 - `externalAccountId`·`artistId`는 정규형 UUID다. 형식이 틀리면 `400 INVALID_EXTERNAL_ACCOUNT_ID`·`400 INVALID_ARTIST_ID`다.
 - 연결 결과(`201`)에는 `Location`을 붙이지 않는다. 계정 하나를 조회하는 API가 없기 때문이다.
 - 쓰기 요청은 `DEMO`에서 허용 목록 계정만 통과한다(`403 DEMO_WRITE_NOT_ALLOWED`, 00 §8).
+- `/api/v1/me/external-accounts/**`는 아티스트마다 10분에 30번까지다. 넘으면 `429 TOO_MANY_REQUESTS`와 `Retry-After`다(§11.2).
 - 태그 이름은 `외부 계정`이다(00 §10.1 목록에 더한다).
 
 ## 2. 호출 주체와 검사 순서
@@ -47,7 +48,7 @@
 | `GET /api/v1/artists/{artistId}/external-accounts` | `artistId`가 토큰 `sub`와 같을 때만. 다르면 `403 ACCESS_DENIED` | 대상이 `ACTIVE`인 ARTIST일 때만. 없음·EVENT_PARTNER·`SUSPENDED`·`WITHDRAWN`은 모두 `404 ARTIST_NOT_FOUND` |
 
 - 조회의 규칙은 [01 §2](./01_trust_profile.md)와 같다. 같은 코드(`ArtistReadAccess`)를 쓴다.
-- 검사 순서: `401` → `403 DEMO_WRITE_NOT_ALLOWED`(쓰기만) → `403 ACCESS_DENIED`(역할) → `400`(경로 형식, 본문 검증) → `404` → `409` → 외부 호출(`422`·`503`) → 성공.
+- 검사 순서: `401` → `403 DEMO_WRITE_NOT_ALLOWED`(쓰기만) → `403 ACCESS_DENIED`(역할) → `429`(`/me` 경로만) → `400`(경로 형식, 본문 검증) → `404` → `409` → 외부 호출(`422`·`503`) → 성공.
 - `/me` 경로에서 남의 `externalAccountId`는 없는 것과 같이 `404 EXTERNAL_ACCOUNT_NOT_FOUND`다. 다른 아티스트 계정의 존재를 드러내지 않는다.
 
 ## 3. 연결 시작
@@ -126,10 +127,10 @@ Spotify 주소로 받는 형식: `https://open.spotify.com/artist/{id}`, `https:
 
 1. Redis에서 `extacct:authz:{sha256(state)}:{토큰 sub}`를 GETDEL로 꺼낸다. 없으면 `400 EXTERNAL_ACCOUNT_AUTHORIZATION_INVALID`.
 2. 요청 쿠키 nonce의 digest를 저장된 digest와 상수 시간으로 비교한다. 쿠키가 없거나 다르면 1과 같은 오류다.
-3. 트랜잭션 밖에서 코드를 교환하고(PKCE) `channels.list?mine=true`로 채널 ID를 받는다. Google이 코드를 거절하면(`invalid_grant` 등) 1과 같은 오류다. 시간 초과·`429`·`5xx`는 `503 EXTERNAL_PROVIDER_UNAVAILABLE`.
-4. 토큰 폐기를 요청한다. 실패해도 진행한다. 토큰은 어디에도 저장하지 않는다.
+3. 트랜잭션 밖에서 YouTube 하루 예산(§11.2)에 2 units를 더하고, 사용자 한도를 넘으면 `503 EXTERNAL_PROVIDER_UNAVAILABLE`. 이어서 코드를 교환하고(PKCE) `channels.list?mine=true`로 채널 ID를 받는다. Google이 코드를 거절하면(`invalid_grant` 등) 1과 같은 오류다. 시간 초과·`429`·`5xx`는 `503 EXTERNAL_PROVIDER_UNAVAILABLE`.
+4. 토큰 폐기를 요청한다. 실패하면 한 번 더 보낸다. 두 번 다 실패하면 아무것도 저장하지 않고 `503 EXTERNAL_PROVIDER_UNAVAILABLE`이다(ADR 14번). 폐기가 확인되기 전에는 연결을 저장하지 않는다. 토큰은 어디에도 저장하지 않는다.
 5. 채널이 없으면 `422 YOUTUBE_CHANNEL_NOT_FOUND`. 채널이 있으면 그 채널 ID를 API 키로 한 번 더 조회해 공개 채널인지 확인한다(ADR 14번). 공개가 아니면 같은 `422`다.
-6. 짧은 트랜잭션: 아티스트별 advisory lock → 그 플랫폼의 지금 연결을 다시 읽음 → 아래 표를 위에서부터 → 감사 기록 → 커밋.
+6. 짧은 트랜잭션: 아티스트 잠금(§11.3) → 그 플랫폼의 지금 연결을 다시 읽음 → 아래 표를 위에서부터 → 감사 기록 → 커밋. 교체는 기존 행을 `DELETE ... WHERE id = expectedExternalAccountId`로 지우고 지운 행이 1개가 아니면 아무것도 저장하지 않고 `409 EXTERNAL_ACCOUNT_CONNECTION_CHANGED`다.
 
 | 상황(위에서부터 처음 맞는 것) | 결과 |
 |---|---|
@@ -142,7 +143,7 @@ Spotify 주소로 받는 형식: `https://open.spotify.com/artist/{id}`, `https:
 ### 5.3 처리 순서 (Spotify)
 
 1. 주소에서 아티스트 ID를 꺼낸다.
-2. Spotify `GET /v1/artists/{id}`(Client Credentials)로 존재를 확인한다. 없으면 `422 SPOTIFY_ARTIST_NOT_FOUND`. 시간 초과·`429`·`5xx`는 `503 EXTERNAL_PROVIDER_UNAVAILABLE`. Spotify 연결이 설정으로 꺼져 있으면(Premium 승인 전) `503 EXTERNAL_PROVIDER_DISABLED`.
+2. Spotify `GET /v1/artists/{id}`(Client Credentials)로 존재를 확인한다. 1시간 안에 확인한 결과가 Redis에 있으면 그것을 쓴다. 없으면 `422 SPOTIFY_ARTIST_NOT_FOUND`. 시간 초과·`429`·`5xx`는 `503 EXTERNAL_PROVIDER_UNAVAILABLE`. Spotify 연결이 설정으로 꺼져 있으면(Premium 승인 전) `503 EXTERNAL_PROVIDER_DISABLED`.
 3. §5.2의 6과 같다. 비교 대상은 요청의 `replaceExternalAccountId`다. 다른 아티스트가 같은 Spotify 아티스트를 걸어도 막지 않는다(본인 확인이 아니다).
 
 ### 5.4 응답
@@ -218,6 +219,8 @@ Spotify 주소로 받는 형식: `https://open.spotify.com/artist/{id}`, `https:
 - DB에는 플랫폼 ID만 있다. 이름·제목·썸네일은 조회 때 서버가 앱 자격 증명(YouTube API 키, Spotify Client Credentials)으로 받는다(ADR 12번).
 - 받은 값은 Redis에 1시간 캐시한다. 받지 못한 결과는 30초 동안 기억해 장애 때 반복 호출을 막는다.
 - 계정마다 병렬로 받는다. 호출마다 연결 1초·응답 2초, 응답 전체 상한 3초다. 상한을 넘은 계정은 불변식 5대로 `null`로 채우고 `200`을 준다.
+- YouTube 하루 예산의 사용자 한도(§11.2)를 넘었으면 YouTube를 부르지 않고 불변식 5대로 `null`이다. 링크는 남는다.
+- 같은 계정의 캐시가 빈 동시 조회는 서버 안에서 한 번만 호출하고 결과를 나눠 쓴다.
 - 연결을 해제하면 그 계정의 캐시를 지운다.
 
 ## 7. 작업물 후보
@@ -244,7 +247,8 @@ YouTube 계정만 받는다.
 - 채널 업로드 재생목록의 **공개** 영상을 최신순으로 최대 50개 준다. 페이지네이션은 없다(크기 고정, 00 §5). 51번째보다 오래된 영상은 새로 고를 수 없다.
 - API 키로 받는다. 사용자 토큰이 필요 없어 언제든 부를 수 있다.
 - `isSelected`는 지금 고른 영상인지다.
-- 후보 ID 목록은 Redis에 10분 캐시해 §8 검증에 함께 쓴다. DB에는 저장하지 않는다.
+- 응답 전체를 계정마다 Redis에 10분 캐시하고 §8 검증에 함께 쓴다(`isSelected`는 캐시하지 않고 응답 때 DB로 채운다). DB에는 저장하지 않는다. 10분 안의 다시 조회는 YouTube를 부르지 않는다. 캐시가 빈 동시 요청은 서버 안에서 한 번만 호출한다.
+- 캐시가 비었을 때 하루 예산(§11.2)에 3 units를 더하고, 사용자 한도를 넘으면 `503 EXTERNAL_PROVIDER_UNAVAILABLE`이다.
 - Spotify 계정이면 `409 EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED`다.
 - 플랫폼 호출이 실패하면 `503 EXTERNAL_PROVIDER_UNAVAILABLE`이다.
 
@@ -258,13 +262,14 @@ YouTube 계정만 받는다.
 
 - 0~10개, 중복 없음. 고른 순서가 표시 순서다. `[]`는 모두 지운다.
 - 각 ID는 지금 §7 후보에 있거나, 이미 고른 영상이어야 한다. 둘 다 아니면 `400 EXTERNAL_ACCOUNT_WORK_NOT_CANDIDATE`다. 이미 고른 영상을 허용하는 이유: 새 업로드가 50개 넘게 쌓이면 예전에 고른 영상이 후보 밖으로 밀리는데, 그 영상을 남긴 채 순서만 바꾸는 저장이 실패하면 안 되기 때문이다. 후보 캐시가 없으면 서버가 다시 받는다.
+- 후보 확인(외부 호출)은 트랜잭션 밖에서 하고, 저장은 아티스트 잠금(§11.3)을 잡은 트랜잭션에서 계정이 아직 있는지 다시 읽은 뒤 한다. 그사이 해제됐으면 `404 EXTERNAL_ACCOUNT_NOT_FOUND`다.
 - 전체를 바꾼다(PUT). 새로 고른 영상의 `refreshed_at`은 지금이다. 이미 고른 영상은 기존 `refreshed_at`을 유지한다. 응답은 §6.2 계정 하나다.
 - 11개 이상, 중복, 빈 문자열은 `400 VALIDATION_ERROR`.
 - Spotify 계정이면 `409 EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED`.
 
 ## 9. 연결 해제
 
-- 행과 고른 영상을 지우고 감사 `DISCONNECTED`를 남긴다. 그 계정의 표시 정보 캐시를 지운다.
+- 아티스트 잠금(§11.3)을 잡고 행과 고른 영상을 지운 뒤 감사 `DISCONNECTED`를 남긴다. 커밋 뒤 그 계정의 표시 정보·후보 캐시를 지운다.
 - `204`. 없거나 남의 계정이면 `404 EXTERNAL_ACCOUNT_NOT_FOUND`.
 - 응답을 받지 못해 다시 보낸 요청이 `404`면 이미 해제된 것이다. 프론트는 이 경우를 성공으로 보고 목록을 다시 읽는다.
 - 해제하면 Trust Profile의 다음 조회부터 `EXTERNAL_ACCOUNT`가 빠진다(01 §4.3).
@@ -288,7 +293,9 @@ YouTube 계정만 받는다.
 | 409 | `EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED` | Spotify 계정의 작업물 요청 |
 | 422 | `YOUTUBE_CHANNEL_NOT_FOUND` | 로그인한 Google 계정에 공개 YouTube 채널이 없음 |
 | 422 | `SPOTIFY_ARTIST_NOT_FOUND` | Spotify에 그 아티스트가 없음 |
-| 503 | `EXTERNAL_PROVIDER_UNAVAILABLE` | 플랫폼 시간 초과·`429`·`5xx`. `Retry-After`는 붙이지 않는다 |
+| 429 | `TOO_MANY_REQUESTS` | `/me/external-accounts/**` 아티스트별 요청 제한을 넘음. `Retry-After`는 창이 끝날 때까지 남은 초(00 §8) |
+| 503 | `EXTERNAL_PROVIDER_UNAVAILABLE` | 플랫폼 시간 초과·`429`·`5xx`, 토큰 폐기 두 번 실패, YouTube 하루 예산의 사용자 한도 초과. `Retry-After`는 붙이지 않는다 |
+| 503 | `RATE_LIMIT_UNAVAILABLE` | 요청 제한 카운터(Redis)를 쓸 수 없음(00 §8) |
 | 503 | `EXTERNAL_PROVIDER_DISABLED` | 그 플랫폼이 설정으로 꺼져 있음(키 없음, 유료 승인 전) |
 
 콜백(§4)이 프론트로 넘기는 `linkError` 값: `EXTERNAL_ACCOUNT_AUTHORIZATION_DENIED`(사용자가 거절), `EXTERNAL_ACCOUNT_AUTHORIZATION_FAILED`(그 밖).
@@ -306,13 +313,41 @@ ADR external_links/00 "저장"이 정본이다. 요약:
 
 YouTube 정책은 ID도 30일 안에 갱신하거나 삭제하게 한다(ADR 14번).
 
-- 하루 한 번 돈다. 여러 서버가 같이 돌지 않도록 PostgreSQL advisory lock 하나를 잡는다.
-- `refreshed_at`이 7일 넘은 YouTube 채널·영상 ID를 API 키로 50개씩 조회한다.
+- 하루 한 번 돈다. 여러 서버가 같이 돌지 않도록 작업 전체에 PostgreSQL advisory lock 하나를 잡는다.
+- `refreshed_at`이 7일 넘은 YouTube 채널·영상 ID를 API 키로 50개씩 조회한다. 호출마다 하루 예산(§11.2)에 1 unit를 더한다. 작업은 사용자 한도 8,000과 관계없이 10,000까지 쓸 수 있다.
+- 행을 바꾸거나 지울 때는 아티스트마다 트랜잭션을 따로 열고 그 아티스트의 잠금(§11.3)을 잡은 뒤, 행이 아직 같은 계정·영상인지 다시 읽고 바꾼다.
 - 있고 공개면 `refreshed_at`을 지금으로 바꾼다.
 - 채널이 없거나 공개가 아니면 그 연결을 지우고 감사 `DISCONNECTED`를 남긴다. 영상이 없거나 공개가 아니면 그 작업물 행을 지운다.
 - 플랫폼 오류로 확인하지 못하면 그 행은 그대로 두고 다음 날 다시 한다. 다만 `refreshed_at`이 30일을 넘은 행은 확인하지 못했어도 지운다(채널이면 감사 `DISCONNECTED`).
 - 지운 연결과 영상의 표시 정보 캐시도 지운다.
 - 이 작업은 API를 바꾸지 않는다. 결과는 다음 조회에 반영된다.
+
+### 11.2 요청 제한과 YouTube 하루 예산
+
+YouTube 할당량(하루 10,000 units, 태평양 시간 자정 초기화)은 프로젝트 전체가 함께 쓴다(ADR 15번).
+
+| 장치 | 규칙 |
+|---|---|
+| 아티스트별 요청 제한 | `/api/v1/me/external-accounts/**` 요청을 아티스트마다 10분 고정 창으로 센다(`extacct:rl:{artistId}:{창 시작}`, `INCR`·`EXPIRE`). 31번째부터 `429 TOO_MANY_REQUESTS`, `Retry-After`는 창이 끝날 때까지 남은 초. Redis를 쓸 수 없으면 `503 RATE_LIMIT_UNAVAILABLE` |
+| 하루 예산 | YouTube를 부르기 전에 `extacct:ytquota:{태평양 시간 날짜}`에 쓸 units을 `INCRBY`로 더한다(TTL 2일). 연결 2, 후보 3, 표시 정보 계정당 2 units다 |
+| 사용자 한도 | 더한 값이 8,000을 넘으면 사용자 요청은 YouTube를 부르지 않는다. 연결·후보는 `503 EXTERNAL_PROVIDER_UNAVAILABLE`, 조회는 표시 정보가 `null`(링크는 남음) |
+| 작업 몫 | ID 확인 작업(§11.1)은 10,000까지 쓴다. 남은 2,000 units는 ID 10만 개를 확인할 수 있다 |
+| 경고 | 합계가 7,000을 넘으면 경고 로그를 한 번 남긴다 |
+
+- EVENT_PARTNER 조회에는 요청 제한을 걸지 않는다. 계정당 1시간 캐시와 하루 예산이 호출 수를 묶는다.
+- Spotify는 하루 할당량이 없다. 존재 확인과 표시 정보를 1시간 캐시하고, 아티스트별 요청 제한을 같이 받는다.
+
+### 11.3 아티스트 잠금
+
+한 아티스트의 외부 계정 행을 바꾸는 모든 트랜잭션은 먼저 같은 잠금을 잡는다(ADR 8번).
+
+```sql
+SELECT pg_advisory_xact_lock(hashtextextended('extacct:' || :artistId, 0));
+```
+
+- 대상: 연결(§5.2의 6), 작업물 고르기(§8), 해제(§9), ID 확인 작업의 갱신·삭제(§11.1), runbook의 운영자 삭제 SQL.
+- 잠금을 잡은 뒤 지금 행을 다시 읽고 판단한다. 외부 호출은 잠금 밖에서 한다.
+- 해제가 `204`를 받았으면 그 뒤에 커밋되는 연결 요청은 지금 연결이 기대와 달라 `409`다. 해제한 연결이 되살아나지 않는다.
 
 ## 12. 테스트 기준
 
@@ -336,7 +371,12 @@ DB·Redis가 관여하는 경우는 Testcontainers(PostgreSQL, Redis)로 확인�
 | 다른 아티스트 | 같은 YouTube 채널은 `409 EXTERNAL_ACCOUNT_ALREADY_LINKED`. 같은 Spotify 아티스트는 두 아티스트 모두 성공한다 |
 | 동시 연결 | 같은 아티스트가 같은 기대 값(`null`)으로 시작한 서로 다른 계정 연결 두 개를 동시에 보내면(배리어로 20회 반복) 한쪽은 `201`, 다른 쪽은 `409 EXTERNAL_ACCOUNT_CONNECTION_CHANGED`이고 행은 1개다. `500`이 아니다. 두 아티스트가 같은 채널을 동시에 연결하면 한쪽만 성공하고 다른 쪽은 `409 EXTERNAL_ACCOUNT_ALREADY_LINKED`다 |
 | Spotify | 허용 형식 3가지는 성공, 다른 호스트·`http`·22자가 아닌 ID는 `400 EXTERNAL_ACCOUNT_URL_INVALID`, Spotify가 없다고 하면 `422 SPOTIFY_ARTIST_NOT_FOUND`, 설정이 꺼져 있으면 `503 EXTERNAL_PROVIDER_DISABLED`이고 Spotify 호출이 없다 |
-| 토큰 | Google 토큰 폐기 요청이 나간다. 폐기가 실패해도 연결은 성공한다 |
+| 토큰 | Google 토큰 폐기 요청이 나간다. 한 번 실패하고 두 번째에 성공하면 연결된다. 두 번 다 실패하면 `503 EXTERNAL_PROVIDER_UNAVAILABLE`이고 행·감사 기록이 없다 |
+| 해제와 연결 경쟁 | 연결 요청이 지금 연결 X를 읽은 직후 해제를 끼워 넣도록 잠금 획득 순서를 고정한다. 해제가 먼저 잠금을 잡아 `204`를 받으면 연결 요청은 `409`이고 행이 없다. 교체의 조건부 삭제가 0행이면 아무것도 저장하지 않는다. 고르기 저장 직전에 해제되면 고르기는 `404`다 |
+| 같은 잠금 | 연결·고르기·해제·ID 확인 작업이 모두 `extacct:` 아티스트 잠금을 잡는다. 한 경로가 잠금을 잡고 있는 동안 다른 경로가 같은 아티스트 행을 바꾸지 못한다 |
+| 요청 제한 | 같은 아티스트의 31번째 `/me/external-accounts/**` 요청은 `429`이고 `Retry-After`가 있다. 다른 아티스트는 영향이 없다. EVENT_PARTNER 조회는 제한을 받지 않는다 |
+| 하루 예산 | 예산 키를 8,000으로 두면 연결·후보는 `503`이고 YouTube 호출이 없다. 조회는 `200`이고 표시 정보만 `null`이다. ID 확인 작업은 계속 YouTube를 부른다. 10,000이면 작업도 멈춘다 |
+| 후보 캐시 | 10분 안의 두 번째 후보 조회와 동시 요청 10개는 YouTube 호출이 1번이다. 해제하면 후보 캐시가 지워진다 |
 | 조회 표시 정보 | 플랫폼이 응답하면 이름·제목이 채워진다. 시간 초과면 불변식 5대로 `null`이고 링크는 남으며 `200`이고 응답이 3초 안에 온다. 삭제된 영상은 빠진다 |
 | 캐시 | 1시간 안의 두 번째 조회에 외부 호출이 없다. 실패는 30초 동안 다시 부르지 않는다. 해제하면 캐시가 지워진다 |
 | ID 확인 작업 | `refreshed_at`이 8일 전인 YouTube 채널·영상은 다시 조회해 시각이 갱신된다. 없어진 영상은 행이 지워지고, 없어진 채널은 연결이 지워지며 감사 `DISCONNECTED`가 남는다. 플랫폼이 실패하면 행이 남지만, `refreshed_at`이 31일 전이면 실패해도 지워진다. 두 인스턴스가 동시에 돌려도 한쪽만 처리한다 |
@@ -345,7 +385,7 @@ DB·Redis가 관여하는 경우는 Testcontainers(PostgreSQL, Redis)로 확인�
 | 플랫폼 문자열 | 제어 문자·`<script>` 같은 값이 든 제목은 제어 문자만 지워 그대로 글자로 나가고, 201자 제목은 200자로 잘린다. 허용 호스트가 아닌 썸네일은 `null`이다 |
 | 해제 | `204`, 영상 함께 삭제, 감사 `DISCONNECTED`. 다음 Trust Profile 조회에서 `EXTERNAL_ACCOUNT`가 빠진다 |
 | Trust Profile | YouTube를 연결하면 `verifications`에 `EXTERNAL_ACCOUNT`·`YOUTUBE`가 들어가고, Spotify만 연결하면 들어가지 않는다 |
-| 원칙 테스트 | ADR "원칙을 지키는 테스트" 1~11 |
+| 원칙 테스트 | ADR "원칙을 지키는 테스트" 1~14 |
 
 ## 13. 예시
 
