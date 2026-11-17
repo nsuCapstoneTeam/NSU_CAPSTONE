@@ -26,12 +26,35 @@ class LogSafetyListener implements ApplicationListener<ApplicationEnvironmentPre
 
     @Override
     public void onApplicationEvent(ApplicationEnvironmentPreparedEvent event) {
+        rejectJvmDebugOptions();
         enforceLevelFloor(LoggingSystem.get(event.getSpringApplication().getClassLoader()));
     }
 
     @Override
     public int getOrder() {
         return LoggingApplicationListener.DEFAULT_ORDER + 1;
+    }
+
+    /**
+     * 이 옵션들은 로거를 거치지 않고 헤더, 요청 원문, TLS 평문을 stdout·stderr에 찍어 레벨로 막을 수 없다. 레벨 하한은 되돌려 쓸 수 있지만
+     * 이 출력은 되돌릴 수 없어서 시작을 막는다. 이름 하나씩 막으면 빠지므로 JDK 내부 접두어 전체를 본다.
+     */
+    private static void rejectJvmDebugOptions() {
+        List<String> found = System.getProperties().stringPropertyNames().stream()
+                .filter(LogSafetyListener::isJvmDebugOption)
+                .sorted()
+                .toList();
+        if (!found.isEmpty()) {
+            // 예외 메시지는 메시지 없는 출력기가 빼므로, 멈춘 이유(옵션 이름)는 로그 문장으로 남긴다
+            log.error("헤더와 요청 원문을 로거 밖으로 찍는 JVM 디버그 옵션이 있어 시작하지 않는다: {}", found);
+            throw new IllegalStateException("로그 보호 장치를 우회하는 JVM 디버그 옵션이 있다: " + found);
+        }
+    }
+
+    private static boolean isJvmDebugOption(String name) {
+        return name.startsWith("jdk.internal.httpclient.")
+                || name.equals("jdk.httpclient.HttpClient.log")
+                || name.equals("javax.net.debug");
     }
 
     private void enforceLevelFloor(LoggingSystem loggingSystem) {
