@@ -1,18 +1,27 @@
 package com.nsu.capstone.global.logging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.event.EventIntegrationTestBase;
 import com.nsu.capstone.identity.domain.User;
+import com.nsu.capstone.identity.oauth.OAuthOpaqueValueService;
+import com.nsu.capstone.identity.oauth.OAuthRedisKeys;
+import com.nsu.capstone.identity.oauth.RedisOAuth2AuthorizationRequestRepository;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.support.UuidV7Generator;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,6 +34,15 @@ class LogPrivacyIntegrationTest extends EventIntegrationTestBase {
 
     @Autowired
     Environment environment;
+
+    @Autowired
+    RedisOAuth2AuthorizationRequestRepository authorizationRequestRepository;
+
+    @Autowired
+    OAuthOpaqueValueService opaqueValueService;
+
+    @Autowired
+    StringRedisTemplate redisTemplate;
 
     @Test
     void 중복_이메일_저장이_실패해도_출력_바이트에_이메일이_없다() throws Exception {
@@ -53,6 +71,36 @@ class LogPrivacyIntegrationTest extends EventIntegrationTestBase {
             assertThat(capture.lines())
                     .anyMatch(line -> line.contains("GlobalExceptionHandler") && line.contains("\"level\":\"ERROR\""));
         }
+    }
+
+    /**
+     * 저장소가 읽다가 실패하면 Jackson 예외 메시지에 읽던 JSON 조각(여기서는 이메일)이 든다. 원인 예외를 달고 던지면 그 메시지가 상위로 전파되므로,
+     * 예외 클래스 이름만 담아 원인 없이 감싼다(artist-oauth-signup.md와 같은 방식).
+     */
+    @Test
+    void OAuth_인가_요청_역직렬화에_실패해도_예외_어디에도_읽던_값이_없다() {
+        String state = "state-" + UUID.randomUUID();
+        redisTemplate
+                .opsForValue()
+                .set(OAuthRedisKeys.authorization(opaqueValueService.digest(state)), "{\"email\": " + Sentinel.EMAIL);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setParameter("state", state);
+
+        Throwable thrown = catchThrowable(() -> authorizationRequestRepository.loadAuthorizationRequest(request));
+
+        // @Repository 빈이라 Spring 예외 변환이 한 겹 더 감쌀 수 있다. 바깥 타입이 아니라 원인 체인 전체를 본다.
+        List<Throwable> chain = new ArrayList<>();
+        for (Throwable current = thrown; current != null; current = current.getCause()) {
+            chain.add(current);
+        }
+        assertThat(thrown).as("역직렬화 실패는 예외로 알려야 한다").isNotNull();
+        assertThat(chain)
+                .as("읽기 실패의 원인으로 붙은 Jackson 예외(메시지에 읽던 JSON 조각이 든다)")
+                .noneMatch(throwable -> throwable.getClass().getName().startsWith("tools.jackson"));
+        assertThat(chain)
+                .as("예외 메시지에 든 값")
+                .noneMatch(throwable ->
+                        throwable.getMessage() != null && throwable.getMessage().contains(Sentinel.EMAIL));
     }
 
     /** 제약 위반(PostgreSQL Detail 포함)을 일으키는 테스트 전용 엔드포인트. */

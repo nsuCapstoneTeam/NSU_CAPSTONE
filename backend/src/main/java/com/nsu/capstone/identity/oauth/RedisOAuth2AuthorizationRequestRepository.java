@@ -130,7 +130,9 @@ public class RedisOAuth2AuthorizationRequestRepository
             }
             return snapshot;
         } catch (Exception exception) {
-            throw new IllegalStateException("Failed to read OAuth authorization request", exception);
+            // Jackson 예외 메시지에는 읽던 JSON 조각(state, 리다이렉트 주소 등)이 들어 있다. 원인으로 달지 않고 예외 클래스 이름만 남긴다.
+            throw new IllegalStateException("Failed to read OAuth authorization request: "
+                    + exception.getClass().getName());
         }
     }
 
