@@ -2,7 +2,7 @@
 
 - 상태: **Proposed** (설계 리뷰와 PR 리뷰에서 확정)
 - 결정일: **2026-11-08 ~ 2026-11-17** (NSU-37 설계 세션, 김동엽). 1~5번과 5-2는 사용자가 답했다. 6~11번은 2026-11-16 사용자 기준("사용자 경험 우선, 차이가 없으면 권장안")에 따라 설계 세션이 정했다. 12번(표시 정보 저장, 2026-11-16)과 13번(SoundCloud 제외, 2026-11-17)은 약관이 걸려 지휘 세션을 거쳐 사용자가 정했다
-- 설계 리뷰: Codex adversarial review(grill `20261108T131744Z-6c5712e8`) 1회차(2026-11-17) 지적 4개를 반영했다. SoundCloud 아티스트 프로필 금지 조항과 SoundCloud 공유 캐시는 13번(SoundCloud 제외), YouTube ID 보관 기한은 14번, 교체 승인 경쟁 조건은 8번에서 다룬다. 2회차 지적 3개도 반영했다. 토큰 폐기 실패는 14번, 해제·정리 작업의 잠금은 8번, YouTube 할당량 보호는 15번에서 다룬다
+- 설계 리뷰: Codex adversarial review(grill `20261108T131744Z-6c5712e8`) 1회차(2026-11-17) 지적 4개를 반영했다. SoundCloud 아티스트 프로필 금지 조항과 SoundCloud 공유 캐시는 13번(SoundCloud 제외), YouTube ID 보관 기한은 14번, 교체 승인 경쟁 조건은 8번에서 다룬다. 2회차 지적 3개도 반영했다. 토큰 폐기 실패는 14번, 해제·정리 작업의 잠금은 8번, YouTube 할당량 보호는 15번에서 다룬다. 3회차 지적 3개(거절한 요청의 예산 소비, 실패 경로의 토큰 폐기 누락, 로그인과 같은 Cloud 프로젝트에서의 폐기 범위)는 15번과 14번에서 다룬다
 - 요구사항: SSOT 최종 승인 v1.17.1의 `AUTH-160`(외부 계정 연결은 로그인 OAuth와 다른 기능), `TRUST-152`(Verification은 Reliability에 더하지 않음), `AUDIT-099`(외부 계정 연결·해제 기록). 이 ADR이 바꾸는 요구사항은 SSOT 초안 리비전으로 올린다(Linear 확인 대기)
 - 관련: [06 외부 계정 API](../../api/06_external_accounts.md), [01 Trust Profile §4.3·§7](../../api/01_trust_profile.md), [ADR artist_trust_architecture/07](../artist_trust_architecture/07_external_account_verification_policy.md), [ADR authentication/00](../authentication/00_csrf_protection_for_bearer_api.md) Decision 7, [ADR authentication/01](../authentication/01_oauth_browser_binding.md), [ADR identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md), NSU-37, NSU-79, NSU-12, NSU-90, NSU-33, NSU-110, NSU-145
 
@@ -331,6 +331,8 @@ A로 정했다(2026-11-16 사용자 결정).
 
 - 연결할 때 받은 토큰은 바로 폐기하므로 동의는 연결 시점에 끝난다. 그 뒤 저장한 ID는 API 키로 다시 받은 공개 데이터(동의 없이 받은 데이터, III.E.4.d)로 관리한다. 연결 직후 서버는 채널 ID를 API 키로 한 번 더 조회해 공개 채널임을 확인한다.
 - **폐기가 확인돼야 연결을 저장한다**(설계 리뷰 2회차 지적). 처음 설계는 폐기가 실패해도 연결을 저장했다. 그러면 Google 쪽에는 동의가 살아 있는데 우리는 토큰이 없어, 사용자가 나중에 Google 설정 화면에서 동의를 철회해도 알 수 없다. 정책 III.D.2.3은 그 철회 뒤 30일 안에 관련 데이터를 지우라고 한다. 그래서 폐기 요청이 실패하면 한 번 더 보내고, 그래도 실패하면 아무것도 저장하지 않고 `503 EXTERNAL_PROVIDER_UNAVAILABLE`을 준다. 아티스트는 처음부터 다시 연결한다. 폐기가 성공하면 Google 쪽 동의가 끝났으므로 나중에 철회될 동의가 남지 않는다.
+- **토큰을 받은 뒤에는 결과와 관계없이 폐기한다**(설계 리뷰 3회차 지적). 2회차 설계는 성공 경로에만 폐기를 두었다. 그러면 코드 교환은 성공했는데 채널 조회가 시간 초과·`429`·`5xx`로 실패하거나, 채널이 없어 `422`가 될 때 토큰을 폐기하지 않고 끝난다. 이제 토큰을 받은 직후부터 응답하기 전까지를 `try`/`finally`로 감싸, 어떤 결과든 폐기를 최대 2번 시도한다. 실패 경로에서 두 번 다 실패하면 원래 오류를 그대로 주고, 토큰 값 없이 오류 로그를 남긴다(아티스트 ID, 원래 오류 코드). 이 경우 Google 쪽에 동의가 남지만 우리는 아무 데이터도 저장하지 않았다.
+- **YouTube 연결은 로그인과 다른 Google Cloud 프로젝트를 쓴다**(설계 리뷰 3회차 지적). Google 문서는 "폐기하면 그 프로젝트에 준 모든 scope가 없어지고, 그 프로젝트에 등록된 모든 클라이언트의 토큰이 무효가 된다"고 적었다(OAuth 2.0 for Web Server Applications, Token revocation). 로그인용 Google 클라이언트와 같은 프로젝트에 두면, 연결 때 하는 폐기가 그 사용자의 로그인 동의까지 지운다. 다음 로그인에서 동의 화면이 다시 나오고, 같은 순간 진행 중인 로그인은 userinfo 조회가 실패할 수 있다. 프로젝트를 나누면 `youtube.readonly` 검수도 로그인 앱과 따로 받는다. 이 전제는 앱 시작 때 검사한다. Google 클라이언트 ID의 앞부분 숫자는 프로젝트 번호이므로, YouTube 연결 클라이언트 ID와 로그인 클라이언트 ID의 프로젝트 번호가 같으면 앱이 뜨지 않는다.
 
 | 관점 | 폐기 확인 뒤 저장 (채택) | 폐기 실패해도 저장(처음 설계) |
 |---|---|---|
@@ -375,7 +377,7 @@ A로 정했다(2026-11-16 사용자 결정).
 
 - **캐시:** 작업물 후보는 응답 전체(제목·썸네일 포함)를 계정마다 Redis에 10분 둔다. 표시 정보는 12번대로 1시간이다. 같은 계정의 캐시가 빈 동시 요청은 서버 안에서 한 번만 호출하고 결과를 나눠 쓴다(single-flight). 해제하면 두 캐시를 모두 지운다. YouTube 정책의 30일 제한(III.E.4.d)과 최신 값 표시(III.E.4.f)를 지키는 짧은 임시 캐시다.
 - **아티스트별 요청 제한:** `/api/v1/me/external-accounts/**`는 아티스트마다 10분 고정 창에 30번까지다. 넘으면 `429 TOO_MANY_REQUESTS`와 `Retry-After`(00 §8)다. 키는 `extacct:rl:{artistId}:{창 시작}`이고 `INCR`·`EXPIRE`로 센다. 이 모듈은 진행 상태를 이미 Redis에 두므로 Redis를 쓸 수 없으면 어차피 실패한다. 그때는 `503 RATE_LIMIT_UNAVAILABLE`(00 §8)이다. 전역 요청 제한(NSU-123)이 머지되면 그 구현으로 옮긴다.
-- **하루 예산:** YouTube를 부르기 전에 `extacct:ytquota:{태평양 시간 날짜}`에 쓸 units을 더한다(`INCRBY`). 사용자 요청(연결, 후보, 표시 정보)은 합계가 8,000을 넘으면 부르지 않는다. 그때 연결과 후보는 `503 EXTERNAL_PROVIDER_UNAVAILABLE`, 표시 정보는 `null`(링크는 남음)이다. ID 확인 작업은 10,000까지 쓸 수 있어 남은 2,000 units를 쓴다. 1만 개 ID를 확인해도 200 units라 충분하다. 7,000을 넘으면 경고 로그를 남긴다.
+- **하루 예산:** YouTube를 부르기 전에 `extacct:ytquota:{태평양 시간 날짜}`에서 예산을 확보한다. 확인과 증가는 Lua 스크립트 하나로 원자적으로 한다. "지금 값 + 쓸 units ≤ 한도"일 때만 `INCRBY`하고 확보 성공을 돌려준다. 넘으면 값을 바꾸지 않고 실패를 돌려준다. 거절한 요청은 예산을 쓰지 않는다(설계 리뷰 3회차 지적: 먼저 더하고 나중에 비교하면, 거절이 쌓여 카운터가 ID 확인 작업의 몫까지 올라간다). 확보한 뒤 실제 호출이 실패해도 되돌리지 않는다. YouTube는 실패한 요청에도 units를 매기기 때문이다. 사용자 요청(연결, 후보, 표시 정보)의 한도는 8,000이다. 그때 연결과 후보는 `503 EXTERNAL_PROVIDER_UNAVAILABLE`, 표시 정보는 `null`(링크는 남음)이다. ID 확인 작업은 10,000까지 쓸 수 있어 남은 2,000 units를 쓴다. 1만 개 ID를 확인해도 200 units라 충분하다. 7,000을 넘으면 경고 로그를 남긴다.
 - EVENT_PARTNER의 조회는 요청 제한을 걸지 않는다. 계정당 1시간 캐시와 하루 예산이 호출 수를 묶는다. 예산이 차도 링크는 그대로 보인다.
 - Spotify는 하루 할당량이 아니라 30초 단위 요청 제한이다. 존재 확인과 표시 정보를 같은 Redis 캐시(1시간)에 두고, 아티스트별 요청 제한을 같이 받는다. Spotify가 `429`를 주면 `503 EXTERNAL_PROVIDER_UNAVAILABLE`이다.
 
@@ -422,7 +424,7 @@ YouTube:
 2. 브라우저가 같은 탭에서 Google로 간다
 3. Google → `GET /api/v1/external-accounts/oauth/callback/youtube` → 프론트 `/mypage`로 `302`(값만 넘기고 Redis·DB·외부 호출 없음)
 4. 프론트 → `POST /api/v1/me/external-accounts` (`state`·`code`)
-5. 서버: 요청 제한(15번) → GETDEL → 쿠키 digest 비교 → **트랜잭션 밖에서** 하루 예산 확인 → 코드 교환과 채널 조회(PKCE 사용) → 토큰 폐기(실패하면 한 번 더, 그래도 실패하면 `503`이고 저장하지 않음, 14번) → 채널 ID를 API 키로 다시 조회(14번) → 짧은 트랜잭션(아티스트 잠금 → 지금 연결 ID와 `expectedExternalAccountId` 비교(8번) → 조건부 삭제·추가 → 감사 기록) → 응답
+5. 서버: 요청 제한(15번) → GETDEL → 쿠키 digest 비교 → **트랜잭션 밖에서** 하루 예산 확보 → 코드 교환 → (여기부터 `finally`에서 토큰 폐기, 14번) 채널 조회(PKCE 사용) → 토큰 폐기(실패하면 한 번 더, 그래도 실패하면 `503`이고 저장하지 않음) → 채널 ID를 API 키로 다시 조회(14번) → 짧은 트랜잭션(아티스트 잠금 → 지금 연결 ID와 `expectedExternalAccountId` 비교(8번) → 조건부 삭제·추가 → 감사 기록) → 응답
 
 Spotify: `POST /api/v1/me/external-accounts`(`url`, `replaceExternalAccountId`) → 주소 해석 → Spotify API로 존재 확인 → 같은 트랜잭션 처리(비교 대상은 요청의 `replaceExternalAccountId`).
 
@@ -438,7 +440,7 @@ YouTube ID 확인(14번): 매일 한 번 도는 작업이 `refreshed_at`이 7일
 | 읽기 경로(표시 정보) | 계정마다 병렬, 호출마다 연결 1초·응답 2초, 전체 상한 3초. 실패하면 표시 정보를 `null`로 두고 응답은 `200` |
 | 앱 자격 증명 | YouTube API 키, Spotify Client Credentials 토큰(만료 전까지 메모리에 둔다) |
 | 비밀값 | 환경 변수로만 주입한다. 저장소에 기본값을 두지 않는다 |
-| 코드 교환 | Spring Security 7.1.1 `RestClientAuthorizationCodeTokenResponseClient`를 모듈 안 `ClientRegistration`(bean 아님)과 타임아웃 `RestClient`로 재사용한다. 로그인 `ClientRegistrationRepository`는 건드리지 않는다. Google OAuth 클라이언트는 로그인용과 따로 만든다(민감 scope를 로그인 동의 화면에 섞지 않기 위해) |
+| 코드 교환 | Spring Security 7.1.1 `RestClientAuthorizationCodeTokenResponseClient`를 모듈 안 `ClientRegistration`(bean 아님)과 타임아웃 `RestClient`로 재사용한다. 로그인 `ClientRegistrationRepository`는 건드리지 않는다. Google OAuth 클라이언트는 로그인과 **다른 Google Cloud 프로젝트**에 만든다(14번: 폐기가 프로젝트 단위로 퍼지고, 민감 scope 검수를 로그인 앱과 섞지 않기 위해) |
 | 토큰 | 타입에 없다. gateway는 `redeem(code, verifier) → FetchedAccount`만 돌려준다 |
 
 ### 링크는 서버가 만든다
@@ -480,8 +482,9 @@ YouTube ID 확인(14번): 매일 한 번 도는 작업이 `refreshed_at`이 7일
 | 10 | 교체 승인은 그 연결 ID에만 유효하다(8번) | 기기 A가 X 교체를 시작한 뒤 B가 Y로 교체하면, A의 연결 요청은 `409 EXTERNAL_ACCOUNT_CONNECTION_CHANGED`이고 Y와 그 작업물이 남는다. 시작 뒤 X를 해제한 경우도 `409` |
 | 11 | YouTube ID는 30일을 넘겨 확인 없이 남지 않는다(14번) | `refreshed_at`이 31일 전인 YouTube 행은 플랫폼이 실패해도 작업이 지운다. 7일 넘은 행은 다시 확인하고 시각을 갱신한다. 없어진 영상·채널은 지운다 |
 | 12 | 해제한 연결은 되살아나지 않는다(8번) | 연결 요청이 지금 연결을 읽은 직후 해제를 끼워 넣어도(잠금 획득 순서를 테스트에서 고정), 해제가 `204`를 받았으면 연결 요청은 `409`이고 행이 없다. 교체의 조건부 삭제가 0행이면 아무것도 저장하지 않는다. 해제·고르기·ID 정리가 모두 같은 잠금 키를 쓰는지 검사한다 |
-| 13 | 폐기를 확인하지 못한 토큰으로 연결하지 않는다(14번) | Google 폐기 요청이 두 번 실패하면 `503`이고 행·감사 기록이 없다. 한 번 실패하고 두 번째에 성공하면 연결된다 |
-| 14 | 한 사용자가 YouTube 할당량을 다 쓰지 못한다(15번) | 같은 계정의 후보 조회를 10분 안에 여러 번 해도 YouTube 호출은 1번이다. 동시 요청 10개도 1번이다. 31번째 요청은 `429`와 `Retry-After`. 하루 예산이 8,000을 넘으면 연결·후보는 `503`, 조회는 링크만 남고 `200`, ID 확인 작업은 계속 돈다 |
+| 13 | 받은 토큰은 반드시 폐기를 시도하고, 폐기를 확인하지 못하면 연결하지 않는다(14번) | Google 폐기 요청이 두 번 실패하면 `503`이고 행·감사 기록이 없다. 한 번 실패하고 두 번째에 성공하면 연결된다. 코드 교환 뒤 채널 조회가 시간 초과·`5xx`이거나 채널이 없어 `422`일 때도 폐기 요청이 나간다 |
+| 14 | 한 사용자가 YouTube 할당량을 다 쓰지 못한다(15번) | 같은 계정의 후보 조회를 10분 안에 여러 번 해도 YouTube 호출은 1번이다. 동시 요청 10개도 1번이다. 31번째 요청은 `429`와 `Retry-After`. 하루 예산이 8,000이면 연결·후보는 `503`, 조회는 링크만 남고 `200`이다. 8,000에서 거절된 요청을 1,000번 보내도 카운터는 8,000 그대로이고, ID 확인 작업은 남은 2,000 units를 쓴다 |
+| 15 | YouTube 연결과 로그인은 다른 Google Cloud 프로젝트다(14번) | 두 클라이언트 ID의 프로젝트 번호(앞부분 숫자)가 같으면 설정 검증이 실패해 앱이 뜨지 않는다 |
 
 ## 외부 API 검토
 
