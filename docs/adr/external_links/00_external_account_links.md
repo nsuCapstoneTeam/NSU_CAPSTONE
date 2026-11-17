@@ -320,7 +320,7 @@ ADR authentication/00 Decision 7은 외부 계정 연결도 login CSRF와 같은
 | 확장성 | 차이 없음 | 차이 없음 |
 | 운영 | 쿠키 이름 설정 하나 | 없음 |
 | 사용자 경험 | 차이 없음(같은 브라우저에서 시작하고 끝냄) | 차이 없음 |
-| 구현량 | `OAuthBindingCookie`를 이름·수명만 바꿔 재사용 | 없음 |
+| 구현량 | 모듈 안 작은 쿠키 클래스와 `OAuthOpaqueValueService` 재사용(Reused 참고) | 없음 |
 
 ### 12. 표시 정보 저장
 
@@ -469,7 +469,8 @@ A로 정했다(2026-11-16 사용자 결정).
 ### 모듈과 패키지
 
 - 모듈 하나가 연결의 단일 소유자다: `com.nsu.capstone.verification.externalaccount`. ADR 06 §19의 최상위 `verification/`이고, 기존 `identity/verification`(이메일·휴대폰 OTP)과 다르다.
-- 하위 패키지는 저장소 관례대로 `domain`(값 타입: `ExternalAccountProvider`, `ProviderLink`, 감사 enum), `presentation`, `application`, `repository`, `provider`를 쓴다.
+- 하위 패키지는 저장소 관례대로 `domain`(값 타입: `ExternalAccountProvider`, `ProviderLink`, 감사 enum), `presentation`, `application`, `repository`, `provider`, `redis`(요청 제한·YouTube 예산·캐시)를 쓴다.
+- 행을 바꾸는 저장소 메서드는 첫 매개변수로 잠금 증표 `LockedArtist`를 받는다. 증표는 아티스트 잠금을 잡는 메서드만 만들 수 있어, 잠금 없는 쓰기는 컴파일되지 않는다(8번 일반 규칙을 타입으로 강제).
 - 서비스 `ExternalAccountService`의 공개 메서드: `startAuthorization`, `connect`, `workCandidates`, `chooseWorks`, `disconnect`, `linksOf`. ID 확인 작업은 `ExternalAccountRefreshJob`이 맡는다.
 - 다른 모듈은 이 모듈을 import하지 않는다. Trust Profile에는 이 모듈의 `VerificationSource` 구현을 Spring이 주입한다(인터페이스는 `trust`에 있다).
 
@@ -652,7 +653,7 @@ NSU-37이 함께 하는 정리(2026-11-17 지휘 결정, NSU-105와 겹치지 �
 ## Reused
 
 - 접근 규칙: `TrustProfileQueryService`의 ARTIST 본인·EVENT_PARTNER `ACTIVE` 규칙을 `ArtistReadAccess`로 뽑아 재사용한다.
-- 결합 쿠키: `identity/oauth/OAuthBindingCookie`(이름·수명만 다르게), `OAuthOpaqueValueService`(nonce 생성·digest).
+- 결합 쿠키: nonce 생성과 digest는 `identity/oauth/OAuthOpaqueValueService`를 그대로 쓴다. 쿠키 이름·속성·수명은 모듈 안 작은 클래스(`ExternalAccountBindingCookie`)에 둔다. `OAuthBindingCookie`는 이름·수명이 상수라 매개변수화하려면 로그인 흐름 코드를 고쳐야 해서, 로그인 회귀 위험을 피하려고 재사용하지 않았다(구현 단계 결정, 2026-11-17). 속성(`HttpOnly; Secure; SameSite=Lax; Path=/`, `__Host-` 접두사, 개발용 이름)은 `OAuthBindingCookie`와 같게 둔다.
 - 코드 교환: Spring Security `RestClientAuthorizationCodeTokenResponseClient`.
 - Trust Profile 포트: 01 §7 `VerificationSource`, `VerificationProvider`(`YOUTUBE`).
 - 오류 응답: `global/exception`의 `ErrorCode`·`BusinessException`(ADR-007).
