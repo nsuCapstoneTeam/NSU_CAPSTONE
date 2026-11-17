@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.nsu.capstone.NsuCapstoneApplication;
 import java.util.Arrays;
 import java.util.List;
 import org.slf4j.LoggerFactory;
@@ -44,11 +45,13 @@ public final class ForkedMain {
         Class<?> source = switch (mode) {
             case "light", "httpclient" -> TestApp.EmptyConfig.class;
             case "attach-appender" -> AttachAppenderConfig.class;
+            case "app" -> NsuCapstoneApplication.class;
             default -> throw new IllegalArgumentException("알 수 없는 실행 방식: " + mode);
         };
-        try (ConfigurableApplicationContext ignored = new SpringApplicationBuilder(source)
-                .web(WebApplicationType.NONE)
-                .run(bootArgs)) {
+        // 전체 앱은 Security와 MVC 때문에 서블릿 웹 앱으로 띄운다(포트는 인자로 0을 준다)
+        WebApplicationType webType = mode.equals("app") ? WebApplicationType.SERVLET : WebApplicationType.NONE;
+        try (ConfigurableApplicationContext ignored =
+                new SpringApplicationBuilder(source).web(webType).run(bootArgs)) {
             if (mode.equals("httpclient")) {
                 callLocalServerWithAuthorization();
             }
