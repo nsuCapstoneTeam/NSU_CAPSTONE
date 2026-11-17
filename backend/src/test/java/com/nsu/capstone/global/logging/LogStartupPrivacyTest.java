@@ -59,6 +59,25 @@ class LogStartupPrivacyTest {
         assertThat(result.output()).contains(ForkedMain.STARTED).doesNotContain(FAKE_JWT_SECRET);
     }
 
+    /**
+     * 구현 때 확인할 것(ADR 테스트 절 끝): 배포 형식으로 띄웠을 때 JVM이 JSON이 아닌 줄(네이티브 접근 경고 등)을 stdout·stderr에 찍으면 로그 수집이
+     * 줄을 못 읽는다. 찍으면 JVM 옵션으로 끈다. ForkedMain이 직접 찍는 줄(LEVEL, STARTED)은 제외한다.
+     */
+    @Test
+    void 배포_설정으로_띄우면_JSON이_아닌_줄이_stdout_stderr에_없다() throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), appEnvironment(), appArguments());
+
+        assertThat(result.exitCode())
+                .as("종료 코드. 출력 끝: %s", tail(result.output()))
+                .isZero();
+        assertThat(result.output()
+                        .lines()
+                        .filter(line -> !line.isBlank())
+                        .filter(line -> !line.startsWith("LEVEL ") && !line.equals(ForkedMain.STARTED)))
+                .as("JSON 객체가 아닌 줄")
+                .allMatch(line -> line.startsWith("{\"") && line.endsWith("}"));
+    }
+
     private static Map<String, String> appEnvironment() {
         Map<String, String> env = new HashMap<>();
         env.put("JWT_ACCESS_TOKEN_SECRET", FAKE_JWT_SECRET);
