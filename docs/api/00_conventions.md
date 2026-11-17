@@ -109,7 +109,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 
 | HTTP | `code` | 상황 |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | 요청 본문·파라미터 검증 실패 (ADR-007). MVC가 요청 인자로 읽는 헤더(예: `Idempotency-Key`)에 허용하지 않는 문자(제어 문자 등)가 있어 서버가 읽기를 거절한 경우도 같다. `Authorization`처럼 보안 처리에서 먼저 읽는 헤더는 보안 처리가 거절하므로 다른 상태(예: `401`)가 될 수 있다([ADR logging/00](../adr/logging/00_structured_logs_and_request_id.md) Decision 7) |
+| 400 | `VALIDATION_ERROR` | 요청 본문·파라미터 검증 실패 (ADR-007). MVC가 요청 인자로 읽는 헤더(예: `Idempotency-Key`)에 허용하지 않는 문자(제어 문자 등)가 있어 서버가 읽기를 거절한 경우도 같다(NSU-146 PR2에서 적용, 그 전에는 `500`). `Authorization`처럼 보안 처리에서 먼저 읽는 헤더는 보안 처리가 거절하므로 다른 상태(예: `401`)가 될 수 있다([ADR logging/00](../adr/logging/00_structured_logs_and_request_id.md) Decision 7) |
 | 400 | `INVALID_{대상}` | 경로 값의 형식 오류 (예: `INVALID_ARTIST_ID`) |
 | 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음, 만료, 서명 오류 |
 | 403 | `ACCESS_DENIED` | 인증은 됐지만 호출 주체에게 허용되지 않은 요청 |
