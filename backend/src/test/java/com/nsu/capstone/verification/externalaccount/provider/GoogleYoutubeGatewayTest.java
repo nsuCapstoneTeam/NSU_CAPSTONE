@@ -20,15 +20,21 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.nsu.capstone.verification.externalaccount.config.ExternalAccountProperties;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountException;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
 import com.nsu.capstone.verification.externalaccount.redis.YoutubeQuota;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
@@ -111,6 +117,168 @@ class GoogleYoutubeGatewayTest {
                                 .isEqualTo(ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE));
 
         server.verify();
+        verifyNoInteractions(quota);
+    }
+
+    @Test
+    void 예산을_확보하지_못하면_UNAVAILABLE이고_채널은_조회하지_않지만_토큰은_폐기한다() {
+        when(quota.tryReserve(any(UUID.class), eq(2))).thenReturn(false);
+        expectTokenExchange();
+        expectRevoke();
+
+        assertThatThrownBy(() -> gateway.redeem(callerId, CODE, VERIFIER))
+                .isInstanceOfSatisfying(
+                        ExternalAccountException.class,
+                        e -> assertThat(e.getFailure())
+                                .isEqualTo(ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE));
+
+        server.verify();
+    }
+
+    @Test
+    void 채널_조회가_5xx이면_UNAVAILABLE이고_토큰은_폐기한다() {
+        expectTokenExchange();
+        server.expect(requestTo(startsWith(API_BASE + "/channels"))).andRespond(withServerError());
+        expectRevoke();
+
+        assertThatThrownBy(() -> gateway.redeem(callerId, CODE, VERIFIER))
+                .isInstanceOfSatisfying(
+                        ExternalAccountException.class,
+                        e -> assertThat(e.getFailure())
+                                .isEqualTo(ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE));
+
+        server.verify();
+    }
+
+    @Test
+    void 로그인한_계정에_채널이_없으면_YOUTUBE_CHANNEL_NOT_FOUND이고_토큰은_폐기한다() {
+        expectTokenExchange();
+        expectOwnChannel("{\"pageInfo\":{\"totalResults\":0}}");
+        expectRevoke();
+
+        assertThatThrownBy(() -> gateway.redeem(callerId, CODE, VERIFIER))
+                .isInstanceOfSatisfying(
+                        ExternalAccountException.class,
+                        e -> assertThat(e.getFailure()).isEqualTo(ExternalAccountFailure.YOUTUBE_CHANNEL_NOT_FOUND));
+
+        server.verify();
+    }
+
+    @Test
+    void API_키로_다시_조회한_채널이_공개가_아니면_YOUTUBE_CHANNEL_NOT_FOUND다() {
+        expectTokenExchange();
+        expectOwnChannel("{\"items\":[{\"id\":\"" + CHANNEL_ID + "\"}]}");
+        expectRevoke();
+        expectPublicCheck("{\"items\":[{\"id\":\"" + CHANNEL_ID + "\",\"status\":{\"privacyStatus\":\"private\"}}]}");
+
+        assertThatThrownBy(() -> gateway.redeem(callerId, CODE, VERIFIER))
+                .isInstanceOfSatisfying(
+                        ExternalAccountException.class,
+                        e -> assertThat(e.getFailure()).isEqualTo(ExternalAccountFailure.YOUTUBE_CHANNEL_NOT_FOUND));
+
+        server.verify();
+    }
+
+    @Test
+    void API_키로_다시_조회했는데_채널이_응답에_없으면_YOUTUBE_CHANNEL_NOT_FOUND다() {
+        expectTokenExchange();
+        expectOwnChannel("{\"items\":[{\"id\":\"" + CHANNEL_ID + "\"}]}");
+        expectRevoke();
+        expectPublicCheck("{\"pageInfo\":{\"totalResults\":0}}");
+
+        assertThatThrownBy(() -> gateway.redeem(callerId, CODE, VERIFIER))
+                .isInstanceOfSatisfying(
+                        ExternalAccountException.class,
+                        e -> assertThat(e.getFailure()).isEqualTo(ExternalAccountFailure.YOUTUBE_CHANNEL_NOT_FOUND));
+    }
+
+    @Test
+    void API_키_조회가_5xx이면_UNAVAILABLE이다() {
+        expectTokenExchange();
+        expectOwnChannel("{\"items\":[{\"id\":\"" + CHANNEL_ID + "\"}]}");
+        expectRevoke();
+        server.expect(requestTo(startsWith(API_BASE + "/channels"))).andRespond(withServerError());
+
+        assertThatThrownBy(() -> gateway.redeem(callerId, CODE, VERIFIER))
+                .isInstanceOfSatisfying(
+                        ExternalAccountException.class,
+                        e -> assertThat(e.getFailure())
+                                .isEqualTo(ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE));
+    }
+
+    @Test
+    void 토큰_폐기가_한_번_실패해도_다시_보내_성공하면_연결한다() {
+        expectTokenExchange();
+        expectOwnChannel("{\"items\":[{\"id\":\"" + CHANNEL_ID + "\"}]}");
+        server.expect(requestTo(REVOKE_URI)).andRespond(withServerError());
+        expectRevoke();
+        expectPublicCheck("{\"items\":[{\"id\":\"" + CHANNEL_ID + "\",\"status\":{\"privacyStatus\":\"public\"}}]}");
+
+        assertThat(gateway.redeem(callerId, CODE, VERIFIER).providerAccountId()).isEqualTo(CHANNEL_ID);
+
+        server.verify();
+    }
+
+    @Test
+    void 채널_조회에_성공했는데_토큰_폐기가_두_번_실패하면_UNAVAILABLE이고_API_키_확인은_하지_않는다() {
+        expectTokenExchange();
+        expectOwnChannel("{\"items\":[{\"id\":\"" + CHANNEL_ID + "\"}]}");
+        server.expect(requestTo(REVOKE_URI)).andRespond(withServerError());
+        server.expect(requestTo(REVOKE_URI)).andRespond(withServerError());
+
+        assertThatThrownBy(() -> gateway.redeem(callerId, CODE, VERIFIER))
+                .isInstanceOfSatisfying(
+                        ExternalAccountException.class,
+                        e -> assertThat(e.getFailure())
+                                .isEqualTo(ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE));
+
+        server.verify();
+    }
+
+    @Test
+    void 이미_실패한_경로에서_폐기가_두_번_실패하면_원래_오류를_주고_토큰_값_없이_오류_로그를_남긴다() {
+        Logger logger = (Logger) LoggerFactory.getLogger(GoogleYoutubeGateway.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            expectTokenExchange();
+            expectOwnChannel("{\"pageInfo\":{\"totalResults\":0}}");
+            server.expect(requestTo(REVOKE_URI)).andRespond(withServerError());
+            server.expect(requestTo(REVOKE_URI)).andRespond(withServerError());
+
+            assertThatThrownBy(() -> gateway.redeem(callerId, CODE, VERIFIER))
+                    .isInstanceOfSatisfying(
+                            ExternalAccountException.class,
+                            e -> assertThat(e.getFailure())
+                                    .isEqualTo(ExternalAccountFailure.YOUTUBE_CHANNEL_NOT_FOUND));
+
+            server.verify();
+            assertThat(appender.list).hasSize(1);
+            ILoggingEvent event = appender.list.get(0);
+            assertThat(event.getLevel()).isEqualTo(Level.ERROR);
+            assertThat(event.getFormattedMessage())
+                    .contains(callerId.toString())
+                    .contains("YOUTUBE_CHANNEL_NOT_FOUND")
+                    .doesNotContain(ACCESS_TOKEN)
+                    .doesNotContain("client-secret");
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    @Test
+    void 코드_교환이_시간_초과면_UNAVAILABLE이다() {
+        server.expect(requestTo(TOKEN_URI)).andRespond(request -> {
+            throw new IOException("응답 시간 초과");
+        });
+
+        assertThatThrownBy(() -> gateway.redeem(callerId, CODE, VERIFIER))
+                .isInstanceOfSatisfying(
+                        ExternalAccountException.class,
+                        e -> assertThat(e.getFailure())
+                                .isEqualTo(ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE));
+
         verifyNoInteractions(quota);
     }
 

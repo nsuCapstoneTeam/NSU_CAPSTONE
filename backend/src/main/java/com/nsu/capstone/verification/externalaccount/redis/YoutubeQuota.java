@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
@@ -73,13 +74,20 @@ public class YoutubeQuota {
     }
 
     private boolean reserve(List<String> keys, int units, int totalLimit, int callerLimit) {
-        Long newTotal = redis.execute(
-                RESERVE,
-                keys,
-                Integer.toString(units),
-                Integer.toString(totalLimit),
-                Integer.toString(callerLimit),
-                Long.toString(TTL_SECONDS));
+        Long newTotal;
+        try {
+            newTotal = redis.execute(
+                    RESERVE,
+                    keys,
+                    Integer.toString(units),
+                    Integer.toString(totalLimit),
+                    Integer.toString(callerLimit),
+                    Long.toString(TTL_SECONDS));
+        } catch (DataAccessException e) {
+            // 예산을 셀 수 없으면 YouTube를 부르지 않는 쪽이 안전하다. 호출한 쪽은 확보하지 못한 것과 같게 다룬다.
+            log.warn("YouTube 하루 예산 카운터를 쓸 수 없어 확보하지 못한 것으로 본다", e);
+            return false;
+        }
         if (newTotal == null || newTotal < 0) {
             return false;
         }
