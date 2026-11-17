@@ -25,6 +25,7 @@ import com.nsu.capstone.verification.externalaccount.provider.YoutubeCandidate;
 import com.nsu.capstone.verification.externalaccount.provider.YoutubeGateway;
 import com.nsu.capstone.verification.externalaccount.redis.AuthorizationStore;
 import com.nsu.capstone.verification.externalaccount.redis.CandidateCache;
+import com.nsu.capstone.verification.externalaccount.redis.DisplayCache;
 import com.nsu.capstone.verification.externalaccount.redis.ProfileCache;
 import com.nsu.capstone.verification.externalaccount.redis.YoutubeQuota;
 import com.nsu.capstone.verification.externalaccount.repository.ExternalAccountRepository;
@@ -74,6 +75,7 @@ public class ExternalAccountService {
     private final SpotifyGateway spotifyGateway;
     private final ProfileCache profileCache;
     private final CandidateCache candidateCache;
+    private final DisplayCache displayCache;
     private final YoutubeQuota youtubeQuota;
     private final ExternalAccountProperties properties;
     private final OAuthOpaqueValueService opaqueValues;
@@ -240,6 +242,34 @@ public class ExternalAccountService {
                 || workIds.stream().distinct().count() != workIds.size();
         if (invalid) {
             throw new ExternalAccountException(ExternalAccountFailure.VALIDATION_ERROR, "영상은 중복 없이 10개까지 고를 수 있다");
+        }
+    }
+
+    /**
+     * 연결을 해제한다(06 §9). 행과 고른 영상을 지우고 감사 DISCONNECTED를 남긴 뒤, 그 계정의 캐시를 지운다.
+     * 없거나 남의 계정이면 NOT_FOUND다. 응답을 못 받아 다시 보낸 요청이 NOT_FOUND면 이미 해제된 것이다.
+     */
+    public void disconnect(UUID artistId, UUID externalAccountId) {
+        ExternalAccount removed = transactionTemplate.execute(status -> {
+            LockedArtist locked = repository.lockArtist(artistId);
+            // 잠금을 잡은 뒤 다시 읽는다. 그사이 해제됐거나 남의 계정이면 없는 것과 같다
+            ExternalAccount account = ownedAccount(artistId, externalAccountId);
+            if (!repository.deleteById(locked, account.id())) {
+                throw new ExternalAccountException(ExternalAccountFailure.EXTERNAL_ACCOUNT_NOT_FOUND, "연결한 계정이 없다");
+            }
+            appendAudit(
+                    locked, artistId, account.id(), account.provider(), AuditEventType.DISCONNECTED, clock.instant());
+            return account;
+        });
+        evictCaches(removed);
+    }
+
+    /** 커밋 뒤 그 계정의 표시 정보·후보 캐시를 지운다(06 §6.5, §9). */
+    private void evictCaches(ExternalAccount account) {
+        displayCache.evict(account.id());
+        candidateCache.evict(account.id());
+        if (account.provider() == ExternalAccountProvider.SPOTIFY) {
+            profileCache.evict(ExternalAccountProvider.SPOTIFY, "artist", account.providerAccountId());
         }
     }
 

@@ -35,6 +35,10 @@ public class ProfileCache {
         }
     }
 
+    public void evict(ExternalAccountProvider provider, String kind, String providerId) {
+        redis.delete(RedisKeys.profile(provider, kind, providerId));
+    }
+
     public void put(ExternalAccountProvider provider, String kind, String providerId, ProviderProfile profile) {
         redis.opsForValue()
                 .set(RedisKeys.profile(provider, kind, providerId), objectMapper.writeValueAsString(profile), TTL);
