@@ -21,7 +21,7 @@ class LogSafetyListener implements ApplicationListener<ApplicationEnvironmentPre
     private static final String OWN_PACKAGE = "com.nsu.capstone";
 
     /** INFO에서도 원문을 찍는 로거. 이 로거와 그 아래 모든 자식 로거의 하한은 WARN이다. */
-    private static final List<String> WARN_FLOOR_LOGGERS = List.of(
+    static final List<String> WARN_FLOOR_LOGGERS = List.of(
             "org.apache.tomcat.util.http", "org.apache.coyote.http11.Http11Processor", "jdk.httpclient.HttpClient");
 
     @Override

@@ -34,6 +34,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
             "logging.level.web=DEBUG",
             "logging.level.org.springframework.web.client=DEBUG",
             "logging.level.org.hibernate.orm.jdbc.extract=TRACE",
+            "logging.level.org.apache.tomcat.util.http=DEBUG",
+            "logging.level.org.apache.tomcat.util.http.parser.Cookie=INFO",
+            "logging.level.org.apache.coyote.http11.Http11Processor=TRACE",
+            "logging.level.jdk.httpclient.HttpClient=INFO",
             "logging.level.com.nsu.capstone=DEBUG"
         })
 @Import(TestcontainersConfiguration.class)
@@ -81,6 +85,22 @@ class LogLevelFloorTest {
         assertThat(context.getLogger("com.nsu.capstone").getEffectiveLevel()).isEqualTo(Level.DEBUG);
         assertThat(output.getAll().lines().filter(line -> line.contains("ERROR") && line.contains("LogSafetyListener")))
                 .hasSize(1);
+    }
+
+    @Test
+    void INFO에서도_원문을_찍는_로거는_자식을_포함해_낮은_레벨을_줘도_WARN이다() {
+        LoggerContext context = LoggerLevels.context();
+
+        for (String name : List.of(
+                "org.apache.tomcat.util.http",
+                "org.apache.tomcat.util.http.parser.Cookie",
+                "org.apache.tomcat.util.http.parser.SomeNewChild",
+                "org.apache.coyote.http11.Http11Processor",
+                "jdk.httpclient.HttpClient")) {
+            assertThat(context.getLogger(name).getEffectiveLevel())
+                    .as("%s 실효 레벨", name)
+                    .isEqualTo(Level.WARN);
+        }
     }
 
     @Test
