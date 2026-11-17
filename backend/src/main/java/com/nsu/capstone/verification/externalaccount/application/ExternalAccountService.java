@@ -21,9 +21,12 @@ import com.nsu.capstone.verification.externalaccount.domain.ThumbnailPolicy;
 import com.nsu.capstone.verification.externalaccount.provider.FetchedAccount;
 import com.nsu.capstone.verification.externalaccount.provider.ProviderProfile;
 import com.nsu.capstone.verification.externalaccount.provider.SpotifyGateway;
+import com.nsu.capstone.verification.externalaccount.provider.YoutubeCandidate;
 import com.nsu.capstone.verification.externalaccount.provider.YoutubeGateway;
 import com.nsu.capstone.verification.externalaccount.redis.AuthorizationStore;
+import com.nsu.capstone.verification.externalaccount.redis.CandidateCache;
 import com.nsu.capstone.verification.externalaccount.redis.ProfileCache;
+import com.nsu.capstone.verification.externalaccount.redis.YoutubeQuota;
 import com.nsu.capstone.verification.externalaccount.repository.ExternalAccountRepository;
 import com.nsu.capstone.verification.externalaccount.repository.LockedArtist;
 import java.nio.charset.StandardCharsets;
@@ -38,7 +41,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -53,6 +58,14 @@ public class ExternalAccountService {
 
     private static final String YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
 
+    /** 작업물 후보 한 번의 YouTube 비용(업로드 재생목록 조회 + 영상 상세 조회 등, 06 §11.2). */
+    private static final int CANDIDATE_UNITS = 3;
+
+    /** 계정마다 고를 수 있는 영상의 최대 개수(06 §8). */
+    private static final int MAX_WORKS = 10;
+
+    private final SingleFlight candidateFlight = new SingleFlight();
+
     private final ArtistReadAccess artistReadAccess;
     private final DisplayInfoLoader displayInfoLoader;
     private final ExternalAccountRepository repository;
@@ -60,6 +73,8 @@ public class ExternalAccountService {
     private final YoutubeGateway youtubeGateway;
     private final SpotifyGateway spotifyGateway;
     private final ProfileCache profileCache;
+    private final CandidateCache candidateCache;
+    private final YoutubeQuota youtubeQuota;
     private final ExternalAccountProperties properties;
     private final OAuthOpaqueValueService opaqueValues;
     private final UserIdGenerator idGenerator;
@@ -73,7 +88,7 @@ public class ExternalAccountService {
      * @param replaceExternalAccountId 교체를 승인한 지금 연결의 ID. 그 플랫폼 계정이 없으면 {@code null}
      */
     public AuthorizationStart startAuthorization(UUID artistId, UUID replaceExternalAccountId) {
-        requireYoutubeEnabled();
+        requireEnabled(ExternalAccountProvider.YOUTUBE);
         UUID currentId = repository
                 .findByArtistAndProvider(artistId, ExternalAccountProvider.YOUTUBE)
                 .map(ExternalAccount::id)
@@ -109,7 +124,11 @@ public class ExternalAccountService {
      */
     public List<AccountView> linksOf(UUID callerId, UserRole callerRole, UUID artistId) {
         artistReadAccess.require(callerId, callerRole, artistId);
-        List<ExternalAccount> accounts = repository.findByArtist(artistId).stream()
+        return viewsOf(callerId, repository.findByArtist(artistId));
+    }
+
+    private List<AccountView> viewsOf(UUID callerId, List<ExternalAccount> unsorted) {
+        List<ExternalAccount> accounts = unsorted.stream()
                 .sorted(Comparator.comparing(ExternalAccount::provider))
                 .toList();
         Map<UUID, List<SelectedWork>> works = new HashMap<>();
@@ -149,6 +168,121 @@ public class ExternalAccountService {
                 workViews);
     }
 
+    /**
+     * 아티스트가 고를 수 있는 공개 영상 후보(06 §7). 최신순 최대 50개이고, 지금 고른 영상에 표시한다.
+     */
+    public List<CandidateView> workCandidates(UUID artistId, UUID externalAccountId) {
+        ExternalAccount account = ownedYoutubeAccount(artistId, externalAccountId);
+        List<YoutubeCandidate> candidates = candidatesOf(artistId, account);
+        Set<String> selected = repository.findWorks(account.id()).stream()
+                .map(SelectedWork::providerWorkId)
+                .collect(Collectors.toSet());
+        return candidates.stream()
+                .map(candidate -> new CandidateView(
+                        candidate.videoId(),
+                        ProviderLink.youtubeVideo(candidate.videoId()).value(),
+                        DisplayText.clean(candidate.title(), DisplayText.TITLE_MAX),
+                        ThumbnailPolicy.allowedOrNull(candidate.thumbnailUrl()),
+                        candidate.publishedAt(),
+                        selected.contains(candidate.videoId())))
+                .toList();
+    }
+
+    /**
+     * 고른 영상 전체를 바꾼다(06 §8). 표시 순서는 {@code workIds}의 순서다. 0~10개, 중복 없음.
+     * 각 ID는 지금 후보에 있거나 이미 고른 영상이어야 한다.
+     */
+    public AccountView chooseWorks(UUID artistId, UUID externalAccountId, List<String> workIds) {
+        validateWorkIds(workIds);
+        ExternalAccount account = ownedYoutubeAccount(artistId, externalAccountId);
+
+        // 1단계(잠금 밖): 지금 고른 영상을 읽어 새 ID가 있는지만 본다. 이 값은 "후보를 받을지"를 고르는 데에만 쓴다.
+        Set<String> selectedOutsideLock = repository.findWorks(account.id()).stream()
+                .map(SelectedWork::providerWorkId)
+                .collect(Collectors.toSet());
+        boolean hasNewWork = workIds.stream().anyMatch(id -> !selectedOutsideLock.contains(id));
+        Set<String> candidateIds = hasNewWork
+                ? candidatesOf(artistId, account).stream()
+                        .map(YoutubeCandidate::videoId)
+                        .collect(Collectors.toSet())
+                : Set.of();
+
+        // 2단계(잠금 안): 계정이 아직 있는지와 지금 고른 영상을 다시 읽고, 그 값으로만 판단한다(ADR 8번 일반 규칙).
+        transactionTemplate.executeWithoutResult(status -> {
+            LockedArtist locked = repository.lockArtist(artistId);
+            ExternalAccount current = ownedAccount(artistId, externalAccountId);
+            Map<String, SelectedWork> existing = repository.findWorks(current.id()).stream()
+                    .collect(Collectors.toMap(SelectedWork::providerWorkId, work -> work));
+            Instant now = clock.instant();
+            List<SelectedWork> chosen = workIds.stream()
+                    .map(id -> {
+                        SelectedWork kept = existing.get(id);
+                        if (kept != null) {
+                            return kept;
+                        }
+                        if (!candidateIds.contains(id)) {
+                            throw new ExternalAccountException(
+                                    ExternalAccountFailure.EXTERNAL_ACCOUNT_WORK_NOT_CANDIDATE, "후보에도 기존 선택에도 없는 영상이다");
+                        }
+                        return new SelectedWork(id, now);
+                    })
+                    .toList();
+            repository.replaceWorks(locked, current.id(), chosen);
+        });
+        return viewsOf(artistId, List.of(ownedAccount(artistId, externalAccountId)))
+                .get(0);
+    }
+
+    private static void validateWorkIds(List<String> workIds) {
+        boolean invalid = workIds == null
+                || workIds.size() > MAX_WORKS
+                || workIds.stream().anyMatch(id -> id == null || id.isBlank())
+                || workIds.stream().distinct().count() != workIds.size();
+        if (invalid) {
+            throw new ExternalAccountException(ExternalAccountFailure.VALIDATION_ERROR, "영상은 중복 없이 10개까지 고를 수 있다");
+        }
+    }
+
+    /** 내 계정이 아니면 없는 것과 같다. 다른 아티스트 계정의 존재를 드러내지 않는다(06 §2). */
+    private ExternalAccount ownedAccount(UUID artistId, UUID externalAccountId) {
+        return repository
+                .findById(externalAccountId)
+                .filter(account -> account.artistId().equals(artistId))
+                .orElseThrow(() ->
+                        new ExternalAccountException(ExternalAccountFailure.EXTERNAL_ACCOUNT_NOT_FOUND, "연결한 계정이 없다"));
+    }
+
+    private ExternalAccount ownedYoutubeAccount(UUID artistId, UUID externalAccountId) {
+        ExternalAccount account = ownedAccount(artistId, externalAccountId);
+        if (account.provider() != ExternalAccountProvider.YOUTUBE) {
+            throw new ExternalAccountException(
+                    ExternalAccountFailure.EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED, "이 플랫폼은 작업물을 고를 수 없다");
+        }
+        return account;
+    }
+
+    /** 10분 캐시. 비면 YouTube 비용 3 units를 호출자에게 매기고 받는다. 동시 요청은 한 번으로 합친다. */
+    private List<YoutubeCandidate> candidatesOf(UUID callerId, ExternalAccount account) {
+        Optional<List<YoutubeCandidate>> cached = candidateCache.get(account.id());
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+        requireEnabled(ExternalAccountProvider.YOUTUBE);
+        return candidateFlight.run("candidates:" + account.id(), () -> {
+            Optional<List<YoutubeCandidate>> filledMeanwhile = candidateCache.get(account.id());
+            if (filledMeanwhile.isPresent()) {
+                return filledMeanwhile.get();
+            }
+            if (!youtubeQuota.tryReserve(callerId, CANDIDATE_UNITS)) {
+                throw new ExternalAccountException(
+                        ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE, "YouTube 하루 예산을 확보하지 못했다");
+            }
+            List<YoutubeCandidate> fetched = youtubeGateway.fetchUploads(account.providerAccountId());
+            candidateCache.put(account.id(), fetched);
+            return fetched;
+        });
+    }
+
     public ConnectResult connect(UUID artistId, ConnectRequest request) {
         return switch (request) {
             case ConnectRequest.YoutubeConnect youtube -> connectYoutube(artistId, youtube);
@@ -157,10 +291,7 @@ public class ExternalAccountService {
     }
 
     private ConnectResult connectSpotify(UUID artistId, ConnectRequest.SpotifyConnect request) {
-        if (!properties.spotify().enabled()) {
-            throw new ExternalAccountException(
-                    ExternalAccountFailure.EXTERNAL_PROVIDER_DISABLED, "Spotify 연결이 설정으로 꺼져 있다");
-        }
+        requireEnabled(ExternalAccountProvider.SPOTIFY);
         String spotifyArtistId = SpotifyArtistUrl.parseArtistId(request.url());
         // 1시간 안에 확인한 결과가 있으면 Spotify를 다시 부르지 않는다(06 §5.3)
         if (profileCache
@@ -177,7 +308,7 @@ public class ExternalAccountService {
     }
 
     private ConnectResult connectYoutube(UUID artistId, ConnectRequest.YoutubeConnect request) {
-        requireYoutubeEnabled();
+        requireEnabled(ExternalAccountProvider.YOUTUBE);
         AuthorizationFlow flow = authorizationStore
                 .consume(opaqueValues.digest(request.state()), artistId)
                 .orElseThrow(ExternalAccountService::authorizationInvalid);
@@ -260,10 +391,14 @@ public class ExternalAccountService {
                 ExternalAccountFailure.EXTERNAL_ACCOUNT_AUTHORIZATION_INVALID, "연결 진행 정보가 없거나 맞지 않다");
     }
 
-    private void requireYoutubeEnabled() {
-        if (!properties.youtube().enabled()) {
+    private void requireEnabled(ExternalAccountProvider provider) {
+        boolean enabled = switch (provider) {
+            case YOUTUBE -> properties.youtube().enabled();
+            case SPOTIFY -> properties.spotify().enabled();
+        };
+        if (!enabled) {
             throw new ExternalAccountException(
-                    ExternalAccountFailure.EXTERNAL_PROVIDER_DISABLED, "YouTube 연결이 설정으로 꺼져 있다");
+                    ExternalAccountFailure.EXTERNAL_PROVIDER_DISABLED, provider + " 연결이 설정으로 꺼져 있다");
         }
     }
 

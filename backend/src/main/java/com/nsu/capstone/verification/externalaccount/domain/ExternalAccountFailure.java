@@ -6,6 +6,14 @@ public enum ExternalAccountFailure {
     EXTERNAL_ACCOUNT_AUTHORIZATION_INVALID,
     /** 요청의 replaceExternalAccountId(연결 요청에서는 시작 때 고정한 값)가 그 플랫폼의 지금 연결과 다름 */
     EXTERNAL_ACCOUNT_CONNECTION_CHANGED,
+    /** 없거나 남의 계정. 다른 아티스트 계정의 존재를 드러내지 않는다 */
+    EXTERNAL_ACCOUNT_NOT_FOUND,
+    /** Spotify 계정의 작업물 요청 */
+    EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED,
+    /** 후보에도 기존 선택에도 없는 영상 */
+    EXTERNAL_ACCOUNT_WORK_NOT_CANDIDATE,
+    /** 영상 ID 목록이 11개 이상이거나 중복·빈 문자열을 담음 */
+    VALIDATION_ERROR,
     /** Spotify에 그 아티스트가 없음 */
     SPOTIFY_ARTIST_NOT_FOUND,
     /** Spotify 주소 형식 오류 */

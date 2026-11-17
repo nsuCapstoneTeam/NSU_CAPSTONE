@@ -8,9 +8,13 @@ import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountExcep
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
 import com.nsu.capstone.verification.externalaccount.redis.YoutubeQuota;
 import java.net.URI;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +51,9 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     private static final String REGISTRATION_ID = "youtube-link";
     private static final int CONNECT_UNITS = 2;
     private static final int REVOKE_ATTEMPTS = 2;
+    /** 작업물 후보는 최신 공개 영상 50개까지다(06 §7). */
+    private static final int UPLOADS_LIMIT = 50;
+
     private static final Set<String> CODE_REJECTED_ERRORS = Set.of("invalid_grant", "invalid_request");
 
     private final ExternalAccountProperties.Youtube youtube;
@@ -138,20 +145,21 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     }
 
     private ChannelList getWithApiKey(String path, String part, String ids) {
+        return getWithApiKey(path, Map.of("part", part, "id", ids));
+    }
+
+    private ChannelList getWithApiKey(String path, Map<String, String> params) {
+        UriComponentsBuilder uri = UriComponentsBuilder.fromUriString(youtube.apiBaseUri() + path);
+        params.forEach(uri::queryParam);
         try {
             return readRestClient
                     .get()
-                    .uri(UriComponentsBuilder.fromUriString(youtube.apiBaseUri() + path)
-                            .queryParam("part", part)
-                            .queryParam("id", ids)
-                            .queryParam("key", youtube.apiKey())
-                            .build()
-                            .toUri())
+                    .uri(uri.queryParam("key", youtube.apiKey()).build().toUri())
                     .retrieve()
                     .body(ChannelList.class);
         } catch (RestClientException e) {
             // API 키와 URL은 예외 메시지에 들어 있을 수 있어 메시지를 옮기지 않는다
-            throw unavailable("YouTube 표시 정보를 받지 못했다");
+            throw unavailable("YouTube 정보를 받지 못했다");
         }
     }
 
@@ -164,6 +172,72 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
                 ? null
                 : thumbnails.medium() != null ? thumbnails.medium() : thumbnails.defaultThumbnail();
         return new ProviderProfile(snippet.title(), picked == null ? null : picked.url());
+    }
+
+    @Override
+    public List<YoutubeCandidate> fetchUploads(String channelId) {
+        ChannelList channels = getWithApiKey("/channels", "contentDetails", channelId);
+        String uploadsPlaylist =
+                channels == null || channels.items() == null || channels.items().isEmpty()
+                        ? null
+                        : uploadsOf(channels.items().get(0));
+        if (uploadsPlaylist == null) {
+            return List.of();
+        }
+        ChannelList playlistItems = getWithApiKey(
+                "/playlistItems", Map.of("part", "contentDetails", "playlistId", uploadsPlaylist, "maxResults", "50"));
+        List<String> videoIds = playlistItems == null || playlistItems.items() == null
+                ? List.of()
+                : playlistItems.items().stream()
+                        .map(item -> item.contentDetails() == null
+                                ? null
+                                : item.contentDetails().videoId())
+                        .filter(Objects::nonNull)
+                        .toList();
+        if (videoIds.isEmpty()) {
+            return List.of();
+        }
+        ChannelList videos = getWithApiKey("/videos", "snippet,status", String.join(",", videoIds));
+        if (videos == null || videos.items() == null) {
+            return List.of();
+        }
+        return videos.items().stream()
+                .filter(video -> video.id() != null
+                        && video.status() != null
+                        && "public".equals(video.status().privacyStatus()))
+                .map(video -> {
+                    ProviderProfile profile = profileOf(video.snippet());
+                    return new YoutubeCandidate(
+                            video.id(),
+                            profile.displayName(),
+                            profile.thumbnailUrl(),
+                            parseInstant(
+                                    video.snippet() == null
+                                            ? null
+                                            : video.snippet().publishedAt()));
+                })
+                .sorted(Comparator.comparing(
+                        YoutubeCandidate::publishedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(UPLOADS_LIMIT)
+                .toList();
+    }
+
+    private static String uploadsOf(ChannelList.Channel channel) {
+        if (channel.contentDetails() == null || channel.contentDetails().relatedPlaylists() == null) {
+            return null;
+        }
+        return channel.contentDetails().relatedPlaylists().uploads();
+    }
+
+    private static Instant parseInstant(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Instant.parse(value);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
     }
 
     /** 폐기를 보내고, 실패하면 한 번 더 보낸다. 폐기를 확인했는지 돌려준다. */
@@ -282,10 +356,16 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     private record ChannelList(List<Channel> items) {
 
         @JsonIgnoreProperties(ignoreUnknown = true)
-        private record Channel(String id, Snippet snippet, Status status) {}
+        private record Channel(String id, Snippet snippet, Status status, ContentDetails contentDetails) {}
 
         @JsonIgnoreProperties(ignoreUnknown = true)
-        private record Snippet(String title, Thumbnails thumbnails) {}
+        private record ContentDetails(RelatedPlaylists relatedPlaylists, String videoId) {}
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        private record RelatedPlaylists(String uploads) {}
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        private record Snippet(String title, String publishedAt, Thumbnails thumbnails) {}
 
         @JsonIgnoreProperties(ignoreUnknown = true)
         private record Thumbnails(@JsonProperty("default") Thumbnail defaultThumbnail, Thumbnail medium) {}

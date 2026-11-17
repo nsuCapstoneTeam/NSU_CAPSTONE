@@ -15,6 +15,11 @@ final class RedisKeys {
         return PREFIX + "meta:" + provider + ":" + kind + ":" + providerId;
     }
 
+    /** 작업물 후보 응답 전체. */
+    static String candidates(UUID externalAccountId) {
+        return PREFIX + "candidates:" + externalAccountId;
+    }
+
     /** YouTube 계정의 표시 정보(채널과 고른 영상). */
     static String display(UUID externalAccountId) {
         return PREFIX + "display:" + externalAccountId;

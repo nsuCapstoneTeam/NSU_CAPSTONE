@@ -20,4 +20,10 @@ public interface YoutubeGateway {
      * 실패(시간 초과, 429, 5xx, 403 등)는 EXTERNAL_PROVIDER_UNAVAILABLE이다. 호출 비용은 부르는 쪽이 먼저 확보한다.
      */
     YoutubeDisplay fetchDisplay(String channelId, List<String> videoIds);
+
+    /**
+     * 채널 업로드 재생목록의 공개 영상을 최신순으로 최대 50개 받는다(06 §7). API 키를 쓰고 비용은 3 units다.
+     * 부르는 쪽이 먼저 확보한다. 실패는 EXTERNAL_PROVIDER_UNAVAILABLE이다.
+     */
+    List<YoutubeCandidate> fetchUploads(String channelId);
 }
