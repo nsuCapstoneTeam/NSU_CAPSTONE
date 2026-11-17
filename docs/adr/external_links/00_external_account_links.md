@@ -469,7 +469,7 @@ A로 정했다(2026-11-16 사용자 결정).
 ### 모듈과 패키지
 
 - 모듈 하나가 연결의 단일 소유자다: `com.nsu.capstone.verification.externalaccount`. ADR 06 §19의 최상위 `verification/`이고, 기존 `identity/verification`(이메일·휴대폰 OTP)과 다르다.
-- 하위 패키지는 저장소 관례대로 `presentation`, `application`, `repository`, `provider`를 쓴다.
+- 하위 패키지는 저장소 관례대로 `domain`(값 타입: `ExternalAccountProvider`, `ProviderLink`, 감사 enum), `presentation`, `application`, `repository`, `provider`를 쓴다.
 - 서비스 `ExternalAccountService`의 공개 메서드: `startAuthorization`, `connect`, `workCandidates`, `chooseWorks`, `disconnect`, `linksOf`. ID 확인 작업은 `ExternalAccountRefreshJob`이 맡는다.
 - 다른 모듈은 이 모듈을 import하지 않는다. Trust Profile에는 이 모듈의 `VerificationSource` 구현을 Spring이 주입한다(인터페이스는 `trust`에 있다).
 

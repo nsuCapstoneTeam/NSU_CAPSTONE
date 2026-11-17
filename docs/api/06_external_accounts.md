@@ -65,7 +65,7 @@ YouTube만 받는다. Spotify는 바로 §5로 연결한다.
 | 필드 | 타입 | 규칙 |
 |---|---|---|
 | `provider` | enum | `YOUTUBE`. `SPOTIFY`·빈 값·모르는 값은 `400 VALIDATION_ERROR` |
-| `replaceExternalAccountId` | UUID \| null, 키 필수 | 교체하기로 사용자가 승인한 지금 연결의 ID. 그 플랫폼 계정이 없으면 `null`. 키가 없거나 형식이 틀리면 `400 VALIDATION_ERROR` |
+| `replaceExternalAccountId` | UUID \| null | 교체하기로 사용자가 승인한 지금 연결의 ID. 그 플랫폼 계정이 없으면 `null`. 키가 빠지면 `null`로 본다. 형식이 틀리면 `400 VALIDATION_ERROR`. 키 누락을 따로 거절하지 않는 이유: 기존 연결이 있는데 `null`이 오면 아래 비교에서 `409`가 되므로, 실수로 빠뜨려도 연결이 바뀌지 않는다 |
 
 응답 `200`:
 
@@ -120,7 +120,7 @@ Spotify:
 | `provider` | 필수 enum |
 | `oauth.state`, `oauth.code` | YouTube에서 필수, 각 1~2048자. Spotify에서 보내면 `400 VALIDATION_ERROR` |
 | `url` | Spotify에서 필수, 2048자 이하. YouTube에서 보내면 `400 VALIDATION_ERROR` |
-| `replaceExternalAccountId` | Spotify에서 키 필수, UUID \| null(§3과 같은 뜻). YouTube는 §3에서 고정한 값을 쓰고 이 필드를 보내면 `400 VALIDATION_ERROR` |
+| `replaceExternalAccountId` | Spotify에서 UUID \| null(§3과 같은 뜻, 빠지면 `null`). YouTube는 §3에서 고정한 값을 쓰고 이 필드를 보내면 `400 VALIDATION_ERROR` |
 
 Spotify 주소로 받는 형식: `https://open.spotify.com/artist/{id}`, `https://open.spotify.com/intl-{언어}/artist/{id}`(쿼리·조각은 무시), `spotify:artist:{id}`. `{id}`는 base62 22자다. 다른 형식은 `400 EXTERNAL_ACCOUNT_URL_INVALID`다.
 
@@ -378,7 +378,7 @@ DB·Redis가 관여하는 경우는 Testcontainers(PostgreSQL, Redis)로 확인�
 | 조회 접근 | ARTIST 본인 `200`, 남의 `artistId`는 대상 조회 전에 `403`. EVENT_PARTNER는 ACTIVE ARTIST `200`, 없음·EVENT_PARTNER·SUSPENDED·WITHDRAWN 모두 `404 ARTIST_NOT_FOUND` |
 | DEMO | 허용 목록 밖 계정의 시작·연결·고르기·해제는 `403 DEMO_WRITE_NOT_ALLOWED`이고 Redis·DB가 바뀌지 않는다. 콜백 `GET`은 `302` |
 | 시작 | 응답에 `authorizationUrl`(PKCE `S256`, `state`, scope `youtube.readonly`)과 결합 쿠키(`HttpOnly; Secure; SameSite=Lax; Path=/`, `Max-Age=660`)가 있다. Redis 값에 nonce 원문·토큰이 없다. `provider: SPOTIFY`는 `400 VALIDATION_ERROR` |
-| 시작 교체 확인 | 같은 플랫폼 계정 X가 있는데 `replaceExternalAccountId`가 `null`이거나 다른 ID면 `409 EXTERNAL_ACCOUNT_CONNECTION_CHANGED`이고 Redis 키가 생기지 않는다. 계정이 없는데 ID를 보내도 `409`. 키가 없으면 `400 VALIDATION_ERROR` |
+| 시작 교체 확인 | 같은 플랫폼 계정 X가 있는데 `replaceExternalAccountId`가 `null`이거나 다른 ID면 `409 EXTERNAL_ACCOUNT_CONNECTION_CHANGED`이고 Redis 키가 생기지 않는다. 계정이 없는데 ID를 보내도 `409`. 키를 빠뜨리면 `null`과 같다(계정 X가 있으면 `409`, 없으면 진행) |
 | 교체 경쟁 | 기기 A가 X 교체로 시작 → 기기 B가 X를 Y로 교체하고 영상을 고름 → A의 연결 요청은 `409 EXTERNAL_ACCOUNT_CONNECTION_CHANGED`이고 Y와 그 영상, 감사 기록이 그대로다. A 시작 뒤 X를 해제한 경우, `null`로 시작한 뒤 다른 탭이 연결한 경우도 `409`다. 같은 채널을 다시 연결하면 기대 값과 관계없이 `200`이고 아무것도 바뀌지 않는다. Spotify도 같은 규칙이다 |
 | 콜백 | `code`·`state`는 프론트 주소로 `302`, `access_denied`는 `linkError=..._DENIED`. `Referrer-Policy: no-referrer`, `Cache-Control: no-store`. Redis·DB·외부 호출이 없다. 쿼리로 다른 주소를 넣어도 설정된 프론트 주소로만 간다 |
 | 결합 | 쿠키 없음, 다른 nonce, 다른 사용자 토큰으로 보낸 `state`는 모두 `400 EXTERNAL_ACCOUNT_AUTHORIZATION_INVALID`. 다른 사용자 토큰으로 보낸 요청은 원래 사용자의 Redis 값을 지우지 않는다 |
