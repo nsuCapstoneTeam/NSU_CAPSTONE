@@ -2,6 +2,7 @@ package com.nsu.capstone.global.logging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,22 @@ class LogDeviceSelfCheckTest {
                 .contains(expectedItem)
                 .doesNotContain(ForkedMain.STARTED)
                 .doesNotContain(LogDeviceCheck.PROBE);
+    }
+
+    /** 검사는 시험 이벤트를 쓰지 않고 인코딩만 한다. 파일 어펜더가 붙어 있어도 로그 파일에 시험 문자열이 없어야 한다. */
+    @Test
+    void 파일_어펜더를_붙이면_시작을_멈추고_로그_파일에도_시험_문자열이_없다(@TempDir Path directory) throws Exception {
+        Path logFile = directory.resolve("self-check.log");
+
+        ForkedJvm.Result result = ForkedJvm.run(List.of("-Dlogging.file.name=" + logFile), Map.of(), "light");
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
+        assertThat(result.output())
+                .contains(STOPPED_BY_CHECK)
+                .contains("어펜더가 2개다")
+                .doesNotContain(ForkedMain.STARTED)
+                .doesNotContain(LogDeviceCheck.PROBE);
+        assertThat(logFile).exists().content(StandardCharsets.UTF_8).doesNotContain(LogDeviceCheck.PROBE);
     }
 
     @Test
@@ -136,7 +153,6 @@ class LogDeviceSelfCheckTest {
 
     /** 이름, JVM 인자, 환경 변수, 오류에 담겨야 할 어긋난 항목 */
     static Stream<Arguments> tamperedSettings() {
-        Path logFile = Path.of(System.getProperty("java.io.tmpdir"), "log-device-self-check.log");
         return Stream.of(
                 Arguments.of("LOG_FORMAT 빈 값", List.of(), Map.of("LOG_FORMAT", ""), "출력이 JSON이 아니다"),
                 Arguments.of("LOG_FORMAT=ecs", List.of(), Map.of("LOG_FORMAT", "ecs"), "출력에 필드가 없다: level"),
@@ -168,7 +184,6 @@ class LogDeviceSelfCheckTest {
                         List.of("-Dlogging.structured.json.exclude=requestId"),
                         Map.of(),
                         "출력에 필드가 없다: requestId"),
-                Arguments.of("파일 어펜더", List.of("-Dlogging.file.name=" + logFile), Map.of(), "어펜더가 2개다"),
                 Arguments.of(
                         "콘솔 임계값 ERROR",
                         List.of("-Dlogging.threshold.console=ERROR"),
