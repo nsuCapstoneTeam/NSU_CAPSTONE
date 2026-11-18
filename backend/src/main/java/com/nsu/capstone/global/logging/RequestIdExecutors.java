@@ -1,5 +1,6 @@
 package com.nsu.capstone.global.logging;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.AbstractExecutorService;
@@ -35,8 +36,21 @@ public final class RequestIdExecutors {
         @Override
         public void execute(Runnable command) {
             // 일을 넘기는 순간의 MDC다. 작업이 실제로 도는 때가 아니다.
-            Map<String, String> submitterContext = MDC.getCopyOfContextMap();
-            delegate.execute(() -> runWithContext(submitterContext, command));
+            delegate.execute(new ContextRunnable(MDC.getCopyOfContextMap(), command));
+        }
+
+        /** 넘긴 쪽의 MDC를 들고 가는 작업. shutdownNow()가 원래 작업을 돌려줄 수 있게 command를 그대로 보관한다. */
+        @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
+        private static final class ContextRunnable implements Runnable {
+
+            private final Map<String, String> submitterContext;
+
+            private final Runnable command;
+
+            @Override
+            public void run() {
+                runWithContext(submitterContext, command);
+            }
         }
 
         /**
@@ -66,9 +80,14 @@ public final class RequestIdExecutors {
             delegate.shutdown();
         }
 
+        /** 큐에 남은 작업을 넘긴 그대로 돌려준다. submit()한 작업은 호출자가 취소할 수 있는 FutureTask다. */
         @Override
         public List<Runnable> shutdownNow() {
-            return delegate.shutdownNow();
+            List<Runnable> pending = new ArrayList<>();
+            for (Runnable queued : delegate.shutdownNow()) {
+                pending.add(queued instanceof ContextRunnable wrapper ? wrapper.command : queued);
+            }
+            return pending;
         }
 
         @Override

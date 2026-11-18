@@ -7,12 +7,15 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.AppenderBase;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -153,6 +156,44 @@ class RequestIdExecutorsTest {
         assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
         assertThat(delegate.isTerminated()).isTrue();
         assertThat(executor.isTerminated()).isTrue();
+    }
+
+    /**
+     * 직접 submit한 실행기는 shutdownNow()가 큐의 FutureTask를 돌려주고, 호출자는 그것을 취소해 Future.get() 대기를 풀 수 있다. 래퍼가
+     * 자기 Runnable을 돌려주면 Future만 취소하는 호출자는 이 작업을 건너뛰고 get()이 끝나지 않는다.
+     */
+    @Test
+    void shutdownNow가_돌려준_작업으로_큐에_남은_submit_작업의_Future를_취소할_수_있다() throws Exception {
+        occupyWorkerThread();
+        Future<String> queued = executor.submit(() -> "실행되지 않는다");
+
+        List<Runnable> pending = executor.shutdownNow();
+
+        assertThat(pending).singleElement().isInstanceOf(Future.class);
+        ((Future<?>) pending.getFirst()).cancel(false);
+        assertThat(queued.isCancelled()).isTrue();
+    }
+
+    @Test
+    void shutdownNow는_execute로_넘긴_작업을_넘긴_그대로_돌려준다() throws Exception {
+        occupyWorkerThread();
+        Runnable queued = () -> {};
+        executor.execute(queued);
+
+        List<Runnable> pending = executor.shutdownNow();
+
+        assertThat(pending).containsExactly(queued);
+    }
+
+    /** 작업 스레드 하나를 붙잡아 둔다. 이 뒤에 넘긴 작업은 큐에서 기다린다. shutdownNow()가 인터럽트하면 풀린다. */
+    private void occupyWorkerThread() throws InterruptedException {
+        CountDownLatch running = new CountDownLatch(1);
+        CountDownLatch never = new CountDownLatch(1);
+        executor.submit(() -> {
+            running.countDown();
+            return never.await(30, TimeUnit.SECONDS);
+        });
+        assertThat(running.await(5, TimeUnit.SECONDS)).as("붙잡는 작업이 시작했다").isTrue();
     }
 
     @Test
