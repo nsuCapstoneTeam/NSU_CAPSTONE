@@ -179,7 +179,7 @@ class OpenApiDocsIntegrationTest {
 
         assertThat(publicApis).hasSize(19);
         assertThat(publicApisWithAuth).isEmpty();
-        assertThat(otherApis).hasSize(17);
+        assertThat(otherApis).hasSize(20);
         assertThat(otherApisWithOverride).isEmpty();
     }
 
@@ -222,6 +222,9 @@ class OpenApiDocsIntegrationTest {
         if (path.contains("external-accounts")) {
             return "외부 계정";
         }
+        if (path.startsWith("/api/v1/me/identity-verification")) {
+            return "실명 본인확인";
+        }
         if (path.startsWith("/api/v1/artists/")) {
             return "Trust Profile";
         }
@@ -244,8 +247,11 @@ class OpenApiDocsIntegrationTest {
         put    | /api/v1/me/external-accounts/{externalAccountId}/works | 200 | ExternalAccountResponse
         delete | /api/v1/me/external-accounts/{externalAccountId} | 204 | ''
         get    | /api/v1/artists/{artistId}/external-accounts | 200 | ExternalAccountListResponse
+        get    | /api/v1/me/identity-verification       | 200 | IdentityStatusResponse
+        post   | /api/v1/me/identity-verification/attempts | 201 | StartedAttemptResponse
+        put    | /api/v1/me/identity-verification/attempts/{identityVerificationId}/completion | 200 | IdentityStatusResponse
         """)
-    @DisplayName("행사·지역·외부 계정 API의 성공 상태와 응답 스키마를 적는다")
+    @DisplayName("행사·지역·외부 계정·실명 본인확인 API의 성공 상태와 응답 스키마를 적는다")
     void documentsSuccessStatusAndSchema(String method, String path, String status, String schema) throws Exception {
         JsonNode responses = operation(method, path).path("responses");
 
@@ -270,6 +276,9 @@ class OpenApiDocsIntegrationTest {
         put    | /api/v1/me/external-accounts/{externalAccountId}/works
         delete | /api/v1/me/external-accounts/{externalAccountId}
         get    | /api/v1/artists/{artistId}/external-accounts
+        get    | /api/v1/me/identity-verification
+        post   | /api/v1/me/identity-verification/attempts
+        put    | /api/v1/me/identity-verification/attempts/{identityVerificationId}/completion
         """)
     @DisplayName("인증이 필요한 API에 401 AUTHENTICATION_REQUIRED를 적는다")
     void documentsUnauthorizedResponse(String method, String path) throws Exception {
@@ -295,8 +304,11 @@ class OpenApiDocsIntegrationTest {
         put    | /api/v1/me/external-accounts/{externalAccountId}/works | 400=INVALID_EXTERNAL_ACCOUNT_ID,VALIDATION_ERROR,EXTERNAL_ACCOUNT_WORK_NOT_CANDIDATE,ProblemDetail;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;404=EXTERNAL_ACCOUNT_NOT_FOUND;409=EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED;429=TOO_MANY_REQUESTS;503=EXTERNAL_PROVIDER_UNAVAILABLE,EXTERNAL_PROVIDER_DISABLED,RATE_LIMIT_UNAVAILABLE,EXTERNAL_ACCOUNT_BUSY
         delete | /api/v1/me/external-accounts/{externalAccountId} | 400=INVALID_EXTERNAL_ACCOUNT_ID;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;404=EXTERNAL_ACCOUNT_NOT_FOUND;429=TOO_MANY_REQUESTS;503=RATE_LIMIT_UNAVAILABLE,EXTERNAL_ACCOUNT_BUSY
         get    | /api/v1/artists/{artistId}/external-accounts | 400=INVALID_ARTIST_ID;403=ACCESS_DENIED;404=ARTIST_NOT_FOUND
+        get    | /api/v1/me/identity-verification      | 403=ACCESS_DENIED
+        post   | /api/v1/me/identity-verification/attempts | 403=ACCESS_DENIED;409=IDENTITY_ALREADY_VERIFIED;429=TOO_MANY_REQUESTS;503=RATE_LIMIT_UNAVAILABLE
+        put    | /api/v1/me/identity-verification/attempts/{identityVerificationId}/completion | 400=INVALID_IDENTITY_VERIFICATION_ID;403=ACCESS_DENIED;404=IDENTITY_VERIFICATION_ATTEMPT_NOT_FOUND;409=IDENTITY_VERIFICATION_ATTEMPT_EXPIRED,IDENTITY_VERIFICATION_NOT_COMPLETED;422=IDENTITY_VERIFICATION_FAILED,IDENTITY_VERIFICATION_REJECTED;429=TOO_MANY_REQUESTS;503=IDENTITY_VERIFICATION_UNAVAILABLE,RATE_LIMIT_UNAVAILABLE
         """)
-    @DisplayName("행사·지역·외부 계정 API의 오류 상태와 code를 계약(03 §9, 06 §10)대로 적는다")
+    @DisplayName("행사·지역·외부 계정·실명 본인확인 API의 오류 상태와 code를 계약(03 §9, 06 §10, 07 §4)대로 적는다")
     void documentsErrorResponsesFromContract(String method, String path, String errors) throws Exception {
         Map<String, List<String>> expected = new TreeMap<>();
         for (String entry : errors.split(";")) {
@@ -319,6 +331,23 @@ class OpenApiDocsIntegrationTest {
             assertThat(response.path("description").asString("")).as(status).contains(words);
             assertThat(schemaName(response)).as(status).isEqualTo("ErrorResponse");
         });
+    }
+
+    @ParameterizedTest(name = "{0} {1}")
+    @CsvSource(delimiter = '|', textBlock = """
+        post   | /api/v1/me/identity-verification/attempts
+        put    | /api/v1/me/identity-verification/attempts/{identityVerificationId}/completion
+        """)
+    @DisplayName("실명 본인확인의 429 응답에 Retry-After 헤더(정수, 초)를 적는다")
+    void documentsRetryAfterHeaderOfTooManyRequests(String method, String path) throws Exception {
+        JsonNode header = operation(method, path)
+                .path("responses")
+                .path("429")
+                .path("headers")
+                .path("Retry-After");
+
+        assertThat(header.isMissingNode()).as("429 응답 헤더 %s", header).isFalse();
+        assertThat(type(header.path("schema"))).isEqualTo("integer");
     }
 
     @Test

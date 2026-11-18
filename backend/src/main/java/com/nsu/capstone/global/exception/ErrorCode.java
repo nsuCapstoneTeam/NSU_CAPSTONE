@@ -72,6 +72,26 @@ public enum ErrorCode {
             "EXTERNAL_PROVIDER_DISABLED", HttpStatus.SERVICE_UNAVAILABLE, "이 플랫폼 연결은 아직 사용할 수 없습니다."),
     EXTERNAL_ACCOUNT_BUSY(
             "EXTERNAL_ACCOUNT_BUSY", HttpStatus.SERVICE_UNAVAILABLE, "다른 변경을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."),
+    // 실명 본인확인(API 07 §4)
+    INVALID_IDENTITY_VERIFICATION_ID(
+            "INVALID_IDENTITY_VERIFICATION_ID", HttpStatus.BAD_REQUEST, "본인확인 시도 ID 형식이 올바르지 않습니다."),
+    IDENTITY_VERIFICATION_ATTEMPT_NOT_FOUND(
+            "IDENTITY_VERIFICATION_ATTEMPT_NOT_FOUND", HttpStatus.NOT_FOUND, "본인확인 시도를 찾을 수 없습니다."),
+    IDENTITY_ALREADY_VERIFIED("IDENTITY_ALREADY_VERIFIED", HttpStatus.CONFLICT, "이미 실명 본인확인을 마쳤습니다."),
+    IDENTITY_VERIFICATION_ATTEMPT_EXPIRED(
+            "IDENTITY_VERIFICATION_ATTEMPT_EXPIRED", HttpStatus.CONFLICT, "본인확인 시간이 지났습니다. 처음부터 다시 시작해 주세요."),
+    IDENTITY_VERIFICATION_NOT_COMPLETED(
+            "IDENTITY_VERIFICATION_NOT_COMPLETED",
+            HttpStatus.CONFLICT,
+            "본인확인이 아직 끝나지 않았습니다. 창에서 마쳤다면 잠시 뒤 다시 확인해 주세요."),
+    IDENTITY_VERIFICATION_FAILED(
+            "IDENTITY_VERIFICATION_FAILED", HttpStatus.UNPROCESSABLE_ENTITY, "본인확인에 실패했습니다. 처음부터 다시 시작해 주세요."),
+    IDENTITY_VERIFICATION_REJECTED(
+            "IDENTITY_VERIFICATION_REJECTED", HttpStatus.UNPROCESSABLE_ENTITY, "지금은 본인확인을 받을 수 없습니다."),
+    IDENTITY_VERIFICATION_UNAVAILABLE(
+            "IDENTITY_VERIFICATION_UNAVAILABLE",
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "본인확인 서비스에 연결할 수 없습니다. 잠시 뒤 같은 요청을 다시 보내 주세요."),
     INTERNAL_SERVER_ERROR("INTERNAL_SERVER_ERROR", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
     private final String code;
