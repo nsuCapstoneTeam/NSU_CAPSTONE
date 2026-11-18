@@ -3,12 +3,16 @@ package com.nsu.capstone.identity.signup;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.ZoneId;
-import org.springframework.context.annotation.Bean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({SignupSessionProperties.class, SignupVerificationProperties.class})
+@EnableConfigurationProperties({
+    SignupSessionProperties.class,
+    SignupVerificationProperties.class,
+    PublicRequestLimitProperties.class
+})
 public class SignupSessionConfig {
 
     @Bean

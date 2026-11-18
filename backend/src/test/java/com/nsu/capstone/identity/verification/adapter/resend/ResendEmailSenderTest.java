@@ -43,9 +43,8 @@ class ResendEmailSenderTest {
 
     @BeforeEach
     void setUp() {
-        RestClient.Builder builder = RestClient.builder()
-            .baseUrl(BASE_URL)
-            .defaultHeader("Authorization", "Bearer " + API_KEY);
+        RestClient.Builder builder =
+                RestClient.builder().baseUrl(BASE_URL).defaultHeader("Authorization", "Bearer " + API_KEY);
         server = MockRestServiceServer.bindTo(builder).build();
         sender = new ResendEmailSender(builder.build(), FROM);
     }
@@ -53,14 +52,14 @@ class ResendEmailSenderTest {
     @Test
     void postsEmailWithAuthorizationAndVerificationMessage() {
         server.expect(once(), requestTo(BASE_URL + "/emails"))
-            .andExpect(method(POST))
-            .andExpect(header("Authorization", "Bearer " + API_KEY))
-            .andExpect(jsonPath("$.from").value(FROM))
-            .andExpect(jsonPath("$.to[0]").value(TO))
-            .andExpect(jsonPath("$.subject").value("[NSU-EventMatch] 회원가입 인증번호"))
-            .andExpect(jsonPath("$.text").value(org.hamcrest.Matchers.containsString(CODE)))
-            .andExpect(jsonPath("$.text").value(org.hamcrest.Matchers.containsString("5분")))
-            .andRespond(withSuccess("{\"id\":\"email-id\"}", APPLICATION_JSON));
+                .andExpect(method(POST))
+                .andExpect(header("Authorization", "Bearer " + API_KEY))
+                .andExpect(jsonPath("$.from").value(FROM))
+                .andExpect(jsonPath("$.to[0]").value(TO))
+                .andExpect(jsonPath("$.subject").value("[NSU-EventMatch] 회원가입 인증번호"))
+                .andExpect(jsonPath("$.text").value(org.hamcrest.Matchers.containsString(CODE)))
+                .andExpect(jsonPath("$.text").value(org.hamcrest.Matchers.containsString("5분")))
+                .andRespond(withSuccess("{\"id\":\"email-id\"}", APPLICATION_JSON));
 
         sender.sendVerificationCode(TO, CODE, Duration.ofMinutes(5));
 
@@ -69,44 +68,52 @@ class ResendEmailSenderTest {
 
     @ParameterizedTest
     @MethodSource("providerFailureStatuses")
-    void convertsProviderHttpErrorsWithoutExposingResponse(HttpStatus status) {
+    void convertsProviderHttpErrorsWithoutExposingResponse(
+            HttpStatus status, VerificationDeliveryException.Outcome expected) {
         server.expect(requestTo(BASE_URL + "/emails"))
-            .andRespond(withStatus(status)
-                .contentType(APPLICATION_JSON)
-                .body("{\"message\":\"raw-provider-response " + API_KEY + " " + CODE + "\"}"));
+                .andRespond(withStatus(status)
+                        .contentType(APPLICATION_JSON)
+                        .body("{\"message\":\"raw-provider-response " + API_KEY + " " + CODE + "\"}"));
 
-        assertSanitizedFailure();
+        assertSanitizedFailure(expected);
     }
 
     @Test
     void convertsConnectionFailure() {
         server.expect(requestTo(BASE_URL + "/emails"))
-            .andRespond(withException(new IOException("connection failed " + API_KEY)));
+                .andRespond(withException(new IOException("connection failed " + API_KEY)));
 
-        assertSanitizedFailure();
+        assertSanitizedFailure(VerificationDeliveryException.Outcome.UNKNOWN);
     }
 
     @Test
     void convertsMalformedResponse() {
-        server.expect(requestTo(BASE_URL + "/emails"))
-            .andRespond(withSuccess("not-json " + API_KEY, APPLICATION_JSON));
+        server.expect(requestTo(BASE_URL + "/emails")).andRespond(withSuccess("not-json " + API_KEY, APPLICATION_JSON));
 
-        assertSanitizedFailure();
+        assertSanitizedFailure(VerificationDeliveryException.Outcome.UNKNOWN);
     }
 
     @Test
     void rejectsResponseWithoutMessageId() {
-        server.expect(requestTo(BASE_URL + "/emails"))
-            .andRespond(withSuccess("{\"id\":\"\"}", APPLICATION_JSON));
+        server.expect(requestTo(BASE_URL + "/emails")).andRespond(withSuccess("{\"id\":\"\"}", APPLICATION_JSON));
 
-        assertSanitizedFailure();
+        assertSanitizedFailure(VerificationDeliveryException.Outcome.UNKNOWN);
     }
 
-    private void assertSanitizedFailure() {
+    @Test
+    void unexpectedExecutionFailureDoesNotEscapeWithPrivateData() {
+        server.expect(requestTo(BASE_URL + "/emails")).andRespond(request -> {
+            throw new IllegalStateException("raw-provider-response " + API_KEY + " " + TO);
+        });
+        assertSanitizedFailure(VerificationDeliveryException.Outcome.UNKNOWN);
+    }
+
+    private void assertSanitizedFailure(VerificationDeliveryException.Outcome expected) {
         VerificationDeliveryException exception = assertThrows(
-            VerificationDeliveryException.class,
-            () -> sender.sendVerificationCode(TO, CODE, Duration.ofMinutes(5))
-        );
+                VerificationDeliveryException.class,
+                () -> sender.sendVerificationCode(TO, CODE, Duration.ofMinutes(5)));
+        org.junit.jupiter.api.Assertions.assertEquals(expected, exception.outcome());
+        org.junit.jupiter.api.Assertions.assertNull(exception.getCause());
         assertFalse(exception.getMessage().contains(API_KEY));
         assertFalse(exception.getMessage().contains(CODE));
         assertFalse(exception.getMessage().contains(TO));
@@ -116,10 +123,9 @@ class ResendEmailSenderTest {
 
     private static Stream<Arguments> providerFailureStatuses() {
         return Stream.of(
-            Arguments.of(BAD_REQUEST),
-            Arguments.of(TOO_MANY_REQUESTS),
-            Arguments.of(INTERNAL_SERVER_ERROR),
-            Arguments.of(SERVICE_UNAVAILABLE)
-        );
+                Arguments.of(BAD_REQUEST, VerificationDeliveryException.Outcome.REJECTED),
+                Arguments.of(TOO_MANY_REQUESTS, VerificationDeliveryException.Outcome.REJECTED),
+                Arguments.of(INTERNAL_SERVER_ERROR, VerificationDeliveryException.Outcome.UNKNOWN),
+                Arguments.of(SERVICE_UNAVAILABLE, VerificationDeliveryException.Outcome.UNKNOWN));
     }
 }

@@ -5,8 +5,10 @@ import com.nsu.capstone.identity.presentation.dto.CreateEventPartnerSignupSessio
 import com.nsu.capstone.identity.presentation.dto.CreateEventPartnerSignupSessionResponse;
 import com.nsu.capstone.identity.presentation.dto.EventPartnerSignupRequest;
 import com.nsu.capstone.identity.presentation.dto.EventPartnerSignupResponse;
+import com.nsu.capstone.identity.presentation.dto.TermAgreementRequest;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,16 +32,21 @@ public class EventPartnerSignupController {
     @PostMapping("/session")
     @ResponseStatus(HttpStatus.CREATED)
     public CreateEventPartnerSignupSessionResponse createSession(
-        @Valid @RequestBody CreateEventPartnerSignupSessionRequest request
-    ) {
-        return eventPartnerSignupService.createSession(request.email(), request.phone());
+            @Valid @RequestBody CreateEventPartnerSignupSessionRequest request, HttpServletRequest servletRequest) {
+        return eventPartnerSignupService.createSession(
+                request.email(),
+                request.phone(),
+                request.agreements() == null
+                        ? null
+                        : request.agreements().stream()
+                                .map(TermAgreementRequest::toTermVersion)
+                                .toList(),
+                servletRequest.getRemoteAddr());
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public EventPartnerSignupResponse signup(
-        @Valid @RequestBody EventPartnerSignupRequest request
-    ) {
+    public EventPartnerSignupResponse signup(@Valid @RequestBody EventPartnerSignupRequest request) {
         return eventPartnerSignupService.signup(request.signupSessionId(), request.password());
     }
 }

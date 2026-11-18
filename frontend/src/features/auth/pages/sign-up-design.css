@@ -19,18 +19,9 @@
   --role-b: #e8505b;
   --role-text: #c4364a;
 }
-/* 역할을 나타내는 글자(제목 위 영문, 진행 단계)는 역할 색, 버튼·포커스 등 조작 요소는 브랜드 파랑 유지 */
-.signup-page--designed .eyebrow,
-.signup-page--designed .signup-progress li.is-active,
-.signup-page--designed .signup-progress li.is-complete {
+/* 역할을 나타내는 글자(제목 위 영문)는 역할 색, 버튼·포커스 등 조작 요소는 브랜드 파랑 유지 */
+.signup-page--designed .eyebrow {
   color: var(--role-text);
-}
-.signup-page--designed .signup-progress li.is-active > span,
-.signup-page--designed .signup-progress li.is-complete > span {
-  border-color: var(--role-b);
-}
-.signup-page--designed .signup-progress li.is-complete:not(:last-child)::after {
-  background: var(--role-b);
 }
 
 /* 페이지 위쪽에 옅은 역할 색 빛 (로그인 배경 색감을 밝게 이어감) */
@@ -126,31 +117,6 @@
 @keyframes signup-card-in {
   from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: none; }
-}
-
-/* ---------- 진행 단계 ---------- */
-.signup-page--designed .signup-progress li > span {
-  transition: transform 220ms ease, background-color 220ms ease, border-color 220ms ease;
-}
-.signup-page--designed .signup-progress li.is-active > span {
-  background: linear-gradient(135deg, var(--role-a), var(--role-b));
-  transform: scale(1.08);
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--role-a) 18%, transparent);
-}
-.signup-page--designed .signup-progress li.is-complete > span {
-  background: linear-gradient(135deg, var(--role-a), var(--role-b));
-}
-.signup-page--designed .signup-progress li:not(:last-child)::after {
-  height: 3px;
-  border-radius: 999px;
-  transition: background-color 300ms ease;
-}
-
-/* 진행 단계 바로 아래 첫 섹션에는 구분선을 한 번만 (선이 두 줄로 겹치던 문제) */
-.signup-page--designed .signup-progress + .signup-section {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
 }
 
 /* 두 칸 입력: 긴 안내 문구 때문에 칸이 겹치지 않게 */
@@ -301,7 +267,6 @@
   .signup-page--designed .signup-form {
     animation: none;
   }
-  .signup-page--designed .signup-progress li > span,
   .signup-page--designed .signup-verification-row button,
   .signup-page--designed .signup-submit {
     transition: none;

@@ -1,7 +1,7 @@
 // 회원가입 규칙 테스트 (실행: node --test src/features/auth/signup-rules.test.js)
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { canComplete, isAdult, isValidEmail, isValidPhone, missingItems, phoneDigits } from './signup-rules.js';
+import { isAdult, isValidEmail, isValidPhone, missingItems, phoneDigits } from './signup-rules.js';
 
 // 테스트 기준일을 고정 (실행하는 날에 따라 결과가 바뀌지 않게)
 const TODAY = new Date(2026, 9, 5); // 2026-10-05 (월은 0부터 시작해서 9 = 10월)
@@ -28,7 +28,6 @@ describe('missingItems', () => {
 
   it('모두 채운 일반가입은 빠진 항목이 없다', () => {
     assert.deepEqual(labels(doneEmail), []);
-    assert.equal(canComplete(doneEmail, TODAY), true);
   });
 
   it('이메일을 입력만 하고 인증하지 않으면 이메일 인증이 빠진다', () => {
@@ -48,12 +47,6 @@ describe('missingItems', () => {
   it('이메일이 없는 간편가입(Kakao)은 이메일부터 받는다', () => {
     const kakao = { ...doneEmail, method: 'kakao', email: '', emailVerified: false };
     assert.deepEqual(labels(kakao), ['이메일']);
-  });
-});
-
-describe('canComplete', () => {
-  it('이미 가입된 이메일이면 모두 채워도 끝낼 수 없다', () => {
-    assert.equal(canComplete({ ...doneEmail, emailTaken: true }, TODAY), false);
   });
 });
 

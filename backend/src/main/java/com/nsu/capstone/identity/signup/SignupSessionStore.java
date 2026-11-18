@@ -13,8 +13,6 @@ public interface SignupSessionStore {
 
     boolean markPhoneVerified(String signupSessionId, UserRole expectedRole);
 
-    boolean markRequiredTermsAgreed(String signupSessionId, UserRole expectedRole);
-
     boolean markAdultConfirmed(String signupSessionId, UserRole expectedRole);
 
     void deleteById(String signupSessionId);

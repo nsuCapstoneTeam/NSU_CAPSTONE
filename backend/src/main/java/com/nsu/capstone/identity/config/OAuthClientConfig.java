@@ -6,6 +6,8 @@ import com.nsu.capstone.identity.oauth.OAuthProperties;
 import com.nsu.capstone.identity.oauth.RedisOAuth2AuthorizationRequestRepository;
 import com.nsu.capstone.identity.security.OAuthAuthenticationFailureHandler;
 import com.nsu.capstone.identity.security.OAuthAuthenticationSuccessHandler;
+import com.nsu.capstone.identity.security.OAuthFrontendRedirectService;
+import com.nsu.capstone.identity.signup.RedisPublicRequestLimitStore;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -59,13 +61,17 @@ public class OAuthClientConfig {
             RedisOAuth2AuthorizationRequestRepository authorizationRequestRepository,
             NoOpOAuth2AuthorizedClientRepository authorizedClientRepository,
             OAuthAuthenticationSuccessHandler successHandler,
-            OAuthAuthenticationFailureHandler failureHandler) {
+            OAuthAuthenticationFailureHandler failureHandler,
+            RedisPublicRequestLimitStore limits,
+            OAuthFrontendRedirectService redirects) {
         return new OAuthSecurityConfigurer(
                 clientRegistrationRepository,
                 authorizationRequestRepository,
                 authorizedClientRepository,
                 successHandler,
-                failureHandler);
+                failureHandler,
+                limits,
+                redirects);
     }
 
     private ClientRegistration registration(

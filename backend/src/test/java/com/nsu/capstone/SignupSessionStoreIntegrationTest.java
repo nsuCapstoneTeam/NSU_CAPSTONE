@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.nsu.capstone.identity.domain.UserRole;
+import com.nsu.capstone.identity.signup.SignupMethod;
 import com.nsu.capstone.identity.signup.SignupSession;
 import com.nsu.capstone.identity.signup.SignupSessionProperties;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
@@ -32,30 +33,28 @@ class SignupSessionStoreIntegrationTest {
     @Test
     void savesReadsAndDeletesArtistSignupSession() {
         SignupSession session = new SignupSession(
-            "redis-integration-session",
-            "artist@example.com",
-            "01012345678",
-            true,
-            true,
-            true,
-            true,
-            UserRole.ARTIST
-        );
+                "redis-integration-session",
+                "artist@example.com",
+                "01012345678",
+                true,
+                true,
+                true,
+                true,
+                UserRole.ARTIST,
+                SignupMethod.LOCAL,
+                (true) ? SignupTestTerms.consent() : null);
 
         signupSessionStore.save(session);
 
-        assertTrue(Boolean.TRUE.equals(redisTemplate.hasKey(
-            "signup:session:{" + session.signupSessionId() + "}"
-        )));
-        Long ttlSeconds = redisTemplate.getExpire(
-            "signup:session:{" + session.signupSessionId() + "}",
-            TimeUnit.SECONDS
-        );
+        assertTrue(Boolean.TRUE.equals(redisTemplate.hasKey("signup:session:{" + session.signupSessionId() + "}")));
+        Long ttlSeconds =
+                redisTemplate.getExpire("signup:session:{" + session.signupSessionId() + "}", TimeUnit.SECONDS);
         assertTrue(ttlSeconds > 0);
         assertTrue(ttlSeconds <= Duration.ofMinutes(30).toSeconds());
         assertEquals(Duration.ofMinutes(30), signupSessionProperties.ttl());
 
-        SignupSession found = signupSessionStore.findById(session.signupSessionId()).orElseThrow();
+        SignupSession found =
+                signupSessionStore.findById(session.signupSessionId()).orElseThrow();
         assertEquals(session, found);
 
         signupSessionStore.deleteById(session.signupSessionId());
@@ -65,15 +64,16 @@ class SignupSessionStoreIntegrationTest {
     @Test
     void returnsEmptyForExpiredSignupSession() {
         SignupSession session = new SignupSession(
-            "expired-redis-integration-session",
-            "expired@example.com",
-            "01087654321",
-            true,
-            true,
-            true,
-            true,
-            UserRole.ARTIST
-        );
+                "expired-redis-integration-session",
+                "expired@example.com",
+                "01087654321",
+                true,
+                true,
+                true,
+                true,
+                UserRole.ARTIST,
+                SignupMethod.LOCAL,
+                (true) ? SignupTestTerms.consent() : null);
         String key = "signup:session:{" + session.signupSessionId() + "}";
         signupSessionStore.save(session);
 

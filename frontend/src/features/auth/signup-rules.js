@@ -12,7 +12,6 @@ export const PASSWORD_MIN = 8;
 // 인증번호 규칙 (백엔드 auth.properties와 같은 값)
 export const OTP_TTL_SECONDS = 5 * 60; // 인증번호 유효시간 5분
 export const RESEND_COOLDOWN_SECONDS = 60; // 다시 받기는 60초 뒤부터
-export const MAX_ATTEMPTS = 5; // 인증번호 확인은 5번까지
 
 // 가입 가능 나이 (AUTH-006)
 export const ADULT_AGE = 18;
@@ -89,7 +88,3 @@ export function missingItems(state, today = new Date()) {
 
   return missing;
 }
-
-// 가입을 끝낼 수 있는지: 빠진 항목이 없고, 이미 가입된 이메일이 아니어야 함 (AUTH-158)
-export const canComplete = (state, today = new Date()) =>
-  missingItems(state, today).length === 0 && !state.emailTaken;

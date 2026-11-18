@@ -2,7 +2,6 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import brandMark from './assets/clap-sound-mark.svg';
 import brandMarkDark from './assets/clap-sound-mark-dark.svg';
 import teamLogo from './assets/hallaemallae-logo.png';
-import { ARTISTS } from './features/matching/matching.js';
 import { INITIAL_PROFILE, INITIAL_POSTS } from './data/demo-data.js';
 import useStoredState from './hooks/use-stored-state.js';
 import { pageOf, pathOf, titleOf } from './routes.js';
@@ -23,6 +22,7 @@ import Board from './features/board/board-page.jsx';
 import EventSearch from './features/event-search/event-search-page.jsx';
 import { STATUS_VALUES as SCHEDULE_STATUSES } from './features/my-page/availability.js';
 import { isEventList } from './features/my-page/organizer-events.js';
+import { isSavedArtistList } from './features/my-page/saved-artists.js';
 
 // 저장소에서 읽은 값이 올바른 형식인지 확인하는 함수들 (형식이 틀리면 초기값 사용)
 const arrayValue = (value) => Array.isArray(value);
@@ -97,11 +97,8 @@ export default function App() {
   );
   // 행사 관계자 '내 행사' 목록 (NSU-56, 서버 API 전까지 체험 저장)
   const [events, setEvents, eventsError] = useStoredState('hm-mvp-events-v1', [], isEventList);
-  const [saved, setSaved, savedError] = useStoredState(
-    'hm-mvp-saved-v1',
-    [],
-    (v) => arrayValue(v) && v.every((id) => ARTISTS.some((a) => a.id === id)),
-  );
+  // 관심 아티스트 id 목록 (추천 결과에만 있는 아티스트도 저장되므로 형식만 확인, NSU-139)
+  const [saved, setSaved, savedError] = useStoredState('hm-mvp-saved-v1', [], isSavedArtistList);
   // search: 마지막 매칭 검색 조건, notice: 화면 위 알림 문구
   const [search, setSearch] = useState(null);
   // 마이페이지를 열 때 처음 보여 줄 탭 (보통 프로필)
