@@ -129,7 +129,7 @@ backend README의 "로그" 절에 넣을 내용이다.
 
 - 로그는 SLF4J로 남긴다. 파일 주인의 스타일(`@Slf4j` 또는 `LoggerFactory`)을 따른다. 요청 ID, JSON, 시각은 자동으로 붙는다.
 - 이메일·전화번호·토큰·인증번호·비밀키와 DTO·record 통째는 로그와 예외 메시지에 넣지 않는다. CI의 `LogSafetyChecker`와 `LogPrivacyIntegrationTest`가 막는다.
-- 로컬에서 평문으로 보려면 `.env`에 `LOG_FORMAT=`(빈 값)을 둔다.
+- 로컬에서 평문으로 보려면 `.env`에 `LOG_LOCAL_MODE=true`와 `LOG_FORMAT=`(빈 값)을 함께 둔다(`.env.example`의 주석 두 줄을 푼다). `LOG_FORMAT=`만 두면 앱이 시작하지 않는다(Decision 4). 배포에서는 두 줄 모두 두지 않는다.
 - 요청 하나의 로그는 `requestId`로 찾는다. 응답 헤더 `X-Request-Id`와 같은 값이다.
 - MDC에 다른 키를 넣을 때는 `try (var ignored = MDC.putCloseable("eventId", id)) { … }`를 쓴다. `MDC.clear()`는 쓰지 않는다.
 
@@ -140,7 +140,7 @@ backend README의 "로그" 절에 넣을 내용이다.
 {"@timestamp":"…","message":"요청 처리 완료: PUT /api/v1/me/event-partner-profile -> 400 (31ms)","logger_name":"com.nsu.capstone.global.logging.RequestIdFilter","level":"INFO",…,"requestId":"0f8c1b9e-5d0a-4c55-9a43-2b1f3c7d9e10"}
 ```
 
-로컬(`LOG_FORMAT=`):
+로컬(`LOG_LOCAL_MODE=true`, `LOG_FORMAT=`):
 
 ```text
 2026-11-11T15:00:28.512+09:00  WARN 4242 --- [nsu-capstone] [nio-8080-exec-3] [0f8c1b9e-5d0a-4c55-9a43-2b1f3c7d9e10] c.n.c.p.p.application.RegionNormalizer   : 지역 목록에 없는 EVENT_PARTNER 프로필 지역 코드: 29
@@ -239,7 +239,7 @@ docs/adr/recommendation_eligibility/00_eligibility_rules.md  NSU-63 MDC 메모 �
 
 이어서 쓸 테스트(한 번에 하나씩):
 
-- AC1: `LOG_FORMAT=`이면 평문에 `[requestId]`, S1(`System.out`).
+- AC1: `LOG_LOCAL_MODE=true`와 `LOG_FORMAT=`이면 평문에 `[requestId]`, S1(`System.out`).
 - AC2 필터: 같은 스레드의 두 요청 사이에 ID와 `eventId`가 섞이지 않음, `GlobalExceptionHandler` ERROR 줄의 ID, `ERROR` 디스패치가 같은 ID를 씀, 값 없는 `ERROR` 디스패치는 새 ID, 빠져나온 예외는 ID와 함께 한 번 남고 500, 커밋 뒤 예외는 남기고 다시 던짐, 연결 끊김은 ERROR 없이 넘김, 완료 줄의 경로는 패턴(`/api/v1/events/{eventId}`)이고 Security가 먼저 거절했거나 맞는 경로가 없으면 `UNMATCHED`, 2xx 완료 줄은 DEBUG, **들어온 `X-Request-Id: attacker-chosen`과 `traceparent`는 ID가 되지 않고 어떤 줄에도 없음**.
 - AC2 Security(`@WebMvcTest`, `RoleAuthorizationSecurityTest` 설정 복사): 토큰 없음·잘못된 토큰 401, URL 403·`@PreAuthorize` 403에서 완료 줄이 같은 ID이고, 본문은 정확히 `{code,message}`(`$.* hasSize(2)`).
 - AC2 실제 Tomcat(`RANDOM_PORT`): 401·403 응답에 `X-Request-Id`가 있음(MockMvc 응답은 커밋된 뒤에도 헤더를 받아 이것을 증명하지 못한다, 구현 중 발견), 방화벽 거절(`/test/log-probe/a;b`)의 두 디스패치가 같은 ID, 필터 사이에서 던진 예외가 ID 있는 ERROR 한 줄이고 `Servlet.service()` 줄이 없음.
