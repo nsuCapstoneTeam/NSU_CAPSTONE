@@ -176,20 +176,23 @@ final class LogDeviceCheck {
     }
 
     /**
-     * JUL 핸들러는 루트의 SLF4J 브리지 하나뿐이어야 한다. Boot가 로깅을 설정하지 않으면 JUL 콘솔 핸들러가 남고, 이름 있는 JUL 로거에 붙은
-     * 핸들러는 루트를 거치지 않고 평문 stderr로 나간다.
+     * JUL 핸들러는 루트의 SLF4J 브리지 하나뿐이어야 한다. Boot가 로깅을 설정하지 않으면 JUL 콘솔 핸들러가 남고, 브리지가 둘이면 JUL 레코드가
+     * 두 번 전달된다. 이름 있는 JUL 로거에 붙은 핸들러는 루트를 거치지 않고 평문 stderr로 나간다.
      */
     private static List<String> julHandlerProblems() {
         List<String> problems = new ArrayList<>();
-        java.util.logging.Handler[] handlers =
-                java.util.logging.Logger.getLogger("").getHandlers();
-        for (java.util.logging.Handler handler : handlers) {
-            if (!(handler instanceof SLF4JBridgeHandler)) {
+        int bridges = 0;
+        for (java.util.logging.Handler handler :
+                java.util.logging.Logger.getLogger("").getHandlers()) {
+            if (handler instanceof SLF4JBridgeHandler) {
+                bridges++;
+            } else {
                 problems.add("JUL 루트 핸들러: " + handler.getClass().getName());
             }
         }
-        if (handlers.length == 0) {
-            problems.add("JUL 루트 핸들러에 SLF4J 브리지가 없다");
+        if (bridges != 1) {
+            // 둘 이상이면 JUL 레코드 한 건이 SLF4J로 여러 번 전달된다
+            problems.add("JUL 루트 핸들러의 SLF4J 브리지가 " + bridges + "개다. 하나여야 한다");
         }
         LogManager manager = LogManager.getLogManager();
         for (String name : Collections.list(manager.getLoggerNames())) {

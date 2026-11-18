@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.List;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.slf4j.bridge.SLF4JBridgeHandler;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -26,6 +27,7 @@ import org.springframework.context.annotation.Bean;
  *   <li>stop-console-appender: 컨텍스트를 만드는 중 루트에 붙은 콘솔 어펜더를 멈추는 앱
  *   <li>attach-console-to-child-logger: 컨텍스트를 만드는 중 루트에 붙은 콘솔 어펜더를 하위 로거에도 붙이는 앱
  *   <li>disable-additivity: 컨텍스트를 만드는 중 로거 하나의 additivity를 끄는 앱
+ *   <li>install-second-jul-bridge: 컨텍스트를 만드는 중 JUL 루트에 SLF4J 브리지를 하나 더 붙이는 앱
  *   <li>attach-jul-handler: 컨텍스트를 만드는 중 이름 있는 JUL 로거에 콘솔 핸들러를 붙이는 앱
  * </ul>
  */
@@ -63,6 +65,7 @@ public final class ForkedMain {
             case "stop-console-appender" -> StopConsoleAppenderConfig.class;
             case "attach-console-to-child-logger" -> AttachConsoleToChildLoggerConfig.class;
             case "disable-additivity" -> DisableAdditivityConfig.class;
+            case "install-second-jul-bridge" -> InstallSecondJulBridgeConfig.class;
             case "attach-jul-handler" -> AttachJulHandlerConfig.class;
             case "replace-uncaught-handler" -> ReplaceUncaughtHandlerConfig.class;
             case "app" -> NsuCapstoneApplication.class;
@@ -210,6 +213,20 @@ public final class ForkedMain {
         Object quietLogger() {
             LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
             context.getLogger("com.example.quiet").setAdditive(false);
+            return new Object();
+        }
+    }
+
+    /**
+     * 컨텍스트를 만드는 중에 빈 초기화 코드가 {@code SLF4JBridgeHandler.install()}을 다시 부르는 경우. Boot가 설치한 브리지와 합쳐 둘이 붙어
+     * JUL 레코드 한 건이 SLF4J로 두 번 전달된다. 핸들러가 모두 브리지 타입이라 타입만 보는 검사는 지나간다.
+     */
+    @TestConfiguration(proxyBeanMethods = false)
+    static class InstallSecondJulBridgeConfig {
+
+        @Bean
+        Object secondJulBridge() {
+            SLF4JBridgeHandler.install();
             return new Object();
         }
     }

@@ -139,6 +139,19 @@ class LogDeviceSelfCheckTest {
                 .doesNotContain(LogDeviceCheck.PROBE);
     }
 
+    /** 핸들러가 모두 SLF4J 브리지여도 둘이면 JUL 레코드 한 건이 로그 두 줄이 된다. */
+    @Test
+    void 컨텍스트를_만드는_중_JUL_루트에_SLF4J_브리지를_하나_더_붙이면_준비_완료_검사에서_멈춘다() throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "install-second-jul-bridge");
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
+        assertThat(result.output())
+                .contains(STOPPED_BY_CHECK)
+                .contains("JUL 루트 핸들러의 SLF4J 브리지가 2개다")
+                .doesNotContain(ForkedMain.STARTED)
+                .doesNotContain(LogDeviceCheck.PROBE);
+    }
+
     @Test
     void 컨텍스트를_만드는_중_미처리_예외_처리기를_바꾸면_준비_완료_검사에서_멈춘다() throws Exception {
         ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "replace-uncaught-handler");
