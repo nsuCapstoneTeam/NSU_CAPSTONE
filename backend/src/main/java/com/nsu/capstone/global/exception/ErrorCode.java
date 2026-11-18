@@ -46,6 +46,30 @@ public enum ErrorCode {
             "행사 등록을 처리할 수 없습니다. 잠시 후 같은 요청을 다시 보내 주세요."),
     INVALID_ARTIST_ID("INVALID_ARTIST_ID", HttpStatus.BAD_REQUEST, "아티스트 ID 형식이 올바르지 않습니다."),
     ARTIST_NOT_FOUND("ARTIST_NOT_FOUND", HttpStatus.NOT_FOUND, "아티스트를 찾을 수 없습니다."),
+    // 외부 계정 연결(API 06 §10)
+    INVALID_EXTERNAL_ACCOUNT_ID("INVALID_EXTERNAL_ACCOUNT_ID", HttpStatus.BAD_REQUEST, "외부 계정 ID 형식이 올바르지 않습니다."),
+    EXTERNAL_ACCOUNT_AUTHORIZATION_INVALID(
+            "EXTERNAL_ACCOUNT_AUTHORIZATION_INVALID",
+            HttpStatus.BAD_REQUEST,
+            "연결 요청이 만료되었거나 올바르지 않습니다. 처음부터 다시 연결해 주세요."),
+    EXTERNAL_ACCOUNT_URL_INVALID(
+            "EXTERNAL_ACCOUNT_URL_INVALID", HttpStatus.BAD_REQUEST, "Spotify 아티스트 주소 형식이 올바르지 않습니다."),
+    EXTERNAL_ACCOUNT_WORK_NOT_CANDIDATE(
+            "EXTERNAL_ACCOUNT_WORK_NOT_CANDIDATE", HttpStatus.BAD_REQUEST, "고를 수 없는 영상이 들어 있습니다."),
+    EXTERNAL_ACCOUNT_NOT_FOUND("EXTERNAL_ACCOUNT_NOT_FOUND", HttpStatus.NOT_FOUND, "연결한 외부 계정을 찾을 수 없습니다."),
+    EXTERNAL_ACCOUNT_CONNECTION_CHANGED(
+            "EXTERNAL_ACCOUNT_CONNECTION_CHANGED", HttpStatus.CONFLICT, "다른 곳에서 외부 계정 연결이 바뀌었습니다. 목록을 다시 확인해 주세요."),
+    EXTERNAL_ACCOUNT_ALREADY_LINKED("EXTERNAL_ACCOUNT_ALREADY_LINKED", HttpStatus.CONFLICT, "이미 다른 아티스트가 연결한 계정입니다."),
+    EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED(
+            "EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED", HttpStatus.CONFLICT, "이 플랫폼은 작업물을 고르지 않습니다."),
+    YOUTUBE_CHANNEL_NOT_FOUND(
+            "YOUTUBE_CHANNEL_NOT_FOUND", HttpStatus.UNPROCESSABLE_ENTITY, "이 Google 계정에서 공개 YouTube 채널을 찾을 수 없습니다."),
+    SPOTIFY_ARTIST_NOT_FOUND(
+            "SPOTIFY_ARTIST_NOT_FOUND", HttpStatus.UNPROCESSABLE_ENTITY, "Spotify에서 그 아티스트를 찾을 수 없습니다."),
+    EXTERNAL_PROVIDER_UNAVAILABLE(
+            "EXTERNAL_PROVIDER_UNAVAILABLE", HttpStatus.SERVICE_UNAVAILABLE, "외부 플랫폼이 응답하지 않습니다. 잠시 후 다시 시도해 주세요."),
+    EXTERNAL_PROVIDER_DISABLED(
+            "EXTERNAL_PROVIDER_DISABLED", HttpStatus.SERVICE_UNAVAILABLE, "이 플랫폼 연결은 아직 사용할 수 없습니다."),
     INTERNAL_SERVER_ERROR("INTERNAL_SERVER_ERROR", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
     private final String code;

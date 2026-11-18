@@ -1,6 +1,8 @@
 package com.nsu.capstone.verification.externalaccount.domain;
 
-/** 외부 계정 기능이 거절하는 사유. 이름은 06 계약 §10의 {@code code}와 같다. HTTP로 옮기는 매핑은 컨트롤러 단계에서 한다. */
+import com.nsu.capstone.global.exception.ErrorCode;
+
+/** 외부 계정 기능이 거절하는 사유. 이름은 06 계약 §10의 {@code code}와 같고, HTTP 상태는 {@link ErrorCode}가 정한다. */
 public enum ExternalAccountFailure {
     /** {@code state} 없음·만료·이미 씀, 결합 쿠키 없음·불일치, Google이 코드를 거절함 */
     EXTERNAL_ACCOUNT_AUTHORIZATION_INVALID,
@@ -29,5 +31,10 @@ public enum ExternalAccountFailure {
     /** {@code /me/external-accounts/**} 아티스트별 요청 제한을 넘음. 남은 초는 예외의 retryAfterSeconds다 */
     TOO_MANY_REQUESTS,
     /** 요청 제한 카운터(Redis)를 쓸 수 없음 */
-    RATE_LIMIT_UNAVAILABLE
+    RATE_LIMIT_UNAVAILABLE;
+
+    /** 이 사유를 HTTP 응답으로 옮기는 {@link ErrorCode}. 이름이 같은 항목이다. */
+    public ErrorCode errorCode() {
+        return ErrorCode.valueOf(name());
+    }
 }
