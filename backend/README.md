@@ -132,6 +132,24 @@ PostgreSQL 볼륨을 생성한 후 사용자, 비밀번호 또는 데이터베�
 
 실제 `.env`는 Git에 커밋하지 않는다.
 
+## 외부 계정 연결 설정 (NSU-37)
+
+아티스트가 YouTube 채널·Spotify 아티스트 페이지를 연결하는 기능의 설정이다. 두 플랫폼 모두 기본값이 꺼짐이고, 비밀값은 환경 변수로만 넣는다. 저장소에 값을 두지 않는다.
+
+| 환경 변수 | 뜻 |
+|---|---|
+| `EXTERNAL_ACCOUNT_FRONTEND_BASE_URI` | Google 콜백이 돌려보낼 프론트 주소(경로 없이 출처만). 켜려면 필수 |
+| `EXTERNAL_ACCOUNT_BINDING_COOKIE_SECURE` | 결합 쿠키의 `Secure`. 로컬 HTTP 개발에서만 `false` |
+| `EXTERNAL_ACCOUNT_YOUTUBE_ENABLED` | YouTube 연결을 켠다 |
+| `EXTERNAL_ACCOUNT_YOUTUBE_CLIENT_ID`, `..._CLIENT_SECRET` | OAuth 클라이언트. **로그인용 Google 프로젝트와 다른 프로젝트**의 것이어야 한다 |
+| `EXTERNAL_ACCOUNT_YOUTUBE_API_KEY` | 표시 정보·작업물 후보·ID 확인 작업이 쓰는 API 키 |
+| `EXTERNAL_ACCOUNT_YOUTUBE_REDIRECT_URI` | Google에 등록한 콜백 주소(`.../api/v1/external-accounts/oauth/callback/youtube`) |
+| `EXTERNAL_ACCOUNT_SPOTIFY_ENABLED`, `..._CLIENT_ID`, `..._CLIENT_SECRET` | Spotify 연결. 개발 모드 앱 소유자의 Premium 승인 전까지 끈다 |
+
+- YouTube를 켰는데 필수 값이 비었거나, 연결용 클라이언트와 로그인 클라이언트(`GOOGLE_CLIENT_ID`)의 프로젝트 번호(클라이언트 ID 앞 숫자)가 같으면 앱이 뜨지 않는다. 같은 프로젝트면 연결 때 하는 토큰 폐기가 로그인 동의까지 지운다(ADR `external_links/00` 14번).
+- YouTube ID 확인 작업이 하루 한 번 돈다(한국 시간 04:30). 마지막 성공이 3일을 넘었거나 가장 오래된 확인이 20일을 넘으면 `ERROR` 로그가 남는다. 이 로그를 알림으로 잇는 일은 운영에서 한다.
+- 신고 처리 절차는 [`docs/runbook/external_account_takedown.md`](../docs/runbook/external_account_takedown.md)에 있다.
+
 ## 운영 환경 데이터베이스 설정
 
 운영 환경의 데이터베이스 접속 정보는 Spring Boot의 Externalized Configuration 원칙에 따라 애플리케이션 코드, JAR 및 컨테이너 이미지에 포함하지 않고 실행 환경에서 주입한다.

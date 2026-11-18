@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -17,17 +18,13 @@ import org.springframework.util.StringUtils;
  * 두 클라이언트 ID의 프로젝트 번호가 같으면 앱이 뜨지 않게 한다.
  */
 @Component
+@RequiredArgsConstructor
 public class ExternalAccountSettingsValidator implements InitializingBean {
 
     private static final Pattern PROJECT_NUMBER = Pattern.compile("^(\\d+)-");
 
     private final ExternalAccountProperties properties;
     private final OAuthProperties loginProperties;
-
-    public ExternalAccountSettingsValidator(ExternalAccountProperties properties, OAuthProperties loginProperties) {
-        this.properties = properties;
-        this.loginProperties = loginProperties;
-    }
 
     @Override
     public void afterPropertiesSet() {

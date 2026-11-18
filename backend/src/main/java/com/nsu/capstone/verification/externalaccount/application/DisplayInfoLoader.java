@@ -23,6 +23,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -32,6 +34,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 class DisplayInfoLoader {
 
     private static final String SPOTIFY_KIND = "artist";
@@ -44,21 +47,6 @@ class DisplayInfoLoader {
     private final DisplayCache displayCache;
     private final SingleFlight singleFlight = new SingleFlight();
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
-
-    DisplayInfoLoader(
-            ExternalAccountProperties properties,
-            YoutubeGateway youtubeGateway,
-            SpotifyGateway spotifyGateway,
-            YoutubeQuota youtubeQuota,
-            ProfileCache profileCache,
-            DisplayCache displayCache) {
-        this.properties = properties;
-        this.youtubeGateway = youtubeGateway;
-        this.spotifyGateway = spotifyGateway;
-        this.youtubeQuota = youtubeQuota;
-        this.profileCache = profileCache;
-        this.displayCache = displayCache;
-    }
 
     @PreDestroy
     void shutdown() {
