@@ -12,8 +12,11 @@ on:
 
 jobs:
   claude-review:
-    # Only review PRs opened by dev-kdy. Drafts are reviewed on ready_for_review.
-    if: github.event.pull_request.user.login == 'dev-kdy' && github.event.pull_request.draft == false
+    # Disabled (2026-11-18): the review ended before its subagents returned (they ran in the background and the
+    # CI session exits when the main turn ends), and still posted "No issues found". Codex and CodeRabbit review PRs.
+    # To re-enable, restore the condition below:
+    #   github.event.pull_request.user.login == 'dev-kdy' && github.event.pull_request.draft == false
+    if: false
 
     runs-on: ubuntu-latest
     permissions:
