@@ -118,13 +118,14 @@ final class LogDeviceCheck {
     }
 
     /**
-     * 요청 완료 줄(INFO)과 미처리 예외 줄(ERROR)은 어펜더에 닿기 전에 로거 레벨이 버릴 수 있다(예: logging.level.root=WARN). 어펜더 필터를
-     * 보는 검사는 이것을 놓친다.
+     * 요청 완료 줄(INFO), 미처리 예외 줄(ERROR), 확인 줄(INFO)은 어펜더에 닿기 전에 로거 레벨이 버릴 수 있다(예: logging.level.root=WARN).
+     * 어펜더 필터를 보는 검사는 이것을 놓친다. 확인 줄을 버리면 배포 확인(NSU-129)은 줄이 없는 것을 이상으로 읽는다.
      */
     private static List<String> requiredLoggerProblems(LoggerContext context) {
         List<String> problems = new ArrayList<>();
         requireEnabled(context, RequestIdFilter.class, Level.INFO, problems);
         requireEnabled(context, UncaughtExceptionLogger.class, Level.ERROR, problems);
+        requireEnabled(context, LogDeviceReadyListener.class, Level.INFO, problems);
         return problems;
     }
 

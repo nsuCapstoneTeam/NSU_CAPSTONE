@@ -321,6 +321,12 @@ class LogDeviceSelfCheckTest {
                         List.of("-Dlogging.level.com.nsu.capstone.global.logging.RequestIdFilter=WARN"),
                         Map.of(),
                         "com.nsu.capstone.global.logging.RequestIdFilter"),
+                // 배포 확인(NSU-129)이 찾는 확인 줄(INFO)은 이 로거가 남긴다. 레벨이 버리면 줄이 없고, 배포 확인은 줄이 없는 것을 이상으로 읽는다
+                Arguments.of(
+                        "LogDeviceReadyListener 레벨 WARN",
+                        List.of("-Dlogging.level.com.nsu.capstone.global.logging.LogDeviceReadyListener=WARN"),
+                        Map.of(),
+                        "com.nsu.capstone.global.logging.LogDeviceReadyListener"),
                 Arguments.of(
                         "UncaughtExceptionLogger 레벨 OFF",
                         List.of("-Dlogging.level.com.nsu.capstone.global.logging.UncaughtExceptionLogger=OFF"),
