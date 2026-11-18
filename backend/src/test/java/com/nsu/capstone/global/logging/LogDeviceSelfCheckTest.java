@@ -93,6 +93,23 @@ class LogDeviceSelfCheckTest {
                 .doesNotContain(LogDeviceCheck.PROBE);
     }
 
+    /**
+     * 임계값이 OFF이면 모든 줄이 버려져 멈춘 이유를 알리는 로그 줄도 나오지 않는다. 그래서 출력으로는 이 검사 때문인지 알 수 없다.
+     * 같은 설정이 로컬 모드에서는 시작되는 것과 대조해, 다른 이유가 아니라 이 검사 때문에 멈춘 것을 확인한다.
+     */
+    @Test
+    void 콘솔_임계값을_OFF로_두면_로그가_모두_버려지므로_시작을_멈춘다() throws Exception {
+        List<String> jvmArgs = List.of("-Dlogging.threshold.console=OFF");
+
+        ForkedJvm.Result result = ForkedJvm.run(jvmArgs, Map.of(), "light");
+        ForkedJvm.Result local = ForkedJvm.run(jvmArgs, Map.of("LOG_LOCAL_MODE", "true"), "light");
+
+        assertThat(local.exitCode()).as("대조. 출력: %s", local.output()).isZero();
+        assertThat(local.output()).contains(ForkedMain.STARTED);
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
+        assertThat(result.output()).doesNotContain(ForkedMain.STARTED).doesNotContain(LogDeviceCheck.PROBE);
+    }
+
     @Test
     void 로컬_모드이면_같은_설정도_통과한다(@TempDir Path directory) throws Exception {
         ForkedJvm.Result result = ForkedJvm.run(
@@ -131,6 +148,11 @@ class LogDeviceSelfCheckTest {
                         Map.of(),
                         "출력에 필드가 없다: requestId"),
                 Arguments.of("파일 어펜더", List.of("-Dlogging.file.name=" + logFile), Map.of(), "어펜더가 2개다"),
+                Arguments.of(
+                        "콘솔 임계값 ERROR",
+                        List.of("-Dlogging.threshold.console=ERROR"),
+                        Map.of(),
+                        "필터가 버리는 레벨: INFO, WARN"),
                 Arguments.of(
                         "사용자 Logback 설정",
                         List.of("-Dlogging.config=classpath:log-device/extra-appender-logback.xml"),

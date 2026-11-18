@@ -8,6 +8,7 @@ import ch.qos.logback.classic.spi.LoggingEvent;
 import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.ConsoleAppender;
 import ch.qos.logback.core.encoder.Encoder;
+import ch.qos.logback.core.spi.FilterReply;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -64,6 +65,7 @@ final class LogDeviceCheck {
         problems.addAll(julHandlerProblems());
         if (appender != null) {
             problems.addAll(routingProblems(context, appender));
+            problems.addAll(filterProblems(context, appender));
             problems.addAll(encodedEventProblems(context, appender));
         }
         return problems;
@@ -118,6 +120,20 @@ final class LogDeviceCheck {
         return problems;
     }
 
+    /** 어펜더의 필터 체인이 요청 완료 줄(INFO)과 경고·오류 줄을 버리면 안 된다(예: logging.threshold.console=OFF). */
+    private static List<String> filterProblems(LoggerContext context, Appender<ILoggingEvent> appender) {
+        List<String> denied = new ArrayList<>();
+        for (Level level : List.of(Level.INFO, Level.WARN, Level.ERROR)) {
+            if (appender.getFilterChainDecision(probeEvent(context, level)) == FilterReply.DENY) {
+                denied.add(level.toString());
+            }
+        }
+        if (denied.isEmpty()) {
+            return List.of();
+        }
+        return List.of("콘솔 어펜더 " + appender.getName() + "의 필터가 버리는 레벨: " + String.join(", ", denied));
+    }
+
     /** JUL 루트 핸들러는 SLF4J 브리지 하나뿐이어야 한다. Boot가 로깅을 설정하지 않으면 JUL 콘솔 핸들러가 남는다. */
     private static List<String> julHandlerProblems() {
         List<String> problems = new ArrayList<>();
@@ -140,7 +156,7 @@ final class LogDeviceCheck {
         if (encoder == null || !encoder.isStarted()) {
             return List.of("어펜더 " + appender.getName() + "의 인코더가 없거나 시작되지 않았다");
         }
-        String encoded = new String(encoder.encode(probeEvent(context)), StandardCharsets.UTF_8);
+        String encoded = new String(encoder.encode(probeEvent(context, Level.WARN)), StandardCharsets.UTF_8);
         List<String> problems = new ArrayList<>();
         String trimmed = encoded.stripTrailing();
         if (trimmed.contains("\n")) {
@@ -165,13 +181,13 @@ final class LogDeviceCheck {
     }
 
     /** 메시지와 원인 메시지에 시험 문자열을 담은 예외와 MDC requestId를 가진 이벤트. */
-    private static ILoggingEvent probeEvent(LoggerContext context) {
+    private static ILoggingEvent probeEvent(LoggerContext context, Level level) {
         IllegalStateException failure =
                 new IllegalStateException("바깥 " + PROBE, new IllegalArgumentException("원인 " + PROBE));
         LoggingEvent event = new LoggingEvent(
                 LogDeviceCheck.class.getName(),
                 context.getLogger(LogDeviceCheck.class),
-                Level.WARN,
+                level,
                 "출력 장치 자기 검사",
                 failure,
                 null);
