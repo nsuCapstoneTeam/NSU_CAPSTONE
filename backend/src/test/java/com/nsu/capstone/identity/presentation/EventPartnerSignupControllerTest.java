@@ -53,7 +53,7 @@ class EventPartnerSignupControllerTest {
         mockMvc.perform(post("/api/v1/auth/signup/event-partner/session")
                         .contentType(APPLICATION_JSON)
                         .content("""
-                    {"email":"partner@example.com","phone":"01012345678","agreements":[{"id":"service","version":"v1"},{"id":"privacy","version":"v1"}]}
+                    {"email":"partner@example.com","phone":"01012345678","agreements":[{"id":"service","version":"v1"},{"id":"privacy","version":"v1"},{"id":"demo-notice","version":"v1"},{"id":"overseas-transfer","version":"v1"}]}
                     """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.*", hasSize(1)))

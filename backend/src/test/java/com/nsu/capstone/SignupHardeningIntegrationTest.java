@@ -71,7 +71,8 @@ class SignupHardeningIntegrationTest {
     JdbcTemplate jdbc;
 
     private static final String AGREEMENTS = """
-        [{"id":"service","version":"v1"},{"id":"privacy","version":"v1"}]
+        [{"id":"service","version":"v1"},{"id":"privacy","version":"v1"},\
+        {"id":"demo-notice","version":"v1"},{"id":"overseas-transfer","version":"v1"}]
         """;
 
     private static String email() {
@@ -166,7 +167,7 @@ class SignupHardeningIntegrationTest {
                     ? artists.signup(id, "a-strong-test-password").userId()
                     : partners.signup(id, "a-strong-test-password").userId();
             var saved = terms.findByUserId(userId);
-            assertEquals(2, saved.size());
+            assertEquals(4, saved.size());
             assertTrue(saved.stream().allMatch(t -> session.consent().agreedAt().equals(t.getAgreedAt())));
             assertTrue(sessions.findById(id).isEmpty());
         }
@@ -204,7 +205,7 @@ class SignupHardeningIntegrationTest {
         redis.opsForHash().put(SignupRedisKeys.session(id), "adultConfirmed", "true");
         UUID userId = oauth.signup(id).userId();
         var saved = terms.findByUserId(userId);
-        assertEquals(2, saved.size());
+        assertEquals(4, saved.size());
         assertTrue(saved.stream().allMatch(t -> consent.agreedAt().equals(t.getAgreedAt())));
     }
 

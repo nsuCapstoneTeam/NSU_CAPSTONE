@@ -78,7 +78,7 @@ class ArtistSignupSecurityConfigTest {
                         post("/api/v1/auth/signup/artist/oauth/session")
                                 .contentType(APPLICATION_JSON)
                                 .content(
-                                        "{\"oauthSignupSessionId\":\"session\",\"phone\":\"01012345678\",\"agreements\":[{\"id\":\"service\",\"version\":\"v1\"},{\"id\":\"privacy\",\"version\":\"v1\"}]}"))
+                                        "{\"oauthSignupSessionId\":\"session\",\"phone\":\"01012345678\",\"agreements\":[{\"id\":\"service\",\"version\":\"v1\"},{\"id\":\"privacy\",\"version\":\"v1\"},{\"id\":\"demo-notice\",\"version\":\"v1\"},{\"id\":\"overseas-transfer\",\"version\":\"v1\"}]}"))
                 .andExpect(status().isCreated());
         mockMvc.perform(post("/api/v1/auth/signup/artist/oauth")
                         .contentType(APPLICATION_JSON)
