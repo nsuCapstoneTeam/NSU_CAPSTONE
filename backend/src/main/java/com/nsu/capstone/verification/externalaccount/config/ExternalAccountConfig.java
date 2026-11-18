@@ -34,8 +34,9 @@ public class ExternalAccountConfig {
      * 연결·존재 확인·후보처럼 결과가 저장이나 오류로 이어지는 호출: 연결 3초, 응답 5초, 재시도 없음.
      *
      * <p>기본 후보에서 뺀다(NSU-161). {@code RestClient.Builder}가 기본 후보로 하나라도 있으면 Boot 자동 설정의 기본 빌더
-     * {@code restClientBuilder}가 빠지고, 이름 없이 {@code RestClient.Builder}를 주입받는 다른 모듈(SMS·이메일 발송기)이
-     * 기동에 실패한다. 받는 쪽은 {@link #WRITE_REST_CLIENT}로 이름을 지정한다.
+     * {@code restClientBuilder}가 빠진다. 그러면 이름 없이 {@code RestClient.Builder}를 주입받는 다른 모듈(SMS·이메일 발송기)이
+     * Boot 빌더 대신 이 모듈의 빌더를 조용히 받고, 기본 후보가 쓰기·읽기 둘이면 "expected single matching bean but found 2"로
+     * 기동에 실패한다(PR #232 뒤 실제로 난 경우). 받는 쪽은 {@link #WRITE_REST_CLIENT}로 이름을 지정한다.
      */
     @Bean(name = WRITE_REST_CLIENT, defaultCandidate = false)
     @Qualifier(WRITE_REST_CLIENT)
