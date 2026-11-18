@@ -21,6 +21,10 @@
 | 추천 결과 체험 데이터·원하는 템포 비교 | `src/features/matching/song-results.js` |
 | 추천 곡 재생기 (한 번에 한 곡, 박자 소리) | `src/features/matching/use-song-player.js` |
 | 역할별 프로필·일정·관심 목록 | `src/features/my-page/my-page.jsx` |
+| 외부 계정(YouTube·Spotify) 연결, 작업물 고르기 | `src/features/external-accounts/external-accounts-panel.jsx`(마이페이지 작업물 메뉴), `use-external-accounts.js`, `external-accounts-api.js` |
+| 외부 링크 표시(링크 목록·출처 표기) | `src/features/external-accounts/external-links.jsx`, 주소 거르기 `safe-link.js` |
+| 외부 계정 OAuth 콜백으로 돌아온 값 처리 | `src/features/external-accounts/startup-link.js`, `startup-connection.js` |
+| 확인 배지 색·목록 규칙 | `src/features/my-page/verification-badge.js`, `components/verified-badge.jsx` |
 | 게시글 작성·검색·수정·삭제 | `src/features/board/board-page.jsx` |
 | 행사 찾기: 지역별 행사 수 → 목록 → 장소 → 상세 | `src/features/event-search/event-search-page.jsx`와 `components/` |
 | 행사 찾기 예시 행사·시·도별 세기 | `src/features/event-search/event-search-data.js`, `event-search.js` |

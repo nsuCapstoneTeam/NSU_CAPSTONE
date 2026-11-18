@@ -63,6 +63,8 @@ verifiedAt
 connectedAt
 ```
 
+> 2026-11-16 [external_links/00](../external_links/00_external_account_links.md) 12번·14번: YouTube 약관(30일 안에 갱신 또는 삭제) 때문에 `displayName`·`profileUrl`·`thumbnailUrl`은 저장하지 않고 보여 줄 때 받는다. 저장은 `providerAccountId`, 연결 시각, ID 확인 시각뿐이고, 채널 ID도 7일마다 다시 확인한다.
+
 중요:
 
 ```text
@@ -93,6 +95,8 @@ profileUrl
 verifiedAt
 connectedAt
 ```
+
+> 2026-11-17 [external_links/00](../external_links/00_external_account_links.md) 13번: SoundCloud 연결은 구현하지 않았다. SoundCloud API 약관이 특정 아티스트 전용 페이지·프로필에 API 사용을 금지하기 때문이다. 이 절은 SoundCloud 허가를 받아 다시 설계할 때의 기준으로 남긴다. 그때는 약관의 저장 제한(세션 캐시만 허용)도 함께 본다.
 
 중요:
 
@@ -207,7 +211,7 @@ Provider Account ID + Verification 결과 저장
 | SoundCloud | OAuth 2.1 + PKCE | 해당 Account 접근 권한 | 없음 |
 | Spotify | Artist URL / ID | 공개 Artist Profile 존재 | 없음 |
 
-Provider 연결 결과는 `Verification` 영역에 저장하고 Reliability 관측으로 변환하지 않습니다.
+Provider 연결 결과는 `Verification` 영역에 저장하고 Reliability 관측으로 변환하지 않습니다. Trust Profile `verifications`에는 YouTube만 `EXTERNAL_ACCOUNT`로 나온다. Spotify 연결은 프로필 링크이며 Verification 항목이 아니다. SoundCloud는 약관 때문에 구현하지 않았다([01 §4.3](../../api/01_trust_profile.md), [external_links/00](../external_links/00_external_account_links.md) 5번·13번).
 
 ---
 
@@ -220,6 +224,8 @@ Provider 연결 결과는 `Verification` 영역에 저장하고 Reliability 관�
 ## 선택지 A. 연결이 유지되는 동안 유효
 
 YouTube·SoundCloud 계정의 제어권 확인 결과는 연결이 유지되는 동안 유효합니다. 자동 재확인과 기간 만료를 두지 않습니다.
+
+> 2026-11-17 [external_links/00](../external_links/00_external_account_links.md) 14번에 예외가 생겼다. YouTube API 정책은 채널 ID를 포함한 API 데이터를 30일 안에 갱신하거나 삭제하게 한다. 그래서 매일 작업이 채널이 아직 공개로 있는지 API 키로 확인한다. 채널이 없어지거나 비공개가 되면, 또는 30일 동안 확인하지 못하면 연결을 지운다. 제어권 자체를 다시 확인하지는 않는다. 그러나 30일 미확인 삭제는 아래 "기간 만료"와 결과가 같다. 약관 준수를 위한 변경이며 PR 리뷰에서 확정한다.
 
 ## 선택지 B. 기간 만료 후 재인증
 
@@ -248,4 +254,6 @@ Trust Profile을 조회할 때마다 외부 계정을 확인합니다. Refresh T
 | 같은 계정을 다시 연결 | OAuth로 제어권을 다시 확인한 뒤에만 표시 |
 
 해제·취소된 확인 기록의 보관 여부는 Trust Profile 계약과 무관한 저장 방식의 문제로, NSU-33·NSU-37 구현에서 정합니다.
+
+> 2026-11-16 [external_links/00](../external_links/00_external_account_links.md) 7번에서 정했다. 해제하면 연결 행을 지우고, 감사 기록에는 플랫폼 계정 ID 없이 해제 사실만 남긴다. 관리자 취소는 관리자 기능(NSU-80)이 생길 때까지 runbook에 따른 행 삭제로 대신한다(같은 ADR 2번).
 

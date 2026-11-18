@@ -1,10 +1,8 @@
 package com.nsu.capstone.trust.profile.application;
 
-import com.nsu.capstone.global.exception.BusinessException;
-import com.nsu.capstone.global.exception.ErrorCode;
+import com.nsu.capstone.identity.application.ArtistReadAccess;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
-import com.nsu.capstone.identity.domain.UserStatus;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.trust.profile.domain.TrustProfile;
 import com.nsu.capstone.trust.profile.domain.VerificationItem;
@@ -24,6 +22,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class TrustProfileQueryService {
 
+    private final ArtistReadAccess artistReadAccess;
     private final UserRepository userRepository;
     private final PerformanceOutcomeReader performanceOutcomeReader;
     private final VerificationReader verificationReader;
@@ -31,15 +30,7 @@ public class TrustProfileQueryService {
     private final Clock clock;
 
     public TrustProfile getTrustProfile(UUID callerId, UserRole callerRole, UUID artistId) {
-        boolean ownProfile = callerRole == UserRole.ARTIST && callerId.equals(artistId);
-        if (!ownProfile) {
-            if (callerRole != UserRole.EVENT_PARTNER) {
-                throw new BusinessException(ErrorCode.ACCESS_DENIED);
-            }
-            if (!isActiveArtist(artistId)) {
-                throw new BusinessException(ErrorCode.ARTIST_NOT_FOUND);
-            }
-        }
+        artistReadAccess.require(callerId, callerRole, artistId);
         return assembleAll(List.of(artistId)).get(artistId);
     }
 
@@ -76,13 +67,5 @@ public class TrustProfileQueryService {
                                 outcomes.getOrDefault(artistId, List.of()),
                                 verifications.getOrDefault(artistId, List.of()),
                                 now)));
-    }
-
-    private boolean isActiveArtist(UUID userId) {
-        return userRepository
-                .findById(userId)
-                .filter(user -> user.getRole() == UserRole.ARTIST)
-                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
-                .isPresent();
     }
 }
