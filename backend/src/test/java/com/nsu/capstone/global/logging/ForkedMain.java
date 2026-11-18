@@ -23,6 +23,7 @@ import org.springframework.context.annotation.Bean;
  *   <li>light: 빈이 없는 앱
  *   <li>attach-appender: 컨텍스트를 만드는 중 루트 로거에 어펜더를 하나 더 붙이는 앱
  *   <li>detach-root-appender: 컨텍스트를 만드는 중 콘솔 어펜더를 루트 로거에서 떼어 하위 로거에만 붙이는 앱
+ *   <li>stop-console-appender: 컨텍스트를 만드는 중 루트에 붙은 콘솔 어펜더를 멈추는 앱
  *   <li>attach-console-to-child-logger: 컨텍스트를 만드는 중 루트에 붙은 콘솔 어펜더를 하위 로거에도 붙이는 앱
  *   <li>disable-additivity: 컨텍스트를 만드는 중 로거 하나의 additivity를 끄는 앱
  *   <li>attach-jul-handler: 컨텍스트를 만드는 중 이름 있는 JUL 로거에 콘솔 핸들러를 붙이는 앱
@@ -59,6 +60,7 @@ public final class ForkedMain {
             case "light", "httpclient", "uncaught-thread", "hang" -> TestApp.EmptyConfig.class;
             case "attach-appender" -> AttachAppenderConfig.class;
             case "detach-root-appender" -> DetachRootAppenderConfig.class;
+            case "stop-console-appender" -> StopConsoleAppenderConfig.class;
             case "attach-console-to-child-logger" -> AttachConsoleToChildLoggerConfig.class;
             case "disable-additivity" -> DisableAdditivityConfig.class;
             case "attach-jul-handler" -> AttachJulHandlerConfig.class;
@@ -164,6 +166,21 @@ public final class ForkedMain {
             Appender<ILoggingEvent> console = root.getAppender("CONSOLE");
             root.detachAppender(console);
             context.getLogger("com.nsu.capstone").addAppender(console);
+            return new Object();
+        }
+    }
+
+    /**
+     * 컨텍스트를 만드는 중에 콘솔 어펜더가 멈추는 경우. 루트 연결과 인코더는 시작 상태로 남지만 Logback은 멈춘 어펜더로 아무것도 쓰지 않는다.
+     * 그래서 멈춘 이유를 알리는 로그 줄도 나오지 않는다.
+     */
+    @TestConfiguration(proxyBeanMethods = false)
+    static class StopConsoleAppenderConfig {
+
+        @Bean
+        Object stoppedConsole() {
+            LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
+            context.getLogger(Logger.ROOT_LOGGER_NAME).getAppender("CONSOLE").stop();
             return new Object();
         }
     }

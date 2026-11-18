@@ -86,6 +86,21 @@ class LogDeviceSelfCheckTest {
                 .doesNotContain(LogDeviceCheck.PROBE);
     }
 
+    /**
+     * 멈춘 어펜더는 쓰지 않으므로 멈춘 이유를 알리는 로그 줄도 나오지 않는다. 그래서 출력으로는 이 검사 때문인지 알 수 없다.
+     * 같은 구성이 로컬 모드에서는 시작되는 것과 대조해, 다른 이유가 아니라 이 검사 때문에 멈춘 것을 확인한다.
+     */
+    @Test
+    void 콘솔_어펜더가_멈추면_준비_완료_검사에서_시작을_멈춘다() throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "stop-console-appender");
+        ForkedJvm.Result local = ForkedJvm.run(List.of(), Map.of("LOG_LOCAL_MODE", "true"), "stop-console-appender");
+
+        assertThat(local.exitCode()).as("대조. 출력: %s", local.output()).isZero();
+        assertThat(local.output()).contains(ForkedMain.STARTED);
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
+        assertThat(result.output()).doesNotContain(ForkedMain.STARTED).doesNotContain(LogDeviceCheck.PROBE);
+    }
+
     /** 객체는 하나라 어펜더 개수 검사와 루트 검사는 지나간다. 하위 로거에 다시 붙이면 그 로거의 줄 하나가 두 번 나간다. */
     @Test
     void 콘솔_어펜더를_루트가_아닌_로거에도_붙이면_준비_완료_검사에서_멈추고_오류에_그_로거_이름이_있다() throws Exception {

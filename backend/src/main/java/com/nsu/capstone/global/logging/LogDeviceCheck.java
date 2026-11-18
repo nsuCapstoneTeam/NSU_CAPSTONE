@@ -73,6 +73,7 @@ final class LogDeviceCheck {
         Appender<ILoggingEvent> appender = singleAppender(context, problems);
         problems.addAll(julHandlerProblems());
         if (appender != null) {
+            problems.addAll(startedProblems(appender));
             problems.addAll(routingProblems(context, appender));
             problems.addAll(filterProblems(context, appender));
             problems.addAll(encodedEventProblems(context, appender));
@@ -110,6 +111,14 @@ final class LogDeviceCheck {
             return appenders.iterator().next();
         }
         return null;
+    }
+
+    /** 멈춘 어펜더는 루트 연결과 인코더가 시작 상태로 남아도 아무것도 쓰지 않는다. 인코더만 보는 아래 검사는 이것을 놓친다. */
+    private static List<String> startedProblems(Appender<ILoggingEvent> appender) {
+        if (appender.isStarted()) {
+            return List.of();
+        }
+        return List.of("콘솔 어펜더 " + appender.getName() + "가 시작 상태가 아니다");
     }
 
     /**
