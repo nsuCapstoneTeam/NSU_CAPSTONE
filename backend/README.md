@@ -92,6 +92,8 @@ AUDD_ENABLED=false
 AUDD_API_TOKEN=
 ```
 
+`.env`는 Docker Compose(PostgreSQL·Redis 컨테이너)만 읽고 Spring Boot 애플리케이션은 읽지 않는다. 애플리케이션이 쓰는 값(`POSTGRES_*`·`REDIS_PORT`처럼 컨테이너와 같아야 하는 값, `REDIS_COMMAND_TIMEOUT`, `JWT_ACCESS_TOKEN_SECRET` 등)은 셸에서 export하거나 IntelliJ Run Configuration 환경변수로 넘긴다. `.env`에만 적으면 각 설정의 기본값이 적용되고, 비밀값처럼 필수인 값은 기동에 실패한다.
+
 `POSTGRES_PASSWORD`에는 팀원별로 사용할 로컬 비밀번호를 직접 입력한다.
 `SIGNUP_VERIFICATION_HMAC_SECRET`에는 충분히 긴 임의의 비밀값을 입력하고 저장소에 커밋하지 않는다.
 `SIGNUP_REQUIRED_TERMS`는 `약관ID:버전`을 쉼표로 구분해 입력한다. 기본 환경은 `service`·`privacy` 2종이 필요하다(예시: `service:v1,privacy:v1`). `SPRING_PROFILES_ACTIVE=demo`로 `demo` Spring 프로필을 명시적으로 켜면 `demo-notice`·`overseas-transfer`도 필수다(예시: `service:v1,privacy:v1,demo-notice:v1,overseas-transfer:v1`). 활성 환경의 필수 ID가 빠지거나 중복·알 수 없는 ID가 있으면 기동에 실패한다. 버전 기본값은 없으며, 예시 버전 대신 실제 배포할 약관 버전을 넣고 화면과 맞춘다.
