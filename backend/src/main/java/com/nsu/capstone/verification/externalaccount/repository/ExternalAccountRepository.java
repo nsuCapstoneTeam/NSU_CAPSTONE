@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.postgresql.util.PSQLException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -72,12 +73,26 @@ public class ExternalAccountRepository {
                     .update();
         } catch (DuplicateKeyException e) {
             // 다른 아티스트가 같은 YouTube 채널을 먼저 연결했다. 어느 아티스트인지는 드러내지 않는다(06 §5.2).
-            if (e.getMessage() != null && e.getMessage().contains(YOUTUBE_CHANNEL_UNIQUE_INDEX)) {
+            if (isYoutubeChannelDuplicate(e)) {
                 throw new ExternalAccountException(
                         ExternalAccountFailure.EXTERNAL_ACCOUNT_ALREADY_LINKED, "이미 다른 아티스트가 연결한 YouTube 채널이다");
             }
             throw e;
         }
+    }
+
+    /**
+     * 위반한 제약이 YouTube 채널 유일 인덱스인지. 오류 메시지를 읽지 않고 PostgreSQL이 알려 주는 제약 이름으로 구분한다.
+     * 구조화 로그 도입 뒤에는 드라이버가 오류 DETAIL을 빼므로 메시지 모양에 기대면 안 된다.
+     */
+    static boolean isYoutubeChannelDuplicate(DuplicateKeyException e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+            if (cause instanceof PSQLException postgres && postgres.getServerErrorMessage() != null) {
+                return YOUTUBE_CHANNEL_UNIQUE_INDEX.equals(
+                        postgres.getServerErrorMessage().getConstraint());
+            }
+        }
+        return false;
     }
 
     /**

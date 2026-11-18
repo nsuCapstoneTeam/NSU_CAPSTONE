@@ -2,6 +2,8 @@ package com.nsu.capstone.verification.externalaccount.config;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -41,6 +43,16 @@ public class ExternalAccountConfig {
                 .requestFactory(requestFactory(
                         properties.http().readConnectTimeout(),
                         properties.http().readReadTimeout()));
+    }
+
+    /**
+     * 표시 정보를 계정마다 병렬로 받는 실행기(가상 스레드). 응답 전체 3초 상한 때문에 병렬이 필요하다. 종료 때 Spring이 닫는다.
+     *
+     * <p>{@code shortcut: 요청 ID를 이어 주지 않는 실행기, NSU-146 머지 뒤 RequestIdExecutors.wrap(..)으로 감싼다}
+     */
+    @Bean
+    ExecutorService externalAccountDisplayExecutor() {
+        return Executors.newVirtualThreadPerTaskExecutor();
     }
 
     private static JdkClientHttpRequestFactory requestFactory(Duration connectTimeout, Duration readTimeout) {

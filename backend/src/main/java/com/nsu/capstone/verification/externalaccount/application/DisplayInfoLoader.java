@@ -12,7 +12,6 @@ import com.nsu.capstone.verification.externalaccount.provider.YoutubeGateway;
 import com.nsu.capstone.verification.externalaccount.redis.DisplayCache;
 import com.nsu.capstone.verification.externalaccount.redis.ProfileCache;
 import com.nsu.capstone.verification.externalaccount.redis.YoutubeQuota;
-import jakarta.annotation.PreDestroy;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +19,6 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import lombok.AccessLevel;
@@ -45,13 +43,10 @@ class DisplayInfoLoader {
     private final YoutubeQuota youtubeQuota;
     private final ProfileCache profileCache;
     private final DisplayCache displayCache;
-    private final SingleFlight singleFlight = new SingleFlight();
-    private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+    /** 계정마다 병렬로 받는 실행기. 모듈 설정이 만든다(ExternalAccountConfig). 닫는 것도 Spring이 한다. */
+    private final ExecutorService executor;
 
-    @PreDestroy
-    void shutdown() {
-        executor.shutdownNow();
-    }
+    private final SingleFlight singleFlight = new SingleFlight();
 
     Map<UUID, AccountDisplay> load(
             UUID callerId, List<ExternalAccount> accounts, Map<UUID, List<SelectedWork>> worksByAccount) {
