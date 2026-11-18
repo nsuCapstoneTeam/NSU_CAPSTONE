@@ -1,5 +1,6 @@
 package com.nsu.capstone.verification.identity;
 
+import java.net.URI;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
@@ -32,6 +33,14 @@ record IdentityVerificationProperties(
         if (requestLimitPerHour <= 0) {
             throw new IllegalArgumentException("identity-verification.request-limit-per-hour는 양수여야 한다");
         }
+        requirePositive(attemptLifetime, "identity-verification.attempt-lifetime");
+    }
+
+    /** 비밀 값(이름 암호화 키, API secret)이 로그나 예외 메시지로 새지 않도록 가린다. */
+    @Override
+    public String toString() {
+        return "IdentityVerificationProperties[provider=%s, nameEncryptionKey=***, portone=%s, requestLimitPerHour=%d, attemptLifetime=%s]"
+                .formatted(provider, portone, requestLimitPerHour, attemptLifetime);
     }
 
     record PortOne(
@@ -51,6 +60,15 @@ record IdentityVerificationProperties(
                 throw new IllegalArgumentException("identity-verification.portone.test-channel 설정이 필요하다");
             }
             required(baseUrl, "identity-verification.portone.base-url");
+            requireSecureUrl(baseUrl, "identity-verification.portone.base-url");
+            requirePositive(connectTimeout, "identity-verification.portone.connect-timeout");
+            requirePositive(readTimeout, "identity-verification.portone.read-timeout");
+        }
+
+        @Override
+        public String toString() {
+            return "PortOne[apiSecret=***, storeId=%s, channelKey=%s, testChannel=%s, baseUrl=%s, connectTimeout=%s, readTimeout=%s]"
+                    .formatted(storeId, channelKey, testChannel, baseUrl, connectTimeout, readTimeout);
         }
     }
 
@@ -59,6 +77,29 @@ record IdentityVerificationProperties(
         TestChannel {
             required(pgProvider, "identity-verification.portone.test-channel.pg-provider");
             required(pgMerchantId, "identity-verification.portone.test-channel.pg-merchant-id");
+        }
+    }
+
+    /** 0 이하의 시간은 조회를 보내기도 전에 시간 초과로 만들거나 DB의 만료 CHECK에 걸려 모든 시작을 실패시킨다. */
+    private static void requirePositive(Duration value, String property) {
+        if (value == null || value.isZero() || value.isNegative()) {
+            throw new IllegalArgumentException(property + "는 0보다 커야 한다");
+        }
+    }
+
+    /** API secret이 평문으로 나가지 않게 https만 받는다. 시험용 로컬 서버를 위해 이 컴퓨터의 http는 받는다. */
+    private static void requireSecureUrl(String baseUrl, String property) {
+        URI uri;
+        try {
+            uri = URI.create(baseUrl);
+        } catch (IllegalArgumentException invalid) {
+            throw new IllegalArgumentException(property + "는 올바른 주소여야 한다");
+        }
+        boolean https = "https".equalsIgnoreCase(uri.getScheme());
+        boolean localHttp = "http".equalsIgnoreCase(uri.getScheme())
+                && ("127.0.0.1".equals(uri.getHost()) || "localhost".equals(uri.getHost()));
+        if (!https && !localHttp) {
+            throw new IllegalArgumentException(property + "는 https 주소여야 한다");
         }
     }
 

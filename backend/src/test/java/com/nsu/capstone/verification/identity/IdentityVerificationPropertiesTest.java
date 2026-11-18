@@ -94,7 +94,41 @@ class IdentityVerificationPropertiesTest {
         for (String key : List.of("not-base64-@@@", Base64.getEncoder().encodeToString(new byte[16]))) {
             rows.add(Arguments.of("identity-verification.name-encryption-key", key));
         }
+        // 0 이하의 시간은 모든 조회를 보내기도 전에 시간 초과로 만들거나 DB의 만료 CHECK에 걸려 모든 시작을 실패시킨다.
+        for (String duration : List.of("-5m", "PT0S")) {
+            rows.add(Arguments.of("identity-verification.attempt-lifetime", duration));
+            rows.add(Arguments.of("identity-verification.portone.connect-timeout", duration));
+            rows.add(Arguments.of("identity-verification.portone.read-timeout", duration));
+        }
+        // API secret이 평문으로 나가지 않도록 PortOne 주소는 https(또는 이 컴퓨터의 http)만 받는다.
+        for (String baseUrl : List.of("http://api.portone.io", "ftp://api.portone.io", "api.portone.io", "http://")) {
+            rows.add(Arguments.of("identity-verification.portone.base-url", baseUrl));
+        }
         return rows.stream();
+    }
+
+    @Test
+    void 이_컴퓨터의_http_주소와_https_주소는_PortOne_주소로_받는다() {
+        for (String baseUrl : List.of("http://127.0.0.1:18080", "http://localhost:18080", "https://api.portone.io")) {
+            List<String> values = validValues();
+            values.add("identity-verification.portone.base-url=" + baseUrl);
+
+            runner.withPropertyValues(values.toArray(String[]::new))
+                    .run(context -> assertThat(context).hasNotFailed());
+        }
+    }
+
+    @Test
+    void 설정_객체의_toString은_API_secret과_이름_암호화_키를_가린다() {
+        List<String> values = validValues();
+        values.removeIf(value -> value.startsWith("identity-verification.portone.api-secret="));
+        values.add("identity-verification.portone.api-secret=" + SECRET_MARKER);
+
+        runner.withPropertyValues(values.toArray(String[]::new)).run(context -> {
+            IdentityVerificationProperties properties = context.getBean(IdentityVerificationProperties.class);
+            assertThat(properties.toString()).doesNotContain(SECRET_MARKER).doesNotContain(VALID_KEY);
+            assertThat(properties.portone().toString()).doesNotContain(SECRET_MARKER);
+        });
     }
 
     private static List<String> validValues() {
