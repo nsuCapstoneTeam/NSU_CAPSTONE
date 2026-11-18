@@ -36,7 +36,7 @@
 - 본문과 응답의 `provider`는 enum `YOUTUBE`·`SPOTIFY`다. 값이 늘 수 있다(00 §3).
 - `externalAccountId`·`artistId`는 정규형 UUID다. 형식이 틀리면 `400 INVALID_EXTERNAL_ACCOUNT_ID`·`400 INVALID_ARTIST_ID`다.
 - 연결 결과(`201`)에는 `Location`을 붙이지 않는다. 계정 하나를 조회하는 API가 없기 때문이다.
-- 쓰기 요청은 `DEMO`에서 허용 목록 계정만 통과한다(`403 DEMO_WRITE_NOT_ALLOWED`, 00 §8).
+- 쓰기 요청은 `DEMO`에서 허용 목록 계정만 통과한다(`403 DEMO_WRITE_NOT_ALLOWED`, 00 §8). 이 필터는 전역 필터이고 2026-11-18 기준 아직 구현되지 않았다. 구현되기 전에는 시연 서버에서 외부 계정 플랫폼을 켜지 않는다(ADR 9번).
 - `/api/v1/me/external-accounts/**`는 아티스트마다 10분에 30번까지다. 넘으면 `429 TOO_MANY_REQUESTS`와 `Retry-After`다(§11.2).
 - 태그 이름은 `외부 계정`이다(00 §10.1 목록에 더한다).
 
@@ -333,18 +333,22 @@ YouTube 정책은 ID도 30일 안에 갱신하거나 삭제하게 한다(ADR 14�
 |---|---|---|
 | `2xx`, 응답이 온전함, 그 ID가 `items`에 있고 `public` | 있음 | `refreshed_at`을 지금으로 바꾼다 |
 | `2xx`, 응답이 온전함, 그 ID가 `items`에 없거나 `public`이 아님 | 없음 | 채널이면 연결을 지우고 감사 `DISCONNECTED`(`SYSTEM`, `CHANNEL_NOT_PUBLIC`), 영상이면 그 작업물 행을 지운다 |
-| `2xx`지만 응답이 온전하지 않음(아래) | 확인 실패 | 그 응답에 든 ID 모두 행을 그대로 두고 다음 날 다시 한다. `ERROR` 로그(작업 이름, 요청한 ID 수, 사유)를 남긴다 |
+| `2xx`지만 응답이 온전하지 않음(아래) | `public`으로 온 ID는 있음, 나머지는 확인 실패 | `id`와 `privacyStatus: public`이 함께 온 ID는 `refreshed_at`을 갱신한다. 나머지 행은 그대로 두고 다음 날 다시 한다. `ERROR` 로그(작업 이름, 요청한 ID 수, 사유)를 남긴다 |
 | `403`(`quotaExceeded`·`keyInvalid`·`forbidden` 등), 그 밖의 `4xx`, `5xx`, 시간 초과 | 확인 실패 | 행을 그대로 두고 다음 날 다시 한다 |
 
-"온전하지 않은 응답"은 다음 넷이다. 하나라도 맞으면 그 응답으로는 아무 행도 지우지 않는다(ADR 14번).
+"온전하지 않은 응답"은 다음 넷이다. 하나라도 맞으면 그 응답으로는 아무 행도 지우지 않는다. 공개로 온 ID의 갱신은 한다(ADR 14번).
 
 1. 본문이 비었거나 `items`와 `pageInfo`가 모두 없다.
 2. 일부만 왔다. `nextPageToken`이 있거나, `pageInfo.totalResults`가 받은 `items` 수보다 크다.
-3. 받은 항목에 `id`나 `status`가 없다.
+3. 받은 항목에 `id`나 `status.privacyStatus`가 없다.
 4. 한 응답에서 "없음"이 5개 이상이고 요청한 ID의 절반 이상이다. 채널이 이만큼 한꺼번에 사라지는 일은 정상 운영에서 거의 없고, API 동작이 바뀌었을 가능성이 더 크다. 실제로 사라진 경우도 30일 미확인 삭제(아래)가 정책 기한 안에 지운다.
 
 - 확인 실패가 이어져 `refreshed_at`이 30일을 넘은 행은 확인하지 못했어도 지운다(채널이면 감사 `DISCONNECTED`, `SYSTEM`, `UNVERIFIED_30_DAYS`). YouTube 정책의 30일 제한 때문이다.
-- 실패 감시: 작업이 끝까지 돌면 `extacct:refresh-job:last-success`에 시각을 남긴다. 매 실행 시작에 마지막 성공이 3일을 넘었거나 가장 오래된 YouTube `refreshed_at`이 20일을 넘었으면 `ERROR` 로그를 한 줄 남긴다(작업 이름, 마지막 성공 시각, 가장 오래된 `refreshed_at`, 대상 행 수). 30일 삭제보다 10일 이상 먼저 알아채게 하기 위해서다.
+- 실패 감시: 확인 실패와 반영 오류 없이 끝까지 돈 실행만 `extacct:refresh-job:last-success`에 시각을 남긴다. 반영 오류(DB)가 난 행은 건너뛰고 다음 행을 계속 처리하지만, 그 실행은 성공으로 기록하지 않는다. 매 실행 시작에 다음 중 하나면 `ERROR` 로그를 한 줄 남긴다(작업 이름, 마지막 성공 시각, 가장 오래된 `refreshed_at`, 대상 행 수). 30일 삭제보다 10일 이상 먼저 알아채게 하기 위해서다.
+  - 마지막 성공이 3일을 넘었다.
+  - 마지막 성공 기록이 없는데(첫 실행, Redis 초기화) 가장 오래된 YouTube `refreshed_at`이 10일을 넘었다.
+  - 가장 오래된 YouTube `refreshed_at`이 20일을 넘었다.
+- YouTube가 설정으로 꺼져 있으면 확인 호출을 하지 않는다. 30일 미확인 삭제와 실패 감시는 그대로 한다.
 - 지운 연결과 영상의 표시 정보 캐시도 지운다.
 - 이 작업은 API를 바꾸지 않는다. 결과는 다음 조회에 반영된다.
 
@@ -388,7 +392,7 @@ DB·Redis가 관여하는 경우는 Testcontainers(PostgreSQL, Redis)로 확인�
 |---|---|
 | 역할 | 토큰 없으면 `401`. EVENT_PARTNER의 `/me/external-accounts/**`는 `403 ACCESS_DENIED`이고 Redis·DB가 바뀌지 않는다 |
 | 조회 접근 | ARTIST 본인 `200`, 남의 `artistId`는 대상 조회 전에 `403`. EVENT_PARTNER는 ACTIVE ARTIST `200`, 없음·EVENT_PARTNER·SUSPENDED·WITHDRAWN 모두 `404 ARTIST_NOT_FOUND` |
-| DEMO | 허용 목록 밖 계정의 시작·연결·고르기·해제는 `403 DEMO_WRITE_NOT_ALLOWED`이고 Redis·DB가 바뀌지 않는다. 콜백 `GET`은 `302` |
+| DEMO | 허용 목록 밖 계정의 시작·연결·고르기·해제는 `403 DEMO_WRITE_NOT_ALLOWED`이고 Redis·DB가 바뀌지 않는다. 콜백 `GET`은 `302`. 전역 필터(00 §8)가 구현된 뒤 그 PR에서 확인한다. 이 PR에는 필터가 없어 확인하지 않았다 |
 | 시작 | 응답에 `authorizationUrl`(PKCE `S256`, `state`, scope `youtube.readonly`)과 결합 쿠키(`HttpOnly; Secure; SameSite=Lax; Path=/`, `Max-Age=660`)가 있다. Redis 값에 nonce 원문·토큰이 없다. `provider: SPOTIFY`는 `400 VALIDATION_ERROR` |
 | 시작 교체 확인 | 같은 플랫폼 계정 X가 있는데 `replaceExternalAccountId`가 `null`이거나 다른 ID면 `409 EXTERNAL_ACCOUNT_CONNECTION_CHANGED`이고 Redis 키가 생기지 않는다. 계정이 없는데 ID를 보내도 `409`. 키를 빠뜨리면 `null`과 같다(계정 X가 있으면 `409`, 없으면 진행) |
 | 교체 경쟁 | 기기 A가 X 교체로 시작 → 기기 B가 X를 Y로 교체하고 영상을 고름 → A의 연결 요청은 `409 EXTERNAL_ACCOUNT_CONNECTION_CHANGED`이고 Y와 그 영상, 감사 기록이 그대로다. A 시작 뒤 X를 해제한 경우, `null`로 시작한 뒤 다른 탭이 연결한 경우도 `409`다. 같은 채널을 다시 연결하면 기대 값과 관계없이 `200`이고 아무것도 바뀌지 않는다. Spotify도 같은 규칙이다 |
@@ -412,7 +416,8 @@ DB·Redis가 관여하는 경우는 Testcontainers(PostgreSQL, Redis)로 확인�
 | 고르기 잠금 | 고르기가 잠금 밖에서 v1을 기존 선택으로 본 뒤, 잠금 전에 ID 확인 작업이 v1 행을 지우도록 순서를 고정한다. 저장은 `400 EXTERNAL_ACCOUNT_WORK_NOT_CANDIDATE`이고 아무것도 바뀌지 않는다 |
 | 잠금 대기 | 다른 트랜잭션이 아티스트 잠금을 쥔 채 3초 넘게 있으면 연결·고르기·해제는 `503 EXTERNAL_ACCOUNT_BUSY`이고(`500`이 아니다) 행이 그대로다. 같은 상황의 ID 확인 작업은 그 아티스트를 건너뛰고 다른 아티스트를 계속 처리한다 |
 | 빈 채널 후보 | 업로드 재생목록 조회가 `404 playlistNotFound`이면 후보는 빈 `items`로 `200`이다 |
-| 온전하지 않은 응답 | §11.1의 네 경우(빈 본문·`{}`, `nextPageToken`이 있거나 `totalResults`가 `items` 수보다 큼, `status` 없는 항목, 50개 중 25개가 "없음")마다 행이 하나도 지워지지 않고 `ERROR` 로그가 남는다. 50개 중 4개가 "없음"이면 그 4개만 지운다 |
+| 온전하지 않은 응답 | §11.1의 네 경우(빈 본문·`{}`, `nextPageToken`이 있거나 `totalResults`가 `items` 수보다 큼, `status`나 `privacyStatus` 없는 항목, 50개 중 25개가 "없음")마다 행이 하나도 지워지지 않고 `ERROR` 로그가 남는다. 그 응답에서 `public`으로 온 ID는 `refreshed_at`이 갱신되고, 같은 응답이 31일 이어져도 지워지지 않는다. 50개 중 4개가 "없음"이면 그 4개만 지운다 |
+| 작업 실패 기록 | DB 반영 오류가 난 실행은 다른 행을 계속 처리하고 마지막 성공을 남기지 않는다. 마지막 성공 기록이 없고 가장 오래된 `refreshed_at`이 11일 전이면 `ERROR` 로그가 남는다. YouTube가 꺼져 있으면 YouTube 호출이 없고 31일 전 행은 지워진다 |
 | ID 확인 판정 | `403 quotaExceeded`·`403 keyInvalid`·`5xx`·시간 초과는 행을 지우지 않는다. 온전한 `2xx`에 ID가 없거나 공개가 아니면 지우고 감사에 `SYSTEM`·`CHANNEL_NOT_PUBLIC`이 남는다. 31일 전 행은 확인 실패여도 `UNVERIFIED_30_DAYS`로 지운다. 마지막 성공이 4일 전이거나 가장 오래된 `refreshed_at`이 21일 전이면 `ERROR` 로그가 남는다. 작업 잠금 키가 남아 있어도 1시간 뒤 다음 실행이 잡는다 |
 | 감사 행위자 | 본인 해제는 `ARTIST`·사유 없음, runbook 삭제는 `OPERATOR`와 사유. `actor`가 `ARTIST`가 아닌데 사유가 없으면 DB가 거절한다 |
 | 하루 예산 | 예산 키를 8,000으로 두면 연결·후보는 `503`이고 YouTube 호출이 없다. 조회는 `200`이고 표시 정보만 `null`이다. 그 상태에서 캐시 없는 후보 요청을 1,000번 보내도 카운터는 8,000 그대로이고, ID 확인 작업은 10,000까지 YouTube를 부른다. 동시에 확보 요청을 보내도 카운터가 한도를 넘지 않는다 |
@@ -425,7 +430,7 @@ DB·Redis가 관여하는 경우는 Testcontainers(PostgreSQL, Redis)로 확인�
 | 플랫폼 문자열 | 제어 문자·`<script>` 같은 값이 든 제목은 제어 문자만 지워 그대로 글자로 나가고, 201자 제목은 200자로 잘린다. 허용 호스트가 아닌 썸네일은 `null`이다 |
 | 해제 | `204`, 영상 함께 삭제, 감사 `DISCONNECTED`. 다음 Trust Profile 조회에서 `EXTERNAL_ACCOUNT`가 빠진다 |
 | Trust Profile | YouTube를 연결하면 `verifications`에 `EXTERNAL_ACCOUNT`·`YOUTUBE`가 들어가고, Spotify만 연결하면 들어가지 않는다 |
-| 원칙 테스트 | ADR "원칙을 지키는 테스트" 1~20 |
+| 원칙 테스트 | ADR "원칙을 지키는 테스트" 1~21 |
 
 ## 13. 예시
 
