@@ -52,7 +52,7 @@ class ExternalAccountRepositoryRefreshIntegrationTest extends ExternalAccountInt
         // 다른 채널로 바뀌었다고 보고 시도하면 아무것도 하지 않는다
         assertThat(inLock(artist, locked -> repository.refreshAccount(locked, account.id(), "UCwrong", NOW)))
                 .isFalse();
-        assertThat(inLock(artist, locked -> repository.deleteAccountOfChannel(locked, account.id(), "UCwrong")))
+        assertThat(inLock(artist, locked -> repository.deleteAccountOfChannel(locked, account.id(), "UCwrong", OLD)))
                 .isFalse();
         assertThat(repository.findById(account.id())).contains(account);
 
@@ -61,7 +61,12 @@ class ExternalAccountRepositoryRefreshIntegrationTest extends ExternalAccountInt
         assertThat(repository.findById(account.id()).orElseThrow().refreshedAt())
                 .isEqualTo(NOW);
 
-        assertThat(inLock(artist, locked -> repository.deleteAccountOfChannel(locked, account.id(), "UCright")))
+        // OLD로 읽은 뒤 확인 시각이 NOW로 바뀐 행은 지우지 않는다
+        assertThat(inLock(artist, locked -> repository.deleteAccountOfChannel(locked, account.id(), "UCright", OLD)))
+                .isFalse();
+        assertThat(repository.findById(account.id())).isPresent();
+
+        assertThat(inLock(artist, locked -> repository.deleteAccountOfChannel(locked, account.id(), "UCright", NOW)))
                 .isTrue();
         assertThat(repository.findById(account.id())).isEmpty();
         assertThat(repository.findWorks(account.id())).isEmpty();
@@ -80,11 +85,14 @@ class ExternalAccountRepositoryRefreshIntegrationTest extends ExternalAccountInt
 
         assertThat(inLock(artist, locked -> repository.refreshWork(locked, account.id(), "refresh", NOW)))
                 .isTrue();
-        assertThat(inLock(artist, locked -> repository.deleteWork(locked, account.id(), "drop")))
+        assertThat(inLock(artist, locked -> repository.deleteWork(locked, account.id(), "drop", OLD)))
                 .isTrue();
         assertThat(inLock(artist, locked -> repository.refreshWork(locked, account.id(), "missing", NOW)))
                 .isFalse();
-        assertThat(inLock(artist, locked -> repository.deleteWork(locked, account.id(), "drop")))
+        assertThat(inLock(artist, locked -> repository.deleteWork(locked, account.id(), "drop", OLD)))
+                .isFalse();
+        // OLD로 읽은 뒤 확인 시각이 NOW로 바뀐 영상은 지우지 않는다
+        assertThat(inLock(artist, locked -> repository.deleteWork(locked, account.id(), "refresh", OLD)))
                 .isFalse();
 
         assertThat(repository.findWorks(account.id()))

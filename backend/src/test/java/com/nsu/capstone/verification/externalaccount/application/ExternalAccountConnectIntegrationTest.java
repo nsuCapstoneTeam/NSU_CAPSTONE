@@ -88,7 +88,7 @@ class ExternalAccountConnectIntegrationTest extends ExternalAccountServiceTestBa
     }
 
     @Test
-    void 같은_채널을_다시_연결하면_id_고른_영상_연결_시각을_그대로_두고_감사_기록도_없다() {
+    void 같은_채널을_다시_연결하면_id_고른_영상_연결_시각을_그대로_두고_확인_시각만_지금으로_바꾸며_감사_기록은_없다() {
         User artist = newUser(UserRole.ARTIST, "connect-same@example.com");
         ExternalAccount current = existingAccount(artist, ExternalAccountProvider.YOUTUBE, CHANNEL);
         SelectedWork work = new SelectedWork("dQw4w9WgXcQ", NOW);
@@ -102,8 +102,17 @@ class ExternalAccountConnectIntegrationTest extends ExternalAccountServiceTestBa
         ConnectResult result =
                 service.connect(artist.getId(), new YoutubeConnect(stateOf(start), "code", start.bindingNonce()));
 
+        // 연결 과정의 공개 채널 확인이 곧 재확인이라 확인 시각만 지금으로 바뀐다(06 §11.1)
+        ExternalAccount reconfirmed = new ExternalAccount(
+                current.id(),
+                artist.getId(),
+                ExternalAccountProvider.YOUTUBE,
+                CHANNEL,
+                current.connectedAt(),
+                NOW.plusSeconds(3600));
         assertThat(result.created()).isFalse();
-        assertThat(result.account()).isEqualTo(current);
+        assertThat(result.account()).isEqualTo(reconfirmed);
+        assertThat(repository.findById(current.id())).contains(reconfirmed);
         assertThat(repository.findWorks(current.id())).containsExactly(work);
         assertThat(auditRows(artist)).isEmpty();
     }

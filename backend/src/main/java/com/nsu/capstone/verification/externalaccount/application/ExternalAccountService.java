@@ -371,9 +371,15 @@ public class ExternalAccountService {
         LockedArtist locked = repository.lockArtist(artistId);
         Instant now = clock.instant();
         Optional<ExternalAccount> current = repository.findByArtistAndProvider(artistId, provider);
-        // 1. 지금 연결이 새로 확인한 계정과 같다: 아무것도 바꾸지 않는다
+        // 1. 지금 연결이 새로 확인한 계정과 같다: id·고른 영상·연결 시각은 그대로 두고 확인 시각만 지금으로 바꾼다.
+        // 연결 과정이 공개 채널을 다시 확인한 것이라 ID 확인 작업이 이전에 읽은 값으로 지우지 못하게 한다(06 §11.1)
         if (current.isPresent() && current.get().providerAccountId().equals(providerAccountId)) {
-            return new ConnectResult(current.get(), false);
+            ExternalAccount same = current.get();
+            repository.refreshAccount(locked, same.id(), providerAccountId, now);
+            return new ConnectResult(
+                    new ExternalAccount(
+                            same.id(), same.artistId(), same.provider(), providerAccountId, same.connectedAt(), now),
+                    false);
         }
         // 2. 지금 연결 ID(없으면 null)가 시작 때 승인한 값과 다르다: 시작 뒤 다른 기기·탭에서 바뀌었다
         UUID currentId = current.map(ExternalAccount::id).orElse(null);

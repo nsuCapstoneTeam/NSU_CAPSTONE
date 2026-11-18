@@ -200,6 +200,36 @@ class ExternalAccountTakedownRunbookTest extends ExternalAccountIntegrationTestB
         assertThat(count("external_account_audit_events", artist.getId())).isZero();
     }
 
+    /** PR #232 사람 리뷰(5956360956) 2번의 회귀 시험: YouTube는 새 연결 Y의 고른 영상까지 보존되고 Y에 삭제 감사 기록이 생기지 않는다. */
+    @Test
+    void 대상을_찾은_뒤_아티스트가_YouTube_연결을_바꿔_영상을_골랐어도_삭제_SQL은_새_연결과_영상을_지우지_않는다() throws IOException {
+        User artist = newUser(UserRole.ARTIST, "runbook-replaced-youtube@example.com");
+        UUID reported = insertAccount(artist.getId(), "YOUTUBE", "UCrunbookreported0000000");
+        insertWork(reported, artist.getId(), "reportedv01", 0);
+        // 운영자가 영상 링크로 X를 찾는다
+        UUID found =
+                (UUID) jdbcTemplate.queryForMap(videoLookupSql("reportedv01")).get("id");
+        assertThat(found).isEqualTo(reported);
+        // 삭제 잠금을 얻기 전에 아티스트가 X를 해제하고 다른 채널 Y를 연결해 영상 2개를 골랐다
+        jdbcTemplate.update("DELETE FROM external_accounts WHERE id = ?", reported);
+        UUID replacement = insertAccount(artist.getId(), "YOUTUBE", "UCrunbookreplacement000");
+        insertWork(replacement, artist.getId(), "replacev01", 0);
+        insertWork(replacement, artist.getId(), "replacev02", 1);
+
+        runRunbookSql(found, artist.getId(), "YOUTUBE", "TAKEDOWN_RIGHTS", "5s");
+
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT id FROM external_accounts WHERE artist_id = ?", UUID.class, artist.getId()))
+                .containsExactly(replacement);
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT provider_work_id FROM external_account_works WHERE external_account_id = ?"
+                                + " ORDER BY position",
+                        String.class,
+                        replacement))
+                .containsExactly("replacev01", "replacev02");
+        assertThat(count("external_account_audit_events", artist.getId())).isZero();
+    }
+
     @Test
     void 지울_연결이_없으면_감사_기록도_남기지_않는다() throws IOException {
         User artist = newUser(UserRole.ARTIST, "runbook-none@example.com");

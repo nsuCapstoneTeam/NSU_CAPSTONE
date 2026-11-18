@@ -40,7 +40,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>"없음"은 YouTube가 온전한 2xx로 답했는데 그 ID가 응답에 없거나 {@code public}이 아닐 때만이다. 403, 4xx, 5xx, 시간 초과는
  * 확인 실패이고 행을 지우지 않는다. 온전하지 않은 2xx 응답(게이트웨이가 판정한다)에서는 {@code public}으로 온 ID만 갱신하고
- * 나머지는 지우지 않는다. 30일을 넘긴 행은 공개로 확인하지 못했으면 지운다. 행을 바꿀 때는 아티스트마다 트랜잭션을 따로 열고 그 아티스트의 잠금을 잡은 뒤, 같은 채널·영상일 때만 바꾼다.
+ * 나머지는 지우지 않는다. 30일을 넘긴 행은 공개로 확인하지 못했으면 지운다. 행을 바꿀 때는 아티스트마다 트랜잭션을 따로 열고 그 아티스트의 잠금을 잡은 뒤, 같은 채널·영상일 때만 바꾼다. 지울
+ * 때는 읽을 때의 확인 시각이 지금 값과 같을 때만 지워, 그사이 다시 고른 영상이나 다시 연결한 채널은 남긴다.
  * 잠금을 3초 안에 잡지 못한 아티스트는 이번 실행에서 확인 실패로 두고 다음으로 넘어간다(06 §11.3).
  */
 @Slf4j
@@ -210,7 +211,9 @@ public class ExternalAccountRefreshJob {
 
     private boolean deleteChannel(ExternalAccount account, AuditReason reason, Instant now) {
         LockOutcome outcome = inLockOf(account.artistId(), locked -> {
-            if (!repository.deleteAccountOfChannel(locked, account.id(), account.providerAccountId())) {
+            // 읽을 때의 확인 시각이 지금 값과 같을 때만 지운다. 그사이 같은 채널로 다시 연결했으면 그 연결은 남긴다
+            if (!repository.deleteAccountOfChannel(
+                    locked, account.id(), account.providerAccountId(), account.refreshedAt())) {
                 return false;
             }
             repository.appendAudit(
@@ -240,9 +243,11 @@ public class ExternalAccountRefreshJob {
     }
 
     private boolean deleteWork(StaleWork work) {
+        // 읽을 때의 확인 시각이 지금 값과 같을 때만 지운다. 그사이 뺐다가 다시 고른 영상은 남긴다
         LockOutcome outcome = inLockOf(
                 work.artistId(),
-                locked -> repository.deleteWork(locked, work.externalAccountId(), work.providerWorkId()));
+                locked -> repository.deleteWork(
+                        locked, work.externalAccountId(), work.providerWorkId(), work.refreshedAt()));
         if (outcome == LockOutcome.CHANGED) {
             displayCache.evict(work.externalAccountId());
         }

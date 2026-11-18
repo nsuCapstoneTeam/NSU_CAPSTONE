@@ -2,6 +2,8 @@ package com.nsu.capstone.verification.externalaccount.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,11 +14,13 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
+import com.nsu.capstone.verification.externalaccount.application.ConnectRequest.YoutubeConnect;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccount;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountException;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountProvider;
 import com.nsu.capstone.verification.externalaccount.domain.SelectedWork;
+import com.nsu.capstone.verification.externalaccount.provider.FetchedAccount;
 import com.nsu.capstone.verification.externalaccount.provider.PublicIdCheck;
 import com.nsu.capstone.verification.externalaccount.provider.PublicIdCheck.IncompleteReason;
 import java.time.Instant;
@@ -229,6 +233,77 @@ class ExternalAccountRefreshJobIntegrationTest extends ExternalAccountServiceTes
         assertThat(repository.findWorks(oldAccount.id())).containsExactly(new SelectedWork("o-public", NOW));
     }
 
+    /**
+     * PR #232 사람 리뷰(5956360956) 1번, 원칙 테스트 17: 작업이 읽은 행의 확인 시각이 잠금 안의 지금 값과 같을 때만 지운다. 작업이
+     * 31일 전 영상 v1의 확인을 기다리는 동안 아티스트가 v1을 뺐다가 다시 고르면, 지금 시각으로 저장된 새 v1을 이전에 읽은 값으로
+     * "30일 미확인"이라 판단해 지웠다.
+     */
+    @Test
+    void 영상_확인을_기다리는_동안_뺐다가_다시_고르면_확인이_실패해도_새로_고른_영상이_남는다() {
+        User artist = newUser(UserRole.ARTIST, "job-repick-fail@example.com");
+        ExternalAccount account = account(artist, "UCrepick", NOW);
+        works(artist, account, new SelectedWork("v1", THIRTY_ONE_DAYS_AGO));
+        when(youtubeGateway.findPublicVideoIds(anyList())).thenAnswer(invocation -> {
+            repick(artist, account, "v1");
+            throw unavailable();
+        });
+
+        job.run();
+
+        assertThat(repository.findWorks(account.id())).containsExactly(new SelectedWork("v1", NOW));
+    }
+
+    @Test
+    void 영상_확인을_기다리는_동안_뺐다가_다시_고르면_없음_응답이어도_새로_고른_영상이_남는다() {
+        User artist = newUser(UserRole.ARTIST, "job-repick-gone@example.com");
+        ExternalAccount account = account(artist, "UCrepickgone", NOW);
+        works(artist, account, new SelectedWork("v1", EIGHT_DAYS_AGO));
+        when(youtubeGateway.findPublicVideoIds(anyList())).thenAnswer(invocation -> {
+            repick(artist, account, "v1");
+            return PublicIdCheck.complete(Set.of());
+        });
+
+        job.run();
+
+        assertThat(repository.findWorks(account.id())).containsExactly(new SelectedWork("v1", NOW));
+    }
+
+    @Test
+    void 채널_확인을_기다리는_동안_같은_채널로_다시_연결하면_확인이_실패해도_그_연결이_남는다() {
+        User artist = newUser(UserRole.ARTIST, "job-reconnect-fail@example.com");
+        ExternalAccount account = account(artist, "UCreconnect", THIRTY_ONE_DAYS_AGO);
+        AuthorizationStart start = service.startAuthorization(artist.getId(), account.id());
+        when(youtubeGateway.redeem(eq(artist.getId()), anyString(), anyString()))
+                .thenReturn(new FetchedAccount("UCreconnect"));
+        when(youtubeGateway.findPublicChannelIds(anyList())).thenAnswer(invocation -> {
+            service.connect(artist.getId(), new YoutubeConnect(stateOf(start), "code", start.bindingNonce()));
+            throw unavailable();
+        });
+
+        job.run();
+
+        assertThat(repository.findById(account.id())).isPresent();
+        assertThat(auditRows(artist)).isEmpty();
+    }
+
+    @Test
+    void 채널_확인을_기다리는_동안_같은_채널로_다시_연결하면_없음_응답이어도_그_연결이_남는다() {
+        User artist = newUser(UserRole.ARTIST, "job-reconnect-gone@example.com");
+        ExternalAccount account = account(artist, "UCreconnectgone", EIGHT_DAYS_AGO);
+        AuthorizationStart start = service.startAuthorization(artist.getId(), account.id());
+        when(youtubeGateway.redeem(eq(artist.getId()), anyString(), anyString()))
+                .thenReturn(new FetchedAccount("UCreconnectgone"));
+        when(youtubeGateway.findPublicChannelIds(anyList())).thenAnswer(invocation -> {
+            service.connect(artist.getId(), new YoutubeConnect(stateOf(start), "code", start.bindingNonce()));
+            return PublicIdCheck.complete(Set.of());
+        });
+
+        job.run();
+
+        assertThat(repository.findById(account.id())).isPresent();
+        assertThat(auditRows(artist)).isEmpty();
+    }
+
     @Test
     void 지운_연결의_표시_정보와_후보_캐시도_지운다() {
         User artist = newUser(UserRole.ARTIST, "job-evict@example.com");
@@ -261,6 +336,13 @@ class ExternalAccountRefreshJobIntegrationTest extends ExternalAccountServiceTes
                 .map(ILoggingEvent::getFormattedMessage)
                 .filter(line -> line.contains("사유"))
                 .toList();
+    }
+
+    /** 아티스트가 영상을 모두 뺐다가 다시 고른다. 두 저장 모두 끝난 뒤 돌아온다. */
+    private void repick(User artist, ExternalAccount account, String videoId) {
+        inTransaction(() -> repository.replaceWorks(repository.lockArtist(artist.getId()), account.id(), List.of()));
+        inTransaction(() -> repository.replaceWorks(
+                repository.lockArtist(artist.getId()), account.id(), List.of(new SelectedWork(videoId, NOW))));
     }
 
     private ExternalAccount account(User artist, String channelId, Instant refreshedAt) {

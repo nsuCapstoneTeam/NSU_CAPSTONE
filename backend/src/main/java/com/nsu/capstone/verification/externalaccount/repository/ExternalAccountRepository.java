@@ -275,14 +275,22 @@ public class ExternalAccountRepository {
                 == 1;
     }
 
-    /** 그 채널의 연결일 때만 지운다(작업물은 cascade). 그사이 교체·해제됐으면 {@code false}다. */
-    public boolean deleteAccountOfChannel(LockedArtist locked, UUID accountId, String channelId) {
+    /**
+     * 그 채널의 연결이고 확인 시각이 {@code observedRefreshedAt}과 같을 때만 지운다(작업물은 cascade). 그사이 교체·해제됐거나
+     * 같은 채널로 다시 연결해 확인 시각이 바뀌었으면 {@code false}다(ADR 8번 일반 규칙).
+     *
+     * @param observedRefreshedAt 작업이 잠금 밖에서 이 행을 읽었을 때의 확인 시각
+     */
+    public boolean deleteAccountOfChannel(
+            LockedArtist locked, UUID accountId, String channelId, Instant observedRefreshedAt) {
         return jdbc.sql("""
                                 DELETE FROM external_accounts
-                                WHERE id = :id AND artist_id = :artistId AND provider_account_id = :channelId""")
+                                WHERE id = :id AND artist_id = :artistId AND provider_account_id = :channelId
+                                  AND refreshed_at = :observed""")
                         .param("id", accountId)
                         .param("artistId", locked.getArtistId())
                         .param("channelId", channelId)
+                        .param("observed", OffsetDateTime.ofInstant(observedRefreshedAt, ZoneOffset.UTC))
                         .update()
                 == 1;
     }
@@ -300,14 +308,21 @@ public class ExternalAccountRepository {
                 == 1;
     }
 
-    public boolean deleteWork(LockedArtist locked, UUID accountId, String videoId) {
+    /**
+     * 확인 시각이 {@code observedRefreshedAt}과 같을 때만 지운다. 작업이 읽은 뒤 아티스트가 그 영상을 뺐다가 다시 골라
+     * 확인 시각이 바뀐 행은 {@code false}로 남긴다(ADR 8번 일반 규칙).
+     *
+     * @param observedRefreshedAt 작업이 잠금 밖에서 이 행을 읽었을 때의 확인 시각
+     */
+    public boolean deleteWork(LockedArtist locked, UUID accountId, String videoId, Instant observedRefreshedAt) {
         return jdbc.sql("""
                                 DELETE FROM external_account_works
                                 WHERE external_account_id = :accountId AND artist_id = :artistId
-                                  AND provider_work_id = :videoId""")
+                                  AND provider_work_id = :videoId AND refreshed_at = :observed""")
                         .param("accountId", accountId)
                         .param("artistId", locked.getArtistId())
                         .param("videoId", videoId)
+                        .param("observed", OffsetDateTime.ofInstant(observedRefreshedAt, ZoneOffset.UTC))
                         .update()
                 == 1;
     }
