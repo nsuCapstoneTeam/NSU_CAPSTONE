@@ -94,8 +94,19 @@ public class SignupSendPreflight implements AutoCloseable {
                 try {
                     challenges.cancel(id, channel, generation, recipient, true);
                 } catch (RuntimeException failure) {
-                    // 클라이언트 timeout만 보고 남는 줄이다. Redis가 재개된 뒤 보상이 적용될 수 있어 실패로 단정하지 않는다.
-                    log.warn("가입 인증 미발송 예약 보상 결과를 확인하지 못했습니다. Redis가 재개되면 적용될 수 있습니다. 채널: {}", channel);
+                    // Redis 클라이언트 timeout 같은 데이터 접근 오류는 재개된 뒤 보상이 적용될 수 있어 실패로 단정하지 않는다.
+                    // 그 밖의 예외는 결정적일 수 있어 재개를 기다리라고 말하지 않는다. 둘 다 원인 타입을 남긴다.
+                    if (failure instanceof org.springframework.dao.DataAccessException) {
+                        log.warn(
+                                "가입 인증 미발송 예약 보상 결과를 확인하지 못했습니다. Redis가 재개되면 적용될 수 있습니다. 채널: {}, 원인 타입: {}",
+                                channel,
+                                failure.getClass().getName());
+                    } else {
+                        log.warn(
+                                "가입 인증 미발송 예약 보상 중 예기치 않은 예외가 났습니다. 보상이 적용되지 않았을 수 있습니다. 채널: {}, 원인 타입: {}",
+                                channel,
+                                failure.getClass().getName());
+                    }
                 }
             });
         } catch (RejectedExecutionException failure) {

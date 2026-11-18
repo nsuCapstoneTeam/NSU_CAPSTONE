@@ -49,11 +49,30 @@ class SignupSendPreflightRequestIdTest {
     }
 
     /**
-     * 이 줄은 클라이언트 timeout만 보고 남는다. Redis가 재개된 뒤 보상이 적용될 수 있어 "실패"로 단정하는 문구는 운영에서 오해를 부른다
-     * (design-nsu-123 확인). 문구만 바꾸고 동작은 그대로다.
+     * 이 줄은 Redis 클라이언트 timeout 같은 데이터 접근 오류만 보고 남는다. Redis가 재개된 뒤 보상이 적용될 수 있어 "실패"로 단정하는 문구는
+     * 운영에서 오해를 부른다(design-nsu-123 확인). 그 밖의 예외는 결정적일 수 있어 "재개되면 적용"이라고 말하면 안 된다(backend-verify 지적).
      */
     @Test
-    void 보상_결과를_확인하지_못했을_때의_WARN은_적용될_수_있음을_알린다() throws Exception {
+    void 데이터_접근_오류로_보상_결과를_확인하지_못하면_재개되면_적용될_수_있음과_원인_타입을_알린다() throws Exception {
+        var event = warnWhenCancelThrows(new org.springframework.dao.QueryTimeoutException("unavailable"));
+
+        assertThat(event.getLevel()).isEqualTo(ch.qos.logback.classic.Level.WARN);
+        assertThat(event.getFormattedMessage())
+                .isEqualTo("가입 인증 미발송 예약 보상 결과를 확인하지 못했습니다. Redis가 재개되면 적용될 수 있습니다. 채널: EMAIL,"
+                        + " 원인 타입: org.springframework.dao.QueryTimeoutException");
+    }
+
+    @Test
+    void 결정적인_예외로_보상이_실패하면_재개되면_적용된다고_말하지_않고_원인_타입을_알린다() throws Exception {
+        var event = warnWhenCancelThrows(new IllegalStateException("bug"));
+
+        assertThat(event.getLevel()).isEqualTo(ch.qos.logback.classic.Level.WARN);
+        assertThat(event.getFormattedMessage())
+                .contains("java.lang.IllegalStateException")
+                .doesNotContain("재개되면 적용");
+    }
+
+    private ch.qos.logback.classic.spi.ILoggingEvent warnWhenCancelThrows(RuntimeException thrown) throws Exception {
         var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
         var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(SignupSendPreflight.class);
         appender.start();
@@ -63,7 +82,7 @@ class SignupSendPreflightRequestIdTest {
             var attempted = new CountDownLatch(1);
             org.mockito.Mockito.doAnswer(call -> {
                         attempted.countDown();
-                        throw new org.springframework.dao.QueryTimeoutException("unavailable");
+                        throw thrown;
                     })
                     .when(subject.challenges())
                     .cancel(
@@ -81,11 +100,8 @@ class SignupSendPreflightRequestIdTest {
                 Thread.sleep(10);
             }
 
-            assertThat(appender.list).singleElement().satisfies(event -> {
-                assertThat(event.getLevel()).isEqualTo(ch.qos.logback.classic.Level.WARN);
-                assertThat(event.getFormattedMessage())
-                        .isEqualTo("가입 인증 미발송 예약 보상 결과를 확인하지 못했습니다. Redis가 재개되면 적용될 수 있습니다. 채널: EMAIL");
-            });
+            assertThat(appender.list).as("보상 실패가 남긴 줄").hasSize(1);
+            return appender.list.get(0);
         } finally {
             logger.detachAppender(appender);
         }
