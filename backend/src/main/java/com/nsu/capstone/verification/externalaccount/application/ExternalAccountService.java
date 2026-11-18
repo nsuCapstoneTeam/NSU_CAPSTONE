@@ -129,6 +129,13 @@ public class ExternalAccountService {
         return viewsOf(callerId, repository.findByArtist(artistId));
     }
 
+    /**
+     * 연결 직후 응답에 쓸 계정 하나(06 §5.4). 표시 정보는 조회와 같은 경로로 채운다.
+     */
+    public AccountView viewOf(UUID callerId, ExternalAccount account) {
+        return viewsOf(callerId, List.of(account)).get(0);
+    }
+
     private List<AccountView> viewsOf(UUID callerId, List<ExternalAccount> unsorted) {
         List<ExternalAccount> accounts = unsorted.stream()
                 .sorted(Comparator.comparing(ExternalAccount::provider))
