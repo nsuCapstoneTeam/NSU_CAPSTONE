@@ -2,6 +2,7 @@ package com.nsu.capstone.global.logging;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +27,12 @@ final class ForkedJvm {
      */
     static Result run(List<String> jvmArgs, Map<String, String> env, String... programArgs)
             throws IOException, InterruptedException {
+        return run(TIMEOUT_SECONDS, jvmArgs, env, programArgs);
+    }
+
+    /** 위와 같고, 자식 JVM이 timeoutSeconds 안에 끝나지 않으면 강제 종료하고 예외를 던진다. */
+    static Result run(long timeoutSeconds, List<String> jvmArgs, Map<String, String> env, String... programArgs)
+            throws IOException, InterruptedException {
         List<String> command = new ArrayList<>();
         command.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
         command.add("-cp");
@@ -34,16 +41,27 @@ final class ForkedJvm {
         command.add(ForkedMain.class.getName());
         command.addAll(List.of(programArgs));
 
-        ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
-        builder.environment().keySet().removeIf(name -> name.startsWith("LOG") || name.equals("JAVA_TOOL_OPTIONS"));
-        builder.environment().putAll(env);
-        Process process = builder.start();
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-            process.destroyForcibly();
-            throw new IllegalStateException("자식 JVM이 " + TIMEOUT_SECONDS + "초 안에 끝나지 않았다");
+        // 출력을 파이프로 읽으면 자식이 stdout을 닫을 때까지 readAllBytes가 막혀 아래 waitFor에 닿지 못한다. 파일로 받고 먼저 기다린다.
+        Path outputFile = Files.createTempFile("forked-jvm-", ".log");
+        try {
+            ProcessBuilder builder =
+                    new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(outputFile.toFile());
+            builder.environment().keySet().removeIf(name -> name.startsWith("LOG") || name.equals("JAVA_TOOL_OPTIONS"));
+            builder.environment().putAll(env);
+            Process process = builder.start();
+            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                throw new IllegalStateException("자식 JVM이 " + timeoutSeconds + "초 안에 끝나지 않았다. 출력 끝: "
+                        + tail(Files.readString(outputFile, StandardCharsets.UTF_8)));
+            }
+            return new Result(process.exitValue(), Files.readString(outputFile, StandardCharsets.UTF_8));
+        } finally {
+            Files.deleteIfExists(outputFile);
         }
-        return new Result(process.exitValue(), output);
+    }
+
+    private static String tail(String output) {
+        return output.substring(Math.max(0, output.length() - 500));
     }
 
     record Result(int exitCode, String output) {}

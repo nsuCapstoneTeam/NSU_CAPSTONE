@@ -22,4 +22,14 @@ class CiWorkflowTest {
                 .contains("./gradlew test --tests 'com.nsu.capstone.global.logging.*'")
                 .contains("# shortcut:");
     }
+
+    /** 별도 JVM 테스트가 끝나지 않는 자식을 만나도 job이 기본 제한(6시간)까지 붙잡히지 않는다(backend-verify F4). */
+    @Test
+    void 로그_안전_테스트_job은_제한_시간을_가진다() throws IOException {
+        Path backendRoot = LombokStyleFiles.backendRoot(Path.of("").toAbsolutePath());
+        String workflow = Files.readString(backendRoot.resolveSibling(".github/workflows/ci.yml"));
+        String job = workflow.substring(workflow.indexOf("backend-log-safety:"), workflow.indexOf("frontend-lint:"));
+
+        assertThat(job).contains("timeout-minutes:");
+    }
 }

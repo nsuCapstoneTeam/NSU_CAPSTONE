@@ -46,7 +46,7 @@ public final class ForkedMain {
         String mode = args[0];
         String[] bootArgs = Arrays.copyOfRange(args, 1, args.length);
         Class<?> source = switch (mode) {
-            case "light", "httpclient", "uncaught-thread" -> TestApp.EmptyConfig.class;
+            case "light", "httpclient", "uncaught-thread", "hang" -> TestApp.EmptyConfig.class;
             case "attach-appender" -> AttachAppenderConfig.class;
             case "replace-uncaught-handler" -> ReplaceUncaughtHandlerConfig.class;
             case "app" -> NsuCapstoneApplication.class;
@@ -61,6 +61,10 @@ public final class ForkedMain {
             }
             if (mode.equals("uncaught-thread")) {
                 throwUncaughtFromThread();
+            }
+            if (mode.equals("hang")) {
+                // 끝나지 않는 자식 JVM을 흉내 낸다. 영원히 자지 않고 40초 뒤 끝나서 남는 프로세스가 없다
+                Thread.sleep(40_000);
             }
             LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
             for (String name : REPORTED_LOGGERS) {
