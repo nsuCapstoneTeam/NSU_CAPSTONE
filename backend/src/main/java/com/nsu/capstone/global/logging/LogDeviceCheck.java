@@ -72,6 +72,7 @@ final class LogDeviceCheck {
         }
         Appender<ILoggingEvent> appender = singleAppender(context, problems);
         problems.addAll(julHandlerProblems());
+        problems.addAll(requiredLoggerProblems(context));
         if (appender != null) {
             problems.addAll(startedProblems(appender));
             problems.addAll(routingProblems(context, appender));
@@ -111,6 +112,25 @@ final class LogDeviceCheck {
             return appenders.iterator().next();
         }
         return null;
+    }
+
+    /**
+     * 요청 완료 줄(INFO)과 미처리 예외 줄(ERROR)은 어펜더에 닿기 전에 로거 레벨이 버릴 수 있다(예: logging.level.root=WARN). 어펜더 필터를
+     * 보는 검사는 이것을 놓친다.
+     */
+    private static List<String> requiredLoggerProblems(LoggerContext context) {
+        List<String> problems = new ArrayList<>();
+        requireEnabled(context, RequestIdFilter.class, Level.INFO, problems);
+        requireEnabled(context, UncaughtExceptionLogger.class, Level.ERROR, problems);
+        return problems;
+    }
+
+    private static void requireEnabled(LoggerContext context, Class<?> type, Level level, List<String> problems) {
+        Logger logger = context.getLogger(type);
+        if (!logger.isEnabledFor(level)) {
+            problems.add("필수 로거에서 " + level + " 줄이 버려진다: " + logger.getName() + " (실효 레벨 " + logger.getEffectiveLevel()
+                    + ")");
+        }
     }
 
     /** 멈춘 어펜더는 루트 연결과 인코더가 시작 상태로 남아도 아무것도 쓰지 않는다. 인코더만 보는 아래 검사는 이것을 놓친다. */

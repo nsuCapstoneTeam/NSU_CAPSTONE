@@ -217,6 +217,22 @@ class LogDeviceSelfCheckTest {
                         List.of("-Dlogging.threshold.console=ERROR"),
                         Map.of(),
                         "필터가 버리는 레벨: INFO, WARN"),
+                // 어펜더 필터는 통과해도 로거 레벨이 먼저 줄을 버린다. 요청 완료 줄(INFO)과 미처리 예외 줄(ERROR)이 나와야 한다
+                Arguments.of(
+                        "루트 레벨 WARN",
+                        List.of("-Dlogging.level.root=WARN"),
+                        Map.of(),
+                        "com.nsu.capstone.global.logging.RequestIdFilter"),
+                Arguments.of(
+                        "RequestIdFilter 레벨 WARN",
+                        List.of("-Dlogging.level.com.nsu.capstone.global.logging.RequestIdFilter=WARN"),
+                        Map.of(),
+                        "com.nsu.capstone.global.logging.RequestIdFilter"),
+                Arguments.of(
+                        "UncaughtExceptionLogger 레벨 OFF",
+                        List.of("-Dlogging.level.com.nsu.capstone.global.logging.UncaughtExceptionLogger=OFF"),
+                        Map.of(),
+                        "com.nsu.capstone.global.logging.UncaughtExceptionLogger"),
                 Arguments.of(
                         "사용자 Logback 설정",
                         List.of("-Dlogging.config=classpath:log-device/extra-appender-logback.xml"),
