@@ -1,0 +1,87 @@
+{
+  "source": "NSU_CAPSTONE_AI origin/main a2c4be9 docs/experiments/audio-similarity-calibration/text-embedding-evidence.json (.tokenizer_preflight)",
+  "counting": "MSCLAP counts text + \" <|endoftext|>\" with the GPT-2 tokenizer; token_count includes the end marker",
+  "token_limit": 77,
+  "sentences": [
+    {
+      "query_id": "event-01",
+      "text": "Rock or pop music for an outdoor university festival that the audience can enjoy together.",
+      "token_count": 18
+    },
+    {
+      "query_id": "event-02",
+      "text": "Calm acoustic music for the pre-wedding period at an outdoor wedding.",
+      "token_count": 19
+    },
+    {
+      "query_id": "event-03",
+      "text": "Grand soundtrack music for an award recipient's entrance at a corporate ceremony.",
+      "token_count": 16
+    },
+    {
+      "query_id": "event-04",
+      "text": "Jazz or lounge background music for an art exhibition opening, to play while people converse.",
+      "token_count": 21
+    },
+    {
+      "query_id": "event-05",
+      "text": "Slightly tense electronic music for a nighttime gaming event.",
+      "token_count": 13
+    },
+    {
+      "query_id": "event-06",
+      "text": "Folk or world music for a daytime local cultural festival.",
+      "token_count": 14
+    },
+    {
+      "query_id": "event-07",
+      "text": "Gentle, hopeful instrumental music for a graduation dinner, suitable for dining and conversation.",
+      "token_count": 19
+    },
+    {
+      "query_id": "event-08",
+      "text": "Rhythmic pop or electronic music for a fashion runway.",
+      "token_count": 14
+    },
+    {
+      "query_id": "event-09",
+      "text": "Piano-centered music for quiet remembrance at a memorial service.",
+      "token_count": 15
+    },
+    {
+      "query_id": "event-12",
+      "text": "Reggae or Latin music for a beach summer party, with a light, danceable feel.",
+      "token_count": 22
+    },
+    {
+      "query_id": "event-13",
+      "text": "Electronic background music for a product presentation, with a feel that is not too cold.",
+      "token_count": 20
+    },
+    {
+      "query_id": "event-14",
+      "text": "Grand music for the opening of a traditional performance.",
+      "token_count": 12
+    },
+    {
+      "query_id": "event-15",
+      "text": "Groovy funk or disco for an evening party with friends.",
+      "token_count": 14
+    },
+    {
+      "query_id": "event-16",
+      "text": "Ambient music for a meditation workshop that should not interfere with concentration.",
+      "token_count": 16
+    },
+    {
+      "query_id": "event-17",
+      "text": "Pop or soul music for a reception after an awards ceremony; vocals are acceptable.",
+      "token_count": 18
+    },
+    {
+      "query_id": "event-20",
+      "text": "Electronic music for a contemporary dance scene, with tension that gradually builds.",
+      "token_count": 17
+    }
+  ]
+}
