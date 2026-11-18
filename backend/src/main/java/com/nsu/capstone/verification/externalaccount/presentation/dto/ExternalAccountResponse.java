@@ -44,6 +44,7 @@ public record ExternalAccountResponse(
 
     /** 이 모듈의 응답 DTO가 함께 쓴다. 초 단위, 소수 초 없음, 오프셋 {@code +09:00}. */
     static String time(Instant instant) {
-        return TIMESTAMP.format(instant.atZone(ZONE));
+        // 플랫폼이 시각을 주지 않은 값은 null로 내보낸다(후보의 게시 시각)
+        return instant == null ? null : TIMESTAMP.format(instant.atZone(ZONE));
     }
 }

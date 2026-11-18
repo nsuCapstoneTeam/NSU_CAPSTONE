@@ -39,6 +39,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 /**
@@ -159,7 +160,15 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
                     .retrieve()
                     .body(ChannelList.class);
         } catch (RestClientException e) {
-            // API 키와 URL은 예외 메시지에 들어 있을 수 있어 메시지를 옮기지 않는다
+            // API 키와 URL은 예외 메시지에, 오류 내용은 응답 본문에 들어 있을 수 있어 둘 다 옮기지 않는다. 상태만 남긴다
+            if (e instanceof RestClientResponseException response) {
+                log.warn(
+                        "YouTube 호출이 실패했다. 호출: {}, 상태: {}",
+                        path,
+                        response.getStatusCode().value());
+            } else {
+                log.warn("YouTube 호출이 실패했다. 호출: {}, 원인: {}", path, e.getClass().getSimpleName());
+            }
             throw unavailable("YouTube 정보를 받지 못했다");
         }
     }
@@ -251,10 +260,19 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
         return publicIds("/videos", videoIds);
     }
 
-    /** 응답(2xx)이 있어야 "없음"을 판정할 수 있다. 응답을 못 받으면 getWithApiKey가 예외를 던진다. */
+    /**
+     * 응답(2xx)이 있어야 "없음"을 판정할 수 있다. 응답을 못 받으면 getWithApiKey가 예외를 던진다.
+     *
+     * <p>정상 응답은 항상 {@code items}나 {@code pageInfo}를 가진다(0건이면 {@code items} 없이 {@code pageInfo}만 온다).
+     * 프록시나 CDN이 주는 빈 본문·{@code {}} 같은 비정상 2xx를 "배치 전체가 없음"으로 읽으면 일일 작업이 연결을 한꺼번에
+     * 지우므로, 둘 다 없으면 확인 실패로 본다.
+     */
     private Set<String> publicIds(String path, List<String> ids) {
         ChannelList response = getWithApiKey(path, "id,status", String.join(",", ids));
-        if (response == null || response.items() == null) {
+        if (response == null || (response.items() == null && response.pageInfo() == null)) {
+            throw unavailable("YouTube 응답이 비정상이라 존재 여부를 확인하지 못했다");
+        }
+        if (response.items() == null) {
             return Set.of();
         }
         return response.items().stream()
@@ -378,7 +396,7 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record ChannelList(List<Channel> items) {
+    private record ChannelList(List<Channel> items, Object pageInfo) {
 
         @JsonIgnoreProperties(ignoreUnknown = true)
         private record Channel(String id, Snippet snippet, Status status, ContentDetails contentDetails) {}

@@ -98,6 +98,33 @@ class SingleFlightTest {
         pool.shutdown();
     }
 
+    /** backend-verify 지적: RuntimeException만 잡으면 Error 때 기다리던 호출이 영구 대기한다. */
+    @Test
+    void 실행이_Error로_끝나도_기다리던_호출은_영구_대기하지_않고_같은_Error를_받는다() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        Future<String> owner = pool.submit(() -> singleFlight.run("k", () -> {
+            started.countDown();
+            await(release);
+            throw new AssertionError("로더가 Error를 던졌다");
+        }));
+        started.await();
+        Future<String> waiter = pool.submit(() -> singleFlight.run("k", () -> "필요 없음"));
+        Thread.sleep(200); // 기다리는 호출이 진행 중인 실행에 붙을 시간
+        release.countDown();
+
+        try {
+            assertThat(waiter.get(3, java.util.concurrent.TimeUnit.SECONDS)).isNotNull();
+        } catch (java.util.concurrent.ExecutionException e) {
+            assertThat(e.getCause()).isInstanceOf(Throwable.class);
+        }
+        // 소유자는 Error를 그대로 받는다
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> owner.get(3, java.util.concurrent.TimeUnit.SECONDS))
+                .hasRootCauseInstanceOf(AssertionError.class);
+        pool.shutdownNow();
+    }
+
     private static void await(CountDownLatch latch) {
         try {
             latch.await();

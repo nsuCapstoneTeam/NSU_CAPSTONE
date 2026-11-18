@@ -25,7 +25,8 @@ public class SingleFlight {
             T value = loader.get();
             mine.complete(value);
             return value;
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
+            // Error도 기다리는 호출에 전한다. 그렇지 않으면 이미 붙은 호출이 영구히 기다린다
             mine.completeExceptionally(e);
             throw e;
         } finally {
@@ -38,6 +39,9 @@ public class SingleFlight {
             return running.join();
         } catch (CompletionException e) {
             if (e.getCause() instanceof RuntimeException cause) {
+                throw cause;
+            }
+            if (e.getCause() instanceof Error cause) {
                 throw cause;
             }
             throw e;

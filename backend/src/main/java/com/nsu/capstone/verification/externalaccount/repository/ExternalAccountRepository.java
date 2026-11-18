@@ -50,6 +50,9 @@ public class ExternalAccountRepository {
     // 트랜잭션 밖에서 잡은 advisory xact 잠금은 문장이 끝나는 즉시 풀려 아무것도 막지 못한다. MANDATORY가 트랜잭션 밖 호출을 거절한다.
     @Transactional(propagation = Propagation.MANDATORY)
     public LockedArtist lockArtist(UUID artistId) {
+        // 잠금을 쥔 쪽이 풀리지 않을 때 대기하는 요청이 DB 연결을 하나씩 잡고 쌓이지 않게 기다리는 시간에 상한을 둔다.
+        // SET LOCAL이라 이 트랜잭션에만 적용되고, 잠금을 쥐는 트랜잭션은 DB 작업만 하는 짧은 것이다(외부 호출은 밖에서 한다).
+        jdbc.sql("SET LOCAL lock_timeout = '3s'").update();
         jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended('extacct:' || :artistId, 0))")
                 .param("artistId", artistId.toString())
                 .query()

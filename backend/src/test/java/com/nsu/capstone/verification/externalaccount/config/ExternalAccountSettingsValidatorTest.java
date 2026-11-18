@@ -67,6 +67,40 @@ class ExternalAccountSettingsValidatorTest {
                 .hasMessageContaining("client-id");
     }
 
+    /** backend-verify 지적: Spotify를 켰는데 키가 비면 앱은 뜨고 연결만 500이 된다. 시작 때 알려야 한다. */
+    @Test
+    void Spotify를_켜려면_client_id와_client_secret이_있어야_한다() {
+        assertThatThrownBy(spotifyValidator(true, "", "secret")::afterPropertiesSet)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("spotify.client-id");
+        assertThatThrownBy(spotifyValidator(true, "id", null)::afterPropertiesSet)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("spotify.client-secret");
+    }
+
+    @Test
+    void Spotify가_꺼져_있거나_값이_있으면_통과한다() {
+        assertThatCode(spotifyValidator(false, null, null)::afterPropertiesSet).doesNotThrowAnyException();
+        assertThatCode(spotifyValidator(true, "id", "secret")::afterPropertiesSet)
+                .doesNotThrowAnyException();
+    }
+
+    private static ExternalAccountSettingsValidator spotifyValidator(boolean enabled, String id, String secret) {
+        ExternalAccountProperties properties = new ExternalAccountProperties(
+                "http://localhost:5173",
+                true,
+                new ExternalAccountProperties.Youtube(
+                        false, null, null, null, null, "https://a", "https://b", "https://c", "https://d"),
+                new ExternalAccountProperties.Spotify(enabled, id, secret, "https://s/token", "https://s/v1"),
+                new ExternalAccountProperties.Http(
+                        Duration.ofSeconds(3),
+                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(1),
+                        Duration.ofSeconds(2),
+                        Duration.ofSeconds(3)));
+        return new ExternalAccountSettingsValidator(properties, new OAuthProperties());
+    }
+
     private void assertMissing(ExternalAccountProperties.Youtube youtube, String property) {
         assertThatThrownBy(validator(youtube, LOGIN_CLIENT_ID)::afterPropertiesSet)
                 .isInstanceOf(IllegalStateException.class)

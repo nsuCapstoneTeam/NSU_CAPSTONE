@@ -106,6 +106,71 @@ class GoogleYoutubeGatewayVerifyIdsTest {
         assertUnavailable(() -> gateway.findPublicVideoIds(List.of("v1")));
     }
 
+    /**
+     * backend-verify 지적: 프록시나 CDN이 주는 비정상 2xx(빈 본문, {@code {}})를 "모두 없음"으로 읽으면 일일 작업이
+     * 배치의 연결을 한꺼번에 지운다. 정상 응답은 항상 {@code items}나 {@code pageInfo}를 가지므로 둘 다 없으면 확인 실패다.
+     */
+    @Test
+    void 본문이_비었거나_items도_pageInfo도_없는_2xx는_없음이_아니라_확인_실패다() {
+        server.expect(requestTo(startsWith(API_BASE + "/channels"))).andRespond(withSuccess("", APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/channels"))).andRespond(withSuccess("{}", APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/videos"))).andRespond(withSuccess("{}", APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/videos")))
+                .andRespond(withSuccess("{\"kind\":\"youtube#videoListResponse\"}", APPLICATION_JSON));
+
+        assertUnavailable(() -> gateway.findPublicChannelIds(List.of("UC1")));
+        assertUnavailable(() -> gateway.findPublicChannelIds(List.of("UC1")));
+        assertUnavailable(() -> gateway.findPublicVideoIds(List.of("v1")));
+        assertUnavailable(() -> gateway.findPublicVideoIds(List.of("v1")));
+    }
+
+    @Test
+    void 정상적인_0건_응답은_items가_빈_배열이든_pageInfo만_있든_모두_없음이다() {
+        server.expect(requestTo(startsWith(API_BASE + "/channels")))
+                .andRespond(withSuccess("{\"items\":[]}", APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/channels")))
+                .andRespond(withSuccess("{\"pageInfo\":{\"totalResults\":0,\"resultsPerPage\":5}}", APPLICATION_JSON));
+
+        assertThat(gateway.findPublicChannelIds(List.of("UC1"))).isEmpty();
+        assertThat(gateway.findPublicChannelIds(List.of("UC1"))).isEmpty();
+    }
+
+    /**
+     * backend-verify 지적: API 키가 만료돼 403이어도 서버 로그에는 한 줄도 남지 않아 첫 신호가 3일 뒤의 멈춤 경고뿐이다.
+     * 상태와 호출 종류는 남기되, 키가 든 URL과 응답 본문은 남기지 않는다.
+     */
+    @Test
+    void API_호출이_실패하면_상태를_경고_로그로_남기고_API_키와_응답_본문은_남기지_않는다() {
+        ch.qos.logback.classic.Logger logger =
+                (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(GoogleYoutubeGateway.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            server.expect(requestTo(startsWith(API_BASE + "/channels")))
+                    .andRespond(withForbiddenRequest()
+                            .body("{\"error\":{\"errors\":[{\"reason\":\"keyInvalid\"}],\"message\":\"SECRET-BODY\"}}")
+                            .contentType(APPLICATION_JSON));
+
+            assertUnavailable(() -> gateway.findPublicChannelIds(List.of("UC1")));
+
+            assertThat(appender.list)
+                    .filteredOn(event -> event.getLevel() == ch.qos.logback.classic.Level.WARN)
+                    .singleElement()
+                    .satisfies(event -> {
+                        String line = event.getFormattedMessage();
+                        assertThat(line).contains("403");
+                        assertThat(line).doesNotContain("API-KEY", "SECRET-BODY", "key=");
+                        assertThat(event.getThrowableProxy())
+                                .as("예외 객체에는 키가 든 URL이 있을 수 있다")
+                                .isNull();
+                    });
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
     private static void assertUnavailable(Runnable call) {
         assertThatThrownBy(call::run)
                 .isInstanceOfSatisfying(

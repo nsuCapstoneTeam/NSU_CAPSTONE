@@ -94,6 +94,20 @@ class ResponseDtoJsonTest {
         assertThat(item.get("publishedAt").asString()).isEqualTo("2026-10-01T20:00:00+09:00");
     }
 
+    /** backend-verify 지적: 게시 시각이 빠진 영상 하나가 후보 전체를 500으로 만들면 안 된다. */
+    @Test
+    void 게시_시각이_없는_후보도_null로_내보내고_500을_내지_않는다() throws Exception {
+        CandidateView candidate =
+                new CandidateView("v1", "https://www.youtube.com/watch?v=v1", "영상", null, null, false);
+
+        JsonNode item = MAPPER.readTree(MAPPER.writeValueAsString(WorkCandidatesResponse.from(List.of(candidate))))
+                .get("items")
+                .get(0);
+
+        assertThat(item.get("publishedAt").isNull()).isTrue();
+        assertThat(item.get("workId").asString()).isEqualTo("v1");
+    }
+
     @Test
     void 시작_응답은_nonce를_싣지_않고_만료_시각만_KST로_보낸다() throws Exception {
         AuthorizationStart start = new AuthorizationStart(

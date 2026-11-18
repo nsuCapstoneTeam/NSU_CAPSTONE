@@ -41,11 +41,16 @@ YouTube 영상 자체가 문제인 신고는 YouTube에 신고하도록 안내�
 
 읽기만 하는 조회다. 신고자가 알려 준 링크에서 플랫폼 계정 ID를 뽑아 찾는다. YouTube는 `https://www.youtube.com/channel/<채널 ID>`의 채널 ID, Spotify는 `https://open.spotify.com/artist/<아티스트 ID>`의 아티스트 ID다.
 
+신고자가 준 링크는 믿을 수 없는 입력이다. ID 자리에 따옴표나 세미콜론이 든 링크를 보내 SQL을 끼워 넣을 수 있으므로 값을 SQL 문장에 붙여 넣지 않고 `\set` 변수로 넘긴다. 그 전에 ID가 영문자·숫자·`-`·`_`만으로 22~24자인지 눈으로 확인한다. 아니면 조회하지 말고 신고자에게 링크를 다시 받는다.
+
 ```sql
+\set platform_id '여기에 ID만'
+\set provider 'SPOTIFY'                 -- 또는 'YOUTUBE'
+
 SELECT id, artist_id, provider, connected_at
 FROM external_accounts
-WHERE provider = 'SPOTIFY'              -- 또는 'YOUTUBE'
-  AND provider_account_id = '<플랫폼 계정 ID>';
+WHERE provider = :'provider'
+  AND provider_account_id = :'platform_id';
 ```
 
 Spotify는 여러 아티스트가 같은 아티스트 페이지를 걸 수 있어 여러 줄이 나올 수 있다. 신고가 가리키는 아티스트(사칭한 쪽)만 골라 `artist_id`를 정한다. 누구인지 알 수 없으면 신고자에게 되묻되, 24시간을 넘기지 않도록 모두 지우는 쪽을 먼저 고려한다.

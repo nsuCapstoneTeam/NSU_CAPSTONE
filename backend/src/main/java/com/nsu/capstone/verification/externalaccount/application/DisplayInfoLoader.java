@@ -119,6 +119,8 @@ class DisplayInfoLoader {
                 displayCache.put(account.id(), videoIds, display);
                 return toAccountDisplay(display);
             } catch (ExternalAccountException e) {
+                // 이름과 제목만 비고 링크는 남는 장애다. 원인(사유)은 로그에 남겨야 API 키 만료 같은 문제를 알아챈다
+                log.warn("YouTube 표시 정보를 받지 못했다: 연결 {}, 사유 {}", account.id(), e.getFailure());
                 displayCache.markFailed(account.id());
                 return AccountDisplay.UNKNOWN;
             }

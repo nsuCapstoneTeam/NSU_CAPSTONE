@@ -49,6 +49,40 @@ class ExternalAccountLockIntegrationTest extends ExternalAccountIntegrationTestB
         return Boolean.TRUE.equals(acquired);
     }
 
+    /** backend-verify 지적: 잠금을 쥔 쪽이 풀리지 않으면 대기하는 요청이 DB 연결을 하나씩 잡고 쌓인다. 기다리는 시간에 상한이 있어야 한다. */
+    @Test
+    void 잠금을_오래_쥔_트랜잭션이_있으면_기다리는_쪽은_몇_초_안에_예외로_끝난다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "lock-timeout@example.com");
+        java.util.concurrent.CountDownLatch holding = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            pool.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                repository.lockArtist(artist.getId());
+                holding.countDown();
+                try {
+                    release.await(15, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            assertThat(holding.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            long start = System.nanoTime();
+
+            java.util.concurrent.Future<?> waiter = pool.submit(() -> new TransactionTemplate(transactionManager)
+                    .executeWithoutResult(status -> repository.lockArtist(artist.getId())));
+
+            assertThatThrownBy(() -> waiter.get(8, java.util.concurrent.TimeUnit.SECONDS))
+                    .isInstanceOf(java.util.concurrent.ExecutionException.class)
+                    .hasMessageContaining("lock timeout");
+            assertThat(java.time.Duration.ofNanos(System.nanoTime() - start))
+                    .isLessThan(java.time.Duration.ofSeconds(6));
+        } finally {
+            release.countDown();
+            pool.shutdownNow();
+        }
+    }
+
     @Test
     void 아티스트_잠금은_트랜잭션_밖에서는_잡을_수_없다() {
         User artist = newUser(UserRole.ARTIST, "lock-outside@example.com");

@@ -40,7 +40,15 @@ public record ExternalAccountProperties(
             String revokeUri,
 
             @DefaultValue("https://www.googleapis.com/youtube/v3")
-            String apiBaseUri) {}
+            String apiBaseUri) {
+
+        /** 설정 객체를 로그에 찍어도 시크릿과 API 키가 나오지 않게 가린다. */
+        @Override
+        public String toString() {
+            return "Youtube[enabled=" + enabled + ", clientId=" + clientId
+                    + ", clientSecret=***, apiKey=***, redirectUri=" + redirectUri + "]";
+        }
+    }
 
     /**
      * Spotify 연결. 개발 모드 앱 소유자가 Premium이어야 동작하므로 승인 전에는 꺼 둔다(ADR 4번).
@@ -54,7 +62,14 @@ public record ExternalAccountProperties(
             @DefaultValue("https://accounts.spotify.com/api/token")
             String tokenUri,
 
-            @DefaultValue("https://api.spotify.com/v1") String apiBaseUri) {}
+            @DefaultValue("https://api.spotify.com/v1") String apiBaseUri) {
+
+        /** 설정 객체를 로그에 찍어도 시크릿이 나오지 않게 가린다. */
+        @Override
+        public String toString() {
+            return "Spotify[enabled=" + enabled + ", clientId=" + clientId + ", clientSecret=***]";
+        }
+    }
 
     /** 외부 호출 제한 시간(ADR "외부 호출"). 쓰기 경로는 연결 3초·응답 5초, 읽기 경로는 연결 1초·응답 2초다. */
     public record Http(

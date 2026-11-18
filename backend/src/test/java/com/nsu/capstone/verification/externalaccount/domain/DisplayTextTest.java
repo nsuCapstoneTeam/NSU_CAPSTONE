@@ -10,7 +10,8 @@ class DisplayTextTest {
     void 제어_문자만_지우고_HTML처럼_보이는_글자는_그대로_둔다() {
         assertThat(DisplayText.clean("밴드\u0000 이름\u0007\n<script>alert(1)</script>", 200))
                 .isEqualTo("밴드 이름<script>alert(1)</script>");
-        assertThat(DisplayText.clean("탭\t과\r줄바꿈\u0085​", 200)).isEqualTo("탭과줄바꿈​");
+        // 제로폭 공백(U+200B)은 보이지 않게 다른 이름과 같은 모양을 만들 수 있어 이제 지운다(보안 리뷰)
+        assertThat(DisplayText.clean("탭\t과\r줄바꿈\u0085​", 200)).isEqualTo("탭과줄바꿈");
     }
 
     @Test
@@ -29,6 +30,22 @@ class DisplayTextTest {
         assertThat(DisplayText.clean("a".repeat(201), DisplayText.TITLE_MAX)).hasSize(200);
         assertThat(DisplayText.clean("a".repeat(101), DisplayText.DISPLAY_NAME_MAX))
                 .hasSize(100);
+    }
+
+    /** 보안 리뷰 지적: 방향 바꿈·보이지 않는 문자로 이름을 뒤집거나 다른 이름과 같은 모양으로 만들 수 있다. */
+    @Test
+    void 방향_제어_보이지_않는_문자_줄_구분자도_지운다() {
+        assertThat(DisplayText.clean("밴드‮이름", 100)).isEqualTo("밴드이름"); // RLO
+        assertThat(DisplayText.clean("a⁦b⁩c", 100)).isEqualTo("abc"); // isolate
+        assertThat(DisplayText.clean("a​b‎‏c﻿", 100)).isEqualTo("abc"); // 제로폭, 방향 표시, BOM
+        assertThat(DisplayText.clean("줄1 줄2 줄3", 100)).isEqualTo("줄1줄2줄3");
+    }
+
+    @Test
+    void 이모지와_한글에_쓰이는_ZWJ_ZWNJ는_지우지_않는다() {
+        String family = "👨‍👩‍👧";
+
+        assertThat(DisplayText.clean(family, 100)).isEqualTo(family);
     }
 
     @Test

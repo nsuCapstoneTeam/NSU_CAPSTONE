@@ -50,6 +50,15 @@ class ExternalAccountTakedownRunbookTest extends ExternalAccountIntegrationTestB
         assertThat(runbook).as("처리 기한은 접수 뒤 24시간이다").contains("24시간");
     }
 
+    /** 보안 리뷰 지적: 신고자가 준 링크에서 뽑은 값은 믿을 수 없는 입력이다. SQL 문자열에 붙이지 않고 psql 변수로 넘긴다. */
+    @Test
+    void 신고자가_준_값을_SQL_따옴표_안에_직접_붙이라고_안내하지_않는다() throws IOException {
+        String runbook = Files.readString(RUNBOOK);
+
+        assertThat(runbook).doesNotContain("'<플랫폼 계정 ID>'");
+        assertThat(runbook).contains(":'platform_id'");
+    }
+
     @Test
     void 삭제_SQL은_연결과_고른_영상을_지우고_운영자_감사_기록을_남긴다() throws IOException {
         User artist = newUser(UserRole.ARTIST, "runbook-delete@example.com");

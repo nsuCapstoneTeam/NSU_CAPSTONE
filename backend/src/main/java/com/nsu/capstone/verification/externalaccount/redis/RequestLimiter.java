@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -14,8 +15,9 @@ import org.springframework.stereotype.Component;
 /**
  * {@code /api/v1/me/external-accounts/**}의 아티스트별 요청 제한(06 §11.2, ADR 15번). 10분 고정 창에 30번까지다.
  *
- * <p>{@code shortcut: 이 모듈 전용 고정 창 카운터, NSU-123 전역 요청 제한이 머지되면 그 구현으로 옮긴다}
  */
+// shortcut: 이 모듈 전용 고정 창 카운터, NSU-123 전역 요청 제한이 머지되면 그 구현으로 옮긴다
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class RequestLimiter {
@@ -41,6 +43,8 @@ public class RequestLimiter {
             count = redis.execute(
                     INCREMENT, List.of(RedisKeys.requestLimit(artistId, windowStart)), Long.toString(WINDOW_SECONDS));
         } catch (DataAccessException e) {
+            // Redis 장애의 원인을 남긴다. 예외는 SLF4J 마지막 인자로 통째로 넘긴다(메시지를 문장에 붙이지 않는다)
+            log.warn("요청 제한 카운터를 쓸 수 없다", e);
             throw new ExternalAccountException(ExternalAccountFailure.RATE_LIMIT_UNAVAILABLE, "요청 제한 카운터를 쓸 수 없다");
         }
         if (count != null && count > LIMIT) {

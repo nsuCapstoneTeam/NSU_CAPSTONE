@@ -28,6 +28,7 @@ public class ExternalAccountSettingsValidator implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() {
+        validateSpotify();
         ExternalAccountProperties.Youtube youtube = properties.youtube();
         if (!youtube.enabled()) {
             return;
@@ -50,6 +51,20 @@ public class ExternalAccountSettingsValidator implements InitializingBean {
         if (projectNumber.equals(projectNumberOf(loginClientId))) {
             throw new IllegalStateException("YouTube 연결 클라이언트와 로그인 Google 클라이언트가 같은 Google Cloud 프로젝트(" + projectNumber
                     + ")에 있다. 연결 때 하는 토큰 폐기가 로그인 동의까지 지우므로 프로젝트를 나눈다");
+        }
+    }
+
+    /** Spotify를 켰는데 키가 비면 앱은 뜨고 연결만 500이 된다. 켰다면 시작 때 알린다. */
+    private void validateSpotify() {
+        ExternalAccountProperties.Spotify spotify = properties.spotify();
+        if (!spotify.enabled()) {
+            return;
+        }
+        List<String> missing = new ArrayList<>();
+        require(missing, spotify.clientId(), "external-account.spotify.client-id");
+        require(missing, spotify.clientSecret(), "external-account.spotify.client-secret");
+        if (!missing.isEmpty()) {
+            throw new IllegalStateException("Spotify 연결을 켜려면 다음 설정이 필요하다: " + String.join(", ", missing));
         }
     }
 
