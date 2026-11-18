@@ -19,6 +19,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** 별도 JVM 도우미 자체의 안전장치. 끝나지 않는 자식 JVM이 테스트와 CI를 몇 시간씩 붙잡지 않게 한다. */
 class ForkedJvmTest {
@@ -364,6 +366,30 @@ class ForkedJvmTest {
                 .map(line -> line.substring(prefix.length()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("자식 출력에 '" + prefix + "' 줄이 없다: " + output));
+    }
+
+    @Test
+    void 로그_줄은_ForkedMain이_직접_찍는_표식과_빈_줄을_뺀_나머지다() {
+        ForkedJvm.Result result =
+                new ForkedJvm.Result(0, "LEVEL ROOT=INFO\n{\"a\":1}\n\n  \n" + ForkedMain.STARTED + "\n{\"b\":2}\n");
+
+        assertThat(result.logLines()).containsExactly("{\"a\":1}", "{\"b\":2}");
+    }
+
+    @Test
+    void JSON_객체_한_개인_줄은_JSON_객체가_아닌_줄로_세지_않는다() {
+        ForkedJvm.Result result = new ForkedJvm.Result(0, "{\"a\":1}\n{\"message\":\"한글 {중괄호}\"}\n");
+
+        assertThat(result.nonJsonObjectLines()).isEmpty();
+    }
+
+    /** 시작이 `{"`이고 끝이 `}`인 줄도 JSON이 아닐 수 있다. 줄 전체를 파싱해 본다. */
+    @ParameterizedTest
+    @ValueSource(strings = {"{\"a\": broken}", "{\"a\":1} trailing", "{\"a\":1}{\"b\":2}", "[1]", "plain text"})
+    void 줄_전체가_JSON_객체_하나가_아니면_JSON_객체가_아닌_줄로_센다(String line) {
+        ForkedJvm.Result result = new ForkedJvm.Result(0, "{\"ok\":true}\n" + line + "\n");
+
+        assertThat(result.nonJsonObjectLines()).containsExactly(line);
     }
 
     /**

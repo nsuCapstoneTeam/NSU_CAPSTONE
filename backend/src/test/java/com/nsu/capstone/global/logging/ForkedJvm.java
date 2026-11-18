@@ -12,6 +12,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.springframework.util.FileSystemUtils;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 별도 JVM 프로세스로 {@link ForkedMain}을 실행한다. JVM 옵션, 시작 로그, 표준 출력·오류 전체를 검사하는 테스트용이다.
@@ -164,5 +167,32 @@ final class ForkedJvm {
         }
     }
 
-    record Result(int exitCode, String output) {}
+    record Result(int exitCode, String output) {
+
+        /** 앱이 찍은 로그 줄. {@link ForkedMain}이 직접 찍는 표식(LEVEL, STARTED)과 빈 줄은 뺀다. */
+        List<String> logLines() {
+            return output.lines()
+                    .filter(line -> !line.isBlank())
+                    .filter(line -> !line.startsWith("LEVEL ") && !line.equals(ForkedMain.STARTED))
+                    .toList();
+        }
+
+        /** {@link #logLines()} 중 줄 전체가 JSON 객체 하나가 아닌 것. 시작과 끝 문자만 보지 않고 줄 전체를 파싱한다. */
+        List<String> nonJsonObjectLines() {
+            return logLines().stream().filter(line -> !isJsonObject(line)).toList();
+        }
+
+        private static boolean isJsonObject(String line) {
+            try {
+                return JSON.readTree(line).isObject();
+            } catch (JacksonException e) {
+                return false;
+            }
+        }
+    }
+
+    /** 줄 뒤에 다른 토큰이 남아 있으면 실패한다(`{...}{...}`, `{...} 나머지`). */
+    private static final JsonMapper JSON = JsonMapper.builder()
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+            .build();
 }

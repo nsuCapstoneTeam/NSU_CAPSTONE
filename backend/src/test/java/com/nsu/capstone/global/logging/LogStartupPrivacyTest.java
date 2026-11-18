@@ -70,12 +70,9 @@ class LogStartupPrivacyTest {
         assertThat(result.exitCode())
                 .as("종료 코드. 출력 끝: %s", tail(result.output()))
                 .isZero();
-        assertThat(result.output()
-                        .lines()
-                        .filter(line -> !line.isBlank())
-                        .filter(line -> !line.startsWith("LEVEL ") && !line.equals(ForkedMain.STARTED)))
-                .as("JSON 객체가 아닌 줄")
-                .allMatch(line -> line.startsWith("{\"") && line.endsWith("}"));
+        // 로그 줄이 하나도 없으면 아래 단언이 비어 있어서 통과한다. 먼저 줄이 있는지 본다
+        assertThat(result.logLines()).as("표식을 뺀 로그 줄").isNotEmpty();
+        assertThat(result.nonJsonObjectLines()).as("JSON 객체가 아닌 줄").isEmpty();
     }
 
     /**
