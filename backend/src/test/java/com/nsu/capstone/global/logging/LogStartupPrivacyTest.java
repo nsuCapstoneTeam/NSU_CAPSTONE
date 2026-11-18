@@ -82,7 +82,8 @@ class LogStartupPrivacyTest {
         Map<String, String> env = new HashMap<>();
         env.put("JWT_ACCESS_TOKEN_SECRET", FAKE_JWT_SECRET);
         env.put("SIGNUP_VERIFICATION_HMAC_SECRET", "test-only-signup-verification-hmac-secret");
-        env.put("SIGNUP_REQUIRED_TERMS", "service-terms:v1,privacy-policy:v1");
+        // #219가 필수 약관 ID 형식을 바꿨다. TestcontainersConfiguration의 값과 같게 둔다
+        env.put("SIGNUP_REQUIRED_TERMS", "service:v1,privacy:v1");
         env.put("POSTGRES_HOST", POSTGRES.getHost());
         env.put("POSTGRES_PORT", String.valueOf(POSTGRES.getMappedPort(5432)));
         env.put("POSTGRES_DB", POSTGRES.getDatabaseName());
