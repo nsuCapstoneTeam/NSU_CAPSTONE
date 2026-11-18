@@ -36,7 +36,7 @@
 - 본문과 응답의 `provider`는 enum `YOUTUBE`·`SPOTIFY`다. 값이 늘 수 있다(00 §3).
 - `externalAccountId`·`artistId`는 정규형 UUID다. 형식이 틀리면 `400 INVALID_EXTERNAL_ACCOUNT_ID`·`400 INVALID_ARTIST_ID`다.
 - 연결 결과(`201`)에는 `Location`을 붙이지 않는다. 계정 하나를 조회하는 API가 없기 때문이다.
-- 쓰기 요청은 `DEMO`에서 허용 목록 계정만 통과한다(`403 DEMO_WRITE_NOT_ALLOWED`, 00 §8). 이 필터는 전역 필터이고 2026-11-18 기준 아직 구현되지 않았다. 구현되기 전에는 시연 서버에서 외부 계정 플랫폼을 켜지 않는다(ADR 9번).
+- 쓰기 요청은 `DEMO`에서 허용 목록 계정만 통과한다(`403 DEMO_WRITE_NOT_ALLOWED`, 00 §8). 이 필터는 전역 필터(NSU-129 작업 범위 9번)이고 2026-11-18 기준 아직 구현되지 않았다. 구현되기 전에는 시연 서버에서 외부 계정 플랫폼을 켜지 않는다(ADR 9번).
 - `/api/v1/me/external-accounts/**`는 아티스트마다 10분에 30번까지다. 넘으면 `429 TOO_MANY_REQUESTS`와 `Retry-After`다(§11.2).
 - 태그 이름은 `외부 계정`이다(00 §10.1 목록에 더한다).
 

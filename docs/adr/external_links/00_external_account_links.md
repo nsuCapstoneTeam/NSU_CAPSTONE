@@ -307,7 +307,7 @@ grill에서 "연결과 확인을 분리하고 확인 방법을 따로 만든다"
 
 [identity_verification/00](../identity_verification/00_mvp_sandbox_identity_verification.md):35가 이미 정했다. `DEMO`는 쓰기를 기본으로 막고 허용 목록(팀 이메일 가입 계정)만 통과시킨다. 외부 링크 연동은 허용 경로가 아니다. OAuth 콜백(`GET`)은 코드를 프론트에 넘기기만 하고 저장은 `POST`가 하므로 메서드 기준 필터가 빠짐없이 막는다.
 
-이 쓰기 필터(00 §8)는 전역 필터이고, 2026-11-18 기준 아직 어느 PR에도 구현되지 않았다(PR #232 대체 리뷰 지적). 이 모듈은 필터를 만들지 않고 따른다. 필터가 들어오기 전에는 시연 서버에서 외부 계정 플랫폼을 켜지 않는다(`EXTERNAL_ACCOUNT_YOUTUBE_ENABLED`·`EXTERNAL_ACCOUNT_SPOTIFY_ENABLED`를 기본값 `false`로 둔다). 켜면 가입한 아무 ARTIST나 남의 Spotify 페이지를 연결할 수 있다.
+이 쓰기 필터(00 §8)는 전역 필터이고, 2026-11-18 기준 아직 어느 PR에도 구현되지 않았다(PR #232 대체 리뷰 지적). 필터는 NSU-129 작업 범위 9번이 맡고, NSU-129는 이것을 시연 서버 공개 시작 조건으로 두었다. 이 모듈은 필터를 만들지 않고 따른다. 필터가 들어오기 전에는 시연 서버에서 외부 계정 플랫폼을 켜지 않는다(`EXTERNAL_ACCOUNT_YOUTUBE_ENABLED`·`EXTERNAL_ACCOUNT_SPOTIFY_ENABLED`를 기본값 `false`로 둔다). 켜면 가입한 아무 ARTIST나 남의 Spotify 페이지를 연결할 수 있다.
 
 ### 10. 팀 확인
 
