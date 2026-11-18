@@ -36,7 +36,7 @@
 - 본문과 응답의 `provider`는 enum `YOUTUBE`·`SPOTIFY`다. 값이 늘 수 있다(00 §3).
 - `externalAccountId`·`artistId`는 정규형 UUID다. 형식이 틀리면 `400 INVALID_EXTERNAL_ACCOUNT_ID`·`400 INVALID_ARTIST_ID`다.
 - 연결 결과(`201`)에는 `Location`을 붙이지 않는다. 계정 하나를 조회하는 API가 없기 때문이다.
-- 쓰기 요청은 `DEMO`에서 허용 목록 계정만 통과한다(`403 DEMO_WRITE_NOT_ALLOWED`, 00 §8). 이 필터는 전역 필터(NSU-129 작업 범위 9번)이고 2026-11-18 기준 아직 구현되지 않았다. 구현되기 전에는 시연 서버에서 외부 계정 플랫폼을 켜지 않는다(ADR 9번).
+- 쓰기 요청은 `DEMO`에서 허용 목록 계정만 통과한다(`403 DEMO_WRITE_NOT_ALLOWED`, 00 §8). 이 필터는 전역 필터(NSU-158)이고 2026-11-18 기준 아직 구현되지 않았다. 구현되기 전에는 시연 서버에서 외부 계정 플랫폼을 켜지 않는다(ADR 9번).
 - `/api/v1/me/external-accounts/**`는 아티스트마다 10분에 30번까지다. 넘으면 `429 TOO_MANY_REQUESTS`와 `Retry-After`다(§11.2).
 - 태그 이름은 `외부 계정`이다(00 §10.1 목록에 더한다).
 
@@ -392,7 +392,7 @@ DB·Redis가 관여하는 경우는 Testcontainers(PostgreSQL, Redis)로 확인�
 |---|---|
 | 역할 | 토큰 없으면 `401`. EVENT_PARTNER의 `/me/external-accounts/**`는 `403 ACCESS_DENIED`이고 Redis·DB가 바뀌지 않는다 |
 | 조회 접근 | ARTIST 본인 `200`, 남의 `artistId`는 대상 조회 전에 `403`. EVENT_PARTNER는 ACTIVE ARTIST `200`, 없음·EVENT_PARTNER·SUSPENDED·WITHDRAWN 모두 `404 ARTIST_NOT_FOUND` |
-| DEMO | 허용 목록 밖 계정의 시작·연결·고르기·해제는 `403 DEMO_WRITE_NOT_ALLOWED`이고 Redis·DB가 바뀌지 않는다. 콜백 `GET`은 `302`. 전역 필터(00 §8)가 구현된 뒤 그 PR에서 확인한다. 이 PR에는 필터가 없어 확인하지 않았다 |
+| DEMO | 허용 목록 밖 계정의 시작·연결·고르기·해제는 `403 DEMO_WRITE_NOT_ALLOWED`이고 Redis·DB가 바뀌지 않는다. 콜백 `GET`은 `302`. 전역 필터(00 §8, NSU-158)가 구현된 뒤 그 PR에서 확인한다. 이 PR에는 필터가 없어 확인하지 않았다 |
 | 시작 | 응답에 `authorizationUrl`(PKCE `S256`, `state`, scope `youtube.readonly`)과 결합 쿠키(`HttpOnly; Secure; SameSite=Lax; Path=/`, `Max-Age=660`)가 있다. Redis 값에 nonce 원문·토큰이 없다. `provider: SPOTIFY`는 `400 VALIDATION_ERROR` |
 | 시작 교체 확인 | 같은 플랫폼 계정 X가 있는데 `replaceExternalAccountId`가 `null`이거나 다른 ID면 `409 EXTERNAL_ACCOUNT_CONNECTION_CHANGED`이고 Redis 키가 생기지 않는다. 계정이 없는데 ID를 보내도 `409`. 키를 빠뜨리면 `null`과 같다(계정 X가 있으면 `409`, 없으면 진행) |
 | 교체 경쟁 | 기기 A가 X 교체로 시작 → 기기 B가 X를 Y로 교체하고 영상을 고름 → A의 연결 요청은 `409 EXTERNAL_ACCOUNT_CONNECTION_CHANGED`이고 Y와 그 영상, 감사 기록이 그대로다. A 시작 뒤 X를 해제한 경우, `null`로 시작한 뒤 다른 탭이 연결한 경우도 `409`다. 같은 채널을 다시 연결하면 기대 값과 관계없이 `200`이고 아무것도 바뀌지 않는다. Spotify도 같은 규칙이다 |
