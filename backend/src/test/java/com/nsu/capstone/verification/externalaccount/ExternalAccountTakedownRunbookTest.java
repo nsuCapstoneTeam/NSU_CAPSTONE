@@ -38,6 +38,7 @@ class ExternalAccountTakedownRunbookTest extends ExternalAccountIntegrationTestB
 
     private static final Path RUNBOOK = Paths.get("../docs/runbook/external_account_takedown.md");
     private static final Pattern SQL_BLOCK = Pattern.compile("(?s)## 삭제 SQL.*?```sql\\n(.*?)```");
+    private static final Pattern VIDEO_LOOKUP_BLOCK = Pattern.compile("(?s)### 영상 링크.*?```sql\\n(.*?)```");
 
     @Autowired
     ExternalAccountRepository repository;
@@ -81,13 +82,60 @@ class ExternalAccountTakedownRunbookTest extends ExternalAccountIntegrationTestB
     }
 
     @Test
+    void ID_종류별_길이를_적고_영상_링크와_다시_찾기_경로를_안내한다() throws IOException {
+        String runbook = Files.readString(RUNBOOK);
+
+        assertThat(runbook).contains("YouTube 채널 24자", "Spotify 아티스트 22자", "YouTube 영상 11자");
+        assertThat(runbook).contains("watch?v=<영상 ID>");
+        assertThat(runbook).as("0행이면 대상 찾기부터 다시 한다").contains("\"대상 찾기\"부터 다시 한다");
+        assertThat(runbook).as("영상 하나만 지우는 절차는 두지 않는다").contains("영상 하나만 지우는 절차는 두지 않는다");
+    }
+
+    /** PR #232 Claude 대체 리뷰: 처음 runbook은 채널·아티스트 ID로만 찾아 영상 링크(watch?v=) 신고를 처리하지 못했다. */
+    @Test
+    void 영상_ID로_그_영상을_고른_연결을_찾아_삭제_SQL로_지우면_연결과_영상이_사라지고_운영자_감사_기록이_남는다() throws IOException {
+        User artist = newUser(UserRole.ARTIST, "runbook-video@example.com");
+        User other = newUser(UserRole.ARTIST, "runbook-video-other@example.com");
+        UUID accountId = insertAccount(artist.getId(), "YOUTUBE", "UCrunbookvideo0000000000");
+        UUID otherAccountId = insertAccount(other.getId(), "YOUTUBE", "UCrunbookvideoother00000");
+        insertWork(accountId, artist.getId(), "abcDEF12345", 0);
+        insertWork(accountId, artist.getId(), "zzzzzzzzzzz", 1);
+        insertWork(otherAccountId, other.getId(), "yyyyyyyyyyy", 0);
+
+        Map<String, Object> found = jdbcTemplate.queryForMap(videoLookupSql("abcDEF12345"));
+
+        assertThat(found)
+                .containsEntry("id", accountId)
+                .containsEntry("artist_id", artist.getId())
+                .containsEntry("provider", "YOUTUBE");
+        runRunbookSql(
+                (UUID) found.get("id"),
+                (UUID) found.get("artist_id"),
+                (String) found.get("provider"),
+                "TAKEDOWN_RIGHTS",
+                "5s");
+
+        assertThat(count("external_accounts", artist.getId())).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT count(*) FROM external_account_works WHERE external_account_id = ?",
+                        Integer.class,
+                        accountId))
+                .isZero();
+        assertThat(providersOf(other.getId())).containsExactly("YOUTUBE");
+        assertThat(jdbcTemplate.queryForMap(
+                        "SELECT actor, reason FROM external_account_audit_events WHERE artist_id = ?", artist.getId()))
+                .containsEntry("actor", "OPERATOR")
+                .containsEntry("reason", "TAKEDOWN_RIGHTS");
+    }
+
+    @Test
     void 삭제_SQL은_연결과_고른_영상을_지우고_운영자_감사_기록을_남긴다() throws IOException {
         User artist = newUser(UserRole.ARTIST, "runbook-delete@example.com");
         UUID accountId = insertAccount(artist.getId(), "YOUTUBE", "UCrunbookchannel0000000000");
         insertWork(accountId, artist.getId(), "video000001", 0);
         insertWork(accountId, artist.getId(), "video000002", 1);
 
-        runRunbookSql(artist.getId(), "YOUTUBE", "TAKEDOWN_RIGHTS", "5s");
+        runRunbookSql(accountId, artist.getId(), "YOUTUBE", "TAKEDOWN_RIGHTS", "5s");
 
         assertThat(count("external_accounts", artist.getId())).isZero();
         assertThat(jdbcTemplate.queryForObject(
@@ -111,20 +159,40 @@ class ExternalAccountTakedownRunbookTest extends ExternalAccountIntegrationTestB
         User target = newUser(UserRole.ARTIST, "runbook-target@example.com");
         User other = newUser(UserRole.ARTIST, "runbook-other@example.com");
         insertAccount(target.getId(), "YOUTUBE", "UCrunbooktarget00000000000");
-        insertAccount(target.getId(), "SPOTIFY", "1vCWHaC5f2uS3yhpwWbIA6");
+        UUID targetSpotify = insertAccount(target.getId(), "SPOTIFY", "1vCWHaC5f2uS3yhpwWbIA6");
         insertAccount(other.getId(), "SPOTIFY", "1vCWHaC5f2uS3yhpwWbIA6");
 
-        runRunbookSql(target.getId(), "SPOTIFY", "TAKEDOWN_IMPERSONATION", "5s");
+        runRunbookSql(targetSpotify, target.getId(), "SPOTIFY", "TAKEDOWN_IMPERSONATION", "5s");
 
         assertThat(providersOf(target.getId())).containsExactly("YOUTUBE");
         assertThat(providersOf(other.getId())).containsExactly("SPOTIFY");
+    }
+
+    /**
+     * PR #232 Codex 리뷰: 대상 찾기에서 얻은 연결 ID로 지운다. 아티스트와 플랫폼만으로 지우면, 조회한 뒤 아티스트가 연결을
+     * 바꿨을 때 신고와 무관한 새 연결을 지운다.
+     */
+    @Test
+    void 대상을_찾은_뒤_아티스트가_연결을_바꾸면_삭제_SQL은_새_연결을_지우지_않고_감사_기록도_남기지_않는다() throws IOException {
+        User artist = newUser(UserRole.ARTIST, "runbook-replaced@example.com");
+        UUID reported = insertAccount(artist.getId(), "SPOTIFY", "1vCWHaC5f2uS3yhpwWbIA6");
+        // 운영자가 대상을 찾은 뒤, 아티스트가 신고된 연결을 해제하고 다른 아티스트 페이지로 다시 연결했다
+        jdbcTemplate.update("DELETE FROM external_accounts WHERE id = ?", reported);
+        UUID replacement = insertAccount(artist.getId(), "SPOTIFY", "2vCWHaC5f2uS3yhpwWbIA7");
+
+        runRunbookSql(reported, artist.getId(), "SPOTIFY", "TAKEDOWN_IMPERSONATION", "5s");
+
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT id FROM external_accounts WHERE artist_id = ?", UUID.class, artist.getId()))
+                .containsExactly(replacement);
+        assertThat(count("external_account_audit_events", artist.getId())).isZero();
     }
 
     @Test
     void 지울_연결이_없으면_감사_기록도_남기지_않는다() throws IOException {
         User artist = newUser(UserRole.ARTIST, "runbook-none@example.com");
 
-        runRunbookSql(artist.getId(), "YOUTUBE", "TAKEDOWN_RIGHTS", "5s");
+        runRunbookSql(UUID.randomUUID(), artist.getId(), "YOUTUBE", "TAKEDOWN_RIGHTS", "5s");
 
         assertThat(count("external_account_audit_events", artist.getId())).isZero();
     }
@@ -132,9 +200,9 @@ class ExternalAccountTakedownRunbookTest extends ExternalAccountIntegrationTestB
     @Test
     void 사유가_규칙에_맞지_않으면_연결도_감사_기록도_바뀌지_않는다() throws IOException {
         User artist = newUser(UserRole.ARTIST, "runbook-bad-reason@example.com");
-        insertAccount(artist.getId(), "YOUTUBE", "UCrunbookbadreason000000000");
+        UUID accountId = insertAccount(artist.getId(), "YOUTUBE", "UCrunbookbadreason000000000");
 
-        assertThatThrownBy(() -> runRunbookSql(artist.getId(), "YOUTUBE", "NO_SUCH_REASON", "5s"))
+        assertThatThrownBy(() -> runRunbookSql(accountId, artist.getId(), "YOUTUBE", "NO_SUCH_REASON", "5s"))
                 .hasMessageContaining("ck_external_account_audit_events_actor_reason");
 
         assertThat(count("external_accounts", artist.getId())).isEqualTo(1);
@@ -144,7 +212,7 @@ class ExternalAccountTakedownRunbookTest extends ExternalAccountIntegrationTestB
     @Test
     void 삭제_SQL은_앱과_같은_아티스트_잠금을_먼저_잡는다() throws Exception {
         User artist = newUser(UserRole.ARTIST, "runbook-lock@example.com");
-        insertAccount(artist.getId(), "YOUTUBE", "UCrunbooklock00000000000000");
+        UUID accountId = insertAccount(artist.getId(), "YOUTUBE", "UCrunbooklock00000000000000");
         CountDownLatch locked = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -161,7 +229,7 @@ class ExternalAccountTakedownRunbookTest extends ExternalAccountIntegrationTestB
             }));
             assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
 
-            assertThatThrownBy(() -> runRunbookSql(artist.getId(), "YOUTUBE", "TAKEDOWN_RIGHTS", "1s"))
+            assertThatThrownBy(() -> runRunbookSql(accountId, artist.getId(), "YOUTUBE", "TAKEDOWN_RIGHTS", "1s"))
                     .hasMessageContaining("lock timeout");
 
             assertThat(count("external_accounts", artist.getId())).isEqualTo(1);
@@ -173,14 +241,20 @@ class ExternalAccountTakedownRunbookTest extends ExternalAccountIntegrationTestB
         }
     }
 
-    /** 문서의 SQL 블록을 읽어 psql 변수와 메타 명령을 JDBC로 돌릴 수 있게 바꿔 한 연결에서 실행한다. */
-    private void runRunbookSql(UUID artistId, String provider, String reason, String lockTimeout) throws IOException {
+    /**
+     * 문서의 SQL 블록을 읽어 psql 변수와 메타 명령을 JDBC로 돌릴 수 있게 바꿔 한 연결에서 실행한다.
+     *
+     * @param accountId "대상 찾기"에서 얻은 연결 ID
+     */
+    private void runRunbookSql(UUID accountId, UUID artistId, String provider, String reason, String lockTimeout)
+            throws IOException {
         Matcher block = SQL_BLOCK.matcher(Files.readString(RUNBOOK));
         assertThat(block.find()).as("runbook에 '## 삭제 SQL' 아래 sql 블록이 있다").isTrue();
         String sql = block.group(1)
                 .lines()
                 .filter(line -> !line.startsWith("\\")) // psql 메타 명령(\set ...)은 JDBC에 없다
                 .reduce("", (all, line) -> all + line + "\n")
+                .replace(":'account_id'", "'" + accountId + "'")
                 .replace(":'artist_id'", "'" + artistId + "'")
                 .replace(":'provider'", "'" + provider + "'")
                 .replace(":'reason'", "'" + reason + "'")
@@ -197,6 +271,17 @@ class ExternalAccountTakedownRunbookTest extends ExternalAccountIntegrationTestB
             }
             return null;
         });
+    }
+
+    /** 문서의 '### 영상 링크' 조회를 psql 변수 없이 돌릴 수 있게 바꾼다. */
+    private static String videoLookupSql(String videoId) throws IOException {
+        Matcher block = VIDEO_LOOKUP_BLOCK.matcher(Files.readString(RUNBOOK));
+        assertThat(block.find()).as("runbook에 '### 영상 링크' 아래 sql 블록이 있다").isTrue();
+        return block.group(1)
+                .lines()
+                .filter(line -> !line.startsWith("\\"))
+                .reduce("", (all, line) -> all + line + "\n")
+                .replace(":'video_id'", "'" + videoId + "'");
     }
 
     private UUID insertAccount(UUID artistId, String provider, String providerAccountId) {

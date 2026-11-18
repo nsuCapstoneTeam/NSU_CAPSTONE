@@ -24,7 +24,7 @@ YouTube 영상 자체가 문제인 신고는 YouTube에 신고하도록 안내�
 ## 처리 순서
 
 1. 접수 시각, 신고자가 알려 준 링크, 신고 종류를 기록한다.
-2. 아래 "대상 찾기"로 지울 연결(`artist_id`, `provider`)을 찾는다. 찾지 못하면 이미 해제된 것이다. 신고자에게 그렇게 회신하고 끝낸다.
+2. 아래 "대상 찾기"로 지울 연결(`id`, `artist_id`, `provider`)을 찾는다. 찾지 못하면 이미 해제된 것이다. 신고자에게 그렇게 회신하고 끝낸다.
 3. 신고 종류에 맞는 사유 코드를 고른다.
 
 | 신고 | 사유 코드(`reason`) |
@@ -39,13 +39,21 @@ YouTube 영상 자체가 문제인 신고는 YouTube에 신고하도록 안내�
 
 ## 대상 찾기
 
-읽기만 하는 조회다. 신고자가 알려 준 링크에서 플랫폼 계정 ID를 뽑아 찾는다. YouTube는 `https://www.youtube.com/channel/<채널 ID>`의 채널 ID, Spotify는 `https://open.spotify.com/artist/<아티스트 ID>`의 아티스트 ID다.
+읽기만 하는 조회다. 신고자가 알려 준 링크에서 ID를 뽑아 연결을 찾는다. 링크 종류에 따라 다음 중 하나를 쓴다.
+
+| 신고된 링크 | 뽑는 ID | 길이 |
+|---|---|---|
+| YouTube 채널 `https://www.youtube.com/channel/<채널 ID>` | 채널 ID | 24자 |
+| Spotify 아티스트 `https://open.spotify.com/artist/<아티스트 ID>` | 아티스트 ID | 22자 |
+| YouTube 영상 `https://www.youtube.com/watch?v=<영상 ID>` | 영상 ID | 11자 |
 
 신고자가 준 링크는 믿을 수 없는 입력이다. ID 자리에 따옴표나 세미콜론이 든 링크를 보내 SQL을 끼워 넣을 수 있으므로 값을 SQL 문장에 붙여 넣지 않고 `\set` 변수로 넘긴다.
 
-값을 `\set` 줄에 붙이기 전에 ID가 영문자·숫자·`-`·`_`만으로 22~24자인지 눈으로 확인한다. 이 확인은 건너뛰지 않는다. `\set` 줄은 psql 슬래시 명령이라 값에 작은따옴표(`'`)나 역슬래시(`\`)가 있으면 따옴표가 닫히고 뒤의 `\`가 새 명령(셸 실행 `\!` 포함)이 된다. 그런 문자가 하나라도 보이면 붙이지 말고 조회하지도 않는다. 신고자에게 링크를 다시 받는다.
+값을 `\set` 줄에 붙이기 전에 ID가 영문자·숫자·`-`·`_`만으로 위 표의 길이(YouTube 채널 24자, Spotify 아티스트 22자, YouTube 영상 11자)인지 눈으로 확인한다. 이 확인은 건너뛰지 않는다. `\set` 줄은 psql 슬래시 명령이라 값에 작은따옴표(`'`)나 역슬래시(`\`)가 있으면 따옴표가 닫히고 뒤의 `\`가 새 명령(셸 실행 `\!` 포함)이 된다. 그런 문자가 하나라도 보이면 붙이지 말고 조회하지도 않는다. 신고자에게 링크를 다시 받는다.
 
 `\set` 줄 끝에는 주석을 달 수 없다. psql 슬래시 명령은 `--`를 주석으로 보지 않아 값에 그대로 붙는다. 아래 `provider` 값은 `YOUTUBE`나 `SPOTIFY` 중 하나만 적는다.
+
+### 채널·아티스트 링크
 
 ```sql
 \set platform_id '여기에 ID만'
@@ -57,7 +65,24 @@ WHERE provider = :'provider'
   AND provider_account_id = :'platform_id';
 ```
 
-Spotify는 여러 아티스트가 같은 아티스트 페이지를 걸 수 있어 여러 줄이 나올 수 있다. 신고가 가리키는 아티스트(사칭한 쪽)만 골라 `artist_id`를 정한다. 누구인지 알 수 없으면 신고자에게 되묻되, 24시간을 넘기지 않도록 모두 지우는 쪽을 먼저 고려한다.
+Spotify는 여러 아티스트가 같은 아티스트 페이지를 걸 수 있어 여러 줄이 나올 수 있다. 신고가 가리키는 아티스트(사칭한 쪽)만 골라 그 줄의 `id`와 `artist_id`를 정한다. 누구인지 알 수 없으면 신고자에게 되묻되, 24시간을 넘기지 않도록 모두 지우는 쪽을 먼저 고려한다.
+
+### 영상 링크
+
+영상은 연결 안에 고른 영상(`external_account_works`)으로만 들어 있다. 영상 ID로 그 영상을 고른 YouTube 연결을 찾는다.
+
+```sql
+\set video_id '여기에 영상 ID만'
+
+SELECT a.id, a.artist_id, a.provider, a.connected_at
+FROM external_account_works w
+JOIN external_accounts a ON a.id = w.external_account_id
+WHERE w.provider_work_id = :'video_id';
+```
+
+- 같은 영상을 여러 아티스트가 고를 수 있어 여러 줄이 나올 수 있다. 줄마다 아래 "삭제 SQL"을 실행한다.
+- 영상 하나만 지우는 절차는 두지 않는다. 감사 기록이 연결 단위이고, 신고된 영상을 고른 연결은 확인하는 동안 내리는 것이 이 runbook의 기준이다(ADR 2번). 아티스트는 영상을 다시 골라 연결할 수 있다.
+- 조회 결과가 없으면 그 영상을 고른 연결이 이미 없는 것이다. 신고자에게 그렇게 회신하고 끝낸다.
 
 ## 삭제 SQL
 
@@ -68,10 +93,11 @@ Spotify는 여러 아티스트가 같은 아티스트 페이지를 걸 수 있�
 - 감사 기록의 `id`는 앱이 UUIDv7로 만들지만, 여기서는 `gen_random_uuid()`를 쓴다. 순서는 `occurred_at`으로 보므로 문제없다.
 - 감사 기록에는 플랫폼 계정 ID를 남기지 않는다(ADR 7번). YouTube가 삭제를 요구하면 채널 ID도 지워야 하기 때문이다.
 
-위쪽 `\set` 세 줄만 바꿔서 `psql`로 실행한다.
+`\set` 네 줄만 바꿔서 `psql`로 실행한다. `account_id`와 `artist_id`는 "대상 찾기" 결과 줄의 `id`와 `artist_id`다. 지울 행은 연결 ID(`account_id`)로 정한다. 아티스트와 플랫폼만으로 지우면, 조회한 뒤 아티스트가 연결을 바꿨을 때 신고와 무관한 새 연결을 지운다.
 
 ```sql
 \set ON_ERROR_STOP on
+\set account_id '00000000-0000-0000-0000-000000000000'
 \set artist_id '00000000-0000-0000-0000-000000000000'
 \set provider 'SPOTIFY'
 \set reason 'TAKEDOWN_IMPERSONATION'
@@ -82,7 +108,8 @@ SELECT pg_advisory_xact_lock(hashtextextended('extacct:' || (:'artist_id')::uuid
 
 WITH deleted AS (
     DELETE FROM external_accounts
-    WHERE artist_id = (:'artist_id')::uuid
+    WHERE id = (:'account_id')::uuid
+      AND artist_id = (:'artist_id')::uuid
       AND provider = :'provider'
     RETURNING id, artist_id, provider
 )
@@ -93,7 +120,7 @@ FROM deleted;
 COMMIT;
 ```
 
-- 마지막 줄 앞에 `INSERT 0 1`이 보이면 연결 1개를 지우고 기록을 남긴 것이다. `INSERT 0 0`이면 지울 연결이 없었던 것이고, 아무것도 바뀌지 않았다.
+- 마지막 줄 앞에 `INSERT 0 1`이 보이면 연결 1개를 지우고 기록을 남긴 것이다. `INSERT 0 0`이면 그 연결 ID의 행이 없었던 것이고, 아무것도 바뀌지 않았다. 조회한 뒤 아티스트가 연결을 해제하거나 바꾼 경우다. "대상 찾기"부터 다시 한다.
 - 사유 코드가 `TAKEDOWN_RIGHTS`, `TAKEDOWN_IMPERSONATION`이 아니면 DB가 거절한다. 이때는 연결도 기록도 바뀌지 않는다.
 
 ## 삭제 뒤 확인
