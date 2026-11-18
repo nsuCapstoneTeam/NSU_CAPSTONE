@@ -63,6 +63,8 @@ public class RedisPublicRequestLimitStore {
                             Long.toString(window.ttlMillis()),
                             Integer.toString(limit)))) limited(window);
         } catch (DataAccessException exception) {
+            log.warn(
+                    "Redis 장애로 공개 인증 요청을 막았습니다. 원인 타입: {}", exception.getClass().getName());
             throw new BusinessException(ErrorCode.RATE_LIMIT_UNAVAILABLE);
         }
     }

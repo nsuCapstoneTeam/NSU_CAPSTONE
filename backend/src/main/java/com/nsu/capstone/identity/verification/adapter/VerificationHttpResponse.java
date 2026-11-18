@@ -50,17 +50,19 @@ public final class VerificationHttpResponse {
             throw exception;
         } catch (RestClientResponseException exception) {
             throw new VerificationDeliveryException(
-                    exception.getStatusCode().is4xxClientError() ? Outcome.REJECTED : Outcome.UNKNOWN, exception);
+                    exception.getStatusCode().is4xxClientError() ? Outcome.REJECTED : Outcome.UNKNOWN,
+                    exception,
+                    false);
         } catch (ResourceAccessException exception) {
             for (Throwable cause = exception.getCause(); cause != null; cause = cause.getCause()) {
                 if (cause instanceof ConnectException
                         || cause instanceof HttpConnectTimeoutException
                         || cause instanceof UnknownHostException
                         || cause instanceof UnresolvedAddressException) {
-                    throw new VerificationDeliveryException(Outcome.NOT_SENT, exception);
+                    throw new VerificationDeliveryException(Outcome.NOT_SENT, exception, false);
                 }
             }
-            throw new VerificationDeliveryException(Outcome.UNKNOWN, exception);
+            throw new VerificationDeliveryException(Outcome.UNKNOWN, exception, false);
         } catch (RuntimeException exception) {
             // Execution has begun; without evidence of non-delivery, keep the outcome unknown.
             throw new VerificationDeliveryException(Outcome.UNKNOWN, exception);

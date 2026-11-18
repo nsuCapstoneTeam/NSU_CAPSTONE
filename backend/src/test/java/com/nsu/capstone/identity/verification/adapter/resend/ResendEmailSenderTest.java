@@ -68,13 +68,14 @@ class ResendEmailSenderTest {
 
     @ParameterizedTest
     @MethodSource("providerFailureStatuses")
-    void convertsProviderHttpErrorsWithoutExposingResponse(HttpStatus status) {
+    void convertsProviderHttpErrorsWithoutExposingResponse(
+            HttpStatus status, VerificationDeliveryException.Outcome expected) {
         server.expect(requestTo(BASE_URL + "/emails"))
                 .andRespond(withStatus(status)
                         .contentType(APPLICATION_JSON)
                         .body("{\"message\":\"raw-provider-response " + API_KEY + " " + CODE + "\"}"));
 
-        assertSanitizedFailure();
+        assertSanitizedFailure(expected);
     }
 
     @Test
@@ -82,21 +83,21 @@ class ResendEmailSenderTest {
         server.expect(requestTo(BASE_URL + "/emails"))
                 .andRespond(withException(new IOException("connection failed " + API_KEY)));
 
-        assertSanitizedFailure();
+        assertSanitizedFailure(VerificationDeliveryException.Outcome.UNKNOWN);
     }
 
     @Test
     void convertsMalformedResponse() {
         server.expect(requestTo(BASE_URL + "/emails")).andRespond(withSuccess("not-json " + API_KEY, APPLICATION_JSON));
 
-        assertSanitizedFailure();
+        assertSanitizedFailure(VerificationDeliveryException.Outcome.UNKNOWN);
     }
 
     @Test
     void rejectsResponseWithoutMessageId() {
         server.expect(requestTo(BASE_URL + "/emails")).andRespond(withSuccess("{\"id\":\"\"}", APPLICATION_JSON));
 
-        assertSanitizedFailure();
+        assertSanitizedFailure(VerificationDeliveryException.Outcome.UNKNOWN);
     }
 
     @Test
@@ -104,13 +105,14 @@ class ResendEmailSenderTest {
         server.expect(requestTo(BASE_URL + "/emails")).andRespond(request -> {
             throw new IllegalStateException("raw-provider-response " + API_KEY + " " + TO);
         });
-        assertSanitizedFailure();
+        assertSanitizedFailure(VerificationDeliveryException.Outcome.UNKNOWN);
     }
 
-    private void assertSanitizedFailure() {
+    private void assertSanitizedFailure(VerificationDeliveryException.Outcome expected) {
         VerificationDeliveryException exception = assertThrows(
                 VerificationDeliveryException.class,
                 () -> sender.sendVerificationCode(TO, CODE, Duration.ofMinutes(5)));
+        org.junit.jupiter.api.Assertions.assertEquals(expected, exception.outcome());
         org.junit.jupiter.api.Assertions.assertNull(exception.getCause());
         assertFalse(exception.getMessage().contains(API_KEY));
         assertFalse(exception.getMessage().contains(CODE));
@@ -121,9 +123,9 @@ class ResendEmailSenderTest {
 
     private static Stream<Arguments> providerFailureStatuses() {
         return Stream.of(
-                Arguments.of(BAD_REQUEST),
-                Arguments.of(TOO_MANY_REQUESTS),
-                Arguments.of(INTERNAL_SERVER_ERROR),
-                Arguments.of(SERVICE_UNAVAILABLE));
+                Arguments.of(BAD_REQUEST, VerificationDeliveryException.Outcome.REJECTED),
+                Arguments.of(TOO_MANY_REQUESTS, VerificationDeliveryException.Outcome.REJECTED),
+                Arguments.of(INTERNAL_SERVER_ERROR, VerificationDeliveryException.Outcome.UNKNOWN),
+                Arguments.of(SERVICE_UNAVAILABLE, VerificationDeliveryException.Outcome.UNKNOWN));
     }
 }

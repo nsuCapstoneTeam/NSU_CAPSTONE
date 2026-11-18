@@ -68,6 +68,10 @@ public class ArtistSignupService {
         try {
             signupSessionStore.save(signupSession.withConsent(consent));
         } catch (DataAccessException exception) {
+            LoggerFactory.getLogger(getClass())
+                    .warn(
+                            "Redis 장애로 가입 세션 저장을 막았습니다. 원인 타입: {}",
+                            exception.getClass().getName());
             throw new BusinessException(ErrorCode.RATE_LIMIT_UNAVAILABLE);
         }
         return new CreateArtistSignupSessionResponse(signupSessionId);

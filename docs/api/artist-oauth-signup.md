@@ -4,7 +4,7 @@
 - 기준: SSOT AUTH-006, AUTH-008, AUTH-157~160
 - Provider 인증/callback과 기존 계정 로그인은 NSU-75의 구현을 사용한다.
 
-이 문서는 API 계약과 Backend 내부 처리 방식을 설명한다. 2026-11-11 보완한 가입 인증 재발송·Redis 확인 장애 계약은 PR #219 HEAD `16455a9` 이후 미커밋 변경에 구현·로컬 자동 검증 반영했으며 통합 배포 전이다. SSOT `AUTH-006`·`SEC-118` v1.21 초안(팀 확인 전)에 연결되며 기존 요구의 승인 상태를 변경하지 않는다.
+이 문서는 API 계약과 Backend 내부 처리 방식을 설명한다. 2026-11-11 보완한 가입 인증 재발송·Redis 확인 장애 계약은 PR #219의 `b817690`에 구현·로컬 자동 검증 반영했으며 통합 배포 전이다. SSOT `AUTH-006`·`SEC-118` v1.21 초안(팀 확인 전)에 연결되며 기존 요구의 승인 상태를 변경하지 않는다.
 제품 요구사항의 기준 원문은 Linear SSOT이며, Spring Boot–AI 서버 간 공통협의 문서가 아니다.
 
 ## API 계약
@@ -23,7 +23,7 @@ OAuth 콜백과 결과 교환은 OAuth를 시작한 브라우저에서만 성공
 | `POST /api/v1/auth/oauth/result` | 결과 코드를 꺼내고(일회용) 쿠키 nonce가 맞을 때만 응답한다. 맞지 않거나 쿠키가 없으면 `400 OAUTH_RESULT_INVALID`(결과 코드가 없거나 만료됐을 때와 같은 오류). 결합 쿠키를 쓰거나 지우지 않는다(`Set-Cookie` 없음). 쿠키는 7분 뒤 만료된다. 늦게 도착한 응답이 같은 브라우저에서 새로 시작한 흐름의 쿠키를 지우지 못하게 하기 위해서다 |
 
 - 프런트가 할 일은 없다. 프런트와 API가 같은 출처라서 브라우저가 쿠키를 자동으로 보낸다(`fetch` 기본값). `credentials: 'include'`를 쓸 필요가 없다.
-- 배포 전제: nginx가 `https://<도메인>/`에서 React를, `/api/`에서 Spring을 제공한다(같은 출처, HTTPS, HTTP→HTTPS 전환과 HSTS). 프록시는 `X-Forwarded-Proto`·`X-Forwarded-Host`를 넘기고 Spring은 `server.forward-headers-strategy=framework`를 쓴다. 로컬 개발은 Vite 프록시로 같은 출처를 만들고, HTTP 개발에서만 `auth.oauth.binding-cookie-secure=false`로 개발용 쿠키 이름 `NSU_OAUTH_BINDING_DEV`를 쓴다.
+- 배포 전제: nginx가 `https://<도메인>/`에서 React를, `/api/`에서 Spring을 제공한다(같은 출처, HTTPS, HTTP→HTTPS 전환과 HSTS). 프록시는 `X-Forwarded-Proto`·`X-Forwarded-Host`를 넘기고 Spring은 `server.forward-headers-strategy=framework`를 쓴다. 이 설정은 신뢰 프록시에서만 요청을 받는 환경에 한정한다. nginx가 외부 `Forwarded`를 제거하고 `X-Forwarded-For`를 `$remote_addr`로 덮어쓰며 host·proto·port를 직접 설정한다. 전달 헤더를 덧붙이는 설정은 사용하지 않는다. 백엔드 포트의 외부 직접 접근을 차단한다. 구체적인 설정·배포 점검은 [backend README](../../backend/README.md#프록시-ip-신뢰-경계)를 따른다. 로컬 개발은 Vite 프록시로 같은 출처를 만들고, HTTP 개발에서만 `auth.oauth.binding-cookie-secure=false`로 개발용 쿠키 이름 `NSU_OAUTH_BINDING_DEV`를 쓴다.
 - 같은 브라우저에서 OAuth를 두 탭으로 동시에 시작하면 먼저 시작한 쪽은 실패한다. 다시 시작하면 된다.
 - 결합 쿠키는 인증 수단이 아니다. API 인증은 계속 `Authorization: Bearer` 헤더만 쓴다.
 

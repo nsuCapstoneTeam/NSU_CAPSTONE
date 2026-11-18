@@ -37,6 +37,9 @@ public class LoginService {
         try {
             authentication = authenticationManager.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(email, password));
+        } catch (org.springframework.security.authentication.InternalAuthenticationServiceException exception) {
+            limits.loginSucceeded(reservation);
+            throw exception;
         } catch (AuthenticationException exception) {
             throw new BusinessException(ErrorCode.INVALID_LOGIN_CREDENTIALS);
         }

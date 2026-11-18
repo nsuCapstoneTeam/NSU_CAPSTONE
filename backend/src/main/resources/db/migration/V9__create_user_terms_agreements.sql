@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 CREATE TABLE user_terms_agreements (
     id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id),

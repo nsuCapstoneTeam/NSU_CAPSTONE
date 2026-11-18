@@ -375,6 +375,42 @@ class SignupHardeningIntegrationTest {
         });
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(
+            strings = {"V8__normalize_user_email.sql", "V9__create_user_terms_agreements.sql"})
+    void migrationsStopWaitingForUsersLockWithinThreeSeconds(String file) throws Exception {
+        String migration = new ClassPathResource("db/migration/" + file).getContentAsString(StandardCharsets.UTF_8);
+        var source = jdbc.getDataSource();
+        String schema = "migration_lock_" + UUID.randomUUID().toString().replace("-", "");
+        try (var setup = source.getConnection();
+                var ddl = setup.createStatement()) {
+            ddl.execute("CREATE SCHEMA " + schema);
+            ddl.execute("CREATE TABLE " + schema + ".users (id uuid PRIMARY KEY, email text NOT NULL)");
+            try (var holder = source.getConnection();
+                    var blocked = source.getConnection()) {
+                holder.setAutoCommit(false);
+                try (var lock = holder.createStatement()) {
+                    lock.execute("LOCK TABLE " + schema + ".users IN ACCESS EXCLUSIVE MODE");
+                }
+                blocked.setSchema(schema);
+                blocked.setAutoCommit(false);
+                try (var statement = blocked.createStatement()) {
+                    statement.setQueryTimeout(6);
+                    long start = System.nanoTime();
+                    var failure = assertThrows(SQLException.class, () -> statement.execute(migration));
+                    long millis = Duration.ofNanos(System.nanoTime() - start).toMillis();
+                    assertEquals("55P03", failure.getSQLState());
+                    assertTrue(millis >= 2500 && millis < 5500, "lock wait elapsed: " + millis);
+                } finally {
+                    blocked.rollback();
+                    holder.rollback();
+                }
+            } finally {
+                ddl.execute("DROP SCHEMA " + schema + " CASCADE");
+            }
+        }
+    }
+
     private RedisPublicRequestLimitStore limits(Instant now) {
         return new RedisPublicRequestLimitStore(
                 redis, digests, new PublicRequestLimitProperties(30, 30, 30, 10), Clock.fixed(now, ZoneOffset.UTC));

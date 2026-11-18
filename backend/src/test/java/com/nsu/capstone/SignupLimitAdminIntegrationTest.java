@@ -155,7 +155,7 @@ class SignupLimitAdminIntegrationTest {
         assertEquals("0", redis.opsForValue().get(ipCounter));
 
         redis.opsForValue().set(target, "1", Duration.ofMinutes(5));
-        challenges.cancel(id, channel, "lost", true);
+        challenges.cancel(id, channel, "lost", recipient, true);
         assertEquals("1", redis.opsForValue().get(target));
     }
 

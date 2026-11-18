@@ -86,6 +86,7 @@ public class SignupVerificationService {
             }
             verify(session, expectedRole, VerificationChannel.EMAIL, session.email(), code, remoteAddress);
         } catch (DataAccessException failure) {
+            log.warn("Redis 장애로 가입 인증 확인을 막았습니다. 원인 타입: {}", failure.getClass().getName());
             throw new BusinessException(ErrorCode.RATE_LIMIT_UNAVAILABLE);
         }
     }
@@ -107,6 +108,7 @@ public class SignupVerificationService {
             }
             verify(session, expectedRole, VerificationChannel.PHONE, session.phone(), code, remoteAddress);
         } catch (DataAccessException failure) {
+            log.warn("Redis 장애로 가입 인증 확인을 막았습니다. 원인 타입: {}", failure.getClass().getName());
             throw new BusinessException(ErrorCode.RATE_LIMIT_UNAVAILABLE);
         }
     }
@@ -182,7 +184,7 @@ public class SignupVerificationService {
             if (!started) throw new BusinessException(ErrorCode.VERIFICATION_DELIVERY_FAILED);
             preflight.check(deadline);
         } catch (BusinessException failure) {
-            preflight.cancelUnsentLater(signupSessionId, channel, generationId);
+            preflight.cancelUnsentLater(signupSessionId, channel, generationId, recipient);
             throw failure;
         }
         try {
@@ -193,7 +195,7 @@ public class SignupVerificationService {
                         digestService.canonicalMobileNumber(destination), code, properties.otpTtl());
             }
         } catch (VerificationDeliveryException exception) {
-            if (exception.failureType() != null)
+            if (exception.unexpected())
                 log.error(
                         "가입 인증 발송 예외. 채널: {}, 원인 타입: {}, 위치: {}",
                         channel,
@@ -202,8 +204,9 @@ public class SignupVerificationService {
             if (exception.outcome() != VerificationDeliveryException.Outcome.PREPARATION_FAILED)
                 alerts.providerFailure(channel);
             switch (exception.outcome()) {
-                case UNKNOWN -> log.warn("가입 인증 코드 발송 결과를 확인할 수 없습니다. 채널: {}", channel);
-                case PREPARATION_FAILED -> throw preparationFailure(signupSessionId, channel, generationId);
+                case UNKNOWN ->
+                    log.warn("가입 인증 코드 발송 결과를 확인할 수 없습니다. 채널: {}, 원인 타입: {}", channel, exception.failureType());
+                case PREPARATION_FAILED -> throw preparationFailure(signupSessionId, channel, generationId, recipient);
                 case REJECTED, NOT_SENT ->
                     throw deliveryFailure(
                             signupSessionId,
@@ -216,18 +219,19 @@ public class SignupVerificationService {
             var safe = new VerificationDeliveryException(
                     VerificationDeliveryException.Outcome.PREPARATION_FAILED, exception);
             log.error("가입 인증 발송 준비 예외. 채널: {}, 원인 타입: {}, 위치: {}", channel, safe.failureType(), safe.failureLocation());
-            throw preparationFailure(signupSessionId, channel, generationId);
+            throw preparationFailure(signupSessionId, channel, generationId, recipient);
         }
         try {
-            challengeStore.promote(signupSessionId, channel, generationId);
+            challengeStore.promote(signupSessionId, channel, generationId, recipient);
         } catch (DataAccessException exception) {
             log.warn("가입 인증 코드 발송 결과를 저장하지 못했습니다. 채널: {}", channel);
         }
     }
 
-    private IllegalStateException preparationFailure(String id, VerificationChannel channel, String generation) {
+    private IllegalStateException preparationFailure(
+            String id, VerificationChannel channel, String generation, String recipient) {
         try {
-            challengeStore.cancel(id, channel, generation, true);
+            challengeStore.cancel(id, channel, generation, recipient, true);
         } catch (DataAccessException cleanupFailure) {
             log.warn("가입 인증 코드의 미발송 예약을 정리하지 못했습니다. 채널: {}", channel);
         }
@@ -241,7 +245,7 @@ public class SignupVerificationService {
             String recipient,
             boolean refundAll) {
         try {
-            challengeStore.cancel(signupSessionId, channel, generationId, refundAll);
+            challengeStore.cancel(signupSessionId, channel, generationId, recipient, refundAll);
             return new BusinessException(
                     ErrorCode.VERIFICATION_DELIVERY_FAILED, challengeStore.retryAfterCooldown(channel, recipient));
         } catch (DataAccessException exception) {

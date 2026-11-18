@@ -176,6 +176,104 @@ class VerificationChallengeStoreIntegrationTest {
     }
 
     @Test
+    void unstartedReservationRetryAfterUsesRecoveryAndCooldownInsteadOfOtpExpiry() {
+        var session = saveSession("unstarted-retry-" + UUID.randomUUID());
+        var channel = VerificationChannel.EMAIL;
+        var data = challengeData(session, channel, CODE, "reserved");
+        Instant now = Instant.now();
+        assertEquals(ChallengeIssueResult.ISSUED, issueResult(session, channel, CODE, "reserved", now));
+        var failure = assertThrows(
+                BusinessException.class, () -> issueResult(session, channel, CODE, "next", now.plusSeconds(5)));
+        assertEquals(ErrorCode.VERIFICATION_REQUEST_LIMIT_EXCEEDED, failure.getErrorCode());
+        assertTrue(failure.getRetryAfterSeconds() <= 60, "Retry-After: " + failure.getRetryAfterSeconds());
+        assertEquals(
+                "reserved",
+                redisTemplate
+                        .opsForHash()
+                        .get(SignupRedisKeys.pendingChallenge(session.signupSessionId(), channel), "generationId"));
+        assertEquals(
+                data.destinationDigest(),
+                redisTemplate
+                        .opsForHash()
+                        .get(
+                                SignupRedisKeys.pendingChallenge(session.signupSessionId(), channel),
+                                "destinationDigest"));
+    }
+
+    @Test
+    void unsentRecoveryReleasesAnotherSessionsLeaseAndLateStartCannotTakeNewOwner() {
+        var session = saveSession("unsent-lease-" + UUID.randomUUID());
+        String id = session.signupSessionId();
+        var channel = VerificationChannel.EMAIL;
+        var data = challengeData(session, channel, CODE, "old");
+        Instant now = Instant.now();
+        var noCooldown = new SignupVerificationProperties(
+                Duration.ofMinutes(5),
+                Duration.ZERO,
+                5,
+                6,
+                "test-only-secret",
+                List.of("service:v1"),
+                100,
+                100,
+                100,
+                100,
+                100,
+                10);
+        var store = new RedisVerificationChallengeStore(
+                redisTemplate, noCooldown, SignupTestTerms.timing(), mock(VerificationAlertService.class));
+        assertEquals(
+                ChallengeIssueResult.ISSUED,
+                store.issue(
+                        id,
+                        session.role(),
+                        channel,
+                        data.codeDigest(),
+                        data.destinationDigest(),
+                        "old",
+                        now,
+                        data.destinationDigest(),
+                        testIpDigest));
+        String delivery = SignupRedisKeys.pendingDelivery(channel, data.destinationDigest());
+        assertTrue(redisTemplate.getExpire(delivery, TimeUnit.MILLISECONDS) <= 15000);
+        var limited = assertThrows(
+                BusinessException.class,
+                () -> store.issue(
+                        id,
+                        session.role(),
+                        channel,
+                        "next",
+                        data.destinationDigest(),
+                        "next",
+                        now.plusSeconds(5),
+                        data.destinationDigest(),
+                        testIpDigest));
+        assertTrue(limited.getRetryAfterSeconds() <= 15);
+        assertFalse(store.startDelivery(id, channel, "old", now.plusSeconds(16)));
+        var other = SignupSession.createArtist(id + "-other", session.email(), session.phone())
+                .withConsent(SignupTestTerms.consent());
+        signupSessionStore.save(other);
+        assertEquals(
+                ChallengeIssueResult.ISSUED,
+                store.issue(
+                        other.signupSessionId(),
+                        other.role(),
+                        channel,
+                        "next",
+                        data.destinationDigest(),
+                        "next",
+                        now.plusSeconds(16),
+                        data.destinationDigest(),
+                        testIpDigest));
+        String owner = redisTemplate.opsForValue().get(delivery);
+        assertFalse(store.startDelivery(id, channel, "old", now.plusSeconds(16)));
+        store.cancel(id, channel, "old", data.destinationDigest(), true);
+        assertEquals(owner, redisTemplate.opsForValue().get(delivery));
+        assertTrue(store.startDelivery(other.signupSessionId(), channel, "next", now.plusSeconds(16)));
+        assertTrue(redisTemplate.getExpire(delivery, TimeUnit.MILLISECONDS) > 15000);
+    }
+
+    @Test
     void storesOnlyDigestWithFiveMinuteBoundAndConsumesSuccessfulChallenge() {
         SignupSession session = saveSession("challenge-lifecycle");
         ChallengeData data = issue(session, VerificationChannel.EMAIL, CODE, "generation-1");
@@ -310,7 +408,11 @@ class VerificationChallengeStoreIntegrationTest {
                         second.destinationDigest(),
                         testIpDigest));
 
-        challengeStore.promote(session.signupSessionId(), VerificationChannel.EMAIL, second.generationId());
+        challengeStore.promote(
+                session.signupSessionId(),
+                VerificationChannel.EMAIL,
+                second.generationId(),
+                second.destinationDigest());
 
         assertEquals(
                 ChallengeVerificationResult.INVALID,
@@ -531,7 +633,7 @@ class VerificationChallengeStoreIntegrationTest {
                     testIpDigest);
             if (index < 5) {
                 assertEquals(ChallengeIssueResult.ISSUED, send.get());
-                store.promote(id, VerificationChannel.PHONE, id);
+                store.promote(id, VerificationChannel.PHONE, id, recipient);
             } else {
                 BusinessException limited = assertThrows(BusinessException.class, send::get);
                 assertEquals(ErrorCode.VERIFICATION_REQUEST_LIMIT_EXCEEDED, limited.getErrorCode());
@@ -548,7 +650,8 @@ class VerificationChallengeStoreIntegrationTest {
 
         assertEquals(
                 ChallengeIssueResult.ISSUED, issueResult(session, VerificationChannel.PHONE, "654321", "rejected"));
-        challengeStore.cancel(session.signupSessionId(), VerificationChannel.PHONE, "rejected", false);
+        challengeStore.cancel(
+                session.signupSessionId(), VerificationChannel.PHONE, "rejected", original.destinationDigest(), false);
         assertTrue(challengeStore.retryAfterCooldown(VerificationChannel.PHONE, original.destinationDigest()) > 0);
         assertEquals(ChallengeVerificationResult.VERIFIED, verify(session, VerificationChannel.PHONE, original));
     }
@@ -595,8 +698,8 @@ class VerificationChallengeStoreIntegrationTest {
         assertTrue(challengeStore.startDelivery(id, channel, "next", now));
         String delivery = SignupRedisKeys.pendingDelivery(channel, active.destinationDigest());
         assertTrue(redisTemplate.hasKey(delivery));
-        if (succeeds) challengeStore.promote(id, channel, "next");
-        else challengeStore.cancel(id, channel, "next", false);
+        if (succeeds) challengeStore.promote(id, channel, "next", active.destinationDigest());
+        else challengeStore.cancel(id, channel, "next", active.destinationDigest(), false);
         assertFalse(redisTemplate.hasKey(delivery));
         var expected = challengeData(session, channel, succeeds ? "654321" : CODE, succeeds ? "next" : "active");
         assertEquals(
@@ -634,8 +737,8 @@ class VerificationChallengeStoreIntegrationTest {
         assertEquals(ChallengeIssueResult.ISSUED, issueResult(session, channel, "654321", "new", now.plusSeconds(61)));
         String owner = redisTemplate.opsForValue().get(delivery);
         assertTrue(challengeStore.startDelivery(id, channel, "new", now.plusSeconds(61)));
-        challengeStore.promote(id, channel, "old");
-        challengeStore.cancel(id, channel, "old", false);
+        challengeStore.promote(id, channel, "old", first.destinationDigest());
+        challengeStore.cancel(id, channel, "old", first.destinationDigest(), false);
         assertEquals(owner, redisTemplate.opsForValue().get(delivery));
         assertEquals("new", redisTemplate.opsForHash().get(pending, "generationId"));
         var restarted = new RedisVerificationChallengeStore(
@@ -653,7 +756,7 @@ class VerificationChallengeStoreIntegrationTest {
                         first.destinationDigest(),
                         testIpDigest));
         assertEquals(owner, redisTemplate.opsForValue().get(delivery));
-        restarted.promote(id, channel, "new");
+        restarted.promote(id, channel, "new", first.destinationDigest());
         assertFalse(redisTemplate.hasKey(delivery));
     }
 
@@ -903,7 +1006,8 @@ class VerificationChallengeStoreIntegrationTest {
         assertEquals(ChallengeIssueResult.ISSUED, issueResult(session, VerificationChannel.PHONE, "654321", "sent"));
         Instant started = Instant.now();
         assertTrue(challengeStore.startDelivery(session.signupSessionId(), VerificationChannel.PHONE, "sent", started));
-        challengeStore.promote(session.signupSessionId(), VerificationChannel.PHONE, first.generationId());
+        challengeStore.promote(
+                session.signupSessionId(), VerificationChannel.PHONE, first.generationId(), first.destinationDigest());
         assertTrue(challengeStore
                 .findRecoverable(session.signupSessionId(), VerificationChannel.PHONE, started)
                 .isEmpty());
@@ -1142,7 +1246,7 @@ class VerificationChallengeStoreIntegrationTest {
                                 data.destinationDigest(),
                                 ip));
                 assertTrue(store.startDelivery(id, channel, id, now));
-                store.promote(id, channel, id);
+                store.promote(id, channel, id, data.destinationDigest());
             } else {
                 var failure = assertThrows(
                         BusinessException.class,
@@ -1211,7 +1315,7 @@ class VerificationChallengeStoreIntegrationTest {
                         data.destinationDigest(),
                         testIpDigest));
         assertTrue(store.startDelivery(session.signupSessionId(), VerificationChannel.EMAIL, "sent", now));
-        store.promote(session.signupSessionId(), VerificationChannel.EMAIL, "sent");
+        store.promote(session.signupSessionId(), VerificationChannel.EMAIL, "sent", data.destinationDigest());
         var next = saveSession("email-nine-am-next");
         var nextData = challengeData(next, VerificationChannel.EMAIL, CODE, "next");
         var failure = assertThrows(
@@ -1255,18 +1359,11 @@ class VerificationChallengeStoreIntegrationTest {
         redisTemplate.delete(cooldownKey(channel, active.destinationDigest()));
         var unreliable = spy(redisTemplate);
         doAnswer(call -> {
-                    org.springframework.data.redis.core.script.RedisScript<?> script = call.getArgument(0);
-                    if (script.getScriptAsString().contains("releaseDelivery(KEYS[2], ARGV[1], KEYS[5])")) {
-                        if (applied) call.callRealMethod();
-                        throw new QueryTimeoutException("cancel response unavailable");
-                    }
-                    return call.callRealMethod();
+                    if (applied) call.callRealMethod();
+                    throw new QueryTimeoutException("cancel response unavailable");
                 })
                 .when(unreliable)
-                .execute(
-                        any(org.springframework.data.redis.core.script.RedisScript.class),
-                        Mockito.anyList(),
-                        any(Object[].class));
+                .execute(any(org.springframework.data.redis.core.RedisCallback.class));
         var store = new RedisVerificationChallengeStore(
                 unreliable, verificationProperties, SignupTestTerms.timing(), mock(VerificationAlertService.class));
         var sender = mock(SmsSender.class);
@@ -1312,7 +1409,7 @@ class VerificationChallengeStoreIntegrationTest {
         String owner = redisTemplate.opsForValue().get(delivery);
         assertEquals(ChallengeVerificationResult.VERIFIED, verify(first, channel, active));
         assertEquals(owner, redisTemplate.opsForValue().get(delivery));
-        challengeStore.cancel(other.signupSessionId(), channel, "other", true);
+        challengeStore.cancel(other.signupSessionId(), channel, "other", active.destinationDigest(), true);
         assertFalse(redisTemplate.hasKey(delivery));
     }
 
@@ -1427,7 +1524,7 @@ class VerificationChallengeStoreIntegrationTest {
                         Instant.now(),
                         data.destinationDigest(),
                         testIpDigest));
-        challengeStore.promote(session.signupSessionId(), channel, generationId);
+        challengeStore.promote(session.signupSessionId(), channel, generationId, data.destinationDigest());
         return data;
     }
 

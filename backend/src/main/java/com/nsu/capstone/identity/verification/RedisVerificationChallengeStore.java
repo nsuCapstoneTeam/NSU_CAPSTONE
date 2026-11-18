@@ -112,8 +112,12 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         local deliveryKey = KEYS[lastCounter + counterCount + 2]
         local recoverAt = redis.call('HGET', KEYS[2], 'recoverAt')
         if recoverAt and tonumber(recoverAt) <= now then discardUnsent(KEYS[2], deliveryKey) end
+        local pendingWait = redis.call('PTTL', KEYS[2])
+        if pendingWait > 0 and redis.call('HGET', KEYS[2], 'dispatching') ~= 'true' then
+            pendingWait = math.max(0, tonumber(redis.call('HGET', KEYS[2], 'recoverAt')) - now)
+        end
         local retry = math.max(redis.call('PTTL', KEYS[3]), redis.call('PTTL', KEYS[4]),
-            redis.call('PTTL', deliveryKey), redis.call('PTTL', KEYS[2]),
+            redis.call('PTTL', deliveryKey), pendingWait,
             redis.call('PTTL', KEYS[lastCounter + counterCount + 1]))
         local attemptLimit = tonumber(redis.call('GET', KEYS[5]) or '0') >= tonumber(ARGV[10])
         if attemptLimit then retry = math.max(retry, tonumber(ARGV[11])) end
@@ -159,7 +163,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
             'issuedAt', ARGV[6], 'failedAttempts', '0', 'recoverAt', ARGV[9], 'dispatching', 'false',
             'deliveryKey', deliveryKey)
         redis.call('PEXPIRE', KEYS[2], challengeTtl)
-        redis.call('SET', deliveryKey, KEYS[6], 'PX', challengeTtl)
+        redis.call('SET', deliveryKey, KEYS[6], 'PX', math.max(1, math.min(challengeTtl, tonumber(ARGV[9]) - now)))
         if tonumber(ARGV[8]) > 0 then
             redis.call('SET', KEYS[3], ARGV[5], 'PX', ARGV[8])
         end
@@ -182,6 +186,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
             redis.call('SET', KEYS[3], cjson.encode(record.counters), 'PXAT', record.refundUntil)
         end
         redis.call('HSET', KEYS[1], 'dispatching', 'true', 'recoverAt', ARGV[2])
+        if deliveryKey then redis.call('PEXPIRE', KEYS[4], redis.call('PTTL', KEYS[1])) end
         return 1
         """, Long.class);
 
@@ -576,13 +581,19 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
     }
 
     @Override
-    public void promote(String signupSessionId, VerificationChannel channel, String generationId) {
-        finish(signupSessionId, channel, generationId, "promote");
+    public void promote(
+            String signupSessionId, VerificationChannel channel, String generationId, String recipientDigest) {
+        finish(signupSessionId, channel, generationId, recipientDigest, "promote");
     }
 
     @Override
-    public void cancel(String signupSessionId, VerificationChannel channel, String generationId, boolean refundAll) {
-        finish(signupSessionId, channel, generationId, refundAll ? "all" : "destination");
+    public void cancel(
+            String signupSessionId,
+            VerificationChannel channel,
+            String generationId,
+            String recipientDigest,
+            boolean refundAll) {
+        finish(signupSessionId, channel, generationId, recipientDigest, refundAll ? "all" : "destination");
     }
 
     @Override
@@ -591,17 +602,30 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         return seconds(millis == null ? 0 : millis);
     }
 
-    private void finish(String signupSessionId, VerificationChannel channel, String generationId, String action) {
-        redisTemplate.execute(
-                FINISH_SCRIPT,
-                List.of(
-                        SignupRedisKeys.challenge(signupSessionId, channel),
-                        SignupRedisKeys.pendingChallenge(signupSessionId, channel),
-                        reservationKey(signupSessionId, channel, generationId),
-                        SignupRedisKeys.preservedChallenge(signupSessionId, channel),
-                        deliveryKey(signupSessionId, channel)),
-                generationId,
-                action);
+    private void finish(
+            String signupSessionId,
+            VerificationChannel channel,
+            String generationId,
+            String recipientDigest,
+            String action) {
+        // EVAL is deliberate: a timed-out EVALSHA cache miss cannot fall back to EVAL later.
+        var keys = List.of(
+                SignupRedisKeys.challenge(signupSessionId, channel),
+                SignupRedisKeys.pendingChallenge(signupSessionId, channel),
+                reservationKey(signupSessionId, channel, generationId),
+                SignupRedisKeys.preservedChallenge(signupSessionId, channel),
+                SignupRedisKeys.pendingDelivery(channel, recipientDigest));
+        byte[][] arguments = java.util.stream.Stream.concat(
+                        keys.stream(), java.util.stream.Stream.of(generationId, action))
+                .map(value -> value.getBytes(StandardCharsets.UTF_8))
+                .toArray(byte[][]::new);
+        redisTemplate.execute((org.springframework.data.redis.core.RedisCallback<Long>) connection -> connection
+                .scriptingCommands()
+                .eval(
+                        FINISH_SCRIPT.getScriptAsString().getBytes(StandardCharsets.UTF_8),
+                        org.springframework.data.redis.connection.ReturnType.INTEGER,
+                        keys.size(),
+                        arguments));
     }
 
     private String deliveryKey(String signupSessionId, VerificationChannel channel) {

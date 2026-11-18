@@ -168,7 +168,7 @@ Docker Compose를 통해 다음 서비스를 실행한다.
 
 ## 가입 인증 알림과 시간 설정
 
-2026-11-11 사용자 결정·문서 반영 승인으로 [가입 API 계약](../docs/api/signup-terms-and-send-limits.md)과 SSOT v1.21 초안을 보완했다(팀 확인 전). PR #219 HEAD `16455a9` 이후 미커밋 변경에 결과 미정 중 수신처·채널별 재발송 제한과 인증 확인 `503 RATE_LIMIT_UNAVAILABLE`를 구현했다. 로컬 전체 백엔드 1,072건·Spotless 통과(2026-11-11)이며 실제 발송·프록시·배포 검증은 별도다.
+2026-11-11 사용자 결정·문서 반영 승인으로 [가입 API 계약](../docs/api/signup-terms-and-send-limits.md)과 SSOT v1.21 초안을 보완했다(팀 확인 전). PR #219의 `b817690`에 결과 미정 중 수신처·채널별 재발송 제한과 인증 확인 `503 RATE_LIMIT_UNAVAILABLE`를 구현했다. 로컬 전체 백엔드 1,072건·Spotless 통과(2026-11-11)이며 실제 발송·프록시·배포 검증은 별도다.
 
 재발송 요청 즉시 기존 코드를 폐기하지 않는다. 성공·결과 모름의 Redis 기록 시 새 코드로 교체하고 확정 실패 기록 시 기존 코드를 유지한다. 결과 미정이면 다른 세션에서도 같은 수신처·채널의 재발송을 막는다. 결과 정리·미발송 복구·해당 인증 완료 또는 코드의 원래 만료로 해제하며, 정상 쿨다운이 끝나거나 복구 시간이 지났다는 이유만으로 해제하지 않는다. 재요청으로 TTL을 연장하지 않는다. START 반영 후 제공자를 부르지 못한 경우 보상을 시도하지만 보상 실패·작업 제출 거절·프로세스 종료 뒤 환불까지 보장하지 않는다. Redis 확인 경로는 오답 제한을 보장할 수 없으면 정답도 승인하지 않는다.
 
@@ -381,3 +381,27 @@ backend/
 - LLM 및 Spring AI 관련 설정은 모델과 적용 방식 확정 후 별도로 추가한다.
 
 가입 인증 발송 전 Redis 조회·예약·발송 시작은 전용 연결을 사용한다. `auth.verification.send-redis.connect-timeout=200ms`, `command-timeout=250ms`, `total-timeout=800ms`는 로컬·같은 배포망에서 검증할 초기값이다. 각 단계는 명령 한도와 전체 기한의 남은 시간 중 짧은 시간까지만 기다린다. 기한을 넘기면 제공자를 호출하지 않고 `503 VERIFICATION_DELIVERY_FAILED`로 끝내며, 응답 경로에서 예약 정리·쿨다운 조회를 기다리지 않는다. 늦게 완료된 예약은 기존 복구 경로가 처리하고 발송 시도 여부가 불확실한 카운터는 유지한다. 다른 Redis 경로의 연결·명령 설정은 바꾸지 않는다. 배포망의 지연에 맞춘 최종 값과 다른 Redis 경로의 설정은 NSU-101에서 조율한다.
+
+
+### 프록시 IP 신뢰 경계
+
+단일 공개 nginx → 비공개 Spring 구성을 사용한다. 로컬 기본 설정은 전달 헤더를 신뢰하지 않는다. 배포 환경에서만 `SERVER_FORWARD_HEADERS_STRATEGY=framework`를 설정하고 backend를 다시 시작한다. 이 설정과 아래 nginx 설정·접근 차단을 함께 적용한다.
+
+- nginx의 `/api/` 프록시 location에 [forwarded-headers.conf](deploy/nginx/forwarded-headers.conf)의 지시문을 포함한다. `Forwarded`를 제거하고 `X-Forwarded-For`를 `$remote_addr`로 덮어쓴다. `X-Forwarded-Host`·`Proto`·`Port`는 nginx가 직접 설정하며 외부 prefix·ssl 헤더는 제거한다. `$proxy_add_x_forwarded_for`는 쓰지 않는다.
+- HTTPS server에는 허용한 `server_name`을 지정하고 알 수 없는 Host는 별도 기본 server에서 거절한다. `proxy_pass`의 backend 주소는 환경에 맞게 지정한다. backend 포트는 프록시에서만 접근할 수 있도록 네트워크를 제한한다.
+- 외부 LB·CDN이 nginx 앞에 추가되는 구성은 이 설정의 대상이 아니다. 그 경우 신뢰 프록시와 실제 원격 주소 처리부터 다시 검토한다.
+- 배포 전: 직접 backend 접근 거절, 외부 전달 헤더 위조로 한도 분리 불가, 서로 다른 실제 IP의 한도 분리, IPv6 /64 집계, OAuth HTTPS callback·쿠키·redirect URI를 확인한다. 한 항목이라도 미확인이면 공개 가입을 열지 않는다.
+
+`ClientIpTrustIntegrationTest`는 위 설정 파일을 실제 nginx 컨테이너에 넣어 위조 헤더 차단을 확인하고, 별도의 프록시→backend 요청으로 서로 다른 IP의 실패 한도 분리를 확인한다. 실제 배포 네트워크의 접근 차단과 OAuth 제공자 로그인 검증을 대신하지 않는다.
+
+근거: [Spring 전달 헤더의 신뢰 경계](https://docs.spring.io/spring-framework/reference/7.1/web/webmvc/filters.html), [nginx proxy_set_header](https://nginx.org/en/docs/http/ngx_http_proxy_module.html). 확인: 2026-11-18.
+
+### NSU-123 배포와 롤백 순서
+
+1. 배포 전 DB 스냅샷·복원 가능 여부를 확인하고, 위 이메일 충돌 SQL이 0행인지 확인한다. 새 약관 계약의 backend와 NSU-129 화면을 같은 배포 대상으로 준비한다. V8·V9는 락을 3초 안에 얻지 못하면 실패한다. 이 경우 트랜잭션과 Flyway 실패 상태를 확인하고 원인을 해소한 뒤 배포를 재시도한다.
+2. 신규 발송을 중단하고 진행 중 요청을 종료한다. 구형 pending·preserved가 정리되거나 원래 TTL로 만료된 것을 확인한 뒤 전환한다. 키 일괄 삭제·TTL 연장·구형/신형 발송 동시 운영은 하지 않는다.
+3. 문제 발생 시 우선 신규 가입·발송을 중단하고 복귀 시점 DB도 백업한다. V8·V9가 적용됐는지, 배포 후 쓰기가 있었는지 확인한다. 적용 전이면 기존 빌드로 복귀하고, 적용 후에는 이메일 정규화를 유지하며 V8 CHECK·V9와 호환되는 것으로 검증한 빌드만 사용한다. 준비된 호환 빌드가 없으면 구버전을 임의로 띄우지 않고 가입 중단 상태에서 수정 배포한다.
+4. 배포 전 스냅샷으로 DB 전체를 복원해야 한다면 배포 후 데이터의 보존·재반영 범위를 사람이 확정한 뒤 DB와 앱을 같은 시점으로 복귀한다. 이 작업에는 운영 승인과 별도 복원 검증이 필요하다. 이메일 원래 대소문자는 V8에 남지 않아 백업 없이는 복원할 수 없다.
+5. 재진입 전 정규화 중복·CHECK·가입 및 로그인·약관 기록을 다시 확인한다. CHECK를 임시로 해제한 환경은 재진입 전에 충돌 검사·정규화·CHECK 재설정을 수행하는 별도 forward 마이그레이션이 필요하다. 이번 변경에는 운영 CHECK 삭제, 미리 만든 V10, `flyway repair`, 계정 병합·삭제를 포함하지 않는다.
+
+V8·V9 직접 수정은 아직 공유·배포 DB에 적용하지 않았고 유지할 데이터 없는 일회용 로컬 DB만 쓴다는 사용자 확인(2026-11-18)에 따른다. 이미 적용한 다른 DB가 있다면 실행 전에 중단하고 마이그레이션 체크섬 호환을 별도로 검토한다.

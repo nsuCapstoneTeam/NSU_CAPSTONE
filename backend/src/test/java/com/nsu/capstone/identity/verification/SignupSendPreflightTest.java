@@ -28,17 +28,18 @@ class SignupSendPreflightTest {
                     throw new org.springframework.dao.QueryTimeoutException("unavailable");
                 })
                 .when(challenges)
-                .cancel(anyString(), any(), anyString(), eq(true));
+                .cancel(anyString(), any(), anyString(), anyString(), eq(true));
         var preflight = new SignupSendPreflight(
                 sessions,
                 challenges,
                 new SignupSendRedisProperties(Duration.ofMillis(200), Duration.ofMillis(250), Duration.ofMillis(800)),
                 () -> {});
-        preflight.cancelUnsentLater("session", VerificationChannel.EMAIL, "generation");
+        preflight.cancelUnsentLater("session", VerificationChannel.EMAIL, "generation", "recipient");
         assertTrue(attempted.await(1, TimeUnit.SECONDS));
         preflight.close();
         reset(challenges);
-        assertDoesNotThrow(() -> preflight.cancelUnsentLater("session", VerificationChannel.EMAIL, "generation"));
+        assertDoesNotThrow(
+                () -> preflight.cancelUnsentLater("session", VerificationChannel.EMAIL, "generation", "recipient"));
         verifyNoInteractions(challenges);
     }
 
@@ -117,7 +118,7 @@ class SignupSendPreflightTest {
             release.countDown();
             assertTrue(finished.await(1, TimeUnit.SECONDS));
             verify(challenges, never()).startDelivery(anyString(), any(), anyString(), any());
-            verify(challenges, never()).cancel(anyString(), any(), anyString(), anyBoolean());
+            verify(challenges, never()).cancel(anyString(), any(), anyString(), anyString(), anyBoolean());
             verify(challenges, never()).retryAfterCooldown(any(), anyString());
             verifyNoInteractions(email, sms);
         } finally {

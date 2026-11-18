@@ -58,9 +58,14 @@ public interface VerificationChallengeStore {
             String ipDigest,
             Instant now);
 
-    void promote(String signupSessionId, VerificationChannel channel, String generationId);
+    void promote(String signupSessionId, VerificationChannel channel, String generationId, String recipientDigest);
 
-    void cancel(String signupSessionId, VerificationChannel channel, String generationId, boolean refundAll);
+    void cancel(
+            String signupSessionId,
+            VerificationChannel channel,
+            String generationId,
+            String recipientDigest,
+            boolean refundAll);
 
     long retryAfterCooldown(VerificationChannel channel, String rateLimitDestinationDigest);
 }

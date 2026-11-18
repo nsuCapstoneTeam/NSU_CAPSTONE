@@ -136,7 +136,7 @@ class ArtistSignupVerificationServiceTest {
             var failure = assertThrows(
                     IllegalStateException.class, () -> service.sendEmailCode(SESSION_ID, UserRole.ARTIST, "127.0.0.1"));
             assertNull(failure.getCause());
-            verify(challengeStore).cancel(anyString(), any(), anyString(), eq(true));
+            verify(challengeStore).cancel(anyString(), any(), anyString(), anyString(), eq(true));
             verify(alerts, never()).providerFailure(any());
             org.junit.jupiter.api.Assertions.assertFalse(appender.list.isEmpty());
             for (var event : appender.list) {
@@ -147,6 +147,78 @@ class ArtistSignupVerificationServiceTest {
                         || text.contains("raw-provider-response"));
                 assertNull(event.getThrowableProxy());
             }
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void expectedTransportFailureWarnsAndUnexpectedFailureErrorsWithoutPrivateData(boolean unexpected) {
+        when(codeGenerator.generate()).thenReturn(CODE);
+        when(challengeStore.issue(
+                        anyString(),
+                        any(),
+                        any(),
+                        anyString(),
+                        anyString(),
+                        anyString(),
+                        any(),
+                        anyString(),
+                        anyString()))
+                .thenReturn(ChallengeIssueResult.ISSUED);
+        when(challengeStore.startDelivery(anyString(), any(), anyString(), any()))
+                .thenReturn(true);
+        var unsafe = new IllegalStateException("raw-provider-response " + EMAIL + " " + PHONE + " " + CODE);
+        doThrow(new VerificationDeliveryException(VerificationDeliveryException.Outcome.UNKNOWN, unsafe, unexpected))
+                .when(emailSender)
+                .sendVerificationCode(anyString(), anyString(), any());
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(SignupVerificationService.class);
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            service.sendEmailCode(SESSION_ID, UserRole.ARTIST, "127.0.0.1");
+            assertEquals(
+                    unexpected,
+                    appender.list.stream().anyMatch(event -> event.getLevel() == ch.qos.logback.classic.Level.ERROR));
+            org.junit.jupiter.api.Assertions.assertTrue(
+                    appender.list.stream().anyMatch(event -> event.getLevel() == ch.qos.logback.classic.Level.WARN));
+            for (var event : appender.list) {
+                var text = event.getFormattedMessage();
+                org.junit.jupiter.api.Assertions.assertFalse(text.contains(EMAIL)
+                        || text.contains(PHONE)
+                        || text.contains(CODE)
+                        || text.contains("raw-provider-response"));
+                assertNull(event.getThrowableProxy());
+            }
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
+    void redisConfirmFailureHasSafeDiagnosticAndKeeps503Contract() {
+        when(signupSessionStore.findById(SESSION_ID))
+                .thenThrow(new QueryTimeoutException("private " + EMAIL + " " + CODE));
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(SignupVerificationService.class);
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            var failure = assertThrows(
+                    BusinessException.class,
+                    () -> service.confirmEmailCode(SESSION_ID, CODE, UserRole.ARTIST, "127.0.0.1"));
+            assertEquals(ErrorCode.RATE_LIMIT_UNAVAILABLE, failure.getErrorCode());
+            assertEquals(1, appender.list.size());
+            var event = appender.list.getFirst();
+            assertEquals(ch.qos.logback.classic.Level.WARN, event.getLevel());
+            org.junit.jupiter.api.Assertions.assertFalse(
+                    event.getFormattedMessage().contains(EMAIL)
+                            || event.getFormattedMessage().contains(CODE));
+            assertNull(event.getThrowableProxy());
         } finally {
             logger.detachAppender(appender);
             appender.stop();
@@ -298,7 +370,7 @@ class ArtistSignupVerificationServiceTest {
                 BusinessException.class, () -> service.sendEmailCode(SESSION_ID, UserRole.ARTIST, "127.0.0.1"));
 
         assertEquals(ErrorCode.VERIFICATION_DELIVERY_FAILED, exception.getErrorCode());
-        verify(challengeStore).cancel(anyString(), any(), anyString(), ArgumentMatchers.eq(false));
+        verify(challengeStore).cancel(anyString(), any(), anyString(), anyString(), ArgumentMatchers.eq(false));
         verify(alerts).providerFailure(VerificationChannel.EMAIL);
     }
 
@@ -325,7 +397,7 @@ class ArtistSignupVerificationServiceTest {
         if (cancelFails) {
             doThrow(new QueryTimeoutException("Redis unavailable"))
                     .when(challengeStore)
-                    .cancel(anyString(), any(), anyString(), eq(false));
+                    .cancel(anyString(), any(), anyString(), anyString(), eq(false));
         } else {
             when(challengeStore.retryAfterCooldown(any(), anyString()))
                     .thenThrow(new QueryTimeoutException("Redis unavailable"));
@@ -336,7 +408,7 @@ class ArtistSignupVerificationServiceTest {
 
         assertEquals(ErrorCode.VERIFICATION_DELIVERY_FAILED, exception.getErrorCode());
         assertNull(exception.getRetryAfterSeconds());
-        verify(challengeStore, never()).promote(anyString(), any(), anyString());
+        verify(challengeStore, never()).promote(anyString(), any(), anyString(), anyString());
     }
 
     @Test
@@ -361,9 +433,10 @@ class ArtistSignupVerificationServiceTest {
 
         service.sendEmailCode(SESSION_ID, UserRole.ARTIST, "127.0.0.1");
 
-        verify(challengeStore).promote(anyString(), any(), anyString());
+        verify(challengeStore).promote(anyString(), any(), anyString(), anyString());
         verify(alerts).providerFailure(VerificationChannel.EMAIL);
-        verify(challengeStore, never()).cancel(anyString(), any(), anyString(), ArgumentMatchers.anyBoolean());
+        verify(challengeStore, never())
+                .cancel(anyString(), any(), anyString(), anyString(), ArgumentMatchers.anyBoolean());
     }
 
     @Test

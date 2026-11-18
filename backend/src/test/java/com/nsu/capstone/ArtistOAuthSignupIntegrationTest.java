@@ -531,7 +531,7 @@ class ArtistOAuthSignupIntegrationTest {
                 recipient,
                 digests.clientIpDigest("127.0.0.1"));
         if (result == ChallengeIssueResult.ISSUED) {
-            challenges.promote(session.signupSessionId(), channel, "generation");
+            challenges.promote(session.signupSessionId(), channel, "generation", recipient);
         }
         return result;
     }

@@ -10,6 +10,7 @@ public class VerificationDeliveryException extends RuntimeException {
     }
 
     private final Outcome outcome;
+    private final boolean unexpected;
     private final String failureType;
     private final StackTraceElement failureLocation;
 
@@ -19,11 +20,20 @@ public class VerificationDeliveryException extends RuntimeException {
 
     /** Retains diagnostic metadata only, never the provider exception or its message. */
     public VerificationDeliveryException(Outcome outcome, RuntimeException failure) {
+        this(outcome, failure, failure != null);
+    }
+
+    public VerificationDeliveryException(Outcome outcome, RuntimeException failure, boolean unexpected) {
         super("인증 코드 발송 결과: " + outcome);
+        this.unexpected = unexpected;
         this.outcome = outcome;
         this.failureType = failure == null ? null : failure.getClass().getName();
         this.failureLocation =
                 failure == null || failure.getStackTrace().length == 0 ? null : failure.getStackTrace()[0];
+    }
+
+    public boolean unexpected() {
+        return unexpected;
     }
 
     public String failureType() {

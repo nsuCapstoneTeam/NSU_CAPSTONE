@@ -69,21 +69,28 @@ public class SignupSendPreflight implements AutoCloseable {
             Thread.currentThread().interrupt();
             throw failure();
         } catch (ExecutionException exception) {
-            if (exception.getCause() instanceof org.springframework.dao.DataAccessException) throw failure();
+            if (exception.getCause() instanceof org.springframework.dao.DataAccessException cause) {
+                log.warn(
+                        "Redis 장애로 가입 인증 발송을 막았습니다. 원인 타입: {}", cause.getClass().getName());
+                throw failure();
+            }
             if (exception.getCause() instanceof RuntimeException runtime) throw runtime;
             throw new IllegalStateException(exception.getCause());
         } catch (TimeoutException | RejectedExecutionException exception) {
+            log.warn(
+                    "Redis 작업 기한 초과 또는 작업 제출 거절로 가입 인증 발송을 막았습니다. 원인 타입: {}",
+                    exception.getClass().getName());
             // An uncertain Redis write may still finish. Leave its reservation to recovery.
             throw failure();
         }
     }
 
     /** Best effort only: failure, rejection or process exit can leave a conservative reservation. */
-    public void cancelUnsentLater(String id, VerificationChannel channel, String generation) {
+    public void cancelUnsentLater(String id, VerificationChannel channel, String generation, String recipient) {
         try {
             executor.execute(() -> {
                 try {
-                    challenges.cancel(id, channel, generation, true);
+                    challenges.cancel(id, channel, generation, recipient, true);
                 } catch (RuntimeException failure) {
                     log.warn("가입 인증 미발송 예약 보상 실패. 채널: {}", channel);
                 }

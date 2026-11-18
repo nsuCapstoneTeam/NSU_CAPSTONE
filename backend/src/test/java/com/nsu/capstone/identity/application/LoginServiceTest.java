@@ -103,6 +103,22 @@ class LoginServiceTest {
         assertInvalidCredentials(PASSWORD);
     }
 
+    @Test
+    void databaseFailureReleasesFailureReservationAndDoesNotIssueToken() {
+        var limits = org.mockito.Mockito.mock(com.nsu.capstone.identity.signup.RedisPublicRequestLimitStore.class);
+        var provider = new DaoAuthenticationProvider(new DatabaseUserDetailsService(userRepository));
+        provider.setPasswordEncoder(passwordEncoder);
+        var service = new LoginService(new ProviderManager(provider), tokenService, limits);
+        when(limits.login(EMAIL, "203.0.113.10")).thenReturn("failure-slot");
+        when(userRepository.findByEmail(EMAIL))
+                .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("database unavailable"));
+        assertThrows(
+                org.springframework.security.authentication.InternalAuthenticationServiceException.class,
+                () -> service.login(EMAIL, PASSWORD, "203.0.113.10"));
+        verify(limits).loginSucceeded("failure-slot");
+        verify(tokenService, never()).issue(any());
+    }
+
     private void assertInvalidCredentials(String password) {
         BusinessException exception =
                 assertThrows(BusinessException.class, () -> loginService.login(EMAIL, password, "127.0.0.1"));
