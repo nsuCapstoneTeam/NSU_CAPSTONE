@@ -37,6 +37,9 @@ final class LogDeviceCheck {
 
     private static final String PROBE_REQUEST_ID = "log-device-request-id";
 
+    /** 시험 이벤트의 메시지. 한글이라 콘솔 문자셋이 한글을 표현하지 못하면(ISO-8859-1 등) 인코딩된 값이 달라진다. */
+    private static final String PROBE_MESSAGE = "출력 장치 자기 검사";
+
     /** AC1 필드와 예외 출력. 이 중 하나라도 빠지면 로그 검색과 요청 추적이 깨진다. */
     private static final List<String> REQUIRED_FIELDS =
             List.of("@timestamp", "level", "logger_name", "message", "requestId", "stack_trace");
@@ -239,6 +242,11 @@ final class LogDeviceCheck {
         if (requestId != null && !(requestId.isString() && PROBE_REQUEST_ID.equals(requestId.asString()))) {
             problems.add("requestId 값이 시험 이벤트의 값과 다르다");
         }
+        // 콘솔 문자셋이 한글을 표현하지 못하면 메시지가 ?로 바뀐 채 나가지만 JSON 구조와 필수 필드는 멀쩡하다
+        JsonNode message = json.get("message");
+        if (message != null && !(message.isString() && PROBE_MESSAGE.equals(message.asString()))) {
+            problems.add("message 값이 시험 이벤트의 메시지와 다르다");
+        }
         JsonNode stackTrace = json.get("stack_trace");
         if (stackTrace != null) {
             List<String> missing = PROBE_EXCEPTION_CLASSES.stream()
@@ -275,7 +283,7 @@ final class LogDeviceCheck {
                 LogDeviceCheck.class.getName(),
                 context.getLogger(LogDeviceCheck.class),
                 level,
-                "출력 장치 자기 검사",
+                PROBE_MESSAGE,
                 failure,
                 null);
         event.setMDCPropertyMap(Map.of(RequestId.MDC_KEY, PROBE_REQUEST_ID));

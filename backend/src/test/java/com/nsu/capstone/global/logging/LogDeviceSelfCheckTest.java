@@ -186,6 +186,24 @@ class LogDeviceSelfCheckTest {
     }
 
     /**
+     * 콘솔 문자셋이 한글을 표현하지 못하면(ISO-8859-1 등) 메시지가 ?로 바뀐 채 나간다. JSON 구조와 필수 필드는 멀쩡해서 다른 검사는 지나간다.
+     * 멈춘 이유를 알리는 로그 줄도 ?로 깨지므로 출력으로는 이 검사 때문인지 알 수 없다. 같은 설정이 로컬 모드에서는 시작되는 것과 대조해, 다른
+     * 이유가 아니라 이 검사 때문에 멈춘 것을 확인한다.
+     */
+    @Test
+    void 콘솔_문자셋이_한글을_표현하지_못하면_로그가_깨지므로_시작을_멈춘다() throws Exception {
+        List<String> jvmArgs = List.of("-Dlogging.charset.console=ISO-8859-1");
+
+        ForkedJvm.Result result = ForkedJvm.run(jvmArgs, Map.of(), "light");
+        ForkedJvm.Result local = ForkedJvm.run(jvmArgs, Map.of("LOG_LOCAL_MODE", "true"), "light");
+
+        assertThat(local.exitCode()).as("대조. 출력: %s", local.output()).isZero();
+        assertThat(local.output()).contains(ForkedMain.STARTED);
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
+        assertThat(result.output()).doesNotContain(ForkedMain.STARTED).doesNotContain(LogDeviceCheck.PROBE);
+    }
+
+    /**
      * 배포 확인(NSU-129)은 경고 부재가 아니라 이 줄의 존재를 본다. 필터와 레벨은 줄을 지울 수만 있고 만들 수는 없어서, 줄이 있으면
      * 로컬 모드가 아니고 검사를 통과했다는 뜻이다.
      */
