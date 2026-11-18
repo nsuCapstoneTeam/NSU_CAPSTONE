@@ -1,5 +1,6 @@
 package com.nsu.capstone.verification.identity;
 
+import com.nsu.capstone.identity.domain.UserStatus;
 import com.nsu.capstone.identity.support.UuidV7Generator;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -126,6 +127,14 @@ class IdentityVerificationRepository {
                 .param("now", timestamp(now))
                 .param("id", attemptId.value())
                 .update();
+    }
+
+    /** 계정 상태는 JWT에 없어 DB에서 읽는다. users는 읽기만 한다. */
+    Optional<UserStatus> findAccountStatus(UUID userId) {
+        return jdbc.sql("SELECT status FROM users WHERE id = :userId")
+                .param("userId", userId)
+                .query((rs, rowNum) -> UserStatus.valueOf(rs.getString("status")))
+                .optional();
     }
 
     Optional<StoredVerification> findVerification(UUID userId) {
