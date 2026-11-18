@@ -150,12 +150,24 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
         return getWithApiKey(path, Map.of("part", part, "id", ids));
     }
 
+    /** 표시 정보처럼 실패해도 링크만 남기면 되는 호출: 읽기 경로(연결 1초·응답 2초). */
     private ChannelList getWithApiKey(String path, Map<String, String> params) {
+        return getWithApiKey(readRestClient, path, params);
+    }
+
+    /**
+     * 후보 조회·ID 확인처럼 결과가 오류나 삭제로 이어지는 호출: 쓰기 경로(연결 3초·응답 5초, ADR "외부 호출").
+     * 후보는 호출이 3번이라 읽기 경로의 2초만 넘어도 503이 되고, ID 확인 작업은 기다리는 사용자가 없다.
+     */
+    private ChannelList getWithApiKeyOnWritePath(String path, Map<String, String> params) {
+        return getWithApiKey(restClient, path, params);
+    }
+
+    private ChannelList getWithApiKey(RestClient client, String path, Map<String, String> params) {
         UriComponentsBuilder uri = UriComponentsBuilder.fromUriString(youtube.apiBaseUri() + path);
         params.forEach(uri::queryParam);
         try {
-            return readRestClient
-                    .get()
+            return client.get()
                     .uri(uri.queryParam("key", youtube.apiKey()).build().toUri())
                     .retrieve()
                     .body(ChannelList.class);
@@ -186,7 +198,7 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
 
     @Override
     public List<YoutubeCandidate> fetchUploads(String channelId) {
-        ChannelList channels = getWithApiKey("/channels", "contentDetails", channelId);
+        ChannelList channels = getWithApiKeyOnWritePath("/channels", Map.of("part", "contentDetails", "id", channelId));
         String uploadsPlaylist =
                 channels == null || channels.items() == null || channels.items().isEmpty()
                         ? null
@@ -194,7 +206,7 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
         if (uploadsPlaylist == null) {
             return List.of();
         }
-        ChannelList playlistItems = getWithApiKey(
+        ChannelList playlistItems = getWithApiKeyOnWritePath(
                 "/playlistItems", Map.of("part", "contentDetails", "playlistId", uploadsPlaylist, "maxResults", "50"));
         List<String> videoIds = playlistItems == null || playlistItems.items() == null
                 ? List.of()
@@ -207,7 +219,8 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
         if (videoIds.isEmpty()) {
             return List.of();
         }
-        ChannelList videos = getWithApiKey("/videos", "snippet,status", String.join(",", videoIds));
+        ChannelList videos =
+                getWithApiKeyOnWritePath("/videos", Map.of("part", "snippet,status", "id", String.join(",", videoIds)));
         if (videos == null || videos.items() == null) {
             return List.of();
         }
@@ -268,7 +281,7 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
      * 지우므로, 둘 다 없으면 확인 실패로 본다.
      */
     private Set<String> publicIds(String path, List<String> ids) {
-        ChannelList response = getWithApiKey(path, "id,status", String.join(",", ids));
+        ChannelList response = getWithApiKeyOnWritePath(path, Map.of("part", "id,status", "id", String.join(",", ids)));
         if (response == null || (response.items() == null && response.pageInfo() == null)) {
             throw unavailable("YouTube 응답이 비정상이라 존재 여부를 확인하지 못했다");
         }

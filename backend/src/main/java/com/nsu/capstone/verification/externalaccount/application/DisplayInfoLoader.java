@@ -135,13 +135,35 @@ class DisplayInfoLoader {
         if (!properties.spotify().enabled()) {
             return AccountDisplay.UNKNOWN;
         }
-        ProviderProfile profile = profileCache
-                .get(ExternalAccountProvider.SPOTIFY, SPOTIFY_KIND, account.providerAccountId())
-                .or(() -> spotifyGateway.findArtist(account.providerAccountId()).map(found -> {
-                    profileCache.put(ExternalAccountProvider.SPOTIFY, SPOTIFY_KIND, account.providerAccountId(), found);
-                    return found;
-                }))
-                .orElse(null);
-        return profile == null ? AccountDisplay.UNKNOWN : new AccountDisplay(profile, Map.of());
+        String artistId = account.providerAccountId();
+        Optional<ProviderProfile> cached = profileCache.get(ExternalAccountProvider.SPOTIFY, SPOTIFY_KIND, artistId);
+        if (cached.isPresent()) {
+            return new AccountDisplay(cached.get(), Map.of());
+        }
+        if (displayCache.recentlyFailed(account.id())) {
+            return AccountDisplay.UNKNOWN;
+        }
+        // 캐시가 빈 동시 조회는 서버 안에서 한 번만 부르고 결과를 나눠 쓴다(06 §6.5)
+        return singleFlight.run("spotify-display:" + artistId, () -> {
+            Optional<ProviderProfile> filledMeanwhile =
+                    profileCache.get(ExternalAccountProvider.SPOTIFY, SPOTIFY_KIND, artistId);
+            if (filledMeanwhile.isPresent()) {
+                return new AccountDisplay(filledMeanwhile.get(), Map.of());
+            }
+            try {
+                Optional<ProviderProfile> found = spotifyGateway.findArtist(artistId);
+                if (found.isPresent()) {
+                    profileCache.put(ExternalAccountProvider.SPOTIFY, SPOTIFY_KIND, artistId, found.get());
+                    return new AccountDisplay(found.get(), Map.of());
+                }
+                // 이제 Spotify에 없는 아티스트다. 링크만 남기고, 장애 때처럼 짧게 기억해 반복 호출을 막는다
+                displayCache.markFailed(account.id());
+                return AccountDisplay.UNKNOWN;
+            } catch (ExternalAccountException e) {
+                log.warn("Spotify 표시 정보를 받지 못했다: 연결 {}, 사유 {}", account.id(), e.getFailure());
+                displayCache.markFailed(account.id());
+                return AccountDisplay.UNKNOWN;
+            }
+        });
     }
 }

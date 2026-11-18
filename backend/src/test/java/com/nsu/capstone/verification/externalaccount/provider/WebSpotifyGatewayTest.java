@@ -181,6 +181,32 @@ class WebSpotifyGatewayTest {
         server.verify();
     }
 
+    /**
+     * backend-verify 지적: 토큰 서버가 느리면 조회마다 토큰 요청을 새로 보내 서로 줄을 서고 한 건당 최대 8초를 쓴다.
+     * 실패는 30초 동안 기억해 그동안은 요청을 보내지 않고 바로 실패시킨다.
+     */
+    @Test
+    void 토큰_발급이_실패하면_30초_동안은_토큰_서버를_다시_부르지_않고_지나면_다시_시도한다() {
+        server.expect(once(), requestTo(TOKEN_URI)).andRespond(withServerError());
+
+        assertThatThrownBy(() -> gateway.findArtist(ARTIST_ID)).isInstanceOf(ExternalAccountException.class);
+        // 두 번째 호출은 토큰 요청을 보내지 않는다(요청이 나가면 MockRestServiceServer가 예기치 않은 요청으로 실패시킨다)
+        assertThatThrownBy(() -> gateway.findArtist(ARTIST_ID))
+                .isInstanceOfSatisfying(
+                        ExternalAccountException.class,
+                        e -> assertThat(e.getFailure())
+                                .isEqualTo(ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE));
+        server.verify();
+
+        clock.advance(Duration.ofSeconds(31));
+        server.reset(); // 실제 요청이 나간 뒤에는 기대를 더할 수 없어 새로 시작한다
+        expectToken("recovered", 3600);
+        expectArtist("recovered", withSuccess("{\"name\":\"밴드\"}", APPLICATION_JSON));
+
+        assertThat(gateway.findArtist(ARTIST_ID)).isPresent();
+        server.verify();
+    }
+
     private void expectArtist(String token, ResponseCreator response) {
         server.expect(requestTo(API_BASE + "/artists/" + ARTIST_ID))
                 .andExpect(method(GET))

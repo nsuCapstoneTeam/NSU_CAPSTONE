@@ -36,6 +36,8 @@ public class WebSpotifyGateway implements SpotifyGateway {
     private static final String REGISTRATION_ID = "spotify-link";
     /** 만료 직전에 쓴 토큰이 요청 도중 만료되지 않게 여유를 둔다. */
     private static final Duration TOKEN_MARGIN = Duration.ofSeconds(60);
+    /** 토큰 발급 실패를 기억하는 시간. 표시 정보 실패 기억(30초)과 같다. */
+    private static final Duration TOKEN_FAILURE_MEMORY = Duration.ofSeconds(30);
 
     private final ExternalAccountProperties.Spotify spotify;
     private final Clock clock;
@@ -44,6 +46,7 @@ public class WebSpotifyGateway implements SpotifyGateway {
 
     private String cachedToken;
     private Instant cachedUntil = Instant.MIN;
+    private Instant tokenFailedUntil = Instant.MIN;
 
     public WebSpotifyGateway(
             @Qualifier(ExternalAccountConfig.WRITE_REST_CLIENT) RestClient.Builder writeClient,
@@ -103,10 +106,15 @@ public class WebSpotifyGateway implements SpotifyGateway {
         if (cachedToken != null && now.isBefore(cachedUntil)) {
             return cachedToken;
         }
+        // 토큰 서버가 느리거나 죽었을 때 조회마다 토큰 요청을 새로 보내 서로 줄을 서지 않게, 실패를 짧게 기억한다
+        if (now.isBefore(tokenFailedUntil)) {
+            throw unavailable("Spotify 토큰 발급이 최근에 실패해 잠시 다시 시도하지 않는다");
+        }
         OAuth2AccessTokenResponse response;
         try {
             response = tokenClient.getTokenResponse(new OAuth2ClientCredentialsGrantRequest(registration()));
         } catch (OAuth2AuthorizationException e) {
+            tokenFailedUntil = now.plus(TOKEN_FAILURE_MEMORY);
             throw unavailable("Spotify 토큰 발급에 실패했다: " + e.getError().getErrorCode());
         }
         Duration lifetime = Duration.between(
