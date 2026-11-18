@@ -100,7 +100,11 @@
      - S2b: DTO·record를 통째로 로그에 넘기면 실패한다(`toString`이 모든 필드를 찍는다).
      - S3: `@EnableWebSecurity(debug = true)` 금지.
      - S4: `global.logging` 밖에서 MDC 키 `requestId`를 쓰거나 지우는 코드, `MDC.clear()`·`MDC.setContextMap(..)`, 값이 `X-Request-Id`인 문자열 리터럴(HTTP 헤더 이름이므로 대소문자를 가리지 않는다)을 쓰면 실패한다. 설명 문구 안에 헤더 이름이 들어간 문자열(예: `OpenApiConfig` 첫 화면 설명)은 대상이 아니다. 요청 ID와 헤더 이름의 주인은 하나다.
-     - S5: 다른 스레드로 일을 넘기는 코드를 쓰면 실패한다: `@Async`·`@EnableAsync`, `Executors.*`, `new ThreadPoolExecutor`·`new ScheduledThreadPoolExecutor`·`new ForkJoinPool`, `new Thread`, `Thread.ofPlatform()`·`Thread.ofVirtual()`·`Thread.startVirtualThread`, 실행기를 받지 않는 `CompletableFuture.*Async`. 다른 스레드로 넘어가면 MDC가 없어 요청 ID가 끊긴다. 예외는 `global.logging`이 주는 MDC 전파 래퍼(요청 ID를 넘기는 `TaskDecorator`와 그것을 씌운 실행기)를 거친 코드다. 래퍼는 PR #219의 실행기를 감쌀 때 이 모듈에 만든다(7-6).
+     - S5: 다른 스레드로 일을 넘기는 코드를 쓰면 실패한다: `@Async`·`@EnableAsync`, `Executors.*`, `new ThreadPoolExecutor`·`new ScheduledThreadPoolExecutor`·`new ForkJoinPool`, `new Thread`, `Thread.ofPlatform()`·`Thread.ofVirtual()`·`Thread.startVirtualThread`, 실행기를 받지 않는 `CompletableFuture.*Async`. 다른 스레드로 넘어가면 MDC가 없어 요청 ID가 끊긴다. 예외는 MDC 전파 래퍼 `RequestIdExecutors.wrap(ExecutorService)`의 인자 안에서 만든 실행기·스레드다.
+       - 래퍼(`global.logging`, public): `RequestIdExecutors.wrap(delegate)`는 `ExecutorService`를 돌려준다. 일을 넘기는 순간(`execute`·`submit`·`invokeAll`·`invokeAny`) 호출한 스레드의 MDC 전체(`requestId`, `eventId` 등)를 복사해 두고, 작업 스레드에서 그 값을 넣은 채 실행한 뒤 작업 전 상태로 되돌린다. 종료(`shutdown`·`close`)는 감싼 실행기에 넘긴다.
+       - 쓰는 법: `RequestIdExecutors.wrap(Executors.newVirtualThreadPerTaskExecutor())`(NSU-37 표시 정보 병렬 조회), `RequestIdExecutors.wrap(new ThreadPoolExecutor(…, Thread.ofVirtual().name("signup-send-redis-", 0).factory(), new ThreadPoolExecutor.AbortPolicy()))`(#219 `SignupSendPreflight`). 큐 상한·거절 정책·스레드 종류는 감싼 실행기 것을 그대로 쓴다.
+       - Spring `TaskDecorator`를 쓰지 않는 이유: Spring `TaskExecutor`(`ThreadPoolTaskExecutor` 등)에만 씌울 수 있다. #219의 두 실행기와 NSU-37의 실행기는 JDK `ExecutorService`이고, Spring 실행기로 바꾸면 큐 상한·거절 정책을 다시 맞춰야 한다.
+       - 나중에 머지하는 쪽이 맞춘다(2026-11-18 지휘 결정): NSU-37이 먼저 머지되면 이 PR이 main을 합칠 때 그 실행기 bean을 래퍼로 바꾸고, 병렬 조회 스레드의 로그 줄에 요청 ID가 붙는지 테스트 사례로 넣는다.
      - S6: 로그 호출 인자와 예외 생성자 인자에 다음을 넣으면 실패한다. (a) 예외(catch 변수, `Throwable` 형 변수)의 `getMessage()`·`getLocalizedMessage()`·`toString()` 호출, (b) 예외를 문자열에 이어 붙이기(`"…" + e`), (c) 응답 본문 읽기(`getResponseBodyAsString()`, `getResponseBodyAs(..)`). 예외는 SLF4J 호출의 마지막 인자로 통째로 넘긴다(스택 트레이스로 가서 7-4 출력기를 거친다). 로그 문장(`message` 필드)은 출력기를 거치지 않기 때문이다(설계 리뷰 12회차 지적).
    - 실제 흐름 테스트 `LogPrivacyIntegrationTest`(Testcontainers): 가짜 값(이메일, 전화번호, 비밀번호, 인증번호, JWT)을 중복 가입·NOT NULL 위반·가입·인증·로그인 흐름에 넣고, 잡힌 모든 로그 줄에 그 값이 없는지 본다. 검사 대상은 로그 이벤트의 필드가 아니라 **실제 출력 바이트**다. 배포 설정(logstash 형식과 7-4 출력기)으로 만든 Boot 인코더가 인코딩한 줄을 검사한다. 출력기는 인코딩할 때만 메시지를 빼므로, 이벤트를 검사하면 엉뚱한 층을 검증하게 된다. 그리고 Hibernate의 제약 위반 줄(`uk_users_email`)이 실제로 남았는지도 본다. 유출 경로가 조용히 사라져 테스트가 헛돌지 않게 한다.
    - 그 밖의 테스트 목록과 순서는 아래 [테스트](#테스트)에 있다.
@@ -114,7 +118,7 @@
      - 오류 로그: 위 두 경로의 location은 `error_log /dev/null;`로 오류 로그를 아무 데도 저장하지 않는다. nginx는 오류(upstream 시간 초과·연결 끊김은 `error`, 소켓을 만들지 못하는 자원 고갈은 `alert`)를 남기면서 쿼리가 든 원래 요청 줄을 붙이고, 그 줄은 가릴 수 없다. 레벨을 올리는 방식(`crit`)은 하한이라 `alert`·`emerg`가 남는다(설계 리뷰 6회차 지적). 이 두 경로의 장애는 접근 로그의 상태(502·504), `$upstream_status`, `$request_time`과 앱 로그로 본다. nginx 전체의 자원 고갈은 다른 경로의 오류 로그에도 같이 남으므로 알아챌 수 있다.
      - 확인(시연 서버를 열기 전): 두 location의 `error_log`가 `/dev/null`인지 설정에서 본다. 콜백을 처리하는 중에 upstream을 멈추거나 끊어 502·504를 내고, 콜백 location에서 upstream 소켓을 만들지 못하게(예: 낮은 `worker_rlimit_nofile`) 한 뒤, 가짜 `code`·`state`·결과 코드가 접근 로그와 오류 로그 어디에도 없는지 본다. 가짜 결과 코드로 결과 화면에 들어가 JS·CSS 요청을 실패시킨(파일을 빼거나 권한을 막은) 뒤에도 nginx 로그 전체에 그 코드가 없는지 본다.
 10. **AI 서버 호출(NSU-63)은 `RequestIdInterceptor`를 AI client에만 붙인다.**
-    - `RequestIdInterceptor`(이 모듈의 유일한 public 타입)는 지금 요청의 ID를 `X-Request-Id`로 보낸다. 요청 스레드 밖에서는 헤더를 보내지 않는다.
+    - `RequestIdInterceptor`(이 모듈의 public 타입은 이것과 S5의 `RequestIdExecutors` 둘이다)는 지금 요청의 ID를 `X-Request-Id`로 보낸다. 요청 스레드 밖에서는 헤더를 보내지 않는다.
     - 전역 `RestClientCustomizer`로 붙이지 않는다. 그러면 자동 구성 builder를 쓰는 Resend 등 외부 업체에도 내부 ID가 간다.
     - 헤더가 없을 때 AI 서버의 동작(017 미결정 9번)과 017 문서의 상태 표기 불일치는 NSU-63이 AI 담당에게 확인한다.
 
@@ -200,7 +204,7 @@ static List<Violation> check(String relativePath, String source);
 모듈 지도:
 
 ```text
-backend/src/main/java/com/nsu/capstone/global/logging/   RequestId, RequestIdFilter, RequestIdInterceptor, 배포 로거 레벨 하한·JVM 옵션 검사 리스너, 메시지 없는 스택 트레이스 출력기
+backend/src/main/java/com/nsu/capstone/global/logging/   RequestId, RequestIdFilter, RequestIdInterceptor, RequestIdExecutors(MDC 전파 래퍼), 배포 로거 레벨 하한·JVM 옵션 검사 리스너, 메시지 없는 스택 트레이스 출력기
 backend/src/main/resources/META-INF/spring.factories     + 하한 리스너 등록
 backend/src/main/java/com/nsu/capstone/global/exception/GlobalExceptionHandler.java  RequestRejectedException 처리기, handleExceptionInternal 오버라이드(강석윤 님 파일)
 backend/src/main/resources/application.properties        + classpath:config/logging.properties
