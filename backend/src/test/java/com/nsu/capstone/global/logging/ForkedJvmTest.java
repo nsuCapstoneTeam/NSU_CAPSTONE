@@ -6,9 +6,12 @@ import static org.assertj.core.api.SoftAssertions.assertSoftly;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -103,6 +106,98 @@ class ForkedJvmTest {
             } catch (TimeoutException e) {
                 throw new AssertionError("자식 JVM이 20초 안에 시작되지 않았다", e);
             }
+        }
+    }
+
+    /**
+     * 종료 요청만 보내고 돌아오는 회귀를 잡는다. 실제 JVM은 요청 뒤 곧 끝나서 위 테스트로는 이 차이가 안정적으로 드러나지 않는다. 가짜 프로세스는
+     * 끝난 것을 확인할 때까지 살아 있는 척한다.
+     */
+    @Test
+    void terminate는_강제_종료를_요청하고_끝난_것을_확인한_뒤_돌아온다() {
+        SluggishProcess process = new SluggishProcess(true);
+
+        ForkedJvm.terminate(process);
+
+        assertThat(process.calls()).containsExactly("destroyForcibly", "waitFor");
+        assertThat(process.isAlive()).as("끝난 것을 확인하지 않고 돌아왔다").isFalse();
+    }
+
+    @Test
+    void terminate는_요청_뒤에도_자식이_끝나지_않으면_확인한_다음_예외를_던진다() {
+        SluggishProcess process = new SluggishProcess(false);
+
+        assertThatThrownBy(() -> ForkedJvm.terminate(process))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("10초");
+        assertThat(process.calls()).containsExactly("destroyForcibly", "waitFor");
+    }
+
+    /** 강제 종료를 요청받아도 waitFor로 확인할 때까지는 살아 있는 척하는 프로세스. 호출 순서를 기록한다. */
+    private static final class SluggishProcess extends Process {
+
+        private final boolean endsAfterDestroy;
+        private final List<String> calls = new ArrayList<>();
+        private boolean destroyed;
+        private boolean ended;
+
+        SluggishProcess(boolean endsAfterDestroy) {
+            this.endsAfterDestroy = endsAfterDestroy;
+        }
+
+        List<String> calls() {
+            return calls;
+        }
+
+        @Override
+        public Process destroyForcibly() {
+            calls.add("destroyForcibly");
+            destroyed = true;
+            return this;
+        }
+
+        @Override
+        public boolean waitFor(long timeout, TimeUnit unit) {
+            calls.add("waitFor");
+            if (destroyed && endsAfterDestroy) {
+                ended = true;
+            }
+            return ended;
+        }
+
+        @Override
+        public boolean isAlive() {
+            return !ended;
+        }
+
+        @Override
+        public OutputStream getOutputStream() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public InputStream getInputStream() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public InputStream getErrorStream() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int waitFor() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int exitValue() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void destroy() {
+            throw new UnsupportedOperationException();
         }
     }
 

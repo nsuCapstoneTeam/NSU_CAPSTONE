@@ -95,7 +95,7 @@ final class ForkedJvm {
     }
 
     /** 자식을 강제 종료하고 실제로 끝난 것을 제한된 시간 안에 확인한다. 끝나기 전에 출력 파일과 작업 디렉터리를 지우지 않으려는 것이다. */
-    private static void terminate(Process process) {
+    static void terminate(Process process) {
         process.destroyForcibly();
         try {
             if (!process.waitFor(TERMINATION_SECONDS, TimeUnit.SECONDS)) {
