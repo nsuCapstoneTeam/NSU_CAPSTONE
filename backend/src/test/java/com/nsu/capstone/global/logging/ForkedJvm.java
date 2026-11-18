@@ -48,6 +48,13 @@ final class ForkedJvm {
     /** 위와 같고, 자식 JVM이 timeoutSeconds 안에 끝나지 않으면 강제 종료하고 예외를 던진다. */
     static Result run(long timeoutSeconds, List<String> jvmArgs, Map<String, String> env, String... programArgs)
             throws IOException, InterruptedException {
+        return run(new Hooks() {}, timeoutSeconds, jvmArgs, env, programArgs);
+    }
+
+    /** 위와 같고, 테스트가 hooks로 자식 프로세스를 직접 받거나 가짜로 바꾼다. */
+    static Result run(
+            Hooks hooks, long timeoutSeconds, List<String> jvmArgs, Map<String, String> env, String... programArgs)
+            throws IOException, InterruptedException {
         List<String> command = new ArrayList<>();
         command.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
         command.add("-cp");
@@ -68,7 +75,7 @@ final class ForkedJvm {
                     .redirectOutput(outputFile.toFile());
             builder.environment().clear();
             builder.environment().putAll(childEnvironment(System.getenv(), env));
-            Process process = builder.start();
+            Process process = hooks.start(builder);
             try {
                 if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
                     terminate(process);
@@ -118,6 +125,14 @@ final class ForkedJvm {
 
     private static String tail(String output) {
         return output.substring(Math.max(0, output.length() - 500));
+    }
+
+    /** 테스트가 자식 프로세스를 직접 받거나 가짜로 바꾸는 길. 기본은 실제 프로세스를 띄운다. */
+    interface Hooks {
+
+        default Process start(ProcessBuilder builder) throws IOException {
+            return builder.start();
+        }
     }
 
     record Result(int exitCode, String output) {}
