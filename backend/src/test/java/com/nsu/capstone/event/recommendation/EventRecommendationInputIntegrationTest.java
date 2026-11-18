@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.event.EventIntegrationTestBase;
+import com.nsu.capstone.event.domain.EventType;
+import com.nsu.capstone.event.domain.Genre;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.domain.User;
@@ -27,21 +29,23 @@ class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
 
     static final Instant START = Instant.parse("2026-11-06T09:00:00Z");
 
-    @Autowired EventRecommendationInputService inputService;
+    @Autowired
+    EventRecommendationInputService inputService;
 
     UUID idOf(String id) {
         return UUID.fromString(id);
     }
 
     void cancel(String id) throws Exception {
-        mockMvc.perform(put("/api/v1/events/" + id + "/cancellation")
-            .header("Authorization", bearer(partner))).andExpect(status().isOk());
+        mockMvc.perform(put("/api/v1/events/" + id + "/cancellation").header("Authorization", bearer(partner)))
+                .andExpect(status().isOk());
     }
 
     void assertRejectedWith(UUID eventId, User caller, ErrorCode expected) {
         assertThatThrownBy(() -> inputService.snapshotForRecommendation(eventId, caller.getId()))
-            .isInstanceOfSatisfying(BusinessException.class,
-                exception -> assertThat(exception.getErrorCode()).isEqualTo(expected));
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(expected));
     }
 
     @Test
@@ -53,8 +57,8 @@ class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
 
         assertThat(snapshot.eligibility().start()).isEqualTo(LocalDateTime.of(2026, 11, 6, 18, 0));
         assertThat(snapshot.eligibility().regionCode()).isEqualTo("11680");
-        assertThat(snapshot.aiSource().eventType()).isEqualTo("대학 축제");
-        assertThat(snapshot.aiSource().genres()).containsExactly("팝·대중가요", "록");
+        assertThat(snapshot.conditions().eventType()).isEqualTo(EventType.UNIVERSITY_FESTIVAL);
+        assertThat(snapshot.conditions().genres()).containsExactly(Genre.POP, Genre.ROCK);
     }
 
     @Test
@@ -104,8 +108,8 @@ class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
     @DisplayName("삭제한 행사는 등록자에게도 EVENT_NOT_FOUND다")
     void deletedEventIsNotFoundForTheOwnerToo() throws Exception {
         UUID id = idOf(registeredId(validBody()));
-        mockMvc.perform(delete("/api/v1/events/" + id)
-            .header("Authorization", bearer(partner))).andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/v1/events/" + id).header("Authorization", bearer(partner)))
+                .andExpect(status().isNoContent());
 
         assertRejectedWith(id, partner, ErrorCode.EVENT_NOT_FOUND);
     }
@@ -114,8 +118,9 @@ class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
     @DisplayName("저장한 행사의 지문은 추천 입력이 바뀔 때만 달라진다")
     void fingerprintOfStoredEventChangesOnlyWhenRecommendationInputsChange() throws Exception {
         String id = registeredId(validBody());
-        EventFingerprint before =
-            inputService.snapshotForRecommendation(idOf(id), partner.getId()).fingerprint();
+        EventFingerprint before = inputService
+                .snapshotForRecommendation(idOf(id), partner.getId())
+                .fingerprint();
 
         Map<String, Object> renamed = validBody();
         renamed.put("name", "이름만 바꿈");
@@ -123,25 +128,32 @@ class EventRecommendationInputIntegrationTest extends EventIntegrationTestBase {
         renamed.put("visibility", "PRIVATE");
         renamed.remove("details");
         replace(id, renamed);
-        assertThat(inputService.snapshotForRecommendation(idOf(id), partner.getId()).fingerprint())
-            .isEqualTo(before);
+        assertThat(inputService
+                        .snapshotForRecommendation(idOf(id), partner.getId())
+                        .fingerprint())
+                .isEqualTo(before);
 
         Map<String, Object> moved = validBody();
         moved.put("endDate", "2026-11-07");
         moved.put("endTime", "18:00");
         replace(id, moved);
-        assertThat(inputService.snapshotForRecommendation(idOf(id), partner.getId()).fingerprint())
-            .isNotEqualTo(before);
+        assertThat(inputService
+                        .snapshotForRecommendation(idOf(id), partner.getId())
+                        .fingerprint())
+                .isNotEqualTo(before);
 
         replace(id, validBody());
-        assertThat(inputService.snapshotForRecommendation(idOf(id), partner.getId()).fingerprint())
-            .isEqualTo(before);
+        assertThat(inputService
+                        .snapshotForRecommendation(idOf(id), partner.getId())
+                        .fingerprint())
+                .isEqualTo(before);
     }
 
     void replace(String id, Map<String, Object> body) throws Exception {
         mockMvc.perform(put("/api/v1/events/" + id)
-            .header("Authorization", bearer(partner))
-            .contentType(APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(body))).andExpect(status().isOk());
+                        .header("Authorization", bearer(partner))
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk());
     }
 }
