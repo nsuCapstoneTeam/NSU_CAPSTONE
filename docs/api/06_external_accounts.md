@@ -307,7 +307,7 @@ YouTube 계정만 받는다.
 | 503 | `EXTERNAL_PROVIDER_UNAVAILABLE` | 플랫폼 시간 초과·`429`·`5xx`, 토큰 폐기 두 번 실패, YouTube 하루 예산의 사용자 한도 초과. `Retry-After`는 붙이지 않는다 |
 | 503 | `RATE_LIMIT_UNAVAILABLE` | 요청 제한 카운터(Redis)를 쓸 수 없음(00 §8) |
 | 503 | `EXTERNAL_PROVIDER_DISABLED` | 그 플랫폼이 설정으로 꺼져 있음(키 없음, 유료 승인 전) |
-| 503 | `EXTERNAL_ACCOUNT_BUSY` | 아티스트 잠금(§11.3)을 3초 안에 잡지 못함. 같은 아티스트의 다른 변경이 끝나지 않았거나 DB가 느림. `Retry-After`는 붙이지 않는다 |
+| 503 | `EXTERNAL_ACCOUNT_BUSY` | 아티스트 잠금(§11.3)을 3초 안에 잡지 못함. 같은 아티스트의 다른 변경이 끝나지 않았거나 DB가 느림. `Retry-After`는 붙이지 않는다. YouTube 연결 요청(§5)에서 나면 코드 교환과 토큰 폐기가 이미 끝나 `state`를 다시 쓸 수 없으므로, 프론트는 다른 `503`처럼 연결을 처음부터 다시 하게 한다 |
 
 콜백(§4)이 프론트로 넘기는 `linkError` 값: `EXTERNAL_ACCOUNT_AUTHORIZATION_DENIED`(사용자가 거절), `EXTERNAL_ACCOUNT_AUTHORIZATION_FAILED`(그 밖).
 
