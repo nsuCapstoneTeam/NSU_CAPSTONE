@@ -36,12 +36,16 @@ class LogSafetyListener implements ApplicationListener<ApplicationEnvironmentPre
 
     @Override
     public void onApplicationEvent(ApplicationEnvironmentPreparedEvent event) {
+        LoggingSystem loggingSystem =
+                LoggingSystem.get(event.getSpringApplication().getClassLoader());
         if (isLocalMode(event.getEnvironment())) {
+            // 로컬 모드에서는 하한이 꺼져 루트나 이 로거의 레벨이 ERROR·OFF일 수 있다. 배포 확인이 이 줄을 찾으므로 남기기 전에 WARN으로 못 박는다
+            loggingSystem.setLogLevel(LogSafetyListener.class.getName(), LogLevel.WARN);
             log.warn("로컬 전용 로그 모드다. 로그 보호 장치를 건너뛴다. 배포에서 쓰지 않는다");
             return;
         }
         rejectJvmDebugOptions();
-        enforceLevelFloor(LoggingSystem.get(event.getSpringApplication().getClassLoader()));
+        enforceLevelFloor(loggingSystem);
         // 스레드의 미처리 예외는 JDK 기본 처리가 메시지를 평문 stderr로 찍는다. 로거로 보내 메시지 없는 출력기를 거치게 한다
         Thread.setDefaultUncaughtExceptionHandler(new UncaughtExceptionLogger());
         // Boot가 로깅을 초기화하고 레벨을 적용한 직후, 컨텍스트를 만들기 전의 출력 장치를 확인한다

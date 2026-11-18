@@ -59,6 +59,35 @@ class LocalModeTest {
     }
 
     /**
+     * 로컬 모드에서는 레벨 하한이 꺼져 있어 루트나 이 로거의 레벨을 ERROR·OFF로 둘 수 있다. 그래도 WARN은 남아야 한다. 배포에서 로컬 모드가
+     * 켜졌는지를 이 줄로 확인하므로, 줄이 없으면 켜진 것을 알 수 없다(PR #231 리뷰 지적).
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("levelsHidingTheWarn")
+    void 루트나_이_로거의_레벨을_낮춰도_로컬_모드_WARN이_정확히_한_번_남는다(String name, List<String> jvmArgs, String arg) throws Exception {
+        String[] programArgs = arg.isEmpty() ? new String[] {"light"} : new String[] {"light", arg};
+
+        ForkedJvm.Result result = ForkedJvm.run(jvmArgs, Map.of("LOG_LOCAL_MODE", "true"), programArgs);
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isZero();
+        assertThat(result.output().lines().filter(line -> line.contains("로컬 전용 로그 모드")))
+                .as("로컬 모드 WARN 줄")
+                .singleElement()
+                .asString()
+                .contains("\"level\":\"WARN\"");
+    }
+
+    static Stream<Arguments> levelsHidingTheWarn() {
+        return Stream.of(
+                Arguments.of("루트 ERROR", List.of(), "--logging.level.root=ERROR"),
+                Arguments.of("루트 OFF", List.of(), "--logging.level.root=OFF"),
+                Arguments.of(
+                        "이 로거 OFF",
+                        List.of("-Dlogging.level.com.nsu.capstone.global.logging.LogSafetyListener=OFF"),
+                        ""));
+    }
+
+    /**
      * 켜는 값도 끄는 값도 아닌 값은 설정 오류다. 조용히 로컬 모드가 되면 보호 장치가 꺼지고, 조용히 무시되면 켠 줄 알았던 사람이 평문을 못 본다.
      * 어느 쪽이든 시작이 멈춰야 한다(fail closed, backend-verify 지적).
      */
