@@ -46,6 +46,8 @@ POSTGRES_DB=capstone_db
 POSTGRES_PORT=5432
 
 REDIS_PORT=6379
+REDIS_COMMAND_TIMEOUT=1s
+REDIS_CONNECT_TIMEOUT=1s
 
 SIGNUP_VERIFICATION_HMAC_SECRET=
 SIGNUP_REQUIRED_TERMS=
@@ -96,7 +98,7 @@ AUDD_API_TOKEN=
 
 세 가입 세션 생성 API는 `agreements`를 필수로 받고 약관 PUT은 제공하지 않는다. 인증 코드 발송 전에도 동의 기록을 확인하며, 최종 가입은 회원과 가입 시 동의 기록을 한 트랜잭션으로 저장한다. 이메일은 앞뒤 공백 제거·소문자화하고 전화번호는 숫자 정규형만 받는다. 상세 계약은 [가입 약관·한도](../docs/api/signup-terms-and-send-limits.md)를 따른다.
 
-공개 경로 한도는 `.env.example`의 `SIGNUP_SESSION_HOURLY_LIMIT=30`, `OAUTH_HOURLY_LIMIT=30`, `LOGIN_HOURLY_LIMIT=30`, `LOGIN_FAILURES_HOURLY_LIMIT=10`으로 재정의한다. 모두 Asia/Seoul 정각의 1시간 창이며 IPv6는 /64로 센다. Redis 명령 timeout은 1초다. Redis 장애 시 세션 생성·OAuth는 차단하고 로그인은 WARN 로그 후 비밀번호 검증을 계속한다.
+공개 경로 한도는 `.env.example`의 `SIGNUP_SESSION_HOURLY_LIMIT=30`, `OAUTH_HOURLY_LIMIT=30`, `LOGIN_HOURLY_LIMIT=30`, `LOGIN_FAILURES_HOURLY_LIMIT=10`으로 재정의한다. 모두 Asia/Seoul 정각의 1시간 창이며 IPv6는 /64로 센다. 공유 Redis 연결의 명령 timeout은 `REDIS_COMMAND_TIMEOUT`(기본 1초)이며 이 한도 명령을 위해 1초 이하로 둔다. Redis 장애 시 세션 생성·OAuth는 차단하고 로그인은 WARN 로그 후 비밀번호 검증을 계속한다.
 
 V8 마이그레이션은 기존 이메일을 정규화한다. 적용 전 백업과 `SELECT lower(btrim(email)), count(*) FROM users GROUP BY lower(btrim(email)) HAVING count(*) > 1;`로 충돌을 확인한다. 충돌이 있으면 계정을 자동 병합·삭제하지 않고 마이그레이션이 중단된다. V9는 가입 시 동의 기록 테이블을 생성한다. 현재 `UNIQUE (user_id, term_id)`는 가입 시 약관별 기록을 위한 것이며 미래 재동의 이력을 지원한다는 뜻은 아니다. 기존 동의 기록 없는 가입 세션은 새로 생성해야 한다. 프론트 NSU-129와 같은 배포가 필요하며, DB 적용 뒤에는 이메일 원문을 코드 롤백만으로 복원할 수 없다.
 
@@ -197,9 +199,11 @@ IntelliJ Run Configuration의 환경변수에도 다음 이름으로 설정할 �
 | `VERIFICATION_READ_TIMEOUT` | `10s` | 제공자 읽기 timeout |
 | `VERIFICATION_PENDING_RECOVERY` | `15s` | 미발송 예약은 발급부터 복구, 결과 미기록 코드는 발송 시작 기록부터 확인 가능. 재발송 제한 해제 시간이 아님 |
 | `VERIFICATION_ALERT_TIMEOUT` | `3s` | Slack 연결·응답 본문을 포함한 전체 전송 제한 |
+| `REDIS_COMMAND_TIMEOUT` | `1s` | 공유 Redis 연결의 명령 timeout(`spring.data.redis.timeout`). 공개 경로 한도 명령 때문에 1초 이하로 둔다 |
+| `REDIS_CONNECT_TIMEOUT` | `1s` | 공유 Redis 연결의 연결 timeout(`spring.data.redis.connect-timeout`). 설정하지 않으면 Lettuce 기본값 10초 |
 | `REDIS_MAXMEMORY` | `256mb` | Compose Redis 데이터 메모리 한도. Compose 실행 환경 또는 `.env`에서 설정 |
 
-시간은 모두 1ms 이상이어야 하고, 대기 복구 시간은 연결·읽기 timeout 합보다 길어야 한다. Redis 명령 timeout은 기존 1초다. `REDIS_MAXMEMORY`는 양의 정수와 선택 단위 `b`·`kb`·`mb`·`gb`로 지정한다. 0이나 잘못된 단위는 컨테이너 기동 시 거절한다. `compose.yaml`은 `noeviction`을 고정하므로 메모리가 차면 카운터를 지우지 않고 쓰기를 거절한다. 설정 파일 변경만으로 실행 중인 컨테이너가 바뀌지는 않는다.
+시간은 모두 1ms 이상이어야 하고, 대기 복구 시간은 연결·읽기 timeout 합보다 길어야 한다. `REDIS_MAXMEMORY`는 양의 정수와 선택 단위 `b`·`kb`·`mb`·`gb`로 지정한다. 0이나 잘못된 단위는 컨테이너 기동 시 거절한다. `compose.yaml`은 `noeviction`을 고정하므로 메모리가 차면 카운터를 지우지 않고 쓰기를 거절한다. 설정 파일 변경만으로 실행 중인 컨테이너가 바뀌지는 않는다.
 
 SMS·이메일 전체 한도 80%에서 WARN·Slack 알림을 보낸다. 제공자 확정 실패·결과 모름은 채널별 10분 고정 창의 6번째부터 알린다. 알림은 한 작업자·최대 32개 대기 큐로 발송 요청과 분리한다. 큐 크기는 시연용 초기값이며 부하 측정 결과가 아니다. 큐 포화·Redis 장애는 WARN으로 남기고 발송 API의 결과를 바꾸지 않는다. 장애 횟수는 채널·창별 메모리 누적값을 다음 작업에서 Redis에 병합하며, 응답 유실 재시도도 중복 집계하지 않는다. 장애 집계는 현재·직전 10분 창만 유지한다. Redis 장애가 창의 보존 시간을 넘기거나 반영 전 프로세스가 종료되면 누락될 수 있다.
 
@@ -380,7 +384,7 @@ backend/
 - PostgreSQL, pgvector 및 Redis 이미지 버전은 팀 합의 없이 변경하지 않는다.
 - LLM 및 Spring AI 관련 설정은 모델과 적용 방식 확정 후 별도로 추가한다.
 
-가입 인증 발송 전 Redis 조회·예약·발송 시작은 전용 연결을 사용한다. `auth.verification.send-redis.connect-timeout=200ms`, `command-timeout=250ms`, `total-timeout=800ms`는 로컬·같은 배포망에서 검증할 초기값이다. 각 단계는 명령 한도와 전체 기한의 남은 시간 중 짧은 시간까지만 기다린다. 기한을 넘기면 제공자를 호출하지 않고 `503 VERIFICATION_DELIVERY_FAILED`로 끝내며, 응답 경로에서 예약 정리·쿨다운 조회를 기다리지 않는다. 늦게 완료된 예약은 기존 복구 경로가 처리하고 발송 시도 여부가 불확실한 카운터는 유지한다. 다른 Redis 경로의 연결·명령 설정은 바꾸지 않는다. 배포망의 지연에 맞춘 최종 값과 다른 Redis 경로의 설정은 NSU-101에서 조율한다.
+가입 인증 발송 전 Redis 조회·예약·발송 시작은 전용 연결을 사용한다. `auth.verification.send-redis.connect-timeout=200ms`, `command-timeout=250ms`, `total-timeout=800ms`는 로컬·같은 배포망에서 검증할 초기값이다. 각 단계는 명령 한도와 전체 기한의 남은 시간 중 짧은 시간까지만 기다린다. 기한을 넘기면 제공자를 호출하지 않고 `503 VERIFICATION_DELIVERY_FAILED`로 끝내며, 응답 경로에서 예약 정리·쿨다운 조회를 기다리지 않는다. 늦게 완료된 예약은 기존 복구 경로가 처리하고 발송 시도 여부가 불확실한 카운터는 유지한다. 이 전용 연결은 공유 연결의 `REDIS_COMMAND_TIMEOUT`·`REDIS_CONNECT_TIMEOUT`을 따르지 않는다. 두 연결의 값은 모두 측정 결과가 아니며 배포망 지연을 측정한 뒤 조정한다(NSU-101에서 정함).
 
 
 ### 프록시 IP 신뢰 경계
