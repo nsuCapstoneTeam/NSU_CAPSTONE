@@ -10,7 +10,7 @@
 
 | 종류 | 내용 | 근거 |
 |---|---|---|
-| 사람 결정 | 응답 헤더 `X-Request-Id`만, 에러 본문은 그대로, 화면 표시는 미정 | Decision 2 |
+| 사람 결정 | 응답 헤더 `X-Request-Id`만, 에러 본문은 그대로. 로그인 오류 화면의 문의용 코드 표시는 후속 이슈(2026-11-18) | Decision 2 |
 | 사람 결정 | 이름 `requestId`, 들어온 ID 헤더는 믿지 않음 | Decision 1·3 |
 | 사람 결정 | 기본 형식 logstash JSON | Decision 4 |
 | 사람 결정 | 내부 UUID는 허용, 사람을 직접 가리키는 값은 금지 | Decision 7 |
@@ -35,7 +35,7 @@
    - 필터가 `chain.doFilter` 전에 붙인다. 그래서 `{code, message}` 에러, Spring 표준 `ProblemDetail`, Boot `/error`, OAuth `302`, 401/403(응답을 바로 커밋하는 Security 처리기)에 모두 실린다.
    - 앱에 닿기 전에 끝난 응답(Tomcat이 앱에 넘기기 전에 거절한 요청, nginx가 직접 만든 `502`)에는 없다. 계약은 클라이언트가 이를 처리하도록 적는다(`docs/api/00` §11).
    - 에러 본문(ADR-007, `docs/api/00` §8)은 바꾸지 않는다. 계약은 `docs/api/00` §11에 하위 호환 추가로 적는다. Scalar 첫 화면 설명(`OpenApiConfig`)에도 한 줄 적는다.
-   - 화면에 "문의 코드"로 보여 줄지, 사용자가 어디로 알릴지는 **정하지 않았다**. 문의 창구나 사용자 테스트 준비 때 정한다. 프런트는 이번에 할 일이 없다.
+   - 화면에 "문의 코드"로 보여 줄지는 처음에 정하지 않았다. 2026-11-18 사람 결정으로 **로그인(OAuth) 오류 화면에 문의용 코드(요청 ID)를 보여 준다.** 브라우저가 `302` 응답의 헤더를 읽을 수 없으므로, 콜백의 프런트 리다이렉트 주소 계약(`docs/api/artist-oauth-signup.md`)과 프런트 화면이 함께 바뀐다. 그래서 이 이슈에서 하지 않고 후속 이슈에서 한다. 이 이슈의 프런트 할 일은 없다.
 3. **이름은 `requestId`다**(사람 결정).
    - MDC 키와 JSON 필드는 `requestId`, HTTP 헤더는 `X-Request-Id`다. 서버 협의 010·017의 AI 오류 본문 필드 `requestId`, 헤더 `X-Request-Id`와 같다. 그래서 Spring 로그와 AI 로그를 한 검색어로 찾는다.
    - `traceId`는 쓰지 않는다. 나중에 Micrometer Tracing을 붙이면 그 라이브러리가 MDC `traceId`를 쓰므로 한 키에 두 주인이 생긴다.
