@@ -18,6 +18,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.postgresql.util.PSQLException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Repository
 @RequiredArgsConstructor
 public class ExternalAccountRepository {
@@ -65,6 +67,8 @@ public class ExternalAccountRepository {
         } catch (DataAccessException e) {
             // 대기 초과만 503으로 옮기고, 다른 DB 오류는 그대로 올려 500과 오류 로그로 남긴다(06 §10, §11.3)
             if (isLockTimeout(e)) {
+                // 전역 핸들러는 BusinessException을 기록하지 않는다. 여기서 남기지 않으면 DB 지연을 서버 로그로 알 수 없다
+                log.warn("아티스트 잠금을 3초 안에 잡지 못했다: 아티스트 {}", artistId);
                 throw new ExternalAccountException(
                         ExternalAccountFailure.EXTERNAL_ACCOUNT_BUSY, "아티스트 잠금을 3초 안에 잡지 못했다");
             }

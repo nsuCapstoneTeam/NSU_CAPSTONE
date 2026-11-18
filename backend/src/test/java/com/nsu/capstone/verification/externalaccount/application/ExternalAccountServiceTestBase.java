@@ -52,7 +52,7 @@ public abstract class ExternalAccountServiceTestBase extends ExternalAccountInte
      * 다른 트랜잭션이 이 아티스트의 잠금을 쥐고 있는 동안 {@code action}을 실행하고, 끝나면 놓게 한다.
      * 잠금 대기 상한(3초)을 넘겨야 하는 테스트용이므로 {@code action}은 3초 넘게 걸릴 수 있다.
      */
-    protected void whileAnotherTransactionHoldsLockOf(User artist, Runnable action) throws Exception {
+    protected void whileAnotherTransactionHoldsLockOf(User artist, LockedAction action) throws Exception {
         CountDownLatch holding = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         ExecutorService holder = Executors.newSingleThreadExecutor();
@@ -73,6 +73,12 @@ public abstract class ExternalAccountServiceTestBase extends ExternalAccountInte
             release.countDown();
             holder.shutdownNow();
         }
+    }
+
+    /** {@link #whileAnotherTransactionHoldsLockOf}가 실행하는 동작. 검사 예외를 던질 수 있다. */
+    @FunctionalInterface
+    protected interface LockedAction {
+        void run() throws Exception;
     }
 
     protected int authorizationKeyCount() {
