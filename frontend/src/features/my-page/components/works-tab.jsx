@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Icon from '../../../components/common/icon.jsx';
 import VideoLinks from './video-links.jsx';
+import ExternalAccountsPanel from '../../external-accounts/external-accounts-panel.jsx';
 
 // 마이페이지 '작업물' 메뉴 (아티스트): 공연 영상 링크, 작업물 미리 듣기
 // (섭외 요청 우편함은 '섭외 요청' 메뉴로 분리, NSU-110)
@@ -27,6 +28,7 @@ export default function WorksTab({ active, profile, setProfile, notify }) {
         setProfile={setProfile}
         notify={notify}
       />
+      <ExternalAccountsPanel />
       <div className="works-grid">
         {/* 아티스트: 내 음원 미리 듣기 (20MB 이하만 허용) */}
         <section className="panel">

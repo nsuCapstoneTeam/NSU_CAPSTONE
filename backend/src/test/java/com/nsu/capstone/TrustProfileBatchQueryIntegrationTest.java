@@ -49,14 +49,29 @@ import tools.jackson.databind.ObjectMapper;
 @Import(TestcontainersConfiguration.class)
 class TrustProfileBatchQueryIntegrationTest {
 
-    @Autowired TrustProfileQueryService queryService;
-    @Autowired UserRepository userRepository;
-    @Autowired UuidV7Generator uuidV7Generator;
-    @Autowired JdbcTemplate jdbcTemplate;
-    @Autowired ObjectMapper objectMapper;
-    @Autowired EntityManagerFactory entityManagerFactory;
-    @MockitoSpyBean PerformanceOutcomeReader performanceOutcomeReader;
-    @MockitoSpyBean VerificationReader verificationReader;
+    @Autowired
+    TrustProfileQueryService queryService;
+
+    @Autowired
+    UserRepository userRepository;
+
+    @Autowired
+    UuidV7Generator uuidV7Generator;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    ObjectMapper objectMapper;
+
+    @Autowired
+    EntityManagerFactory entityManagerFactory;
+
+    @MockitoSpyBean
+    PerformanceOutcomeReader performanceOutcomeReader;
+
+    @MockitoSpyBean
+    VerificationReader verificationReader;
 
     private final List<UUID> createdUserIds = new ArrayList<>();
 
@@ -68,10 +83,7 @@ class TrustProfileBatchQueryIntegrationTest {
     @Test
     void returnsInsufficientEvidenceProfilesOfArtistsOnlyWhateverAccountStatus() throws Exception {
         List<UUID> artistIds = List.of(
-            saveArtist(UserStatus.ACTIVE),
-            saveArtist(UserStatus.SUSPENDED),
-            saveArtist(UserStatus.WITHDRAWN)
-        );
+                saveArtist(UserStatus.ACTIVE), saveArtist(UserStatus.SUSPENDED), saveArtist(UserStatus.WITHDRAWN));
         UUID eventPartnerId = saveEventPartner();
         UUID missingUserId = uuidV7Generator.generate();
         List<UUID> requestedIds = new ArrayList<>(artistIds);
@@ -83,10 +95,9 @@ class TrustProfileBatchQueryIntegrationTest {
         assertThat(profiles).containsOnlyKeys(artistIds);
         for (UUID artistId : artistIds) {
             JSONAssert.assertEquals(
-                insufficientEvidenceProfile(artistId),
-                objectMapper.writeValueAsString(profiles.get(artistId)),
-                JSONCompareMode.STRICT
-            );
+                    insufficientEvidenceProfile(artistId),
+                    objectMapper.writeValueAsString(profiles.get(artistId)),
+                    JSONCompareMode.STRICT);
         }
     }
 
@@ -95,15 +106,14 @@ class TrustProfileBatchQueryIntegrationTest {
         UUID verifiedArtistId = saveArtist(UserStatus.ACTIVE);
         UUID unverifiedArtistId = saveArtist(UserStatus.ACTIVE);
         List<VerificationItem> verifications = List.of(
-            new VerificationItem(VerificationType.EXTERNAL_ACCOUNT, VerificationProvider.YOUTUBE),
-            new VerificationItem(VerificationType.COPYRIGHT, null)
-        );
+                new VerificationItem(VerificationType.IDENTITY, null),
+                new VerificationItem(VerificationType.EXTERNAL_ACCOUNT, VerificationProvider.YOUTUBE),
+                new VerificationItem(VerificationType.COPYRIGHT, null));
         doReturn(Map.of(verifiedArtistId, verifications))
-            .when(verificationReader).findVerifiedByArtistIds(any());
+                .when(verificationReader)
+                .findVerifiedByArtistIds(any());
 
-        Map<UUID, TrustProfile> profiles = queryService.findByArtistIds(
-            List.of(verifiedArtistId, unverifiedArtistId)
-        );
+        Map<UUID, TrustProfile> profiles = queryService.findByArtistIds(List.of(verifiedArtistId, unverifiedArtistId));
 
         TrustProfile verified = profiles.get(verifiedArtistId);
         TrustProfile unverified = profiles.get(unverifiedArtistId);
@@ -117,15 +127,14 @@ class TrustProfileBatchQueryIntegrationTest {
     @Test
     void issuesSameNumberOfStatementsForOneAndThirtyArtists() {
         List<UUID> artistIds = IntStream.range(0, 30)
-            .mapToObj(i -> saveArtist(UserStatus.ACTIVE))
-            .toList();
+                .mapToObj(i -> saveArtist(UserStatus.ACTIVE))
+                .toList();
 
-        long oneArtistStatements = countStatements(
-            () -> assertThat(queryService.findByArtistIds(artistIds.subList(0, 1))).hasSize(1)
-        );
+        long oneArtistStatements =
+                countStatements(() -> assertThat(queryService.findByArtistIds(artistIds.subList(0, 1)))
+                        .hasSize(1));
         long thirtyArtistStatements = countStatements(
-            () -> assertThat(queryService.findByArtistIds(artistIds)).hasSize(30)
-        );
+                () -> assertThat(queryService.findByArtistIds(artistIds)).hasSize(30));
 
         assertThat(oneArtistStatements).isPositive();
         assertThat(thirtyArtistStatements).isEqualTo(oneArtistStatements);
@@ -134,23 +143,24 @@ class TrustProfileBatchQueryIntegrationTest {
     @Test
     void computesFromLedgerReadingEachSourceOncePerBatch() {
         List<UUID> artistIds = IntStream.range(0, 30)
-            .mapToObj(i -> saveArtist(UserStatus.ACTIVE))
-            .toList();
+                .mapToObj(i -> saveArtist(UserStatus.ACTIVE))
+                .toList();
         UUID artistWithLedger = artistIds.getFirst();
         doReturn(Map.of(artistWithLedger, fourCompletedPerformances()))
-            .when(performanceOutcomeReader).findByArtistIds(any());
+                .when(performanceOutcomeReader)
+                .findByArtistIds(any());
 
         Map<UUID, TrustProfile> profiles = queryService.findByArtistIds(artistIds);
 
         assertThat(profiles.get(artistWithLedger).reliability())
-            .isEqualTo(new Reliability(ConfidenceLevel.MEDIUM, 4, 85));
+                .isEqualTo(new Reliability(ConfidenceLevel.MEDIUM, 4, 85));
         assertThat(profiles.get(artistIds.getLast()).reliability())
-            .isEqualTo(new Reliability(ConfidenceLevel.LOW, 0, null));
+                .isEqualTo(new Reliability(ConfidenceLevel.LOW, 0, null));
         Set<UUID> requested = Set.copyOf(artistIds);
         verify(performanceOutcomeReader)
-            .findByArtistIds(argThat(ids -> Set.copyOf(ids).equals(requested)));
+                .findByArtistIds(argThat(ids -> Set.copyOf(ids).equals(requested)));
         verify(verificationReader)
-            .findVerifiedByArtistIds(argThat(ids -> Set.copyOf(ids).equals(requested)));
+                .findVerifiedByArtistIds(argThat(ids -> Set.copyOf(ids).equals(requested)));
         // 위 verify는 인자가 맞는 호출 1회만 본다. 아티스트별 추가 조회가 없는지 출처마다 정확히 1번 읽었음을 확인한다.
         verifyNoMoreInteractions(performanceOutcomeReader, verificationReader);
     }
@@ -158,8 +168,7 @@ class TrustProfileBatchQueryIntegrationTest {
     @Test
     void returnsEmptyMapWithoutQueryingForEmptyInput() {
         long statements = countStatements(
-            () -> assertThat(queryService.findByArtistIds(List.of())).isEmpty()
-        );
+                () -> assertThat(queryService.findByArtistIds(List.of())).isEmpty());
 
         assertThat(statements).isZero();
     }
@@ -169,15 +178,15 @@ class TrustProfileBatchQueryIntegrationTest {
         UUID eventPartnerId = saveEventPartner();
         UUID missingUserId = uuidV7Generator.generate();
 
-        Map<UUID, TrustProfile> profiles =
-            queryService.findByArtistIds(List.of(eventPartnerId, missingUserId));
+        Map<UUID, TrustProfile> profiles = queryService.findByArtistIds(List.of(eventPartnerId, missingUserId));
 
         assertThat(profiles).isEmpty();
         verifyNoInteractions(performanceOutcomeReader, verificationReader);
     }
 
     private long countStatements(Runnable query) {
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        Statistics statistics =
+                entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         statistics.clear();
         statistics.setStatisticsEnabled(true);
         try {
@@ -190,11 +199,14 @@ class TrustProfileBatchQueryIntegrationTest {
 
     private static List<PerformanceOutcome> fourCompletedPerformances() {
         return IntStream.rangeClosed(1, 4)
-            .mapToObj(day -> new PerformanceOutcome(
-                UUID.randomUUID(), 1, OutcomeType.COMPLETED, null,
-                Instant.parse("2026-09-0%dT10:00:00Z".formatted(day)), null
-            ))
-            .toList();
+                .mapToObj(day -> new PerformanceOutcome(
+                        UUID.randomUUID(),
+                        1,
+                        OutcomeType.COMPLETED,
+                        null,
+                        Instant.parse("2026-09-0%dT10:00:00Z".formatted(day)),
+                        null))
+                .toList();
     }
 
     private UUID saveArtist(UserStatus accountStatus) {
@@ -207,9 +219,7 @@ class TrustProfileBatchQueryIntegrationTest {
 
     private UUID saveEventPartner() {
         UUID id = uuidV7Generator.generate();
-        userRepository.saveAndFlush(
-            User.createEventPartner(id, id + "@example.com", null, "01000000000")
-        );
+        userRepository.saveAndFlush(User.createEventPartner(id, id + "@example.com", null, "01000000000"));
         createdUserIds.add(id);
         return id;
     }

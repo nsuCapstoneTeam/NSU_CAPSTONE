@@ -169,7 +169,9 @@ class OpenApiDocsIntegrationTest {
             for (Map.Entry<String, JsonNode> operation : path.getValue().properties()) {
                 String name = operation.getKey() + " " + path.getKey();
                 JsonNode security = operation.getValue().get("security");
-                if (path.getKey().startsWith("/api/v1/auth/")) {
+                // 외부 계정 연결의 Google 콜백도 로그인 없이 부르는 공개 API다(API 06 §4)
+                if (path.getKey().startsWith("/api/v1/auth/")
+                        || path.getKey().startsWith("/api/v1/external-accounts/oauth/callback/")) {
                     publicApis.add(name);
                     if (security == null || !security.isEmpty()) {
                         publicApisWithAuth.add(name);
@@ -183,9 +185,9 @@ class OpenApiDocsIntegrationTest {
             }
         }
 
-        assertThat(publicApis).hasSize(18);
+        assertThat(publicApis).hasSize(19);
         assertThat(publicApisWithAuth).isEmpty();
-        assertThat(otherApis).hasSize(11);
+        assertThat(otherApis).hasSize(17);
         assertThat(otherApisWithOverride).isEmpty();
     }
 
@@ -225,6 +227,9 @@ class OpenApiDocsIntegrationTest {
         if (path.startsWith("/api/v1/me/event-partner-profile")) {
             return "EVENT_PARTNER 프로필";
         }
+        if (path.contains("external-accounts")) {
+            return "외부 계정";
+        }
         if (path.startsWith("/api/v1/artists/")) {
             return "Trust Profile";
         }
@@ -240,8 +245,15 @@ class OpenApiDocsIntegrationTest {
         delete | /api/v1/events/{eventId}               | 204 | ''
         get    | /api/v1/me/events                      | 200 | PageResponseEventResponse
         get    | /api/v1/regions                        | 200 | RegionListResponse
+        post   | /api/v1/me/external-accounts/authorizations | 200 | AuthorizationResponse
+        post   | /api/v1/me/external-accounts           | 201 | ExternalAccountResponse
+        post   | /api/v1/me/external-accounts           | 200 | ExternalAccountResponse
+        get    | /api/v1/me/external-accounts/{externalAccountId}/work-candidates | 200 | WorkCandidatesResponse
+        put    | /api/v1/me/external-accounts/{externalAccountId}/works | 200 | ExternalAccountResponse
+        delete | /api/v1/me/external-accounts/{externalAccountId} | 204 | ''
+        get    | /api/v1/artists/{artistId}/external-accounts | 200 | ExternalAccountListResponse
         """)
-    @DisplayName("행사·지역 API의 성공 상태와 응답 스키마를 적는다")
+    @DisplayName("행사·지역·외부 계정 API의 성공 상태와 응답 스키마를 적는다")
     void documentsSuccessStatusAndSchema(String method, String path, String status, String schema) throws Exception {
         JsonNode responses = operation(method, path).path("responses");
 
@@ -260,6 +272,12 @@ class OpenApiDocsIntegrationTest {
         delete | /api/v1/events/{eventId}
         get    | /api/v1/me/events
         get    | /api/v1/regions
+        post   | /api/v1/me/external-accounts/authorizations
+        post   | /api/v1/me/external-accounts
+        get    | /api/v1/me/external-accounts/{externalAccountId}/work-candidates
+        put    | /api/v1/me/external-accounts/{externalAccountId}/works
+        delete | /api/v1/me/external-accounts/{externalAccountId}
+        get    | /api/v1/artists/{artistId}/external-accounts
         """)
     @DisplayName("인증이 필요한 API에 401 AUTHENTICATION_REQUIRED를 적는다")
     void documentsUnauthorizedResponse(String method, String path) throws Exception {
@@ -279,8 +297,14 @@ class OpenApiDocsIntegrationTest {
         delete | /api/v1/events/{eventId}              | 400=INVALID_EVENT_ID;403=ACCESS_DENIED;404=EVENT_NOT_FOUND
         get    | /api/v1/me/events                     | 400=VALIDATION_ERROR;403=ACCESS_DENIED
         get    | /api/v1/regions                       | ''
+        post   | /api/v1/me/external-accounts/authorizations | 400=VALIDATION_ERROR,ProblemDetail;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;409=EXTERNAL_ACCOUNT_CONNECTION_CHANGED;429=TOO_MANY_REQUESTS;503=EXTERNAL_PROVIDER_DISABLED,RATE_LIMIT_UNAVAILABLE
+        post   | /api/v1/me/external-accounts          | 400=VALIDATION_ERROR,EXTERNAL_ACCOUNT_AUTHORIZATION_INVALID,EXTERNAL_ACCOUNT_URL_INVALID,ProblemDetail;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;409=EXTERNAL_ACCOUNT_CONNECTION_CHANGED,EXTERNAL_ACCOUNT_ALREADY_LINKED;422=YOUTUBE_CHANNEL_NOT_FOUND,SPOTIFY_ARTIST_NOT_FOUND;429=TOO_MANY_REQUESTS;503=EXTERNAL_PROVIDER_UNAVAILABLE,EXTERNAL_PROVIDER_DISABLED,RATE_LIMIT_UNAVAILABLE,EXTERNAL_ACCOUNT_BUSY
+        get    | /api/v1/me/external-accounts/{externalAccountId}/work-candidates | 400=INVALID_EXTERNAL_ACCOUNT_ID;403=ACCESS_DENIED;404=EXTERNAL_ACCOUNT_NOT_FOUND;409=EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED;429=TOO_MANY_REQUESTS;503=EXTERNAL_PROVIDER_UNAVAILABLE,EXTERNAL_PROVIDER_DISABLED,RATE_LIMIT_UNAVAILABLE
+        put    | /api/v1/me/external-accounts/{externalAccountId}/works | 400=INVALID_EXTERNAL_ACCOUNT_ID,VALIDATION_ERROR,EXTERNAL_ACCOUNT_WORK_NOT_CANDIDATE,ProblemDetail;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;404=EXTERNAL_ACCOUNT_NOT_FOUND;409=EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED;429=TOO_MANY_REQUESTS;503=EXTERNAL_PROVIDER_UNAVAILABLE,EXTERNAL_PROVIDER_DISABLED,RATE_LIMIT_UNAVAILABLE,EXTERNAL_ACCOUNT_BUSY
+        delete | /api/v1/me/external-accounts/{externalAccountId} | 400=INVALID_EXTERNAL_ACCOUNT_ID;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;404=EXTERNAL_ACCOUNT_NOT_FOUND;429=TOO_MANY_REQUESTS;503=RATE_LIMIT_UNAVAILABLE,EXTERNAL_ACCOUNT_BUSY
+        get    | /api/v1/artists/{artistId}/external-accounts | 400=INVALID_ARTIST_ID;403=ACCESS_DENIED;404=ARTIST_NOT_FOUND
         """)
-    @DisplayName("행사·지역 API의 오류 상태와 code를 계약(03 §9)대로 적는다")
+    @DisplayName("행사·지역·외부 계정 API의 오류 상태와 code를 계약(03 §9, 06 §10)대로 적는다")
     void documentsErrorResponsesFromContract(String method, String path, String errors) throws Exception {
         Map<String, List<String>> expected = new TreeMap<>();
         for (String entry : errors.split(";")) {

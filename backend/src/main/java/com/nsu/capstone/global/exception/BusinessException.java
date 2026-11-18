@@ -12,8 +12,16 @@ public class BusinessException extends RuntimeException {
     }
 
     public BusinessException(ErrorCode errorCode, Long retryAfterSeconds) {
-        super(Objects.requireNonNull(errorCode, "errorCode must not be null").getMessage());
-        this.errorCode = errorCode;
+        this(
+                errorCode,
+                retryAfterSeconds,
+                Objects.requireNonNull(errorCode, "errorCode must not be null").getMessage());
+    }
+
+    /** 하위 예외가 서버 로그에 남길 자기 메시지를 쓸 때. 응답 본문은 항상 {@link ErrorCode}의 메시지다. */
+    protected BusinessException(ErrorCode errorCode, Long retryAfterSeconds, String logMessage) {
+        super(logMessage);
+        this.errorCode = Objects.requireNonNull(errorCode, "errorCode must not be null");
         this.retryAfterSeconds = retryAfterSeconds;
     }
 

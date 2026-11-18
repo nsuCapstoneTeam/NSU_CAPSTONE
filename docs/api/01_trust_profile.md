@@ -112,12 +112,13 @@ Authorization: Bearer {accessToken}
 - `IDENTITY`는 곡 업로드·PRIVATE 행사 열람·댓글 권한(`VERIFIED_ARTIST`)의 근거인 실명 본인확인을 EVENT_PARTNER에게 보여 준다. 요구사항은 SSOT `TRUST-142`(v1.18 초안 ③, 팀 확인 전)이고, `TRUST-152`에 따라 Artist Reliability에 더하지 않는다. 화면은 "실명 본인확인"으로 표시하고, "인증된 아티스트"로 쓰지 않는다(용어집). 2026-11-05에 추가했다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)).
 - 시연 서버의 `IDENTITY`는 테스트 본인확인이다. 테스트임은 항목마다 표시하지 않고 시연 환경 배너로 알린다. 테스트 본인확인은 시연 DB에만 있고 운영 DB로 옮기지 않는다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)).
 - NSU-105를 구현하기 전에는 본인확인 기록이 없어 `IDENTITY`가 나오지 않는다.
-- 외부 계정을 연동했다는 사실만으로는 넣지 않는다. 연동한 계정의 작업 내역 표시는 아티스트 프로필(작업물) API(NSU-79)가 맡는다. YouTube Music 아티스트 채널은 `YOUTUBE`로 표시한다.
-- provider별 제어권 확인 기준은 Verification 도메인(NSU-33)이 정한다.
+- YouTube는 OAuth 연결이 제어권 확인이다. 연결하면 넣고, 해제하면 다음 조회부터 뺀다. Spotify 주소 연결은 넣지 않는다(아래 Spotify 항목). 연결한 계정과 작업물 링크는 [06 외부 계정 API](./06_external_accounts.md)(NSU-37·79)가 보여 주며, 그 조회 API는 `verifications`를 바꾸지 않는다. YouTube Music 아티스트 채널은 `YOUTUBE`로 표시한다.
+- `SOUNDCLOUD`는 지금 나오지 않는다. SoundCloud 약관이 아티스트 전용 프로필에 API 사용을 금지해 SoundCloud 연결을 만들지 않았다([external_links/00](../adr/external_links/00_external_account_links.md) 13번). 값은 계약에 남긴다(enum 삭제는 깨지는 변경, 00 §3). 클라이언트는 이 값을 받아도 처리할 수 있어야 한다.
+- 제어권 확인 기준과 한계(관리 권한만 있는 사람, 진짜 채널인지는 확인하지 못함)는 [external_links/00](../adr/external_links/00_external_account_links.md) 5번에 있다. 화면은 "채널 제어권 확인"으로 표시하고 "인증"이라고 쓰지 않는다. `EXTERNAL_ACCOUNT`만으로는 확인 배지를 켜지 않는다(같은 ADR 5-2번).
 - `COPYRIGHT`는 곡의 권리 정보(04, NSU-89)로 계산한다. 2026-10-20 설계에서 권리 검증 단위가 Work에서 곡으로 바뀌었다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)). 시연용 Mock 본인확인으로 받은 등록정보 일치도 들어간다. 이 일치는 시연 DB에만 있고 운영으로 옮기지 않는다(NSU-105).
 - 화면은 `COPYRIGHT`를 "저작권 검증 완료"가 아니라 "등록부 저작자·권리자와 실명 일치"로 표시한다. 이름이 같은 다른 사람도 대조를 통과하고, 등록 저작자가 자기 등록번호를 남의 음원에 붙여도 통과하기 때문이다(2026-10-21 설계 리뷰 1·2차). SSOT `ADMIN-096`의 표시 문구는 v1.17에서 고친다.
 - `COPYRIGHT`는 EVENT_PARTNER가 참고할 정보다. PRIVATE 행사 열람·댓글 권한(`VERIFIED_ARTIST`)의 근거가 아니다. 그 권한은 실명 본인확인(NSU-105)으로 정한다([music_upload/01](../adr/music_upload/01_music_rights_verification.md)).
-- 제어권 확인 결과는 연결이 유지되는 동안 유효하다. 자동으로 다시 확인하거나 기간 만료로 빼지 않는다(07 D45).
+- 제어권 확인 결과는 연결이 유지되는 동안 유효하다. 제어권을 자동으로 다시 확인하지 않는다(07 D45). 예외: YouTube 정책(30일 안에 갱신 또는 삭제) 때문에, 채널이 없어지거나 비공개가 되면, 또는 30일 동안 공개 채널임을 확인하지 못하면 연결을 지운다([external_links/00](../adr/external_links/00_external_account_links.md) 14번, [06 §11.1](./06_external_accounts.md)). 그러면 다음 조회부터 `EXTERNAL_ACCOUNT`가 빠진다.
 - 연결을 해제하면 다음 조회부터 빠지고, 관리자가 검증을 취소하면 즉시 빠진다. 취소 사실과 사유는 내보내지 않는다. 다시 연결하면 OAuth로 다시 확인한 뒤에만 넣는다(07 D45).
 - Spotify는 계정 연동은 허용하지만 Verification 항목이 아니다. Artist URL/ID 입력이나 Spotify 사용자 계정 OAuth는 아티스트 프로필 소유를 증명하지 않으므로(07 §7), 아티스트 프로필에 Spotify 링크를 보여 주고 EVENT_PARTNER가 직접 링크로 확인한다. 소유 확인 수단이 생기면 `provider`에 `SPOTIFY`를 추가한다(enum 값 추가는 non-breaking).
 - 로그인용 간편가입(Google, Kakao, Naver)과 가입 필수 인증(이메일, 휴대폰)은 Verification 항목이 아니다.
@@ -350,6 +351,7 @@ interface VerificationSource {
 | §3의 상태 코드와 `code`가 표대로 나온다 | 본 문서 |
 | 축약형 UUID(`1-2-3-4-5`)는 `400 INVALID_ARTIST_ID`이고, 응답의 `artistId`는 소문자다 | §1 |
 | 같은 (`type`, `provider`)의 Verification은 한 번만 나온다 | §4.3 |
+| YouTube 연결을 본인 해제나 ID 확인 작업이 지우면 다음 조회에서 `EXTERNAL_ACCOUNT`·`YOUTUBE`가 빠진다. Spotify만 연결한 아티스트에게는 나오지 않는다 | §4.3, [06 §11.1](./06_external_accounts.md) |
 | 실명 본인확인을 마친 아티스트는 `verifications`에 `IDENTITY`가 있고, §5의 본인확인 정보와 출처는 응답에 없다 | §4.3·§5 |
 | 등록정보 일치 곡이 있어도 `IDENTITY`가 없으면 `COPYRIGHT`가 나오지 않는다 | §4.2 불변식 8, §7 |
 | 일괄 조회의 쿼리 수가 아티스트 1명과 100명에서 같다 | §7 |
