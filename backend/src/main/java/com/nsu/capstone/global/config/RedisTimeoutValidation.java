@@ -30,7 +30,13 @@ public class RedisTimeoutValidation implements InitializingBean {
             throw new IllegalStateException("spring.data.redis.timeout(REDIS_COMMAND_TIMEOUT)은 "
                     + MAX_COMMAND_TIMEOUT.toMillis() + "ms 이하여야 한다 (현재 " + command.toMillis() + "ms)");
         }
-        requirePositive(redis.getConnectTimeout(), "spring.data.redis.connect-timeout(REDIS_CONNECT_TIMEOUT)");
+        Duration connect = redis.getConnectTimeout();
+        requirePositive(connect, "spring.data.redis.connect-timeout(REDIS_CONNECT_TIMEOUT)");
+        // Lettuce는 밀리초로 변환하므로 1ms 미만은 Netty의 연결 timeout을 비활성화한다.
+        if (connect.compareTo(Duration.ofMillis(1)) < 0) {
+            throw new IllegalStateException(
+                    "spring.data.redis.connect-timeout(REDIS_CONNECT_TIMEOUT) must be at least 1ms");
+        }
     }
 
     private static void requirePositive(Duration value, String property) {

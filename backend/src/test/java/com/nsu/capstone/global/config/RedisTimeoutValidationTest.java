@@ -40,9 +40,16 @@ class RedisTimeoutValidationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"0s", "-1s"})
-    void rejectsNonPositiveConnectTimeout(String value) {
+    @ValueSource(strings = {"0s", "-1s", "1ns", "999999ns"})
+    void rejectsConnectTimeoutBelowOneMillisecond(String value) {
         assertRejected(COMMAND, CONNECT, "REDIS_CONNECT_TIMEOUT=" + value);
+    }
+
+    @Test
+    void acceptsOneMillisecondConnectTimeout() {
+        contextRunner
+                .withPropertyValues(COMMAND, CONNECT, "REDIS_CONNECT_TIMEOUT=1ms")
+                .run(context -> assertThat(context).hasNotFailed());
     }
 
     @Test
