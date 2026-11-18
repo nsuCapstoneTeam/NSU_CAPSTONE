@@ -66,8 +66,7 @@ final class NameCipher {
         }
         try {
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(
-                    Cipher.DECRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, stored, 1, NONCE_BYTES));
+            cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, stored, 1, NONCE_BYTES));
             cipher.updateAAD(associatedData(userId));
             byte[] plain = cipher.doFinal(stored, 1 + NONCE_BYTES, stored.length - 1 - NONCE_BYTES);
             return IdentityName.of(new String(plain, StandardCharsets.UTF_8));

@@ -8,7 +8,10 @@ public final class FailureText {
     public static String of(Throwable failure) {
         StringBuilder text = new StringBuilder();
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
-            text.append(cause.getClass().getName()).append(": ").append(cause.getMessage()).append('\n');
+            text.append(cause.getClass().getName())
+                    .append(": ")
+                    .append(cause.getMessage())
+                    .append('\n');
         }
         return text.toString();
     }

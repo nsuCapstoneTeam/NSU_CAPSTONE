@@ -61,8 +61,8 @@ class IdentityVerificationRepositoryIntegrationTest extends IdentityVerification
     void 만료_시각에_도착한_완료는_시도도_기록도_바꾸지_않는다() {
         IdentityVerificationId id = insertPendingAttempt();
 
-        Optional<StoredVerification> stored =
-                repository.confirm(id, artist.getId(), EXPIRES_AT, EXPIRES_AT.plusSeconds(2), IdentitySource.SANDBOX, null);
+        Optional<StoredVerification> stored = repository.confirm(
+                id, artist.getId(), EXPIRES_AT, EXPIRES_AT.plusSeconds(2), IdentitySource.SANDBOX, null);
 
         assertThat(stored).isEmpty();
         assertThat(repository.findAttempt(id))

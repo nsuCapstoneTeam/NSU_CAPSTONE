@@ -17,10 +17,10 @@ class PublicSurfaceTest {
     @Test
     void 이_패키지의_public_최상위_타입은_다섯뿐이다() throws IOException, URISyntaxException, ClassNotFoundException {
         Path packageDirectory = Path.of(IdentityVerifications.class
-                .getProtectionDomain()
-                .getCodeSource()
-                .getLocation()
-                .toURI())
+                        .getProtectionDomain()
+                        .getCodeSource()
+                        .getLocation()
+                        .toURI())
                 .resolve("com/nsu/capstone/verification/identity");
         List<String> topLevelClassNames;
         try (Stream<Path> files = Files.list(packageDirectory)) {

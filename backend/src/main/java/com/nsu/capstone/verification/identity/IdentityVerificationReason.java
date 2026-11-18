@@ -18,5 +18,5 @@ enum IdentityVerificationReason {
     IDENTITY_VERIFICATION_REJECTED("본인확인 제공자의 결과를 받을 수 없다"),
     IDENTITY_VERIFICATION_UNAVAILABLE("본인확인 제공자에 연결할 수 없다");
 
-    private final String message;
+    private final String description;
 }

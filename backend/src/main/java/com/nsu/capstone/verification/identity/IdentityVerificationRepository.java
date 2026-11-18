@@ -54,7 +54,9 @@ class IdentityVerificationRepository {
                 .param("status", attempt.status().name())
                 .param(
                         "rejectionReason",
-                        attempt.rejectionReason() == null ? null : attempt.rejectionReason().name())
+                        attempt.rejectionReason() == null
+                                ? null
+                                : attempt.rejectionReason().name())
                 .param("createdAt", timestamp(attempt.createdAt()))
                 .param("expiresAt", timestamp(attempt.expiresAt()))
                 .param("closedAt", timestamp(attempt.closedAt()))
@@ -66,10 +68,7 @@ class IdentityVerificationRepository {
                         SELECT id, user_id, status, rejection_reason, created_at, expires_at, closed_at
                         FROM identity_verification_attempts
                         WHERE id = :id
-                        """)
-                .param("id", id.value())
-                .query(ATTEMPT_MAPPER)
-                .optional();
+                        """).param("id", id.value()).query(ATTEMPT_MAPPER).optional();
     }
 
     /** 이 호출 뒤 회원의 본인확인 기록을 돌려준다. 시도를 확정하지 못했고 기록도 없으면 빈 값이다. */
@@ -157,10 +156,7 @@ class IdentityVerificationRepository {
                         SELECT id, user_id, attempt_id, source, mock_name_ciphertext, verified_at
                         FROM identity_verifications
                         WHERE user_id = :userId
-                        """)
-                .param("userId", userId)
-                .query(VERIFICATION_MAPPER)
-                .optional();
+                        """).param("userId", userId).query(VERIFICATION_MAPPER).optional();
     }
 
     private static OffsetDateTime timestamp(Instant instant) {

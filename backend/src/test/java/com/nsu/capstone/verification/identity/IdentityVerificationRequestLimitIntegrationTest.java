@@ -55,7 +55,8 @@ class IdentityVerificationRequestLimitIntegrationTest extends IdentityVerificati
         assertThatThrownBy(() -> limits.identityVerification(account, 1))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
-                        exception -> assertThat(exception.getRetryAfterSeconds()).isEqualTo(3600 - (3600 - 90) + 0L));
+                        exception ->
+                                assertThat(exception.getRetryAfterSeconds()).isEqualTo(3600 - (3600 - 90) + 0L));
     }
 
     @Test
@@ -82,12 +83,16 @@ class IdentityVerificationRequestLimitIntegrationTest extends IdentityVerificati
         String key = "signup:limit:v2:identity-verification:" + NOW.getEpochSecond() + ":" + account;
         assertThat(redis.keys(KEY_PATTERN)).containsExactly(key);
         Long ttlSeconds = redis.getExpire(key);
-        assertThat(ttlSeconds).isBetween(Duration.ofMinutes(69).toSeconds(), Duration.ofMinutes(70).toSeconds());
+        assertThat(ttlSeconds)
+                .isBetween(
+                        Duration.ofMinutes(69).toSeconds(),
+                        Duration.ofMinutes(70).toSeconds());
     }
 
     @Test
     void 계정이_다르면_따로_세고_다음_정각이면_다시_받는다() {
-        UUID other = newUser(com.nsu.capstone.identity.domain.UserRole.ARTIST, "other-limit@example.com").getId();
+        UUID other = newUser(com.nsu.capstone.identity.domain.UserRole.ARTIST, "other-limit@example.com")
+                .getId();
         limits.identityVerification(artist.getId(), 1);
 
         limits.identityVerification(other, 1);

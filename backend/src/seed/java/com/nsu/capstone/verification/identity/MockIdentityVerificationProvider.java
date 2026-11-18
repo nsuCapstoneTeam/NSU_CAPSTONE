@@ -53,8 +53,7 @@ final class MockIdentityVerificationProvider implements IdentityVerificationProv
         totalLookups.incrementAndGet();
         int index = lookups.computeIfAbsent(id, key -> new AtomicInteger()).getAndIncrement();
         List<ProviderOutcome> script = scripts.get(id);
-        ProviderOutcome outcome =
-                script == null ? defaultOutcome : script.get(Math.min(index, script.size() - 1));
+        ProviderOutcome outcome = script == null ? defaultOutcome : script.get(Math.min(index, script.size() - 1));
         lookupHook.run();
         return outcome;
     }

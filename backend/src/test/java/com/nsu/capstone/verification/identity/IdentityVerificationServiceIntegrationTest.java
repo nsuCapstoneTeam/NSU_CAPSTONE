@@ -20,8 +20,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -29,6 +27,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -154,8 +154,8 @@ class IdentityVerificationServiceIntegrationTest extends IdentityVerificationInt
     @Test
     void 없는_시도와_다른_회원의_시도는_모두_찾을_수_없다고_답하고_제공자를_부르지_않는다() {
         User other = newUser(UserRole.ARTIST, "other-artist@example.com");
-        IdentityVerificationId othersPending = IdentityVerificationId.parse(
-                service.start(other.getId()).identityVerificationId());
+        IdentityVerificationId othersPending =
+                IdentityVerificationId.parse(service.start(other.getId()).identityVerificationId());
         IdentityVerificationId othersFailed = new IdentityVerificationId(insertAttempt(other, "FAILED"));
         IdentityVerificationId unknown = new IdentityVerificationId(uuidV7Generator.generate());
 
@@ -281,7 +281,8 @@ class IdentityVerificationServiceIntegrationTest extends IdentityVerificationInt
             assertCompletionFails(id, IdentityVerificationReason.IDENTITY_VERIFICATION_NOT_COMPLETED);
         }
 
-        assertThatThrownBy(() -> service.complete(artist.getId(), id)).isInstanceOf(BusinessException.class)
+        assertThatThrownBy(() -> service.complete(artist.getId(), id))
+                .isInstanceOf(BusinessException.class)
                 .satisfies(exception -> {
                     BusinessException limited = (BusinessException) exception;
                     assertThat(limited.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS);
@@ -328,11 +329,10 @@ class IdentityVerificationServiceIntegrationTest extends IdentityVerificationInt
 
         for (Runnable request : java.util.List.<Runnable>of(
                 () -> withBrokenRedis.start(artist.getId()), () -> withBrokenRedis.complete(artist.getId(), id))) {
-            assertThatThrownBy(request::run)
-                    .isInstanceOfSatisfying(BusinessException.class, exception -> {
-                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.RATE_LIMIT_UNAVAILABLE);
-                        assertThat(exception.getRetryAfterSeconds()).isNull();
-                    });
+            assertThatThrownBy(request::run).isInstanceOfSatisfying(BusinessException.class, exception -> {
+                assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.RATE_LIMIT_UNAVAILABLE);
+                assertThat(exception.getRetryAfterSeconds()).isNull();
+            });
         }
 
         assertThat(attemptCount()).isEqualTo(1);
@@ -369,15 +369,17 @@ class IdentityVerificationServiceIntegrationTest extends IdentityVerificationInt
     @Test
     void 한도를_높이면_같은_시도의_완료_20건이_동시에_와도_모두_성공하고_기록은_하나다() throws Exception {
         IdentityVerificationService roomy = serviceWith(provider, 100);
-        IdentityVerificationId id = IdentityVerificationId.parse(
-                roomy.start(artist.getId()).identityVerificationId());
+        IdentityVerificationId id =
+                IdentityVerificationId.parse(roomy.start(artist.getId()).identityVerificationId());
         provider.script(id, new ProviderOutcome.Verified(IdentitySource.SANDBOX, null));
 
         List<Object> results = runConcurrently(20, () -> roomy.complete(artist.getId(), id));
 
-        assertThat(results).hasSize(20).allSatisfy(result -> assertThat(result)
-                .isInstanceOf(IdentityStatus.class));
-        assertThat(results.stream().map(IdentityStatus.class::cast).map(IdentityStatus::verifiedAt).distinct())
+        assertThat(results).hasSize(20).allSatisfy(result -> assertThat(result).isInstanceOf(IdentityStatus.class));
+        assertThat(results.stream()
+                        .map(IdentityStatus.class::cast)
+                        .map(IdentityStatus::verifiedAt)
+                        .distinct())
                 .hasSize(1);
         assertThat(verificationCount()).isEqualTo(1);
     }
@@ -390,7 +392,8 @@ class IdentityVerificationServiceIntegrationTest extends IdentityVerificationInt
         List<Object> results = runConcurrently(20, () -> service.complete(artist.getId(), id));
 
         assertThat(results.stream().filter(IdentityStatus.class::isInstance)).hasSize(9);
-        List<Object> limited = results.stream().filter(BusinessException.class::isInstance).toList();
+        List<Object> limited =
+                results.stream().filter(BusinessException.class::isInstance).toList();
         assertThat(limited).hasSize(11).allSatisfy(result -> {
             BusinessException exception = (BusinessException) result;
             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS);
@@ -404,16 +407,16 @@ class IdentityVerificationServiceIntegrationTest extends IdentityVerificationInt
     @Test
     void 한_회원의_두_시도를_동시에_완료하면_둘_다_성공하고_기록은_하나다() throws Exception {
         IdentityVerificationService roomy = serviceWith(provider, 100);
-        IdentityVerificationId first = IdentityVerificationId.parse(
-                roomy.start(artist.getId()).identityVerificationId());
-        IdentityVerificationId second = IdentityVerificationId.parse(
-                roomy.start(artist.getId()).identityVerificationId());
+        IdentityVerificationId first =
+                IdentityVerificationId.parse(roomy.start(artist.getId()).identityVerificationId());
+        IdentityVerificationId second =
+                IdentityVerificationId.parse(roomy.start(artist.getId()).identityVerificationId());
         provider.script(first, new ProviderOutcome.Verified(IdentitySource.SANDBOX, null));
         provider.script(second, new ProviderOutcome.Verified(IdentitySource.SANDBOX, null));
 
         AtomicInteger turn = new AtomicInteger();
-        List<Object> results = runConcurrently(
-                2, () -> roomy.complete(artist.getId(), turn.getAndIncrement() == 0 ? first : second));
+        List<Object> results =
+                runConcurrently(2, () -> roomy.complete(artist.getId(), turn.getAndIncrement() == 0 ? first : second));
 
         assertThat(results).hasSize(2).allSatisfy(result -> assertThat(result).isInstanceOf(IdentityStatus.class));
         assertThat(verificationCount()).isEqualTo(1);
@@ -466,9 +469,10 @@ class IdentityVerificationServiceIntegrationTest extends IdentityVerificationInt
         }
 
         if (conditions.limitExceeded()) {
-            assertThat(outcome).isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(
-                            exception.getErrorCode())
-                    .isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
+            assertThat(outcome)
+                    .isInstanceOfSatisfying(
+                            BusinessException.class,
+                            exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
         } else if (conditions.accountIsInactive()) {
             assertFailureReason(outcome, IdentityVerificationReason.ACCOUNT_NOT_ACTIVE);
         } else if (conditions.attemptIsOthers()) {
@@ -494,9 +498,10 @@ class IdentityVerificationServiceIntegrationTest extends IdentityVerificationInt
     }
 
     private static void assertFailureReason(Object outcome, IdentityVerificationReason reason) {
-        assertThat(outcome).isInstanceOfSatisfying(
-                IdentityVerificationException.class,
-                exception -> assertThat(exception.getReason()).isEqualTo(reason));
+        assertThat(outcome)
+                .isInstanceOfSatisfying(
+                        IdentityVerificationException.class,
+                        exception -> assertThat(exception.getReason()).isEqualTo(reason));
     }
 
     record Conditions(
@@ -521,8 +526,14 @@ class IdentityVerificationServiceIntegrationTest extends IdentityVerificationInt
     }
 
     static Stream<Conditions> orderCombinations() {
-        return IntStream.range(0, 64).mapToObj(bits -> new Conditions(
-                (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0, (bits & 8) != 0, (bits & 16) != 0, (bits & 32) != 0));
+        return IntStream.range(0, 64)
+                .mapToObj(bits -> new Conditions(
+                        (bits & 1) != 0,
+                        (bits & 2) != 0,
+                        (bits & 4) != 0,
+                        (bits & 8) != 0,
+                        (bits & 16) != 0,
+                        (bits & 32) != 0));
     }
 
     /** 모든 작업이 문 앞에 모인 뒤 한꺼번에 출발한다. 성공은 값으로, 실패는 예외 객체로 모은다. */
@@ -568,13 +579,10 @@ class IdentityVerificationServiceIntegrationTest extends IdentityVerificationInt
         try (LogCapture logs = new LogCapture()) {
             service.complete(artist.getId(), id);
 
-            assertThat(logs.events())
-                    .anySatisfy(event -> {
-                        assertThat(event.getLevel()).isEqualTo(ch.qos.logback.classic.Level.INFO);
-                        assertThat(event.getFormattedMessage())
-                                .contains(id.external())
-                                .contains("MOCK");
-                    });
+            assertThat(logs.events()).anySatisfy(event -> {
+                assertThat(event.getLevel()).isEqualTo(ch.qos.logback.classic.Level.INFO);
+                assertThat(event.getFormattedMessage()).contains(id.external()).contains("MOCK");
+            });
             assertThat(logs.everything()).doesNotContain("김동엽");
         }
     }

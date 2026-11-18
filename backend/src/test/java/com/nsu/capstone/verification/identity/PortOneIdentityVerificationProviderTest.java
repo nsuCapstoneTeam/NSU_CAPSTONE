@@ -21,8 +21,7 @@ class PortOneIdentityVerificationProviderTest {
 
     private static final IdentityVerificationId ID =
             new IdentityVerificationId(UUID.fromString("01937a5e-8c2b-7e41-9a7d-4f1c2b3e5d6a"));
-    private static final String VERIFIED_TEST_CHANNEL =
-            """
+    private static final String VERIFIED_TEST_CHANNEL = """
             {"status":"VERIFIED","channel":{"type":"TEST","pgProvider":"kcp","pgMerchantId":"AO6R1"}}
             """;
 
@@ -110,15 +109,14 @@ class PortOneIdentityVerificationProviderTest {
 
             assertThat(outcome.toString()).doesNotContain(MARKER);
             assertThat(logs.everything()).doesNotContain(MARKER);
-            assertThat(logs.events()).allSatisfy(event -> assertThat(event.getThrowableProxy())
-                    .isNull());
+            assertThat(logs.events())
+                    .allSatisfy(event -> assertThat(event.getThrowableProxy()).isNull());
         }
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("loggedResponses")
-    void 받을_수_없는_결과는_시도_ID와_이유만_정해진_등급으로_남긴다(
-            String row, int status, String body, Level level, String reason) {
+    void 받을_수_없는_결과는_시도_ID와_이유만_정해진_등급으로_남긴다(String row, int status, String body, Level level, String reason) {
         portOne.respond(status, body);
 
         try (LogCapture logs = new LogCapture()) {
@@ -172,7 +170,8 @@ class PortOneIdentityVerificationProviderTest {
 
     static Stream<Arguments> loggedResponses() {
         String error = "{\"type\":\"ERROR\"}";
-        String live = "{\"status\":\"VERIFIED\",\"channel\":{\"type\":\"LIVE\",\"pgProvider\":\"kcp\",\"pgMerchantId\":\"AO6R1\"}}";
+        String live =
+                "{\"status\":\"VERIFIED\",\"channel\":{\"type\":\"LIVE\",\"pgProvider\":\"kcp\",\"pgMerchantId\":\"AO6R1\"}}";
         String otherProvider =
                 "{\"status\":\"VERIFIED\",\"channel\":{\"type\":\"TEST\",\"pgProvider\":\"other\",\"pgMerchantId\":\"AO6R1\"}}";
         String otherMerchant =
@@ -236,14 +235,22 @@ class PortOneIdentityVerificationProviderTest {
                         200,
                         "{\"status\":\"VERIFIED\",\"channel\":{\"type\":\"LIVE\",\"pgProvider\":\"kcp\",\"pgMerchantId\":\"AO6R1\"}}",
                         new ProviderOutcome.Rejected(RejectionReason.CHANNEL_NOT_TEST)),
-                row("200 모르는 status", 200, "{\"status\":\"CANCELLED\"}", unavailable(UnavailableCause.UNREADABLE_RESPONSE)),
+                row(
+                        "200 모르는 status",
+                        200,
+                        "{\"status\":\"CANCELLED\"}",
+                        unavailable(UnavailableCause.UNREADABLE_RESPONSE)),
                 row("200 깨진 JSON", 200, "{not json", unavailable(UnavailableCause.UNREADABLE_RESPONSE)),
                 row("200 빈 본문", 200, "", unavailable(UnavailableCause.UNREADABLE_RESPONSE)),
                 row("401", 401, error, unavailable(UnavailableCause.CREDENTIAL_REJECTED)),
                 row("403", 403, error, unavailable(UnavailableCause.CREDENTIAL_REJECTED)),
                 row("400", 400, error, unavailable(UnavailableCause.UNEXPECTED_STATUS)),
                 row("429", 429, error, unavailable(UnavailableCause.UNEXPECTED_STATUS)),
-                row("500 JSON이 아닌 본문", 500, "<html>ERROR-BODY-MARKER</html>", unavailable(UnavailableCause.UNEXPECTED_STATUS)),
+                row(
+                        "500 JSON이 아닌 본문",
+                        500,
+                        "<html>ERROR-BODY-MARKER</html>",
+                        unavailable(UnavailableCause.UNEXPECTED_STATUS)),
                 row("502 빈 본문", 502, "", unavailable(UnavailableCause.UNEXPECTED_STATUS)));
     }
 

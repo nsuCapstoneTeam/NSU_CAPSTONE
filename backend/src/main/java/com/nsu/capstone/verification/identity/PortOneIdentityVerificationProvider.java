@@ -32,7 +32,8 @@ class PortOneIdentityVerificationProvider implements IdentityVerificationProvide
 
     static RestClient restClient(
             RestClient.Builder builder, String baseUrl, Duration connectTimeout, Duration readTimeout) {
-        HttpClient client = HttpClient.newBuilder().connectTimeout(connectTimeout).build();
+        HttpClient client =
+                HttpClient.newBuilder().connectTimeout(connectTimeout).build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(client);
         requestFactory.setReadTimeout(readTimeout);
         return builder.clone().baseUrl(baseUrl).requestFactory(requestFactory).build();

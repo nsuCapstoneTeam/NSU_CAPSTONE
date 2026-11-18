@@ -29,10 +29,29 @@ class ServerJarContentsTest {
                 .contains("com/nsu/capstone/verification/identity/MockIdentityVerificationProvider.class");
         assertThat(serverEntries)
                 .as("서버 jar가 main 클래스를 담고 있어야 올바른 jar를 열어 본 것이다")
-                .contains(BOOT_CLASSES + "com/nsu/capstone/verification/identity/PortOneIdentityVerificationProvider.class");
+                .contains(BOOT_CLASSES
+                        + "com/nsu/capstone/verification/identity/PortOneIdentityVerificationProvider.class");
         assertThat(serverEntries)
                 .as("jar 안 어디에도 seed 클래스가 없어야 한다")
                 .noneMatch(name -> seedEntries.stream().anyMatch(name::endsWith));
+    }
+
+    @Test
+    void 시드_jar는_서버_jar처럼_개발용_라이브러리를_담지_않는다() throws IOException {
+        List<String> seedEntries;
+        try (JarFile seedJar = new JarFile(System.getProperty("seed.jar.path"))) {
+            seedEntries = seedJar.stream().map(entry -> entry.getName()).toList();
+        }
+
+        assertThat(seedEntries)
+                .as("시드 jar가 서버 코드와 seed 클래스를 담고 있어야 올바른 jar를 열어 본 것이다")
+                .contains(
+                        BOOT_CLASSES + "com/nsu/capstone/verification/identity/IdentitySeed.class",
+                        BOOT_CLASSES
+                                + "com/nsu/capstone/verification/identity/PortOneIdentityVerificationProvider.class");
+        assertThat(seedEntries)
+                .noneMatch(name -> name.startsWith("BOOT-INF/lib/spring-boot-devtools")
+                        || name.startsWith("BOOT-INF/lib/spring-boot-docker-compose"));
     }
 
     private static List<String> classEntries(Path root) throws IOException {

@@ -92,7 +92,10 @@ class IdentityVerificationService {
     }
 
     private void requireActiveAccount(UUID userId) {
-        if (repository.findAccountStatus(userId).filter(UserStatus.ACTIVE::equals).isEmpty()) {
+        if (repository
+                .findAccountStatus(userId)
+                .filter(UserStatus.ACTIVE::equals)
+                .isEmpty()) {
             throw failure(ACCOUNT_NOT_ACTIVE);
         }
     }

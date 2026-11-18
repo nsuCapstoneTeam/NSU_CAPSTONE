@@ -8,8 +8,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 class PortOneResponseTest {
 
-    private static final String BODY_WITH_PERSONAL_DATA =
-            """
+    private static final String BODY_WITH_PERSONAL_DATA = """
             {
               "status": "VERIFIED",
               "id": "ignored-id",

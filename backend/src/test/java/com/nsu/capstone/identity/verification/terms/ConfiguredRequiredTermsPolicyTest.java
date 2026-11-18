@@ -32,7 +32,8 @@ class ConfiguredRequiredTermsPolicyTest {
     @Test
     void requiresExplicitVersionsAndExactEnvironmentIds() {
         runner.run(context -> assertThat(context).hasFailed());
-        runner.withPropertyValues("auth.signup-verification.required-terms=service,privacy,demo-notice,overseas-transfer")
+        runner.withPropertyValues(
+                        "auth.signup-verification.required-terms=service,privacy,demo-notice,overseas-transfer")
                 .run(context -> assertThat(context).hasFailed());
         runner.withPropertyValues(FOUR_TERMS).run(context -> {
             assertThat(context).hasNotFailed();

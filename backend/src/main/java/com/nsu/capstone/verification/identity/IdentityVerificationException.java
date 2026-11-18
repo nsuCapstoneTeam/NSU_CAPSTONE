@@ -9,7 +9,7 @@ final class IdentityVerificationException extends RuntimeException {
     private final IdentityVerificationReason reason;
 
     IdentityVerificationException(IdentityVerificationReason reason) {
-        super(reason.getMessage());
+        super(reason.getDescription());
         this.reason = reason;
     }
 }

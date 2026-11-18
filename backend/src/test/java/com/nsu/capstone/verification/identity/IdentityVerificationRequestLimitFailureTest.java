@@ -27,7 +27,10 @@ class IdentityVerificationRequestLimitFailureTest {
         when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class)))
                 .thenThrow(new QueryTimeoutException("unavailable"));
         RedisPublicRequestLimitStore limits = new RedisPublicRequestLimitStore(
-                redis, mock(OtpDigestService.class), new PublicRequestLimitProperties(30, 30, 30, 10), Clock.systemUTC());
+                redis,
+                mock(OtpDigestService.class),
+                new PublicRequestLimitProperties(30, 30, 30, 10),
+                Clock.systemUTC());
 
         assertThatThrownBy(() -> limits.identityVerification(UUID.randomUUID(), 10))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
