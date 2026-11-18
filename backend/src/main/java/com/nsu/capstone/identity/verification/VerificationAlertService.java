@@ -1,5 +1,6 @@
 package com.nsu.capstone.identity.verification;
 
+import com.nsu.capstone.global.logging.RequestIdExecutors;
 import com.nsu.capstone.identity.signup.SignupVerificationProperties;
 import com.nsu.capstone.identity.verification.config.VerificationTimingProperties;
 import jakarta.annotation.PreDestroy;
@@ -70,7 +71,8 @@ public class VerificationAlertService implements AutoCloseable {
                 limits,
                 timing,
                 clock,
-                new ThreadPoolExecutor(
+                // 요청 스레드의 MDC(요청 ID)를 알림 스레드 작업으로 옮기는 래퍼 안에서 만든다(NSU-146). 큐 상한·거절 정책·스레드 종류는 그대로다.
+                RequestIdExecutors.wrap(new ThreadPoolExecutor(
                         1,
                         1,
                         0L,
@@ -80,7 +82,7 @@ public class VerificationAlertService implements AutoCloseable {
                                 .daemon()
                                 .name("verification-alert")
                                 .unstarted(task),
-                        new ThreadPoolExecutor.AbortPolicy()));
+                        new ThreadPoolExecutor.AbortPolicy())));
     }
 
     VerificationAlertService(

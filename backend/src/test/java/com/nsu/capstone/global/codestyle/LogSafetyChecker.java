@@ -81,6 +81,32 @@ final class LogSafetyChecker {
     private static final Set<String> EXCEPTION_NAMES =
             Set.of("e", "ex", "exc", "exception", "cause", "throwable", "err", "error", "t");
 
+    /** S5: 다른 스레드로 일을 넘기는 객체 생성 */
+    private static final Set<String> THREAD_HANDOFF_TYPES =
+            Set.of("ThreadPoolExecutor", "ScheduledThreadPoolExecutor", "ForkJoinPool", "Thread");
+
+    /** S5: Thread의 정적 메서드 */
+    private static final Set<String> THREAD_HANDOFF_METHODS = Set.of("ofPlatform", "ofVirtual", "startVirtualThread");
+
+    /** S5: 실행기를 받지 않는 CompletableFuture.*Async의 인자 개수(이 개수로 부르면 공용 풀로 넘어간다) */
+    private static final Map<String, Integer> ASYNC_WITHOUT_EXECUTOR_ARITY = Map.ofEntries(
+            Map.entry("supplyAsync", 1),
+            Map.entry("runAsync", 1),
+            Map.entry("thenApplyAsync", 1),
+            Map.entry("thenAcceptAsync", 1),
+            Map.entry("thenRunAsync", 1),
+            Map.entry("thenComposeAsync", 1),
+            Map.entry("whenCompleteAsync", 1),
+            Map.entry("handleAsync", 1),
+            Map.entry("exceptionallyAsync", 1),
+            Map.entry("exceptionallyComposeAsync", 1),
+            Map.entry("thenCombineAsync", 2),
+            Map.entry("thenAcceptBothAsync", 2),
+            Map.entry("runAfterBothAsync", 2),
+            Map.entry("applyToEitherAsync", 2),
+            Map.entry("acceptEitherAsync", 2),
+            Map.entry("runAfterEitherAsync", 2));
+
     private static final String S4_OWNER_PACKAGE = "/global/logging/";
 
     private static final String REQUEST_ID_HEADER = "X-Request-Id";
@@ -159,6 +185,9 @@ final class LogSafetyChecker {
         /** 요청 ID의 주인인 global.logging 안에서는 S4를 적용하지 않는다 */
         private final boolean s4Allowed;
 
+        /** RequestIdExecutors.wrap(..) 인자 안을 스캔하는 중이면 0보다 크다(S5 예외) */
+        private int wrapDepth;
+
         Scanner(
                 String relativePath,
                 CompilationUnitTree unit,
@@ -226,7 +255,43 @@ final class LogSafetyChecker {
             if (!s4Allowed) {
                 checkMdcUse(node);
             }
+            if (isRequestIdWrap(node)) {
+                // 래퍼 인자 안에서 만든 실행기와 스레드는 S5 예외다
+                wrapDepth++;
+                try {
+                    return super.visitMethodInvocation(node, unused);
+                } finally {
+                    wrapDepth--;
+                }
+            }
+            checkThreadHandoff(node);
             return super.visitMethodInvocation(node, unused);
+        }
+
+        private boolean isRequestIdWrap(MethodInvocationTree node) {
+            return node.getMethodSelect() instanceof MemberSelectTree select
+                    && select.getIdentifier().contentEquals("wrap")
+                    && select.getExpression().toString().endsWith("RequestIdExecutors");
+        }
+
+        /**
+         * S5: 다른 스레드로 넘어가면 MDC가 없어 요청 ID가 끊긴다. 일을 넘기는 코드는 RequestIdExecutors.wrap(..)의 인자 안에서만 만든다.
+         * 실행기를 받지 않는 CompletableFuture.*Async도 공용 풀로 넘기므로 막는다.
+         */
+        private void checkThreadHandoff(MethodInvocationTree node) {
+            if (wrapDepth > 0 || !(node.getMethodSelect() instanceof MemberSelectTree select)) {
+                return;
+            }
+            String method = select.getIdentifier().toString();
+            String owner = select.getExpression().toString();
+            if (owner.equals("Executors")) {
+                report(node, "S5", "Executors." + method + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
+            } else if (owner.equals("Thread") && THREAD_HANDOFF_METHODS.contains(method)) {
+                report(node, "S5", "Thread." + method + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
+            } else if (ASYNC_WITHOUT_EXECUTOR_ARITY.getOrDefault(method, -1)
+                    == node.getArguments().size()) {
+                report(node, "S5", method + "()에 실행기를 넘긴다. 실행기가 없으면 공용 풀로 넘어가 요청 ID가 끊긴다");
+            }
         }
 
         /** S4: 요청 ID의 MDC 키는 global.logging이 주인이다. 다른 곳이 MDC를 통째로 지우거나 갈아 끼우면 요청 ID가 사라진다. */
@@ -271,6 +336,10 @@ final class LogSafetyChecker {
         /** S3: Spring Security 디버그는 요청 헤더와 필터 체인 정보를 찍는다. */
         @Override
         public Void visitAnnotation(AnnotationTree node, Void unused) {
+            String annotation = node.getAnnotationType().toString();
+            if (wrapDepth == 0 && (annotation.endsWith("Async") || annotation.endsWith("EnableAsync"))) {
+                report(node, "S5", "@" + annotation + "을 쓰지 않는다. 실행기는 RequestIdExecutors.wrap(..) 안에서 만든다");
+            }
             if (node.getAnnotationType().toString().endsWith("EnableWebSecurity")) {
                 for (ExpressionTree argument : node.getArguments()) {
                     if (argument instanceof AssignmentTree assignment
@@ -287,6 +356,13 @@ final class LogSafetyChecker {
         public Void visitNewClass(NewClassTree node, Void unused) {
             if (isExceptionType(node.getIdentifier().toString())) {
                 node.getArguments().forEach(argument -> checkArgument(argument));
+            }
+            if (wrapDepth == 0 && THREAD_HANDOFF_TYPES.contains(simpleTypeName(node.getIdentifier()))) {
+                report(
+                        node,
+                        "S5",
+                        "new " + simpleTypeName(node.getIdentifier())
+                                + "(..)을 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
             }
             return super.visitNewClass(node, unused);
         }

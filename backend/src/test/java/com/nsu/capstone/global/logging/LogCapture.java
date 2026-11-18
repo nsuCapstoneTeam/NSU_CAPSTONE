@@ -17,7 +17,7 @@ import org.springframework.core.env.Environment;
  * 로그 이벤트를 배포 설정의 Boot 인코더로 인코딩한 바이트(한 줄 JSON)로 모은다.
  * 개인정보 테스트는 이벤트 필드가 아니라 이 출력을 검사한다. 메시지 없는 출력기는 인코딩할 때만 메시지를 빼기 때문이다.
  */
-final class LogCapture implements AutoCloseable {
+public final class LogCapture implements AutoCloseable {
 
     private static final Pattern LOGGER_NAME = Pattern.compile("\"logger_name\":\"([^\"]*)\"");
 
@@ -53,11 +53,11 @@ final class LogCapture implements AutoCloseable {
         root.addAppender(appender);
     }
 
-    static LogCapture start(Environment environment) {
+    public static LogCapture start(Environment environment) {
         return new LogCapture(environment);
     }
 
-    List<String> lines() {
+    public List<String> lines() {
         return lines;
     }
 

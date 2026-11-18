@@ -269,6 +269,86 @@ class LogSafetyCheckerTest {
     }
 
     @Test
+    void 다른_스레드로_일을_넘기는_코드는_S5_위반이다() {
+        assertThat(check("var pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.SECONDS, queue);"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("var pool = new ScheduledThreadPoolExecutor(1);"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("var pool = new ForkJoinPool(2);")).extracting("rule").containsExactly("S5");
+        assertThat(check("var pool = Executors.newFixedThreadPool(2);"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("new Thread(task).start();")).extracting("rule").containsExactly("S5");
+        assertThat(check("var builder = Thread.ofPlatform();"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("var builder = Thread.ofVirtual();"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("Thread.startVirtualThread(task);")).extracting("rule").containsExactly("S5");
+        assertThat(check("CompletableFuture.supplyAsync(() -> 1);"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("future.thenApplyAsync(value -> value);"))
+                .extracting("rule")
+                .containsExactly("S5");
+    }
+
+    @Test
+    void Async_어노테이션도_S5_위반이다() {
+        String source = """
+                package com.nsu.capstone.identity.application;
+
+                @EnableAsync
+                class Config {
+                    @Async
+                    void run() {}
+                }
+                """;
+
+        assertThat(LogSafetyChecker.check(PATH, source)).extracting("rule").containsExactly("S5", "S5");
+    }
+
+    @Test
+    void 실행기를_받는_CompletableFuture는_S5에서_통과한다() {
+        assertThat(check("CompletableFuture.supplyAsync(() -> 1, executor);")).isEmpty();
+        assertThat(check("future.thenApplyAsync(value -> value, executor);")).isEmpty();
+        assertThat(check("future.thenCombineAsync(other, (a, b) -> a, executor);"))
+                .isEmpty();
+    }
+
+    @Test
+    void 래퍼_인자_안에서_만든_실행기와_스레드는_S5에서_통과한다() {
+        assertThat(check("var pool = RequestIdExecutors.wrap(Executors.newVirtualThreadPerTaskExecutor());"))
+                .isEmpty();
+        // #219 SignupSendPreflight 모양: 래퍼 안의 ThreadPoolExecutor 인자에서 Thread.ofVirtual()을 쓴다
+        assertThat(check("""
+                        var pool = RequestIdExecutors.wrap(new ThreadPoolExecutor(
+                                0, 32, 30, TimeUnit.SECONDS, new SynchronousQueue<>(),
+                                Thread.ofVirtual().name("signup-send-redis-", 0).factory(),
+                                new ThreadPoolExecutor.AbortPolicy()));
+                        """)).isEmpty();
+        // #219 VerificationAlertService 모양: 스레드 팩토리 람다에서 Thread.ofPlatform()을 쓴다
+        assertThat(check("""
+                        var pool = RequestIdExecutors.wrap(new ThreadPoolExecutor(
+                                1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(32),
+                                task -> Thread.ofPlatform().daemon().name("verification-alert").unstarted(task),
+                                new ThreadPoolExecutor.AbortPolicy()));
+                        """)).isEmpty();
+    }
+
+    @Test
+    void 래퍼_밖에서_만든_실행기를_래퍼에_나중에_넘기는_것은_S5_위반이다() {
+        // 인자 안이 아니라 밖에서 만든 실행기는 래퍼를 거쳤는지 구문만으로 알 수 없다. 래퍼 인자 안에서 만들게 한다
+        assertThat(check("""
+                        var raw = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.SECONDS, queue);
+                        var pool = RequestIdExecutors.wrap(raw);
+                        """)).extracting("rule").containsExactly("S5");
+    }
+
+    @Test
     void 로그_호출이_아닌_곳의_민감한_이름은_대상이_아니다() {
         assertThat(check("String masked = email.substring(0, 2);")).isEmpty();
         assertThat(check("service.sendTo(email);")).isEmpty();
