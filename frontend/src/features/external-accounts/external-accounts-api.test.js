@@ -1,7 +1,9 @@
 // 외부 계정 API 창구 테스트 (실행: node --test src/features/external-accounts/external-accounts-api.test.js)
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ExternalAccountsApiError, createExternalAccountsApi } from './external-accounts-api.js';
+import { readFileSync } from 'node:fs';
+import { ERROR_MESSAGES as AUTH_ERROR_MESSAGES } from '../auth/api/auth-api.js';
+import { ERROR_MESSAGES, ExternalAccountsApiError, createExternalAccountsApi } from './external-accounts-api.js';
 
 const ID = '0192f3a4-0000-7000-8000-000000000001';
 const ARTIST = '0192f3a4-0000-7000-8000-0000000000aa';
@@ -157,5 +159,39 @@ describe('오류', () => {
   it('모르는 code도 안내 문구가 비지 않는다', async () => {
     const { api } = apiWith({ status: 400, body: { code: 'SOMETHING_NEW' } });
     await assert.rejects(api.list(ARTIST), (error) => error.message.length > 0);
+  });
+
+  it('아티스트 잠금을 못 잡은 503 EXTERNAL_ACCOUNT_BUSY는 잠시 후 다시 시도하라고 안내한다', async () => {
+    const { api } = apiWith({ status: 503, body: { code: 'EXTERNAL_ACCOUNT_BUSY' } });
+    await assert.rejects(api.list(ARTIST), (error) => {
+      assert.equal(error.code, 'EXTERNAL_ACCOUNT_BUSY');
+      assert.equal(error.message, '다른 변경을 처리하고 있어요. 잠시 후 다시 시도해 주세요.');
+      return true;
+    });
+  });
+});
+
+// 계약의 오류 코드 표를 읽어, 새 코드를 계약에 더하고 안내 문구를 빠뜨리는 일을 막는다
+describe('계약 §10의 오류 코드 안내 문구', () => {
+  const contract = readFileSync(new URL('../../../../docs/api/06_external_accounts.md', import.meta.url), 'utf8');
+  const section = contract.slice(contract.indexOf('## 10. 오류 코드'), contract.indexOf('## 11. 저장'));
+  const codes = [...new Set([...section.matchAll(/`([A-Z][A-Z0-9_]+)`/g)].map((match) => match[1]))];
+
+  it('계약에서 오류 코드를 읽어 온다', () => {
+    assert.ok(codes.length >= 20, `읽은 코드 ${codes.length}개`);
+    assert.ok(codes.includes('EXTERNAL_ACCOUNT_BUSY'));
+  });
+
+  it('표의 모든 code에 안내 문구가 있다', () => {
+    const missing = codes.filter((code) => !ERROR_MESSAGES[code]);
+    assert.deepEqual(missing, []);
+  });
+
+  it('로그인 쪽에도 있는 공통 코드는 로그인 쪽 문구를 그대로 쓴다', () => {
+    const shared = codes.filter((code) => AUTH_ERROR_MESSAGES[code]);
+    assert.ok(shared.includes('AUTHENTICATION_REQUIRED'));
+    for (const code of shared) {
+      assert.equal(ERROR_MESSAGES[code], AUTH_ERROR_MESSAGES[code], code);
+    }
   });
 });

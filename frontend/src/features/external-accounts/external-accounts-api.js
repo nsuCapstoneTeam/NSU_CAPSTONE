@@ -26,6 +26,10 @@ export const ERROR_MESSAGES = {
   EXTERNAL_PROVIDER_UNAVAILABLE: '플랫폼이 지금 응답하지 않아요. 잠시 후 다시 시도해 주세요.',
   EXTERNAL_PROVIDER_DISABLED: '이 플랫폼 연결은 아직 준비 중이에요.',
   RATE_LIMIT_UNAVAILABLE: '지금은 요청을 처리할 수 없어요. 잠시 후 다시 시도해 주세요.',
+  EXTERNAL_ACCOUNT_BUSY: '다른 변경을 처리하고 있어요. 잠시 후 다시 시도해 주세요.',
+  INVALID_EXTERNAL_ACCOUNT_ID: '연결 정보가 맞지 않아요. 목록을 새로 불러와 다시 시도해 주세요.',
+  INVALID_ARTIST_ID: '아티스트 정보가 맞지 않아요. 화면을 새로 열어 다시 시도해 주세요.',
+  ARTIST_NOT_FOUND: '찾을 수 없는 아티스트예요.',
   DEMO_WRITE_NOT_ALLOWED: '시연 환경에서는 이 계정으로 연결을 바꿀 수 없어요.',
 };
 
