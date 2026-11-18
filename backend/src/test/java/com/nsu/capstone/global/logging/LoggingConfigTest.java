@@ -51,6 +51,19 @@ class LoggingConfigTest {
                 .isFalse();
     }
 
+    /**
+     * DevTools가 켜지는 실행(bootRun, IDE)은 Boot /error 응답 본문에 예외 메시지와 스택 트레이스를 싣는 기본값을 가장 낮은 우선순위로 넣는다.
+     * 메시지에는 요청 값이 섞일 수 있다. 명시한 값이 그 기본값을 이긴다(backend-verify 지적). TestApp에는 DevTools가 없어 명시하지 않으면 값이 없다.
+     */
+    @Test
+    void DevTools가_켜는_에러_응답의_예외_메시지와_스택_트레이스를_끈다() {
+        for (String property : List.of("include-message", "include-stacktrace", "include-binding-errors")) {
+            assertThat(environment.getProperty("spring.web.error." + property))
+                    .as("spring.web.error.%s", property)
+                    .isEqualTo("never");
+        }
+    }
+
     @Test
     void multipart는_끈다() {
         assertThat(environment.getProperty("spring.servlet.multipart.enabled", Boolean.class))
