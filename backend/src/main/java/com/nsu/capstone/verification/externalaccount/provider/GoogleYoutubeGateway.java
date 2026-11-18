@@ -60,7 +60,6 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     private static final int MASS_MISSING_MIN = 5;
 
     private static final Set<String> CODE_REJECTED_ERRORS = Set.of("invalid_grant", "invalid_request");
-
     private final ExternalAccountProperties.Youtube youtube;
     private final YoutubeQuota quota;
     private final RestClient restClient;
@@ -99,19 +98,23 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
             channelId = ownChannelId(accessToken);
         } catch (RuntimeException failure) {
             // 토큰을 받은 뒤에는 어떤 결과든 응답하기 전에 폐기를 시도한다(ADR 14번)
-            if (!revokeWithRetry(accessToken)) {
+            String revokeFailure = revokeWithRetry(accessToken);
+            if (revokeFailure != null) {
                 // 이미 실패한 경로라 원래 오류를 그대로 준다. Google 쪽 동의는 남지만 우리는 아무것도 저장하지 않았다.
                 log.error(
-                        "토큰 폐기가 두 번 실패했다: 아티스트 {}, 원래 오류 {}",
+                        "토큰 폐기가 두 번 실패했다: 아티스트 {}, 원래 오류 {}, 폐기 실패 {}",
                         callerId,
                         failure instanceof ExternalAccountException e
                                 ? e.getFailure()
-                                : failure.getClass().getSimpleName());
+                                : failure.getClass().getSimpleName(),
+                        revokeFailure);
             }
             throw failure;
         }
         // 폐기가 확인되기 전에는 연결을 저장하지 않는다(ADR 14번)
-        if (!revokeWithRetry(accessToken)) {
+        String revokeFailure = revokeWithRetry(accessToken);
+        if (revokeFailure != null) {
+            log.error("토큰 폐기가 두 번 실패해 연결하지 않는다: 아티스트 {}, 폐기 실패 {}", callerId, revokeFailure);
             throw unavailable("Google 토큰 폐기를 확인하지 못했다");
         }
         verifyPublic(channelId);
@@ -339,17 +342,19 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
         return response.nextPageToken() != null || (total != null && total > received);
     }
 
-    /** 폐기를 보내고, 실패하면 한 번 더 보낸다. 폐기를 확인했는지 돌려준다. */
-    private boolean revokeWithRetry(String accessToken) {
+    /** 폐기를 보내고, 실패하면 한 번 더 보낸다. 폐기를 확인했으면 {@code null}, 못 했으면 마지막 실패의 원인(상태나 예외 종류)을 돌려준다. */
+    private String revokeWithRetry(String accessToken) {
+        String lastFailure = null;
         for (int attempt = 0; attempt < REVOKE_ATTEMPTS; attempt++) {
             try {
                 revoke(accessToken);
-                return true;
-            } catch (RestClientException ignored) {
+                return null;
+            } catch (RestClientException e) {
                 // 다음 시도로 넘어간다. 토큰 값은 로그에 남기지 않는다.
+                lastFailure = FailureCause.of(e);
             }
         }
-        return false;
+        return lastFailure;
     }
 
     private OAuth2AccessTokenResponse exchange(String code, String codeVerifier) {
@@ -377,6 +382,7 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
             return tokenClient.getTokenResponse(new OAuth2AuthorizationCodeGrantRequest(
                     registration, new OAuth2AuthorizationExchange(authorizationRequest, authorizationResponse)));
         } catch (OAuth2AuthorizationException e) {
+            log.warn("YouTube 코드 교환이 실패했다: OAuth 오류 코드 {}", FailureCause.oauthErrorCode(e));
             // Google이 코드를 거절했다(만료, 이미 씀, 검증값 불일치). 그 밖의 오류는 플랫폼 문제다.
             if (CODE_REJECTED_ERRORS.contains(e.getError().getErrorCode())) {
                 throw new ExternalAccountException(
@@ -400,6 +406,7 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
                     .retrieve()
                     .body(ChannelList.class);
         } catch (RestClientException e) {
+            log.warn("YouTube 본인 채널 조회가 실패했다: {}", FailureCause.of(e));
             throw unavailable("YouTube 채널 조회에 실패했다");
         }
         if (channels == null || channels.items() == null || channels.items().isEmpty()) {
@@ -430,6 +437,7 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
                     .retrieve()
                     .body(ChannelList.class);
         } catch (RestClientException e) {
+            log.warn("YouTube 공개 채널 확인이 실패했다: {}", FailureCause.of(e));
             throw unavailable("YouTube 공개 채널 확인에 실패했다");
         }
         boolean isPublic = channels != null

@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.converter.FormHttpMessageConverter;
@@ -30,6 +31,7 @@ import org.springframework.web.client.RestClientException;
 /**
  * Spotify Web API 호출(06 §5.3). 앱 자격 증명(Client Credentials) 토큰만 쓰고, 사용자 토큰은 받지 않는다.
  */
+@Slf4j
 @Component
 public class WebSpotifyGateway implements SpotifyGateway {
 
@@ -77,6 +79,7 @@ public class WebSpotifyGateway implements SpotifyGateway {
                     .retrieve()
                     .body(ArtistResponse.class);
             if (artist == null) {
+                log.warn("Spotify 아티스트 조회 응답이 비어 있다");
                 throw unavailable("Spotify 응답이 비어 있다");
             }
             String thumbnailUrl = artist.images() == null || artist.images().isEmpty()
@@ -87,8 +90,10 @@ public class WebSpotifyGateway implements SpotifyGateway {
             if (isNotFound(e.getStatusCode())) {
                 return Optional.empty();
             }
+            log.warn("Spotify 아티스트 조회가 실패했다: {}", FailureCause.of(e));
             throw unavailable("Spotify 아티스트 조회에 실패했다: " + e.getStatusCode().value());
         } catch (RestClientException e) {
+            log.warn("Spotify 아티스트 조회가 실패했다: {}", FailureCause.of(e));
             throw unavailable("Spotify 아티스트 조회에 실패했다");
         }
     }
@@ -115,6 +120,7 @@ public class WebSpotifyGateway implements SpotifyGateway {
             response = tokenClient.getTokenResponse(new OAuth2ClientCredentialsGrantRequest(registration()));
         } catch (OAuth2AuthorizationException e) {
             tokenFailedUntil = now.plus(TOKEN_FAILURE_MEMORY);
+            log.warn("Spotify 토큰 발급이 실패했다: OAuth 오류 코드 {}", FailureCause.oauthErrorCode(e));
             throw unavailable("Spotify 토큰 발급에 실패했다: " + e.getError().getErrorCode());
         }
         Duration lifetime = Duration.between(

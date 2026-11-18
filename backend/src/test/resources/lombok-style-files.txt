@@ -142,6 +142,7 @@ src/main/java/com/nsu/capstone/verification/externalaccount/presentation/dto/Ext
 src/main/java/com/nsu/capstone/verification/externalaccount/presentation/dto/ExternalAccountResponse.java
 src/main/java/com/nsu/capstone/verification/externalaccount/presentation/dto/StartAuthorizationRequest.java
 src/main/java/com/nsu/capstone/verification/externalaccount/presentation/dto/WorkCandidatesResponse.java
+src/main/java/com/nsu/capstone/verification/externalaccount/provider/FailureCause.java
 src/main/java/com/nsu/capstone/verification/externalaccount/provider/FetchedAccount.java
 src/main/java/com/nsu/capstone/verification/externalaccount/provider/GoogleYoutubeGateway.java
 src/main/java/com/nsu/capstone/verification/externalaccount/provider/ProviderProfile.java
