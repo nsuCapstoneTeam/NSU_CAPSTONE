@@ -234,6 +234,11 @@ final class LogDeviceCheck {
                 problems.add("출력에 필드가 없다: " + field);
             }
         }
+        // 필드가 있어도 MDC 값이 아니라 고정값이면 모든 줄이 같은 요청 ID를 달고 나간다(logging.structured.json.add.requestId 등)
+        JsonNode requestId = json.get("requestId");
+        if (requestId != null && !(requestId.isString() && PROBE_REQUEST_ID.equals(requestId.asString()))) {
+            problems.add("requestId 값이 시험 이벤트의 값과 다르다");
+        }
         JsonNode stackTrace = json.get("stack_trace");
         if (stackTrace != null) {
             List<String> missing = PROBE_EXCEPTION_CLASSES.stream()

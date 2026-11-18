@@ -254,6 +254,14 @@ class LogDeviceSelfCheckTest {
                         List.of("-Dlogging.structured.json.exclude=requestId"),
                         Map.of(),
                         "출력에 필드가 없다: requestId"),
+                // 필드는 있지만 MDC 값이 아니라 고정값이면 모든 줄이 같은 요청 ID를 달고 나간다
+                Arguments.of(
+                        "requestId를 MDC가 아닌 고정값으로 출력",
+                        List.of(
+                                "-Dlogging.structured.json.context.include=false",
+                                "-Dlogging.structured.json.add.requestId=fixed-value"),
+                        Map.of(),
+                        "requestId 값이 시험 이벤트의 값과 다르다"),
                 Arguments.of(
                         "콘솔 임계값 ERROR",
                         List.of("-Dlogging.threshold.console=ERROR"),
