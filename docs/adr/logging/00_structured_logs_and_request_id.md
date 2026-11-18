@@ -340,6 +340,7 @@ architect가 구조가 다른 후보 두 개를 만들고 채점 기준(AC 증�
 - 로컬에서 평문을 보려면 `.env`에 `LOG_LOCAL_MODE=true`와 `LOG_FORMAT=` 두 줄이 필요하다. 로컬 모드를 켜면 보호 장치가 꺼진다는 WARN이 시작할 때 한 줄 나온다.
 - Tomcat이 클라이언트 오류로 분류하는 예외(잘못된 쿼리 인코딩 등)는 필터가 남기지 않는다. 배포에서는 Tomcat의 DEBUG 줄도 하한에 막혀, 완료 줄(400)만 남는다.
 - `GlobalExceptionHandler`와 #219의 두 실행기(강석윤 님 파일)를 이 PR에서 고친다. PR 설명에 고친 곳을 적어 알린다.
+- 같은 김에 `SignupSendPreflight`의 WARN `가입 인증 미발송 예약 보상 실패`를 "보상 결과를 확인하지 못했다(Redis가 재개되면 적용될 수 있다)"는 뜻으로 바꾼다. 이 줄은 클라이언트 쪽 timeout만 보고 남아서, Redis가 재개된 뒤 보상이 실제로 적용돼도 "환불 안 됨"으로 읽힌다(design-nsu-123의 #219 머지 뒤 확인, 2026-11-18). 문구만 바꾸고 동작은 그대로다.
 - 새 종류의 개인정보(예: NSU-105 PortOne의 이름·생년월일·CI·DI)를 다루는 이슈는 S2 이름 목록과 가짜 값 테스트를 늘린다.
 - 강석윤 님 파일 `RedisOAuth2AuthorizationRequestRepository`를 고친다. PR에서 알린다. `SolapiSmsSender`는 강석윤 님 답에 따라 NSU-123이나 이 이슈에서 고친다.
 - Linear에 남길 일: NSU-146 문구(`traceId` → `requestId`), 용어집 "요청 ID", 배포 이슈의 로그 요구사항(Decision 9), NSU-133 처리방침의 접속 기록, NSU-63 인터셉터와 017 확인, NSU-135 job 합치기.
