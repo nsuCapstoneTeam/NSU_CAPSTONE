@@ -66,7 +66,11 @@ final class LogSafetyChecker {
             "birthdate",
             "ssn",
             "nonce",
-            "verifier");
+            "verifier",
+            // 발송 대상(이메일·전화번호 원문), 가입 세션 ID(그 값만으로 가입을 이어 갈 수 있다), 쿠키. recipient는 HMAC 다이제스트라 뺀다.
+            "destination",
+            "session",
+            "cookie");
 
     private static final Set<String> LOG_METHODS = Set.of("trace", "debug", "info", "warn", "error");
 
@@ -82,8 +86,27 @@ final class LogSafetyChecker {
             Set.of("e", "ex", "exc", "exception", "cause", "throwable", "err", "error", "t");
 
     /** S5: 다른 스레드로 일을 넘기는 객체 생성 */
-    private static final Set<String> THREAD_HANDOFF_TYPES =
-            Set.of("ThreadPoolExecutor", "ScheduledThreadPoolExecutor", "ForkJoinPool", "Thread");
+    private static final Set<String> THREAD_HANDOFF_TYPES = Set.of(
+            "ThreadPoolExecutor",
+            "ScheduledThreadPoolExecutor",
+            "ForkJoinPool",
+            "Thread",
+            "ThreadPoolTaskExecutor",
+            "ThreadPoolTaskScheduler",
+            "SimpleAsyncTaskExecutor",
+            "SimpleAsyncTaskScheduler",
+            "Timer");
+
+    /** S5: Executors의 팩토리 메서드. 정적 import로 소유자 없이 부르는 경우를 이름으로 잡는다. */
+    private static final Set<String> EXECUTOR_FACTORY_METHODS = Set.of(
+            "newFixedThreadPool",
+            "newCachedThreadPool",
+            "newSingleThreadExecutor",
+            "newScheduledThreadPool",
+            "newSingleThreadScheduledExecutor",
+            "newWorkStealingPool",
+            "newVirtualThreadPerTaskExecutor",
+            "newThreadPerTaskExecutor");
 
     /** S5: Thread의 정적 메서드 */
     private static final Set<String> THREAD_HANDOFF_METHODS = Set.of("ofPlatform", "ofVirtual", "startVirtualThread");
@@ -244,7 +267,18 @@ final class LogSafetyChecker {
         @Override
         public Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
             if (isLogCall(node)) {
-                node.getArguments().forEach(argument -> checkArgument(argument));
+                List<? extends ExpressionTree> arguments = node.getArguments();
+                arguments.forEach(argument -> checkArgument(argument));
+                // S6: SLF4J는 마지막 인자만 Throwable로 다룬다. 그 앞 자리의 예외는 toString()(메시지 포함)이 문장에 들어간다
+                for (int i = 0; i < arguments.size() - 1; i++) {
+                    if (arguments.get(i) instanceof IdentifierTree identifier
+                            && isExceptionVariable(identifier.getName().toString())) {
+                        report(
+                                identifier,
+                                "S6",
+                                "예외 '" + identifier.getName() + "'는 로그 호출의 마지막 인자로 넘긴다. 앞 자리에 두면 메시지가 문장에 들어간다");
+                    }
+                }
             }
             if (!s1Allowed
                     && node.getMethodSelect() instanceof MemberSelectTree select
@@ -279,12 +313,26 @@ final class LogSafetyChecker {
          * 실행기를 받지 않는 CompletableFuture.*Async도 공용 풀로 넘기므로 막는다.
          */
         private void checkThreadHandoff(MethodInvocationTree node) {
-            if (wrapDepth > 0 || !(node.getMethodSelect() instanceof MemberSelectTree select)) {
+            if (wrapDepth > 0) {
+                return;
+            }
+            if (node.getMethodSelect() instanceof IdentifierTree bare) {
+                // 정적 import로 소유자 없이 부른 Executors 팩토리
+                if (EXECUTOR_FACTORY_METHODS.contains(bare.getName().toString())) {
+                    report(node, "S5", bare.getName() + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
+                }
+                return;
+            }
+            if (!(node.getMethodSelect() instanceof MemberSelectTree select)) {
                 return;
             }
             String method = select.getIdentifier().toString();
-            String owner = select.getExpression().toString();
-            if (owner.equals("Executors")) {
+            String owner = lastSegment(select.getExpression().toString());
+            if (method.equals("parallelStream")) {
+                report(node, "S5", "parallelStream()은 공용 풀로 넘겨 요청 ID가 끊긴다. 래퍼로 만든 실행기를 쓴다");
+            } else if (owner.equals("ForkJoinPool") && method.equals("commonPool")) {
+                report(node, "S5", "ForkJoinPool.commonPool()을 쓰지 않는다. 공용 풀로 넘기면 요청 ID가 끊긴다");
+            } else if (owner.equals("Executors")) {
                 report(node, "S5", "Executors." + method + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
             } else if (owner.equals("Thread") && THREAD_HANDOFF_METHODS.contains(method)) {
                 report(node, "S5", "Thread." + method + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
@@ -292,6 +340,11 @@ final class LogSafetyChecker {
                     == node.getArguments().size()) {
                 report(node, "S5", method + "()에 실행기를 넘긴다. 실행기가 없으면 공용 풀로 넘어가 요청 ID가 끊긴다");
             }
+        }
+
+        /** java.util.concurrent.Executors처럼 정규화된 이름이면 마지막 조각을, 호출 체인이면 그대로 돌려준다. */
+        private static String lastSegment(String expression) {
+            return expression.matches("[\\w.]+") ? expression.substring(expression.lastIndexOf('.') + 1) : expression;
         }
 
         /** S4: 요청 ID의 MDC 키는 global.logging이 주인이다. 다른 곳이 MDC를 통째로 지우거나 갈아 끼우면 요청 ID가 사라진다. */
@@ -323,9 +376,9 @@ final class LogSafetyChecker {
         /** S1: System.out·System.err는 Logback을 거치지 않아 한 줄 JSON이 아니고 요청 ID도 붙지 않는다. */
         @Override
         public Void visitMemberSelect(MemberSelectTree node, Void unused) {
+            // 정규화된 이름(java.lang.System.out)과 정적 import(import static java.lang.System.out)의 한정자도 같은 MemberSelect다
             if (!s1Allowed
-                    && node.getExpression() instanceof IdentifierTree owner
-                    && owner.getName().contentEquals("System")
+                    && lastSegment(node.getExpression().toString()).equals("System")
                     && (node.getIdentifier().contentEquals("out")
                             || node.getIdentifier().contentEquals("err"))) {
                 report(node, "S1", "System." + node.getIdentifier() + "을 쓰지 않는다. Logback을 거치지 않아 JSON이 아니다");
@@ -428,6 +481,7 @@ final class LogSafetyChecker {
                 @Override
                 public Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
                     checkExceptionUse(node);
+                    checkExceptionStringified(node);
                     ExpressionTree select = node.getMethodSelect();
                     if (select instanceof MemberSelectTree member) {
                         checkName(member.getIdentifier().toString(), node);
@@ -454,6 +508,30 @@ final class LogSafetyChecker {
                 report(node, "S6", "응답 본문을 로그·예외 인자에 넣지 않는다: " + method + "()");
             } else if (MESSAGE_METHODS.contains(method) && isExceptionExpression(select.getExpression())) {
                 report(node, "S6", "예외의 " + method + "()를 로그·예외 인자에 넣지 않는다. 예외를 마지막 인자로 통째로 넘긴다");
+            }
+        }
+
+        /** S6: 예외를 String.valueOf·String.format·formatted에 넘기면 toString()(메시지 포함)이 문자열로 들어간다. */
+        private void checkExceptionStringified(MethodInvocationTree node) {
+            if (!(node.getMethodSelect() instanceof MemberSelectTree select)) {
+                return;
+            }
+            String method = select.getIdentifier().toString();
+            String owner = select.getExpression().toString();
+            boolean stringifier = method.equals("formatted")
+                    || ((method.equals("valueOf") || method.equals("format"))
+                            && (owner.equals("String") || owner.endsWith(".String")));
+            if (!stringifier) {
+                return;
+            }
+            for (ExpressionTree argument : node.getArguments()) {
+                if (argument instanceof IdentifierTree identifier
+                        && isExceptionVariable(identifier.getName().toString())) {
+                    report(
+                            node,
+                            "S6",
+                            "예외 '" + identifier.getName() + "'를 " + method + "()에 넘기지 않는다. 예외를 마지막 인자로 통째로 넘긴다");
+                }
             }
         }
 

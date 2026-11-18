@@ -49,6 +49,27 @@ class LogSafetyCheckerTest {
                 .containsExactly("S2");
     }
 
+    /**
+     * ADR Decision 7의 금지 값 중 이름에 email·phone이 없는 것: 발송 대상(이메일 또는 전화번호 원문), 가입 세션 ID(그 값만으로 가입을 이어 갈 수
+     * 있다), 쿠키(backend-verify 지적). 발송 실패 WARN에 `destination`을 넘겨도 통과하던 틈이다.
+     */
+    @Test
+    void 발송_대상과_세션_ID와_쿠키_이름도_S2_위반이다() {
+        assertThat(check("log.warn(\"발송 실패 {}\", destination);"))
+                .extracting("rule")
+                .containsExactly("S2");
+        assertThat(check("log.warn(\"세션 {}\", signupSessionId);"))
+                .extracting("rule")
+                .containsExactly("S2");
+        assertThat(check("log.warn(\"쿠키 {}\", cookie);")).extracting("rule").containsExactly("S2");
+    }
+
+    /** recipient는 이 코드베이스에서 HMAC 다이제스트(rateLimitDestinationDigest)다. 원문이 아니므로 막지 않는다. */
+    @Test
+    void 다이제스트를_담는_recipient_이름은_통과한다() {
+        assertThat(check("log.warn(\"보상 대상 {}\", recipient);")).isEmpty();
+    }
+
     @Test
     void 예외_생성자_인자에_민감한_이름을_넘겨도_위반이다() {
         assertThat(check("throw new IllegalArgumentException(\"잘못된 값: \" + email);"))
@@ -123,6 +144,25 @@ class LogSafetyCheckerTest {
         assertThat(check("System.out.println(\"출력\");")).extracting("rule").containsExactly("S1");
         assertThat(check("System.err.println(\"오류\");")).extracting("rule").containsExactly("S1");
         assertThat(check("new RuntimeException().printStackTrace();"))
+                .extracting("rule")
+                .containsExactly("S1");
+    }
+
+    @Test
+    void 정규화된_이름과_정적_import로_System_out을_써도_S1_위반이다() {
+        assertThat(check("java.lang.System.out.println(\"출력\");"))
+                .extracting("rule")
+                .containsExactly("S1");
+        String staticImport = """
+                package com.nsu.capstone.identity.application;
+
+                import static java.lang.System.out;
+
+                class Sample {
+                    void run() { out.println("출력"); }
+                }
+                """;
+        assertThat(LogSafetyChecker.check(PATH, staticImport))
                 .extracting("rule")
                 .containsExactly("S1");
     }
@@ -238,6 +278,59 @@ class LogSafetyCheckerTest {
                         """)).extracting("rule").containsExactly("S6");
     }
 
+    /** SLF4J는 마지막 인자만 Throwable로 다룬다. 그 앞 자리에 예외를 넘기면 toString()(메시지 포함)이 문장에 들어간다(backend-verify 지적). */
+    @Test
+    void 예외를_마지막이_아닌_로그_인자로_넘기면_S6_위반이다() {
+        assertThat(checkClassBody("""
+                        void run(String channel) {
+                            try { work(); } catch (Exception e) { log.warn("실패 {} {}", e, channel); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        void run(String channel) {
+                            try { work(); } catch (RuntimeException failure) { log.error("실패 {} {}", failure, channel, failure); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+    }
+
+    @Test
+    void 예외를_문자열로_바꾸는_호출에_넘겨도_S6_위반이다() {
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (Exception e) { log.warn("실패 {}", String.valueOf(e)); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (Exception e) { log.warn(String.format("실패 %s", e)); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (Exception e) { log.warn("실패 %s".formatted(e)); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (Exception e) { throw new IllegalStateException(String.valueOf(e)); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+    }
+
+    @Test
+    void 예외를_원인으로_넘기는_예외_생성자와_문자열이_아닌_값의_valueOf는_통과한다() {
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (Exception e) { throw new IllegalStateException("처리 실패", e); }
+                        }
+                        """)).isEmpty();
+        assertThat(checkClassBody("""
+                        void run(int count) {
+                            try { work(); } catch (Exception e) { log.warn("실패 {}", String.valueOf(count), e); }
+                        }
+                        """)).isEmpty();
+    }
+
     @Test
     void 응답_본문을_로그에_넣으면_S6_위반이다() {
         assertThat(check("log.warn(\"응답 {}\", exception.getResponseBodyAsString());"))
@@ -294,6 +387,51 @@ class LogSafetyCheckerTest {
         assertThat(check("future.thenApplyAsync(value -> value);"))
                 .extracting("rule")
                 .containsExactly("S5");
+    }
+
+    /** 정규화된 이름과 정적 import로 부르면 소유자 문자열 비교를 피해 가던 틈이다(backend-verify 지적). */
+    @Test
+    void 정규화된_이름과_정적_import로_만든_실행기와_스레드도_S5_위반이다() {
+        assertThat(check("var pool = java.util.concurrent.Executors.newFixedThreadPool(2);"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("var pool = newFixedThreadPool(2);"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("var pool = newVirtualThreadPerTaskExecutor();"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("var builder = java.lang.Thread.ofVirtual();"))
+                .extracting("rule")
+                .containsExactly("S5");
+    }
+
+    @Test
+    void Spring_실행기와_Timer와_병렬_스트림과_공용_ForkJoinPool도_S5_위반이다() {
+        assertThat(check("var pool = new ThreadPoolTaskExecutor();"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("var pool = new SimpleAsyncTaskExecutor();"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("var scheduler = new ThreadPoolTaskScheduler();"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("var timer = new Timer();")).extracting("rule").containsExactly("S5");
+        assertThat(check("list.parallelStream().forEach(this::work);"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(check("ForkJoinPool.commonPool().execute(task);"))
+                .extracting("rule")
+                .containsExactly("S5");
+    }
+
+    @Test
+    void 래퍼_인자_안의_Spring_실행기와_정적_import_팩토리는_S5에서_통과한다() {
+        assertThat(check("var pool = RequestIdExecutors.wrap(new ThreadPoolTaskExecutor().getThreadPoolExecutor());"))
+                .isEmpty();
+        assertThat(check("var pool = RequestIdExecutors.wrap(newFixedThreadPool(2));"))
+                .isEmpty();
     }
 
     @Test
