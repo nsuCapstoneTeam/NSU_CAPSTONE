@@ -5,17 +5,28 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
  * 별도 JVM 프로세스로 {@link ForkedMain}을 실행한다. JVM 옵션, 시작 로그, 표준 출력·오류 전체를 검사하는 테스트용이다.
- * 부모 테스트 JVM의 LOG_* 환경 변수와 JAVA_TOOL_OPTIONS는 물려주지 않는다.
+ * 부모 테스트 JVM의 환경 변수는 실행에 필요한 것(허용 목록)만 물려준다.
  */
 final class ForkedJvm {
 
     private static final long TIMEOUT_SECONDS = 120;
+
+    /**
+     * 자식이 물려받는 환경 변수. LANG과 LC_*는 stdout 인코딩을 정한다. 개발자 셸의 SPRING_DATASOURCE_*, SPRING_FLYWAY_*, LOG_*,
+     * JAVA_TOOL_OPTIONS는 물려주지 않는다. 필요한 값은 테스트가 env로 직접 준다.
+     */
+    private static final Set<String> INHERITED_NAMES =
+            Set.of("PATH", "HOME", "JAVA_HOME", "TMPDIR", "LANG", "DOCKER_HOST");
+
+    private static final List<String> INHERITED_PREFIXES = List.of("LC_", "TESTCONTAINERS_");
 
     private ForkedJvm() {}
 
@@ -46,8 +57,8 @@ final class ForkedJvm {
         try {
             ProcessBuilder builder =
                     new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(outputFile.toFile());
-            builder.environment().keySet().removeIf(name -> name.startsWith("LOG") || name.equals("JAVA_TOOL_OPTIONS"));
-            builder.environment().putAll(env);
+            builder.environment().clear();
+            builder.environment().putAll(childEnvironment(System.getenv(), env));
             Process process = builder.start();
             if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
@@ -58,6 +69,22 @@ final class ForkedJvm {
         } finally {
             Files.deleteIfExists(outputFile);
         }
+    }
+
+    /**
+     * @param inherited 부모 프로세스의 환경 변수
+     * @param extra 테스트가 자식에게 더하는 환경 변수. 같은 이름이면 이 값이 이긴다.
+     * @return 자식 JVM의 환경 변수. 허용 목록에 있는 것만 부모에게서 물려받는다.
+     */
+    static Map<String, String> childEnvironment(Map<String, String> inherited, Map<String, String> extra) {
+        Map<String, String> child = new HashMap<>();
+        inherited.forEach((name, value) -> {
+            if (INHERITED_NAMES.contains(name) || INHERITED_PREFIXES.stream().anyMatch(name::startsWith)) {
+                child.put(name, value);
+            }
+        });
+        child.putAll(extra);
+        return child;
     }
 
     private static String tail(String output) {
