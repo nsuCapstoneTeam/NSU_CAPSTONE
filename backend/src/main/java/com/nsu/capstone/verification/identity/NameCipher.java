@@ -17,6 +17,7 @@ import javax.crypto.spec.SecretKeySpec;
  */
 final class NameCipher {
 
+    // shortcut: 키 버전·교체 없음, 운영 단계 ADR에서 실명 저장을 정할 때
     private static final byte VERSION = 0x01;
     private static final int KEY_BYTES = 32;
     private static final int NONCE_BYTES = 12;

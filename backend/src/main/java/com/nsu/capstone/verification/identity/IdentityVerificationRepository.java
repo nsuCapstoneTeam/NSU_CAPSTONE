@@ -43,6 +43,7 @@ class IdentityVerificationRepository {
     private final JdbcClient jdbc;
     private final UuidV7Generator uuidV7Generator;
 
+    // shortcut: 만료 시도 정리 없음, 운영 단계 ADR에서 보관 기간과 정리 작업을 정할 때
     void insertAttempt(IdentityVerificationAttempt attempt) {
         jdbc.sql("""
                         INSERT INTO identity_verification_attempts
