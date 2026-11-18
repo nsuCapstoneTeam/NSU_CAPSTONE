@@ -40,6 +40,11 @@ public class SecurityConfig {
     private static final RequestMatcher OAUTH_PUBLIC_ENDPOINTS =
             new OrRequestMatcher(OAUTH_AUTHORIZATION_ENDPOINT, OAUTH_CALLBACK_ENDPOINT, OAUTH_RESULT_ENDPOINT);
 
+    // 외부 계정 연결의 Google OAuth 콜백(API 06 §4). Google이 로그인 없이 브라우저를 돌려보내는 공개 경로이고,
+    // 컨트롤러는 값을 프론트 주소로 넘기기만 한다. 로그인용 콜백과 달리 이 경로는 저장·외부 호출을 하지 않는다
+    private static final RequestMatcher EXTERNAL_ACCOUNT_CALLBACK_ENDPOINT =
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/external-accounts/oauth/callback/youtube");
+
     // 역할 검사를 본문 파싱보다 먼저 한다. @PreAuthorize만 두면 깨진 JSON을 보낸 ARTIST가 403이 아니라 400을 받는다(05 §4 검사 순서)
     private static final RequestMatcher EVENT_PARTNER_PROFILE_ENDPOINT =
             PathPatternRequestMatcher.pathPattern("/api/v1/me/event-partner-profile");
@@ -79,7 +84,11 @@ public class SecurityConfig {
             throws Exception {
         http.authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
-                                PRE_LOGIN_SIGNUP_ENDPOINTS, LOGIN_ENDPOINT, OAUTH_PUBLIC_ENDPOINTS, API_DOCS_ENDPOINTS)
+                                PRE_LOGIN_SIGNUP_ENDPOINTS,
+                                LOGIN_ENDPOINT,
+                                OAUTH_PUBLIC_ENDPOINTS,
+                                EXTERNAL_ACCOUNT_CALLBACK_ENDPOINT,
+                                API_DOCS_ENDPOINTS)
                         .permitAll()
                         .requestMatchers(EVENT_PARTNER_PROFILE_ENDPOINT)
                         .hasRole("EVENT_PARTNER")
