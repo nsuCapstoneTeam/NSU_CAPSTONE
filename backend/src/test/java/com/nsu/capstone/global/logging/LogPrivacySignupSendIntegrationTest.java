@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
@@ -151,8 +152,7 @@ class LogPrivacySignupSendIntegrationTest {
                     .andReturn()
                     .getResponse()
                     .getStatus();
-            // 알림 실행기처럼 요청 밖 스레드가 남기는 줄까지 모으려고 잠깐 기다린다(없음 단언이라 폴링할 조건이 없다)
-            Thread.sleep(300);
+            awaitQuiet(capture);
 
             // 양성 대조 1: 발송기가 실제로 가짜 제공자까지 갔고, 코드와 수신자가 요청에 실려 갔다(연결 실패는 요청이 없다)
             if (failure.reachesServer()) {
@@ -197,6 +197,23 @@ class LogPrivacySignupSendIntegrationTest {
                             .filter(line -> code.matcher(line).find()))
                     .as("인증 코드가 든 줄")
                     .isEmpty();
+        }
+    }
+
+    /**
+     * 알림 실행기처럼 요청 밖 스레드가 늦게 남기는 줄까지 모은다. "없음" 단언이라 기다릴 조건이 없으므로, 새 줄이 300ms 동안 늘지 않을 때까지
+     * 기다린다(최대 3초). 고정 시간만 자는 것보다 느린 러너에서 줄을 놓칠 가능성이 작다.
+     */
+    private static void awaitQuiet(LogCapture capture) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        int seen = -1;
+        while (System.nanoTime() < deadline) {
+            int now = capture.lines().size();
+            if (now == seen) {
+                return;
+            }
+            seen = now;
+            Thread.sleep(300);
         }
     }
 

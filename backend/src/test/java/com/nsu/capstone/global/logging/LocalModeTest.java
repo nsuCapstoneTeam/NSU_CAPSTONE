@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * ADR logging/00 Decision 4: 보호 장치를 끄는 길은 로컬 모드 하나뿐이다. 로컬 모드에서는 레벨 하한과 JVM 디버그 옵션 검사를 건너뛰고
@@ -55,6 +56,24 @@ class LocalModeTest {
                         List.of("-Dnsu.logging.local-mode=true"),
                         Map.of(),
                         ""));
+    }
+
+    /**
+     * 켜는 값도 끄는 값도 아닌 값은 설정 오류다. 조용히 로컬 모드가 되면 보호 장치가 꺼지고, 조용히 무시되면 켠 줄 알았던 사람이 평문을 못 본다.
+     * 어느 쪽이든 시작이 멈춰야 한다(fail closed, backend-verify 지적).
+     */
+    @ParameterizedTest(name = "LOG_LOCAL_MODE={0}")
+    @ValueSource(strings = {"maybe", "enabled", "tru"})
+    void 켜는_값도_끄는_값도_아닌_로컬_모드_값이면_시작이_멈춘다(String value) throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of("LOG_LOCAL_MODE", value), "light");
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
+        assertThat(result.output()).doesNotContain(ForkedMain.STARTED).doesNotContain("로컬 전용 로그 모드");
+        // 다른 이유로 죽은 것이 아니라 값을 불리언으로 바꾸지 못해서 멈춘 것이다(Boot의 시작 실패 분석이 JSON 한 줄로 남는다)
+        assertThat(result.output())
+                .contains("APPLICATION FAILED TO START")
+                .contains("configuration property 'nsu.logging.local-mode'")
+                .contains("Failed to convert to type java.lang.Boolean");
     }
 
     @Test

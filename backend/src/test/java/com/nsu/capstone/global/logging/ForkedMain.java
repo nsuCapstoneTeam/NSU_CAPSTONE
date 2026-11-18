@@ -114,10 +114,13 @@ public final class ForkedMain {
         });
         server.start();
         try {
-            java.net.http.HttpClient.newHttpClient()
+            java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(5))
+                    .build()
                     .send(
                             java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://localhost:"
                                             + server.getAddress().getPort() + "/"))
+                                    .timeout(java.time.Duration.ofSeconds(10))
                                     .header("Authorization", "Bearer " + FAKE_AUTHORIZATION)
                                     .build(),
                             java.net.http.HttpResponse.BodyHandlers.discarding());

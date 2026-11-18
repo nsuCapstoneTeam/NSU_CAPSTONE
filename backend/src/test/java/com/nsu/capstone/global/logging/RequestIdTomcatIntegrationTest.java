@@ -8,6 +8,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,9 @@ class RequestIdTomcatIntegrationTest extends EventIntegrationTestBase {
     @Autowired
     Environment environment;
 
-    private final HttpClient http = HttpClient.newHttpClient();
+    // 서버가 응답하지 않을 때 CI job 제한(20분)까지 매달리지 않게 시간 제한을 둔다
+    private final HttpClient http =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     /**
      * 방화벽(StrictHttpFirewall)이 ;를 거절하면 Security의 기본 처리기(HttpStatusRequestRejectedHandler)가 sendError(400)으로 답하고,
@@ -79,6 +82,7 @@ class RequestIdTomcatIntegrationTest extends EventIntegrationTestBase {
 
     private HttpResponse<String> send(String path, String authorization) throws Exception {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .timeout(Duration.ofSeconds(10))
                 .GET();
         if (authorization != null) {
             request.header("Authorization", authorization);
