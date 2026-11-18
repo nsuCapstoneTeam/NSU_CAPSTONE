@@ -10,6 +10,7 @@ import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountExcep
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountProvider;
 import com.nsu.capstone.verification.externalaccount.domain.StaleWork;
+import com.nsu.capstone.verification.externalaccount.provider.PublicIdCheck;
 import com.nsu.capstone.verification.externalaccount.provider.YoutubeGateway;
 import com.nsu.capstone.verification.externalaccount.redis.CandidateCache;
 import com.nsu.capstone.verification.externalaccount.redis.DisplayCache;
@@ -17,6 +18,7 @@ import com.nsu.capstone.verification.externalaccount.redis.RefreshJobState;
 import com.nsu.capstone.verification.externalaccount.redis.YoutubeQuota;
 import com.nsu.capstone.verification.externalaccount.repository.ExternalAccountRepository;
 import com.nsu.capstone.verification.externalaccount.repository.LockedArtist;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -24,7 +26,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,9 +37,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * YouTube 채널·영상 ID 확인 작업(06 §11.1, ADR 14번). YouTube 정책이 ID도 30일 안에 갱신하거나 삭제하게 하므로,
  * 하루 한 번 확인한 지 7일 넘은 ID를 API 키로 50개씩 다시 조회한다.
  *
- * <p>"없음"은 YouTube가 온전한 2xx로 답했는데 그 ID가 응답에 없거나 {@code public}이 아닐 때만이다. 403, 4xx, 5xx, 시간 초과,
- * 온전하지 않은 2xx 응답(게이트웨이가 판정한다)은 확인 실패이고 행을 지우지 않는다. 30일을 넘긴 행은 확인하지 못했어도
- * 지운다. 행을 바꿀 때는 아티스트마다 트랜잭션을 따로 열고 그 아티스트의 잠금을 잡은 뒤, 같은 채널·영상일 때만 바꾼다.
+ * <p>"없음"은 YouTube가 온전한 2xx로 답했는데 그 ID가 응답에 없거나 {@code public}이 아닐 때만이다. 403, 4xx, 5xx, 시간 초과는
+ * 확인 실패이고 행을 지우지 않는다. 온전하지 않은 2xx 응답(게이트웨이가 판정한다)에서는 {@code public}으로 온 ID만 갱신하고
+ * 나머지는 지우지 않는다. 30일을 넘긴 행은 공개로 확인하지 못했으면 지운다. 행을 바꿀 때는 아티스트마다 트랜잭션을 따로 열고 그 아티스트의 잠금을 잡은 뒤, 같은 채널·영상일 때만 바꾼다.
  * 잠금을 3초 안에 잡지 못한 아티스트는 이번 실행에서 확인 실패로 두고 다음으로 넘어간다(06 §11.3).
  */
 @Slf4j
@@ -118,12 +119,12 @@ public class ExternalAccountRefreshJob {
         for (List<ExternalAccount> batch : batches(stale)) {
             List<String> channelIds =
                     batch.stream().map(ExternalAccount::providerAccountId).toList();
-            Set<String> publicIds = verified(youtubeGateway::findPublicChannelIds, channelIds);
-            allVerified &= publicIds != null;
+            PublicIdCheck check = verified(youtubeGateway::findPublicChannelIds, channelIds);
+            allVerified &= check != null && check.absenceTrusted();
             for (ExternalAccount account : batch) {
-                if (publicIds != null && publicIds.contains(account.providerAccountId())) {
+                if (check != null && check.publicIds().contains(account.providerAccountId())) {
                     allVerified &= refreshChannel(account, now);
-                } else if (publicIds != null) {
+                } else if (check != null && check.absenceTrusted()) {
                     allVerified &= deleteChannel(account, AuditReason.CHANNEL_NOT_PUBLIC, now);
                 } else if (account.refreshedAt().isBefore(now.minus(DELETE_AFTER))) {
                     deleteChannel(account, AuditReason.UNVERIFIED_30_DAYS, now);
@@ -139,15 +140,15 @@ public class ExternalAccountRefreshJob {
         List<String> videoIds = new ArrayList<>(new LinkedHashSet<>(
                 stale.stream().map(StaleWork::providerWorkId).toList()));
         for (List<String> batch : batches(videoIds)) {
-            Set<String> publicIds = verified(youtubeGateway::findPublicVideoIds, batch);
-            allVerified &= publicIds != null;
+            PublicIdCheck check = verified(youtubeGateway::findPublicVideoIds, batch);
+            allVerified &= check != null && check.absenceTrusted();
             for (StaleWork work : stale) {
                 if (!batch.contains(work.providerWorkId())) {
                     continue;
                 }
-                if (publicIds != null && publicIds.contains(work.providerWorkId())) {
+                if (check != null && check.publicIds().contains(work.providerWorkId())) {
                     allVerified &= refreshWork(work, now);
-                } else if (publicIds != null) {
+                } else if (check != null && check.absenceTrusted()) {
                     allVerified &= deleteWork(work);
                 } else if (work.refreshedAt().isBefore(now.minus(DELETE_AFTER))) {
                     deleteWork(work);
@@ -158,28 +159,39 @@ public class ExternalAccountRefreshJob {
     }
 
     /**
-     * 확인에 성공하면 public인 ID 집합을, 실패(403, 4xx, 5xx, 시간 초과)하거나 하루 예산을 확보하지 못하면
-     * {@code null}을 돌려준다. 작업은 호출 한 번(ID 50개 이하)에 1 unit를 쓰고 호출자 상한 없이 10,000까지 쓸 수 있다.
+     * 응답을 받았으면 그 결과를, 실패(403, 4xx, 5xx, 시간 초과)하거나 하루 예산을 확보하지 못하면 {@code null}을 돌려준다.
+     * 응답이 온전하지 않으면 공개 ID는 그대로 쓰되 "없음"은 믿지 않으므로, 운영자가 알아채도록 ERROR 한 줄을 남긴다
+     * (ID와 응답 본문은 넣지 않는다). 작업은 호출 한 번(ID 50개 이하)에 1 unit를 쓰고 호출자 상한 없이 10,000까지 쓸 수 있다.
      */
-    private Set<String> verified(Function<List<String>, Set<String>> call, List<String> ids) {
+    private PublicIdCheck verified(Function<List<String>, PublicIdCheck> call, List<String> ids) {
         if (!youtubeQuota.tryReserveForJob(1)) {
             log.warn("YouTube 하루 예산이 차서 ID 확인을 건너뛴다: {}개", ids.size());
             return null;
         }
         try {
-            return call.apply(ids);
+            PublicIdCheck check = call.apply(ids);
+            if (!check.absenceTrusted()) {
+                log.error(
+                        "YouTube ID 확인 응답이 온전하지 않아 \"없음\" 판정을 보류한다: 작업 {}, 요청한 ID {}개, 사유 {}",
+                        ExternalAccountRefreshJob.class.getSimpleName(),
+                        ids.size(),
+                        check.incompleteReason());
+            }
+            return check;
         } catch (ExternalAccountException e) {
             log.warn("YouTube ID 확인에 실패했다: {}개, {}", ids.size(), e.getFailure());
             return null;
         }
     }
 
-    /** 아래 네 메서드는 아티스트 잠금을 잡아 처리했으면 {@code true}, 잠금 대기를 넘겨 건너뛰었으면 {@code false}를 돌려준다. */
+    /**
+     * 아래 네 메서드는 아티스트 잠금을 잡아 처리했으면 {@code true}, 잠금 대기를 넘겨 건너뛰었거나 DB 반영 오류가 났으면
+     * {@code false}를 돌려준다. {@code false}가 하나라도 있는 실행은 마지막 성공으로 기록하지 않는다.
+     */
     private boolean refreshChannel(ExternalAccount account, Instant now) {
-        return inLockOf(
-                        account.artistId(),
-                        locked -> repository.refreshAccount(locked, account.id(), account.providerAccountId(), now))
-                != LockOutcome.BUSY;
+        return handled(inLockOf(
+                account.artistId(),
+                locked -> repository.refreshAccount(locked, account.id(), account.providerAccountId(), now)));
     }
 
     private boolean deleteChannel(ExternalAccount account, AuditReason reason, Instant now) {
@@ -204,14 +216,13 @@ public class ExternalAccountRefreshJob {
             displayCache.evict(account.id());
             candidateCache.evict(account.id());
         }
-        return outcome != LockOutcome.BUSY;
+        return handled(outcome);
     }
 
     private boolean refreshWork(StaleWork work, Instant now) {
-        return inLockOf(
-                        work.artistId(),
-                        locked -> repository.refreshWork(locked, work.externalAccountId(), work.providerWorkId(), now))
-                != LockOutcome.BUSY;
+        return handled(inLockOf(
+                work.artistId(),
+                locked -> repository.refreshWork(locked, work.externalAccountId(), work.providerWorkId(), now)));
     }
 
     private boolean deleteWork(StaleWork work) {
@@ -221,14 +232,22 @@ public class ExternalAccountRefreshJob {
         if (outcome == LockOutcome.CHANGED) {
             displayCache.evict(work.externalAccountId());
         }
-        return outcome != LockOutcome.BUSY;
+        return handled(outcome);
     }
 
-    /** 잠금 안에서 한 일의 결과. {@code UNCHANGED}에는 그사이 행이 바뀌어 건드리지 않은 경우와 반영 오류가 든다. */
+    private static boolean handled(LockOutcome outcome) {
+        return outcome == LockOutcome.CHANGED || outcome == LockOutcome.UNCHANGED;
+    }
+
+    /**
+     * 잠금 안에서 한 일의 결과. {@code UNCHANGED}는 그사이 행이 바뀌어 건드리지 않은 경우다. 잠금 대기를 넘긴 {@code BUSY}와
+     * DB 반영 오류인 {@code FAILED}는 이번 실행에서 확인하지 못한 것이다(ADR 14번 "반영 오류도 실패로 센다").
+     */
     private enum LockOutcome {
         CHANGED,
         UNCHANGED,
-        BUSY
+        BUSY,
+        FAILED
     }
 
     /**
@@ -246,9 +265,23 @@ public class ExternalAccountRefreshJob {
                 log.warn("아티스트 잠금을 잡지 못해 이번 실행에서는 건너뛴다: 아티스트 {}", artistId);
                 return LockOutcome.BUSY;
             }
-            log.error("YouTube ID 확인 결과를 반영하지 못했다: 아티스트 {}", artistId, e);
-            return LockOutcome.UNCHANGED;
+            // 예외 메시지에는 연결 정보나 SQL이 들 수 있고 예외 객체는 스택까지 찍으므로, 종류와 SQL state만 남긴다
+            log.error(
+                    "YouTube ID 확인 결과를 반영하지 못했다: 아티스트 {}, 예외 {}, SQL state {}",
+                    artistId,
+                    e.getClass().getSimpleName(),
+                    sqlStateOf(e));
+            return LockOutcome.FAILED;
         }
+    }
+
+    private static String sqlStateOf(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sql && sql.getSQLState() != null) {
+                return sql.getSQLState();
+            }
+        }
+        return "없음";
     }
 
     private static <T> List<List<T>> batches(List<T> items) {

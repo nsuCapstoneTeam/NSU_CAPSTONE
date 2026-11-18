@@ -1,7 +1,6 @@
 package com.nsu.capstone.verification.externalaccount.provider;
 
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /** YouTube(Google)와 주고받는 호출. 서비스는 이 포트만 안다. */
@@ -30,10 +29,12 @@ public interface YoutubeGateway {
 
     /**
      * 채널 ID(50개 이하) 중 YouTube가 2xx로 답하며 {@code public}이라고 한 ID를 돌려준다(06 §11.1). 응답에 없거나 공개가
-     * 아닌 ID는 들어 있지 않다. 응답을 받지 못하면(403, 4xx, 5xx, 시간 초과) 예외이고, 호출한 쪽은 그것을 "없음"으로 보지 않는다.
+     * 아닌 ID는 들어 있지 않다. 응답이 온전하지 않으면 공개 ID는 그대로 돌려주되 {@link PublicIdCheck#absenceTrusted()}가
+     * {@code false}라 호출한 쪽은 나머지를 "없음"으로 보지 않는다. 응답을 받지 못하면(403, 4xx, 5xx, 시간 초과) 예외이고,
+     * 이것도 "없음"이 아니다.
      */
-    Set<String> findPublicChannelIds(List<String> channelIds);
+    PublicIdCheck findPublicChannelIds(List<String> channelIds);
 
     /** {@link #findPublicChannelIds}와 같은 규칙으로 영상 ID(50개 이하)를 확인한다. */
-    Set<String> findPublicVideoIds(List<String> videoIds);
+    PublicIdCheck findPublicVideoIds(List<String> videoIds);
 }

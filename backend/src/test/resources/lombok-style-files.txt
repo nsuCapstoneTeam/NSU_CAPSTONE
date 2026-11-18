@@ -139,6 +139,7 @@ src/main/java/com/nsu/capstone/verification/externalaccount/presentation/dto/Wor
 src/main/java/com/nsu/capstone/verification/externalaccount/provider/FetchedAccount.java
 src/main/java/com/nsu/capstone/verification/externalaccount/provider/GoogleYoutubeGateway.java
 src/main/java/com/nsu/capstone/verification/externalaccount/provider/ProviderProfile.java
+src/main/java/com/nsu/capstone/verification/externalaccount/provider/PublicIdCheck.java
 src/main/java/com/nsu/capstone/verification/externalaccount/provider/SpotifyGateway.java
 src/main/java/com/nsu/capstone/verification/externalaccount/provider/WebSpotifyGateway.java
 src/main/java/com/nsu/capstone/verification/externalaccount/provider/YoutubeCandidate.java

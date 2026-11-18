@@ -18,6 +18,7 @@ import com.nsu.capstone.verification.externalaccount.domain.ExternalAccount;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountException;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountProvider;
+import com.nsu.capstone.verification.externalaccount.provider.PublicIdCheck;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -53,7 +54,7 @@ class ExternalAccountRefreshJobOperationsIntegrationTest extends ExternalAccount
             inGateway.countDown();
             // 잠금이 없으면 두 번째 실행도 여기서 기다리게 되므로 상한을 둔다
             release.await(3, TimeUnit.SECONDS);
-            return Set.of("UCstale");
+            return PublicIdCheck.complete(Set.of("UCstale"));
         });
         ExecutorService pool = Executors.newSingleThreadExecutor();
         Future<?> first = pool.submit(job::run);
@@ -75,7 +76,8 @@ class ExternalAccountRefreshJobOperationsIntegrationTest extends ExternalAccount
             account(artist, "UC" + String.format("%020d", i), EIGHT_DAYS_AGO);
         }
         when(youtubeGateway.findPublicChannelIds(anyList()))
-                .thenAnswer(invocation -> new HashSet<>(invocation.<List<String>>getArgument(0)));
+                .thenAnswer(
+                        invocation -> PublicIdCheck.complete(new HashSet<>(invocation.<List<String>>getArgument(0))));
 
         job.run();
 
@@ -106,7 +108,7 @@ class ExternalAccountRefreshJobOperationsIntegrationTest extends ExternalAccount
         User artist = newUser(UserRole.ARTIST, "ops-job-share@example.com");
         account(artist, "UCstale", EIGHT_DAYS_AGO);
         redis.opsForValue().set(TOTAL_KEY, "8000");
-        when(youtubeGateway.findPublicChannelIds(anyList())).thenReturn(Set.of("UCstale"));
+        when(youtubeGateway.findPublicChannelIds(anyList())).thenReturn(PublicIdCheck.complete(Set.of("UCstale")));
 
         job.run();
 
@@ -121,7 +123,7 @@ class ExternalAccountRefreshJobOperationsIntegrationTest extends ExternalAccount
         when(youtubeGateway.findPublicChannelIds(anyList()))
                 .thenThrow(new ExternalAccountException(
                         ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE, "YouTube 장애"))
-                .thenReturn(Set.of("UCstale"));
+                .thenReturn(PublicIdCheck.complete(Set.of("UCstale")));
 
         job.run();
         assertThat(redis.hasKey(LAST_SUCCESS_KEY)).isFalse();
@@ -181,7 +183,8 @@ class ExternalAccountRefreshJobOperationsIntegrationTest extends ExternalAccount
         // 더 오래된 busy 쪽이 먼저 처리되므로, free가 갱신됐다면 건너뛴 뒤에도 작업이 이어진 것이다
         ExternalAccount busyAccount = account(busy, "UCbusy", NOW.minusSeconds(9 * 86_400L));
         ExternalAccount freeAccount = account(free, "UCfree", EIGHT_DAYS_AGO);
-        when(youtubeGateway.findPublicChannelIds(anyList())).thenReturn(Set.of("UCbusy", "UCfree"));
+        when(youtubeGateway.findPublicChannelIds(anyList()))
+                .thenReturn(PublicIdCheck.complete(Set.of("UCbusy", "UCfree")));
 
         whileAnotherTransactionHoldsLockOf(busy, job::run);
 

@@ -6,6 +6,7 @@ import com.nsu.capstone.verification.externalaccount.config.ExternalAccountConfi
 import com.nsu.capstone.verification.externalaccount.config.ExternalAccountProperties;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountException;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
+import com.nsu.capstone.verification.externalaccount.provider.PublicIdCheck.IncompleteReason;
 import com.nsu.capstone.verification.externalaccount.redis.YoutubeQuota;
 import java.net.URI;
 import java.time.Instant;
@@ -55,8 +56,6 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     private static final int REVOKE_ATTEMPTS = 2;
     /** 작업물 후보는 최신 공개 영상 50개까지다(06 §7). */
     private static final int UPLOADS_LIMIT = 50;
-    /** ID 확인 응답이 온전하지 않을 때 ERROR 로그에 적는 작업 이름. 이 게이트웨이의 ID 확인 호출은 이 작업만 쓴다. */
-    private static final String REFRESH_JOB = "ExternalAccountRefreshJob";
     /** 한 응답에서 "없음"이 이 수 이상이고 요청한 ID의 절반 이상이면 API 동작이 바뀐 것으로 보고 응답 전체를 믿지 않는다(06 §11.1). */
     private static final int MASS_MISSING_MIN = 5;
 
@@ -283,12 +282,12 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     }
 
     @Override
-    public Set<String> findPublicChannelIds(List<String> channelIds) {
+    public PublicIdCheck findPublicChannelIds(List<String> channelIds) {
         return publicIds("/channels", channelIds);
     }
 
     @Override
-    public Set<String> findPublicVideoIds(List<String> videoIds) {
+    public PublicIdCheck findPublicVideoIds(List<String> videoIds) {
         return publicIds("/videos", videoIds);
     }
 
@@ -297,32 +296,40 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
      *
      * <p>"없음"은 온전한 응답에서만 판정한다(06 §11.1, ADR 14번). 정상 응답은 항상 {@code items}나 {@code pageInfo}를 가진다
      * (0건이면 {@code items} 없이 {@code pageInfo}만 온다). 프록시나 CDN이 주는 빈 본문·{@code {}} 같은 비정상 2xx를
-     * "배치 전체가 없음"으로 읽으면 일일 작업이 연결을 한꺼번에 지우므로, 다음 중 하나면 확인 실패로 보고 예외를 던진다.
-     * 빈 응답, 일부만 온 응답, {@code id}나 {@code status}가 없는 항목, 요청 ID 대부분이 "없음"인 응답이다.
+     * "배치 전체가 없음"으로 읽으면 일일 작업이 연결을 한꺼번에 지우므로, 다음 중 하나면 온전하지 않은 응답으로 돌려준다.
+     * 빈 응답, 일부만 온 응답, {@code id}나 {@code status.privacyStatus}가 없는 항목, 요청 ID 대부분이 "없음"인 응답이다.
+     * 온전하지 않은 응답에서도 {@code id}와 {@code privacyStatus: public}이 함께 온 항목은 공개 ID로 돌려준다.
      */
-    private Set<String> publicIds(String path, List<String> ids) {
+    private PublicIdCheck publicIds(String path, List<String> ids) {
         ChannelList response = getWithApiKeyOnWritePath(path, Map.of("part", "id,status", "id", String.join(",", ids)));
         if (response == null
                 || (response.items() == null
                         && (response.pageInfo() == null || response.pageInfo().totalResults() == null))) {
-            throw incompleteResponse(ids.size(), "EMPTY_RESPONSE");
-        }
-        if (isPartial(response)) {
-            throw incompleteResponse(ids.size(), "PARTIAL_RESPONSE");
+            return PublicIdCheck.incomplete(Set.of(), IncompleteReason.EMPTY_RESPONSE);
         }
         List<ChannelList.Channel> items = response.items() == null ? List.of() : response.items();
-        if (items.stream().anyMatch(item -> item == null || item.id() == null || item.status() == null)) {
-            throw incompleteResponse(ids.size(), "ITEM_INCOMPLETE");
-        }
         Set<String> publicIds = items.stream()
-                .filter(item -> "public".equals(item.status().privacyStatus()))
+                .filter(item -> item != null
+                        && item.id() != null
+                        && item.status() != null
+                        && "public".equals(item.status().privacyStatus()))
                 .map(ChannelList.Channel::id)
                 .collect(Collectors.toSet());
+        if (isPartial(response)) {
+            return PublicIdCheck.incomplete(publicIds, IncompleteReason.PARTIAL_RESPONSE);
+        }
+        if (items.stream()
+                .anyMatch(item -> item == null
+                        || item.id() == null
+                        || item.status() == null
+                        || item.status().privacyStatus() == null)) {
+            return PublicIdCheck.incomplete(publicIds, IncompleteReason.ITEM_INCOMPLETE);
+        }
         long missing = ids.stream().filter(id -> !publicIds.contains(id)).count();
         if (missing >= MASS_MISSING_MIN && missing * 2 >= ids.size()) {
-            throw incompleteResponse(ids.size(), "TOO_MANY_MISSING");
+            return PublicIdCheck.incomplete(publicIds, IncompleteReason.TOO_MANY_MISSING);
         }
-        return publicIds;
+        return PublicIdCheck.complete(publicIds);
     }
 
     /** 다음 쪽이 있거나, 전체 건수가 받은 항목 수보다 크면 일부만 온 응답이다. */
@@ -330,18 +337,6 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
         int received = response.items() == null ? 0 : response.items().size();
         Integer total = response.pageInfo() == null ? null : response.pageInfo().totalResults();
         return response.nextPageToken() != null || (total != null && total > received);
-    }
-
-    /**
-     * 온전하지 않은 응답은 확인 실패다(06 §11.1). 운영자가 알아채도록 ERROR 한 줄을 남기되 ID와 응답 본문은 넣지 않는다.
-     */
-    private ExternalAccountException incompleteResponse(int requestedCount, String reason) {
-        log.error(
-                "YouTube ID 확인 응답이 온전하지 않아 이 배치는 확인 실패로 둔다: 작업 {}, 요청한 ID {}개, 사유 {}",
-                REFRESH_JOB,
-                requestedCount,
-                reason);
-        return unavailable("YouTube 응답이 온전하지 않다: " + reason);
     }
 
     /** 폐기를 보내고, 실패하면 한 번 더 보낸다. 폐기를 확인했는지 돌려준다. */

@@ -84,8 +84,8 @@ class GoogleYoutubeGatewayClientSelectionTest {
                 .expect(requestTo(startsWith(API_BASE + "/videos")))
                 .andRespond(withSuccess("{\"items\":[]}", APPLICATION_JSON));
 
-        assertThat(gateway.findPublicChannelIds(List.of("UC1"))).isEmpty();
-        assertThat(gateway.findPublicVideoIds(List.of("v1"))).isEmpty();
+        assertThat(gateway.findPublicChannelIds(List.of("UC1")).publicIds()).isEmpty();
+        assertThat(gateway.findPublicVideoIds(List.of("v1")).publicIds()).isEmpty();
 
         writeServer.verify();
     }
