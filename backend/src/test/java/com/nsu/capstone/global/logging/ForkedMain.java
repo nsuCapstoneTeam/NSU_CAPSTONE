@@ -22,6 +22,7 @@ import org.springframework.context.annotation.Bean;
  *
  * <ul>
  *   <li>light: 빈이 없는 앱
+ *   <li>config-probe: light와 같고, 설정 키 {@value #CONFIG_PROBE_KEY}의 값을 출력하는 앱
  *   <li>attach-appender: 컨텍스트를 만드는 중 루트 로거에 어펜더를 하나 더 붙이는 앱
  *   <li>detach-root-appender: 컨텍스트를 만드는 중 콘솔 어펜더를 루트 로거에서 떼어 하위 로거에만 붙이는 앱
  *   <li>stop-console-appender: 컨텍스트를 만드는 중 루트에 붙은 콘솔 어펜더를 멈추는 앱
@@ -41,6 +42,11 @@ public final class ForkedMain {
     /** httpclient 모드가 Authorization 헤더에 싣는 가짜 값 */
     static final String FAKE_AUTHORIZATION = "fake-authorization-6d2b";
 
+    /** config-probe 모드가 읽어 "CONFIG-PROBE <값>"으로 출력하는 설정 키. 자식이 어떤 파일 설정을 읽었는지 부모가 본다. */
+    static final String CONFIG_PROBE_KEY = "forked.config.probe";
+
+    static final String CONFIG_PROBE_PREFIX = "CONFIG-PROBE ";
+
     /** 시작 뒤 남기는 "상관 ID 확인" 줄의 MDC requestId */
     static final String CORRELATION_ID = "corr-1";
 
@@ -59,7 +65,7 @@ public final class ForkedMain {
         String mode = args[0];
         String[] bootArgs = Arrays.copyOfRange(args, 1, args.length);
         Class<?> source = switch (mode) {
-            case "light", "httpclient", "uncaught-thread", "hang" -> TestApp.EmptyConfig.class;
+            case "light", "httpclient", "uncaught-thread", "hang", "config-probe" -> TestApp.EmptyConfig.class;
             case "attach-appender" -> AttachAppenderConfig.class;
             case "detach-root-appender" -> DetachRootAppenderConfig.class;
             case "stop-console-appender" -> StopConsoleAppenderConfig.class;
@@ -73,8 +79,11 @@ public final class ForkedMain {
         };
         // 전체 앱은 Security와 MVC 때문에 서블릿 웹 앱으로 띄운다(포트는 인자로 0을 준다)
         WebApplicationType webType = mode.equals("app") ? WebApplicationType.SERVLET : WebApplicationType.NONE;
-        try (ConfigurableApplicationContext ignored =
+        try (ConfigurableApplicationContext app =
                 new SpringApplicationBuilder(source).web(webType).run(bootArgs)) {
+            if (mode.equals("config-probe")) {
+                System.out.println(CONFIG_PROBE_PREFIX + app.getEnvironment().getProperty(CONFIG_PROBE_KEY));
+            }
             if (mode.equals("httpclient")) {
                 callLocalServerWithAuthorization();
             }

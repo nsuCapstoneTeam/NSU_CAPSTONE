@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import org.springframework.util.FileSystemUtils;
 
 /**
  * 별도 JVM 프로세스로 {@link ForkedMain}을 실행한다. JVM 옵션, 시작 로그, 표준 출력·오류 전체를 검사하는 테스트용이다.
@@ -52,11 +53,16 @@ final class ForkedJvm {
         command.add(ForkedMain.class.getName());
         command.addAll(List.of(programArgs));
 
+        // 자식은 부모의 작업 디렉터리가 아니라 빈 임시 디렉터리에서 시작한다. Boot가 부모 작업 디렉터리의 ./config/application.properties 같은
+        // 개발자의 파일 설정(개발 DB 주소 등)을 읽지 못하게 하려는 것이다.
+        Path workingDirectory = Files.createTempDirectory("forked-jvm-");
         // 출력을 파이프로 읽으면 자식이 stdout을 닫을 때까지 readAllBytes가 막혀 아래 waitFor에 닿지 못한다. 파일로 받고 먼저 기다린다.
-        Path outputFile = Files.createTempFile("forked-jvm-", ".log");
+        Path outputFile = workingDirectory.resolve("output.log");
         try {
-            ProcessBuilder builder =
-                    new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(outputFile.toFile());
+            ProcessBuilder builder = new ProcessBuilder(command)
+                    .directory(workingDirectory.toFile())
+                    .redirectErrorStream(true)
+                    .redirectOutput(outputFile.toFile());
             builder.environment().clear();
             builder.environment().putAll(childEnvironment(System.getenv(), env));
             Process process = builder.start();
@@ -67,7 +73,7 @@ final class ForkedJvm {
             }
             return new Result(process.exitValue(), Files.readString(outputFile, StandardCharsets.UTF_8));
         } finally {
-            Files.deleteIfExists(outputFile);
+            FileSystemUtils.deleteRecursively(workingDirectory);
         }
     }
 

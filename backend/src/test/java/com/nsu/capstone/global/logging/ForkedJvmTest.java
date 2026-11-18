@@ -2,7 +2,10 @@ package com.nsu.capstone.global.logging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +24,32 @@ class ForkedJvmTest {
 
         // 자식이 스스로 끝나는 40초를 기다리지 않고 제한 시간(8초) 근처에서 돌려준다
         assertThat(Duration.ofNanos(System.nanoTime() - startNanos)).isLessThan(Duration.ofSeconds(30));
+    }
+
+    /**
+     * 자식이 부모의 작업 디렉터리에서 시작하면 Boot가 그곳의 ./config/application.properties를 읽는다. 개발자의 개발 DB 주소(spring.flyway.url
+     * 등)가 거기 있으면 전체 앱 테스트가 Testcontainers 대신 개발 DB에 마이그레이션을 돌릴 수 있다.
+     */
+    @Test
+    void 자식_JVM은_부모_작업_디렉터리의_Spring_설정_파일을_읽지_않는다() throws Exception {
+        Path configDirectory = Path.of("config");
+        assumeFalse(Files.exists(configDirectory), "개발자의 config 디렉터리를 덮어쓰지 않는다: " + configDirectory.toAbsolutePath());
+        Files.createDirectory(configDirectory);
+        try {
+            Files.writeString(
+                    configDirectory.resolve("application.properties"),
+                    ForkedMain.CONFIG_PROBE_KEY + "=parent-working-directory\n");
+
+            ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "config-probe");
+
+            assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isZero();
+            assertThat(result.output())
+                    .contains(ForkedMain.CONFIG_PROBE_PREFIX + "null")
+                    .doesNotContain("parent-working-directory");
+        } finally {
+            Files.deleteIfExists(configDirectory.resolve("application.properties"));
+            Files.deleteIfExists(configDirectory);
+        }
     }
 
     /**

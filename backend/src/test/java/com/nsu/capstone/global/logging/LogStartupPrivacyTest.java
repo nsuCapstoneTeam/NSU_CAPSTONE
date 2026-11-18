@@ -78,6 +78,24 @@ class LogStartupPrivacyTest {
                 .allMatch(line -> line.startsWith("{\"") && line.endsWith("}"));
     }
 
+    /**
+     * 자식이 다른 DB 주소를 환경 변수로 받아도(개발자 셸, CI 설정) 전체 앱 테스트는 datasource와 Flyway 모두 Testcontainers DB만 쓴다.
+     * 닿지 않는 주소를 환경에 넣어도 시작해야 하고, 그렇지 않으면 그 주소로 연결하다 멈춘다.
+     */
+    @Test
+    void 환경에_다른_DB_주소가_있어도_전체_앱은_Testcontainers_DB로_시작한다() throws Exception {
+        Map<String, String> env = appEnvironment();
+        env.put("SPRING_DATASOURCE_URL", "jdbc:postgresql://127.0.0.1:1/unreachable");
+        env.put("SPRING_FLYWAY_URL", "jdbc:postgresql://127.0.0.1:1/unreachable");
+
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), env, appArguments());
+
+        assertThat(result.exitCode())
+                .as("종료 코드. 출력 끝: %s", tail(result.output()))
+                .isZero();
+        assertThat(result.output()).contains(ForkedMain.STARTED);
+    }
+
     private static Map<String, String> appEnvironment() {
         Map<String, String> env = new HashMap<>();
         env.put("JWT_ACCESS_TOKEN_SECRET", FAKE_JWT_SECRET);
@@ -93,13 +111,22 @@ class LogStartupPrivacyTest {
         return env;
     }
 
-    /** 첫 인자는 실행 방식이고 나머지는 Boot 인자다. 비밀번호는 환경 변수 대신 인자로 줘야 datasource가 받는다. */
+    /**
+     * 첫 인자는 실행 방식이고 나머지는 Boot 인자다. 비밀번호는 환경 변수 대신 인자로 줘야 datasource가 받는다. datasource와 Flyway의 주소와
+     * 계정은 명령행 인자로 Testcontainers DB에 고정한다. 명령행 인자는 환경 변수와 파일 설정보다 우선하므로, 다른 곳에 개발 DB 주소가 있어도 거기에
+     * 마이그레이션을 돌리지 않는다.
+     */
     private static String[] appArguments() {
         return new String[] {
             "app",
             "--server.port=0",
             "--logging.level.root=TRACE",
+            "--spring.datasource.url=" + POSTGRES.getJdbcUrl(),
+            "--spring.datasource.username=" + POSTGRES.getUsername(),
             "--spring.datasource.password=" + POSTGRES.getPassword(),
+            "--spring.flyway.url=" + POSTGRES.getJdbcUrl(),
+            "--spring.flyway.user=" + POSTGRES.getUsername(),
+            "--spring.flyway.password=" + POSTGRES.getPassword(),
             "--debug=true",
             "--trace=true"
         };
