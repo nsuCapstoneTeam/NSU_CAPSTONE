@@ -215,11 +215,16 @@ final class LogDeviceCheck {
         }
         String encoded = new String(encoder.encode(probeEvent(context, Level.WARN)), StandardCharsets.UTF_8);
         List<String> problems = new ArrayList<>();
-        String trimmed = encoded.stripTrailing();
-        if (trimmed.contains("\n")) {
+        // Logback은 이벤트 사이에 구분자를 더하지 않는다. 종결자가 없으면 다음 줄이 `}{`로 붙고, 둘이면 빈 줄이 낀다
+        String line = withoutOneLineTerminator(encoded);
+        if (line == null) {
+            problems.add("어펜더 " + appender.getName() + " 출력이 줄 종결자로 끝나지 않는다");
+            line = encoded;
+        }
+        if (line.contains("\n") || line.contains("\r")) {
             problems.add("어펜더 " + appender.getName() + " 출력이 한 줄이 아니다");
         }
-        JsonNode json = parseJson(trimmed);
+        JsonNode json = parseJson(line);
         if (json == null || !json.isObject()) {
             problems.add("어펜더 " + appender.getName() + " 출력이 JSON이 아니다");
             return problems;
@@ -244,6 +249,17 @@ final class LogDeviceCheck {
             }
         });
         return problems;
+    }
+
+    /** @return 끝의 줄 종결자(`\r\n` 또는 `\n`) 하나를 뗀 문자열. 종결자로 끝나지 않으면 null이다. */
+    private static String withoutOneLineTerminator(String encoded) {
+        if (encoded.endsWith("\r\n")) {
+            return encoded.substring(0, encoded.length() - 2);
+        }
+        if (encoded.endsWith("\n")) {
+            return encoded.substring(0, encoded.length() - 1);
+        }
+        return null;
     }
 
     /** 메시지와 원인 메시지에 시험 문자열을 담은 예외와 MDC requestId를 가진 이벤트. */

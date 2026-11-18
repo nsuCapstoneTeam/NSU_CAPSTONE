@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
@@ -190,6 +191,34 @@ class LogDeviceSelfCheckTest {
 
         assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isZero();
         assertThat(result.output()).contains(ForkedMain.STARTED);
+    }
+
+    /** 대조. 사용자 포매터가 필수 필드를 갖추고 줄 종결자를 하나 쓰면 통과한다. 이게 없으면 아래 거부 사례가 다른 이유로 멈춘 것일 수 있다. */
+    @Test
+    void 사용자_포매터가_줄_종결자를_하나_쓰면_통과한다() throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(userFormatter(1), Map.of(), "light");
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isZero();
+        assertThat(result.output()).contains(ForkedMain.STARTED);
+    }
+
+    @ParameterizedTest(name = "종결자 {0}개")
+    @CsvSource({"0, 줄 종결자로 끝나지 않는다", "2, 한 줄이 아니다"})
+    void 사용자_포매터의_줄_종결자가_하나가_아니면_시작을_멈춘다(int terminators, String expectedItem) throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(userFormatter(terminators), Map.of(), "light");
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
+        assertThat(result.output())
+                .contains(STOPPED_BY_CHECK)
+                .contains(expectedItem)
+                .doesNotContain(ForkedMain.STARTED)
+                .doesNotContain(LogDeviceCheck.PROBE);
+    }
+
+    private static List<String> userFormatter(int terminators) {
+        return List.of(
+                "-Dlogging.structured.format.console=" + ProbeJsonFormatter.FORMAT,
+                "-D" + ProbeJsonFormatter.TERMINATORS_PROPERTY + "=" + terminators);
     }
 
     /** 이름, JVM 인자, 환경 변수, 오류에 담겨야 할 어긋난 항목 */
