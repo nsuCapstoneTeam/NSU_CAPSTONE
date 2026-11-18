@@ -3,6 +3,7 @@ package com.nsu.capstone.global.logging;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -35,6 +36,8 @@ public final class RequestIdExecutors {
 
         @Override
         public void execute(Runnable command) {
+            // 감싸기 전에 거절한다. 널을 감싸면 호출자는 돌아온 뒤 작업 스레드에서야 NPE가 난다
+            Objects.requireNonNull(command);
             // 일을 넘기는 순간의 MDC다. 작업이 실제로 도는 때가 아니다.
             delegate.execute(new ContextRunnable(MDC.getCopyOfContextMap(), command));
         }

@@ -125,6 +125,15 @@ class RequestIdExecutorsTest {
                 .doesNotContainKey("requestId");
     }
 
+    /**
+     * 감싸기 전에 거절한다. 그렇지 않으면 널 작업이 래퍼에 싸여 큐에 들어가고, 호출자는 아무 일 없이 돌아온 뒤 작업 스레드에서 NPE가 난다.
+     * 그 예외는 호출자가 아니라 미처리 예외 ERROR 줄로만 남는다.
+     */
+    @Test
+    void 널_작업은_넘기는_호출자에게_NullPointerException으로_거절한다() {
+        assertThatThrownBy(() -> executor.execute(null)).isInstanceOf(NullPointerException.class);
+    }
+
     @Test
     void execute_invokeAll_invokeAny도_호출_스레드의_MDC를_넘긴다() throws Exception {
         MDC.put("requestId", "req-3");
