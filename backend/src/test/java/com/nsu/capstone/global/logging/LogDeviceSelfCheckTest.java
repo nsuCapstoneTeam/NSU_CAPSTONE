@@ -150,6 +150,14 @@ class LogDeviceSelfCheckTest {
                         List.of("-Dlogging.structured.json.stacktrace.printer=standard"),
                         Map.of(),
                         "시험 문자열이 출력된 필드: stack_trace"),
+                // 길이 제한이 시험 문자열 앞에서 잘라 문자열은 안 보이지만, 클래스 이름이 짧은 예외의 메시지는 그대로 남는다
+                Arguments.of(
+                        "출력기 standard와 시험 문자열 앞에서 자르는 길이 제한",
+                        List.of(
+                                "-Dlogging.structured.json.stacktrace.printer=standard",
+                                "-Dlogging.structured.json.stacktrace.max-length=30"),
+                        Map.of(),
+                        "stack_trace에 예외 클래스 이름이 없다"),
                 Arguments.of(
                         "출력기 logging-system",
                         List.of("-Dlogging.structured.json.stacktrace.printer=logging-system"),

@@ -41,6 +41,13 @@ final class LogDeviceCheck {
     private static final List<String> REQUIRED_FIELDS =
             List.of("@timestamp", "level", "logger_name", "message", "requestId", "stack_trace");
 
+    /**
+     * 시험 예외의 바깥 예외와 원인 예외. 둘의 클래스 이름이 stack_trace에 모두 있으면 그 사이의 메시지도 잘리지 않았다는 뜻이다. 시험 문자열이 길이
+     * 제한에 잘려 안 보이는 것만으로는, 클래스 이름이 짧은 예외의 메시지가 남는 설정을 못 거른다.
+     */
+    private static final List<String> PROBE_EXCEPTION_CLASSES =
+            List.of(IllegalStateException.class.getName(), IllegalArgumentException.class.getName());
+
     private LogDeviceCheck() {}
 
     /**
@@ -185,6 +192,15 @@ final class LogDeviceCheck {
         for (String field : REQUIRED_FIELDS) {
             if (!json.has(field)) {
                 problems.add("출력에 필드가 없다: " + field);
+            }
+        }
+        JsonNode stackTrace = json.get("stack_trace");
+        if (stackTrace != null) {
+            List<String> missing = PROBE_EXCEPTION_CLASSES.stream()
+                    .filter(name -> !stackTrace.toString().contains(name))
+                    .toList();
+            if (!missing.isEmpty()) {
+                problems.add("stack_trace에 예외 클래스 이름이 없다: " + String.join(", ", missing));
             }
         }
         json.properties().forEach(entry -> {
