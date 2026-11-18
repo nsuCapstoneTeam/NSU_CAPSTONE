@@ -7,7 +7,9 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowMapper;
@@ -135,6 +137,19 @@ class IdentityVerificationRepository {
                 .param("userId", userId)
                 .query((rs, rowNum) -> UserStatus.valueOf(rs.getString("status")))
                 .optional();
+    }
+
+    /** 기록이 있는 ACTIVE ARTIST의 ID. SQL 한 번이다. */
+    Set<UUID> verifiedArtistsAmong(Collection<UUID> userIds) {
+        return jdbc.sql("""
+                        SELECT v.user_id
+                        FROM identity_verifications v
+                        JOIN users u ON u.id = v.user_id
+                        WHERE v.user_id IN (:userIds) AND u.role = 'ARTIST' AND u.status = 'ACTIVE'
+                        """)
+                .param("userIds", userIds)
+                .query((rs, rowNum) -> rs.getObject("user_id", UUID.class))
+                .set();
     }
 
     Optional<StoredVerification> findVerification(UUID userId) {
