@@ -8,25 +8,24 @@ import java.time.LocalDateTime;
  */
 public final class EventDigests {
 
-    private EventDigests() {
-    }
+    private EventDigests() {}
 
     /**
-     * isEventChanged 지문(03 행사 API §8.3). 추천의 입력인 10개 값만 아래 순서로 쓴다: 시간대, 공연시간,
-     * 지역, 예산, 공연 형태, 설명, 행사 종류, 장르. 장르는 순서와 관계없이 같은 집합이면 같은 값이다.
+     * isEventChanged 지문(03 행사 API §8.3). 추천의 입력인 9개 값만 아래 순서로 쓴다: 시간대, 공연시간,
+     * 지역, 예산, 공연 형태, 행사 종류, 장르. 행사 설명은 추천에 쓰지 않으므로 넣지 않는다(EVT-042 v1.17).
+     * 장르는 순서와 관계없이 같은 집합이면 같은 값이다.
      */
     public static String recommendationFingerprint(Event event) {
         return CanonicalDigest.start()
-            .time(LocalDateTime.ofInstant(event.getStartAt(), Event.ZONE))
-            .time(LocalDateTime.ofInstant(event.getEndAt(), Event.ZONE))
-            .number(event.getPerformanceMinutes())
-            .text(event.getRegionCode())
-            .number(event.getBudgetMin())
-            .number(event.getBudgetMax())
-            .code(event.getArtistType())
-            .text(event.getDescription())
-            .code(event.getEventType())
-            .codeSet(event.getGenres())
-            .hex();
+                .time(LocalDateTime.ofInstant(event.getStartAt(), Event.ZONE))
+                .time(LocalDateTime.ofInstant(event.getEndAt(), Event.ZONE))
+                .number(event.getPerformanceMinutes())
+                .text(event.getRegionCode())
+                .number(event.getBudgetMin())
+                .number(event.getBudgetMax())
+                .code(event.getArtistType())
+                .code(event.getEventType())
+                .codeSet(event.getGenres())
+                .hex();
     }
 }

@@ -164,7 +164,12 @@ PR에는 다음을 적는다.
 - 테스트 또는 검증 결과
 - 문서 영향
 
-CodeRabbit은 보조 리뷰어이며 최종 승인과 Squash Merge는 사람이 한다.
+CodeRabbit과 Codex는 보조 리뷰어다. Squash Merge는 사람이 승인한 뒤에 한다.
+
+다만 아래 PR은 CI 검사를 통과하고 리뷰 지적을 모두 처리했으면, 작성자의 Agent가 사람 승인 없이 Squash Merge할 수 있다.
+
+- 위험도가 낮은 PR: 비즈니스 규칙·데이터·API 계약·보안에 영향이 없는 국소 변경
+- 문서 PR. ADR이나 `docs/api/` 계약처럼 결정을 바꾸는 문서는 들어가지 않는다
 
 ## 8. 꼭 지킬 것
 
@@ -173,7 +178,6 @@ CodeRabbit은 보조 리뷰어이며 최종 승인과 Squash Merge는 사람이 
 - 사람의 확정 결정 없는 정책을 Agent가 임의로 확정하지 않기
 - 최신 Slack Human Decision과 오래된 문서가 충돌하면 Slack 결정을 우선하고 문서를 동기화하기
 - Linear 일반 개발 상태는 `Todo → In Progress → Done`만 사용하기
-- PR Merge 전 Acceptance Criteria와 테스트 결과를 사람이 확인하기
 
 ## 9. Backend 설정 파일 관리
 

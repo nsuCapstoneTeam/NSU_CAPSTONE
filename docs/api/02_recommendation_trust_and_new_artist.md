@@ -4,8 +4,8 @@
 
 - 구현 이슈: NSU-48·NSU-63 (Spring↔AI 연동), NSU-70 (Trust Profile 조합), NSU-86·87·88·89 (다시 보기·재생·생성 제한·업로드 검사), NSUAI-28 (옛 NSU-16, AI 팀으로 이동)
 - 관련 이슈: NSU-28, NSU-90 (화면), NSU-71 (취소), NSUAI-9, NSUAI-10, NSUAI-12, NSUAI-15, NSUAI-16, NSUAI-25
-- 요구사항: SSOT v1.16(2026-10-18 문서 전체 최종 승인) `AI-MATCH-050`·`051`·`052`·`053`·`054`, `AI-031`·`AI-034`, `STORAGE-103`, `SEC-119`, `TRUST-151`·`153`. `AI-MATCH-155`는 v1.9에서 폐지했다. §2.5의 업로드 길이와 권리 신고 때 재생 차단은 SSOT v1.17(2026-11-05 승인) `AI-033`·`RIGHTS-161`을 따른다
-- 서버 협의(Linear): [012. CLAP 음악 유사도 기반 곡 추천 흐름](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)(Accepted, 2026-10-10), [014. 추천 생성 잠금·재생 동의 확인·행사 snapshot](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)(Accepted, 2026-10-15), [007. 추천 단위는 곡](https://linear.app/nsu-capstone/document/007-추천-단위는-곡-69137a45b2c6), [010. AI 곡 검색 실패·시간 초과 시 추천 API 응답](https://linear.app/nsu-capstone/document/010-ai-곡-검색-실패시간-초과-시-추천-api-응답-46a63dece138)
+- 요구사항: SSOT v1.16(2026-10-18 문서 전체 최종 승인) `AI-MATCH-050`·`051`·`052`·`053`·`054`, `AI-031`·`AI-034`, `STORAGE-103`, `SEC-119`, `TRUST-151`·`153`. `AI-MATCH-155`는 v1.9에서 폐지했다. §2.5의 업로드 길이와 권리 신고 때 재생 차단은 SSOT v1.17(2026-11-05 승인) `AI-033`·`RIGHTS-161`을 따른다. 검색 문구(§1.0)와 지문(§4.3)은 SSOT v1.17 `AI-MATCH-050`·`EVT-042`를 따른다
+- 서버 협의(Linear): [012. CLAP 음악 유사도 기반 곡 추천 흐름](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)(Accepted, 2026-10-10), [014. 추천 생성 잠금·재생 동의 확인·행사 snapshot](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)(Accepted, 2026-10-15), [016. Spring canonical 검색 입력 생성 및 AI 입력 책임 분리](https://linear.app/nsu-capstone/document/016-spring-canonical-검색-입력-생성-및-ai-입력-책임-분리-29ac49c33ada)(Accepted, 2026-11-05), [017. Spring canonical 검색 입력 기반 AI Recommend Server 요청·응답 계약](https://linear.app/nsu-capstone/document/017-spring-canonical-검색-입력-기반-ai-recommend-server-요청응답-계약-f96a57425124)(Accepted, 2026-11-10), [007. 추천 단위는 곡](https://linear.app/nsu-capstone/document/007-추천-단위는-곡-69137a45b2c6), [010. AI 곡 검색 실패·시간 초과 시 추천 API 응답](https://linear.app/nsu-capstone/document/010-ai-곡-검색-실패시간-초과-시-추천-api-응답-46a63dece138)
 - 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
 - 공통 규칙: [00_conventions.md](./00_conventions.md), Trust Profile 스키마: [01_trust_profile.md](./01_trust_profile.md), 행사: [03_events.md](./03_events.md), 곡 업로드·권리: [04_music.md](./04_music.md)
 - Eligibility 판정식: [recommendation_eligibility/00](../adr/recommendation_eligibility/00_eligibility_rules.md) (2026-10-20 NSU-48 설계 세션)
@@ -17,7 +17,7 @@
 | 이 문서가 정한다 | 이 문서가 정하지 않는다 |
 |---|---|
 | 추천 API와 다시 보기 API의 경로, 호출 권한과 거부 시 상태 코드, 저장, 다시 보기 범위, 동시 생성 제한(§0.1) | 추천 요청의 입력(요청 본문 없음)과 행사 상태(취소·시작·삭제)에 따른 처리. [03 §5.2·§8](./03_events.md#8-추천-요청과의-연동-nsu-58)이 정한다 |
-| 추천 결과를 만드는 순서와 AI 응답 검사(§1) | AI 곡 검색 API의 경로·필드 이름, 상세 정보와 행사 요청 해석 결과의 형식(AI 담당이 Linear P-NSU-3 문서에 기록 예정) |
+| 추천 결과를 만드는 순서와 AI 응답 검사(§1), 검색 문구(§1.0) | AI 곡 검색 API의 경로·필드 이름(서버 협의 017), 상세 정보의 형식(AI 담당이 Linear P-NSU-3 문서에 기록 예정) |
 | `recommendations[]` 원소의 틀, `matching`, `eligibility`, `isNewArtist`, `availability`(§2·§3) | `matching.details`의 하위 필드(위 AI 문서가 나온 뒤 정함), `artist.profileImageUrl`의 URL 형식 |
 | 저장하는 값, 다시 볼 때 계산하는 값과 빼는 곡(§4) | |
 | 곡 재생 주소 API와 요청 제한(§2.5) | |
@@ -52,8 +52,8 @@
 1. 후보 곡 모으기: AI_RECOMMENDATION_ENABLED(SSOT AI-031)인 아티스트의 ACTIVE (music_id, audioRevision) 쌍
    → Eligibility Filter (Spring, AI-MATCH-051)가 0의 snapshot으로 거름
    → 필터를 통과한 쌍 전부
-2. AI 곡 검색 1회: 1의 쌍 전부 + 0의 행사 요청 원문(행사 설명, 행사 종류, 희망 Genre)
-   → 음악 유사도 순 상위 100곡, 곡별 상세 정보, 행사 요청 해석 결과
+2. AI 곡 검색 1회: 1의 쌍 전부 + 0의 음악 조건으로 만든 검색 문구(§1.0)
+   → 음악 유사도 순 상위 100곡, 곡별 상세 정보
 3. AI 응답 검사 (§1.2) → 호출 중 삭제·revision 변경된 곡 제외 → rank를 1부터 다시 매김
 4. Trust Profile 일괄 조회 (아티스트 중복 제거, 01 §7)
 5. 곡별 추천 이유 템플릿 생성 (§2.4)
@@ -69,16 +69,16 @@
 - 곡을 아티스트로 묶지 않는다. 같은 아티스트의 곡이 여러 개 들어갈 수 있으며, 곡 수를 제한하지 않는다(서버 협의 007).
 - `trustProfile`, `eligibility`, `isNewArtist`, `matching.details`는 순위에 쓰지 않는다(`TRUST-153`).
 
-### 1.0 행사 요청 해석
+### 1.0 검색 문구
 
-Spring은 저장된 Event 원문(행사 설명·행사 종류·희망 Genre)을 AI에 전달한다. AI는 원문에 근거한 CLAP 질의와 요청 템포 등의 구조화된 해석 결과를 반환한다.
+Spring은 0의 snapshot에 담긴 음악 조건(행사 종류·장르, NSU-121 이후 분위기·템포·보컬)으로 짧은 영문 검색 문구를 만들어 AI에 보낸다. AI는 이 문구를 그대로 CLAP 검색 입력으로 쓰고, 번역하거나 다시 해석하지 않는다(서버 협의 016, [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)).
 
-- 번역·규칙·LLM 중 사용할 방식은 AI가 검증 후 정한다. LLM을 필수로 고정하지 않는다.
-- "빠르고 신나는 음악"에서 `FAST`를 해석할 수 있지만, 근거 없이 사용자의 요청을 `135 BPM`으로 만들지 않는다.
-- 요청 조건이 없거나 해석할 수 없으면 그 상태를 구분해 반환한다. Spring은 근거가 없는 일치·불일치 설명을 생성하지 않는다.
-- `FAST` 등의 분류를 수치 범위와 비교하려면 AI가 버전으로 관리하는 비교 기준이 있어야 한다. 이를 사용자가 입력한 정밀 수치로 표현하지 않는다.
-- 일정·예산·지역 등 Eligibility는 Spring의 Event 데이터로 판정한다. AI 해석이 하드필터 입력을 바꾸지 않는다.
-- 실제 해석 결과는 추천 결과와 함께 저장한다. 구체 필드와 응답 예시는 AI 담당이 Linear P-NSU-3에 기록 예정이며, 이후 Spring 화면용 계약으로 대응시킨다.
+- 행사 설명은 검색 문구에 넣지 않는다(SSOT `EVT-042` v1.17).
+- 문장 꼴과 매핑표는 위 ADR을 따른다. 예: `energetic fast-tempo electronic music with vocals for a university festival`.
+- 검색 문구와 그 문구를 만든 매핑 버전을 추천 결과와 함께 저장한다(§4.1). 매핑 버전은 AI 요청에 넣지 않고 `resultVersion`과 따로 둔다. 둘 다 추천 응답에는 내보내지 않는다. 문구는 AI 검증 결과에 따라 바뀌는 내부 값이라, 화면이 기대지 않게 하기 위해서다.
+- AI 담당이 검증한 매핑 버전으로만 AI를 부른다. 검증되지 않은 매핑이면 AI를 부르지 않는다. 그때의 응답은 NSU-63에서 정한다.
+- 요청 템포는 사용자가 고른 템포다. 고르지 않았으면 요청 템포가 없고, 일치·불일치 설명을 만들지 않는다. 근거 없이 정밀 수치(예: `135 BPM`)를 만들지 않는다.
+- 일정·예산·지역 등 Eligibility는 Spring의 Event 데이터로 판정한다. 검색 문구가 하드필터 입력을 바꾸지 않는다.
 
 ### 1.1 순위
 
@@ -89,7 +89,7 @@ Spring은 저장된 Event 원문(행사 설명·행사 종류·희망 Genre)을 
 - 음악 유사도의 청취 평가·calibration 실험은 ai-recommend-server가 수행한다(NSUAI-12). 구체 함수·threshold·breakpoint·계수는 실험 후 정한다. 구간별 선형 변환은 예시이며 확정된 방식이 아니다.
 - 같은 결과 버전에서 같은 cosine은 같은 표시값으로 변환하며, cosine이 증가할 때 표시값이 감소하지 않아야 한다. 변환의 threshold는 calibration 기준이며 후보를 제외하는 최소 유사도 기준이 아니다.
 - 향후 신뢰도순·리스크순 표시 정렬은 AI가 선정한 결과 안에서의 별도 화면 기능으로 검토한다. 이 API의 `rank`는 음악 순위로 유지한다. 정렬 파라미터·null 처리·리스크 비교 규칙은 이번 계약에서 추가하지 않는다.
-- AI가 행사 요청을 LLM으로 해석하면 같은 행사도 요청마다 순위가 달라질 수 있다. 저장한 결과는 저장 시점의 순서를 그대로 보여 준다(§4).
+- 매핑 버전이나 AI의 `resultVersion`이 바뀌면 같은 행사도 순위가 달라질 수 있다. 저장한 결과는 저장 시점의 순서를 그대로 보여 준다(§4).
 
 v1.8 계약의 정렬 규칙(반올림 전 종합 적합도 → 반올림 전 의미 점수 → `musicId`)은 종합 적합도가 없어져 폐지했다.
 
@@ -198,10 +198,11 @@ AI가 준 곡별 상세 정보(BPM·리듬 등)를 화면용 이름으로 옮긴
 
 - 순위에 쓰지 않는 설명용 정보다(서버 협의 012).
 - 하위 필드는 Linear P-NSU-3 문서에 AI 상세 정보 형식이 기록된 뒤 정한다. Spring은 AI 필드 이름을 그대로 내보내지 않고 화면용 이름으로 옮긴다.
-- 측정값·요청 해석·비교 결과를 구분한다. 예: 곡 BPM은 분석됐지만 요청 템포가 없다면 BPM은 표시할 수 있고, 요청과 일치한다는 문장은 만들지 않는다.
-- AI가 분석하지 못한 항목은 값 대신 `null`과 사유로 온다. 화면용 필드에서도 `null`로 둔다. 분석 실패와 요청 조건 없음·해석 불가를 구분한다.
+- 측정값·요청 조건·비교 결과를 구분한다. 예: 곡 BPM은 분석됐지만 요청 템포가 없다면 BPM은 표시할 수 있고, 요청과 일치한다는 문장은 만들지 않는다.
+- AI가 분석하지 못한 항목은 값 대신 `null`과 사유로 온다. 화면용 필드에서도 `null`로 둔다. 분석 실패와 요청 조건 없음을 구분한다.
 - BPM·리듬의 0~100 항목 점수는 만들지 않는다. 상세 분석 실패만으로 음악 순위나 추천 곡을 제외하지 않는다.
-- AI가 비교 기준과 결과를 제공하고 Spring은 그 근거로 템플릿을 만든다. 구체 필드·enum·실패 사유 형식은 AI 문서에 기록 예정이며, 이 문서에서 임의로 정하지 않는다.
+- 요청 템포와 곡 BPM을 비교하는 기준(템포별 구간)은 AI가 버전으로 관리하는 검증된 기준이어야 한다(SSOT `AI-MATCH-050`). 검증된 기준이 없으면 비교 결과와 일치 문장을 만들지 않는다. 기준과 결과의 형식은 NSU-63에서 AI 담당과 정한다. 구체 필드·enum·실패 사유 형식은 AI 문서에 기록 예정이며, 이 문서에서 임의로 정하지 않는다.
+- 비교 결과는 어느 서버가 만들든 생성 당시 값을 저장하고(§4.1), 다시 볼 때 현재 기준으로 다시 계산하지 않는다. 템포 구간을 바꿔도 이미 저장한 추천의 판정이 뒤집히지 않게 하기 위해서다.
 
 ### 2.3 `eligibility.passedConditions`
 
@@ -237,9 +238,9 @@ SSOT `AI-MATCH-051`의 필수 조건을 따른다. 저작권 조건은 곡에 �
 - 화면은 `musicSimilarity`에 `%`를 붙이지 않는다. "일치율"로 읽히거나 Artist Reliability(`ratePercent`)와 같은 종류의 숫자로 보이지 않게 하기 위해서다.
 - AI는 반올림하지 않은 0~100 소수를 준다. Spring은 소수를 그대로 저장하고 응답에서만 정수로 반올림한다(서버 협의 012 결정 4.3).
 - 지금의 0~100 변환은 AI의 임시 기준이며, ai-recommend-server의 청취 평가·실험으로 고정 변환 v1을 정한다. 기준이 바뀌면 결과 버전이 바뀐다.
-- Spring은 AI가 준 `resultVersion` 1개를 결과와 함께 저장한다. AI는 모델/checkpoint·Embedding 생성·전처리·유사도 변환·상세 분석·요청 해석 버전을 필요에 따라 별도로 추적한다.
+- Spring은 AI가 준 `resultVersion` 1개를 결과와 함께 저장한다. AI는 모델/checkpoint·Embedding 생성·전처리·유사도 변환·상세 분석 버전을 필요에 따라 별도로 추적한다. Spring의 매핑 버전(§1.0)은 `resultVersion`과 따로 저장한다.
 - AI는 각 `resultVersion`과 당시 세부 기준의 대응 관계를 보존한다. 결과에 영향을 주는 기준이 바뀌면 새 버전을 발급하며 기존 버전의 뜻을 덮어쓰지 않는다. `audioRevision`·Embedding 생성 버전을 `resultVersion`으로 대체하지 않는다(서버 협의 001).
-- 추천 이유의 재료는 `details`, 행사 요청 해석 결과, `eligibility.passedConditions`다. 행사 요청 해석 결과는 저장하지만 응답에는 내보내지 않는다.
+- 추천 이유의 재료는 `details`, 음악 조건(§1.0), 템포 비교 결과(§2.2), `eligibility.passedConditions`다. 음악 조건은 저장하지만 이 응답에는 내보내지 않는다.
 - 템플릿은 실제로 있는 값만 쓴다. 값이 `null`인 상세 정보 항목은 문장에서 뺀다(SSOT `AI-MATCH-054` 임의 평가 금지).
 - 추천 이유는 항목별로 나눠 만든다. 2026-09-17 회의(지도교수 피드백)의 "왜 추천됐는지 항목별로 설명하는 구조"를 따르기 위해서다(2026-10-07 결정).
 - 순서는 `MUSIC_SIMILARITY` → `TEMPO` → `RHYTHM` → `ELIGIBILITY`로 고정하고, 항목마다 최대 1개다.
@@ -329,9 +330,9 @@ Authorization: Bearer {accessToken}
 
 | 구분 | 값 |
 |---|---|
-| 저장한다 (다시 볼 때 저장 값 그대로) | 순서(`rank`, 다시 볼 때 뺀 곡이 있으면 번호만 다시 매김), `(music_id, audioRevision)`, 음악 유사도(반올림 전 소수), 상세 정보, `eligibility.passedConditions`, 행사 요청 해석 결과, 결과 버전(AI가 주는 `resultVersion` 1개), 행사 지문(§4.3), 요청한 사용자(§5.2) |
+| 저장한다 (다시 볼 때 저장 값 그대로) | 순서(`rank`, 다시 볼 때 뺀 곡이 있으면 번호만 다시 매김), `(music_id, audioRevision)`, 음악 유사도(반올림 전 소수), 상세 정보, `eligibility.passedConditions`, 음악 조건, 검색 문구와 매핑 버전(§1.0), 템포 비교 결과(§2.2), 결과 버전(AI가 주는 `resultVersion` 1개), 행사 지문(§4.3), 요청한 사용자(§5.2) |
 | 다시 볼 때 계산한다 (현재 값) | `trustProfile`, `music.title`, `artist.name`·`profileImageUrl`, `isNewArtist`, `availability`, `isEventChanged`, `excludedCount` |
-| 다시 볼 때 저장 값으로 만든다 | `matching.reasons` (저장한 상세 정보·해석 결과·통과 조건으로 템플릿을 다시 적용) |
+| 다시 볼 때 저장 값으로 만든다 | `matching.reasons` (저장한 상세 정보·음악 조건·템포 비교 결과·통과 조건으로 템플릿을 다시 적용) |
 
 - 다시 볼 때 AI를 호출하지 않는다.
 - 생성 응답도 방금 저장한 결과에 이 표의 규칙을 그대로 적용해 만든다. 그래서 생성하는 동안 바뀐 상태(행사 수정, 아티스트 정지·AI 추천 해제)가 생성 응답에도 나타난다(2026-10-07 결정, Codex 설계 리뷰).
@@ -364,11 +365,12 @@ Authorization: Bearer {accessToken}
 | 바뀌면 `true` (추천에 쓰인 정보) | 바뀌어도 `false` |
 |---|---|
 | Eligibility 입력: 시간대(`startDate`·`startTime`·`endDate`·`endTime`), `performanceMinutes`, `regionCode`, `budgetMin`·`budgetMax`, `artistType` | `name`, `venue`, `expectedAudience`, `visibility`, `details`(선택정보) |
-| AI에 보내는 원문: `description`, `eventType`, `genres` | |
+| 검색 문구의 재료(음악 조건, §1.0): `eventType`, `genres` (NSU-121 이후 분위기·템포·보컬) | `description`(행사 설명. 검색 문구에 쓰지 않는다) |
 
 - 필드 이름은 [03 §3](./03_events.md#3-행사-표현)의 행사 필드다. `genres`는 순서와 관계없이 같은 집합이면 같은 값이다([03 §8.3](./03_events.md#83-iseventchanged-지문)).
 - 값을 바꿨다가 원래대로 되돌리면 `false`다.
-- 생성을 시작할 때 행사를 한 번 읽어 고정한다(snapshot). Eligibility, AI에 보내는 원문, 저장하는 지문을 모두 이 snapshot으로 만든다. 그래서 결과와 지문이 같은 시점의 행사를 가리킨다.
+- 생성을 시작할 때 행사를 한 번 읽어 고정한다(snapshot). Eligibility, 검색 문구, 저장하는 지문을 모두 이 snapshot으로 만든다. 그래서 결과와 지문이 같은 시점의 행사를 가리킨다.
+- 지문에는 검색 문구가 아니라 사용자가 고른 코드를 넣는다. 그래서 매핑 버전이 바뀌어도 `isEventChanged`는 바뀌지 않는다. 매핑 차이는 저장한 매핑 버전으로 구분한다.
 - 지문은 위 표에서 `true`가 되는 필드의 값으로 계산해 결과와 함께 저장한다. 계산 방법(값 정규화, hash 함수)은 구현에서 정한다.
 - 응답할 때마다(생성 응답 포함) 현재 행사로 지문을 다시 계산해 저장한 지문과 비교한다. AI를 기다리는 동안 행사가 바뀌면 생성 응답에서도 `true`다(2026-10-07 결정, Codex 설계 리뷰).
 
@@ -418,7 +420,7 @@ Authorization: Bearer {accessToken}
 
 ### 5.2 생성 횟수 제한
 
-추천을 한 번 만들 때마다 AI 호출(행사 요청을 LLM으로 해석하면 외부 API 비용 포함)이 생기고, 최대 100곡의 원본 재생 주소를 받을 수 있게 된다. 반복 생성으로 인한 비용과 원본 수집을 막고 SSOT `SEC-118`(Rate Limiting)을 지키기 위해 생성 횟수를 제한한다(2026-10-07 결정).
+추천을 한 번 만들 때마다 AI 호출이 생기고, 최대 100곡의 원본 재생 주소를 받을 수 있게 된다. 반복 생성으로 인한 비용과 원본 수집을 막고 SSOT `SEC-118`(Rate Limiting)을 지키기 위해 생성 횟수를 제한한다(2026-10-07 결정).
 
 | 제한 | 값 (설정값) | 기준 |
 |---|---|---|
@@ -458,9 +460,11 @@ Authorization: Bearer {accessToken}
 | 응답은 최대 100곡이고, `rank`는 1부터 빈틈없이 이어진다 | §2.1 |
 | AI 응답에 보내지 않은 쌍, 중복 곡, 보낸 쌍 수와 100 중 작은 값과 다른 반환 개수, 순위 연속성·배열 순서 위반, 유효하지 않은 음악 유사도 또는 내림차순 위반이 있으면 `503`이다 | §1.2 |
 | 표시 유사도가 같은 곡은 AI 순서를 유지하고, Spring은 raw cosine을 요구하거나 동점 순서를 재계산하지 않는다 | §1.1·§1.2 |
-| 행사 원문에 없는 정밀 BPM을 생성하지 않고, 해석 실패·요청 조건 없음에는 일치 설명을 생성하지 않는다. AI 해석이 Eligibility 입력을 바꾸지 않는다 | §1.0 |
+| 검색 문구는 snapshot의 음악 조건으로만 만들고 행사 설명을 넣지 않는다. 고르지 않은 조건에는 일치 설명을 만들지 않는다. 검색 문구가 Eligibility 입력을 바꾸지 않는다 | §1.0 |
+| AI 담당이 검증하지 않은 매핑 버전으로는 AI를 부르지 않는다 | §1.0 |
 | 상세 분석 실패와 요청 조건 없음이 구분되며, 분석된 측정값만 표시한다. 상세 분석 실패가 음악 순위를 바꾸지 않는다 | §2.2·§2.4 |
-| 반올림 전 음악 유사도와 단일 `resultVersion`이 함께 저장되고 다시 보기에도 저장한 기준을 따른다 | §2.4·§4.1 |
+| 반올림 전 음악 유사도, 단일 `resultVersion`, 검색 문구와 매핑 버전이 함께 저장되고 다시 보기에도 저장한 기준을 따른다 | §1.0·§2.4·§4.1 |
+| 템포 비교 기준(구간)을 바꾼 뒤에도 이미 저장한 추천을 다시 보면 생성 당시의 템포 비교 결과로 추천 이유를 만든다 | §2.2·§4.1 |
 | AI를 호출하는 동안 삭제되거나 revision이 바뀐 곡은 빠지고 `rank`가 다시 매겨진다 | §1.2 |
 | Eligibility를 통과한 쌍이 없으면 AI를 호출하지 않고 `[]`로 응답한다 | §1 |
 | 모든 곡에 `trustProfile`이 붙고, 일괄 조회의 쿼리 수가 아티스트 수에 비례하지 않는다 | 01 §7 |
@@ -477,7 +481,7 @@ Authorization: Bearer {accessToken}
 | 생성은 `201`, 다시 보기는 `200`이며 두 응답의 본문 형식이 같고 `createdAt`이 `+09:00` 오프셋 시각이다 | §0.1, §2.0, 00 §4 |
 | 생성 응답과 그 결과의 다시 보기 응답은 `recommendationId`가 같고, 새 추천을 만들면 다시 보기의 `recommendationId`가 바뀐다 | §2.0 |
 | 추천을 받은 적 없는 행사의 다시 보기는 `404 RECOMMENDATION_NOT_FOUND`, 없는 행사는 `404 EVENT_NOT_FOUND`다 | §5 |
-| 추천 뒤 Eligibility 입력이나 AI 원문 필드가 바뀌면 `isEventChanged = true`, 행사명 등 다른 필드만 바뀌거나 값을 되돌리면 `false`다 | §4.3 |
+| 추천 뒤 Eligibility 입력이나 음악 조건 필드가 바뀌면 `isEventChanged = true`, 행사명·행사 설명 등 다른 필드만 바뀌거나 값을 되돌리면 `false`다 | §4.3 |
 | 재생 주소는 그 행사의 등록자에게, 경로의 `recommendationId`가 최신 추천 결과이고 그 결과에 있으며 다시 보기에서 빠지지 않는 곡에 대해서만 발급되며, 10분 뒤 만료되고, 발급마다 재생 기록이 남는다 | §2.5 |
 | 재생 주소 요청의 `recommendationId`가 그 행사의 최신 결과가 아니면 `409 RECOMMENDATION_OUTDATED`이고 주소를 발급하지 않는다. 그 행사의 결과가 아닌 ID는 `404 RECOMMENDATION_NOT_FOUND`다 | §2.5 |
 | 재생 주소를 사용자당 분당 30회 넘게 요청하면 `429 TOO_MANY_REQUESTS`와 `Retry-After`다. Redis에 접속할 수 없어도 메모리 카운터로 발급을 계속하고, 서버별 한도의 합이 사용자당 분당 30회를 넘지 않는다 | §2.5 |
@@ -493,7 +497,7 @@ Authorization: Bearer {accessToken}
 | 곡이 권리 신고로 중단되면, 중단 전에 발급해 아직 만료되지 않은 그 곡의 재생 주소로 요청해도 음원을 받을 수 없다(NSU-104) | §2.5 |
 | Eligibility의 조건별 판정(경계값, 데이터가 없는 아티스트)은 [recommendation_eligibility/00](../adr/recommendation_eligibility/00_eligibility_rules.md)의 테스트 기준을 따른다. 응답의 `passedConditions`에 `ARTIST_VERIFIED`가 없고 `ACCOUNT_ACTIVE`가 있다 | §2.3 |
 | `AI_RECOMMENDATION_ENABLED`가 아닌 아티스트의 곡은 추천 후보가 되지 않는다 | §1 |
-| AI를 기다리는 동안 행사의 Eligibility 입력이나 AI 원문 필드가 바뀌면 생성 응답의 `isEventChanged`가 `true`다. Eligibility·AI 입력·저장 지문은 모두 생성을 시작할 때의 snapshot이다 | §4.3 |
+| AI를 기다리는 동안 행사의 Eligibility 입력이나 음악 조건 필드가 바뀌면 생성 응답의 `isEventChanged`가 `true`다. Eligibility·검색 문구·저장 지문은 모두 생성을 시작할 때의 snapshot이다 | §4.3 |
 | 생성하는 동안 곡 아티스트가 정지되거나 AI 추천을 끄면 생성 응답에서 그 곡이 빠지고 `excludedCount`에 들어간다 | §4.1·§4.2 |
 | 첫 매칭 성사 또는 활성화 90일 경과 후 `isNewArtist = false`다 | §3 |
 | 신규 판정에 Reliability·Risk Signal을 쓰지 않는다 | §3 |
