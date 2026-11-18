@@ -1,5 +1,6 @@
 package com.nsu.capstone.verification.externalaccount.config;
 
+import com.nsu.capstone.global.logging.RequestIdExecutors;
 import com.nsu.capstone.verification.externalaccount.presentation.MyExternalAccountsInterceptor;
 import com.nsu.capstone.verification.externalaccount.redis.RequestLimiter;
 import java.net.http.HttpClient;
@@ -72,10 +73,9 @@ public class ExternalAccountConfig {
      * {@code applicationTaskExecutor}를 만들지 않으므로, 빼지 않으면 다른 모듈의 {@code @Async}·MVC 비동기 처리가
      * 이 실행기로 조용히 바뀐다. 받는 쪽은 {@link #DISPLAY_EXECUTOR}로 이름을 지정한다.
      */
-    // shortcut: 요청 ID를 이어 주지 않는 실행기, NSU-146 머지 뒤 RequestIdExecutors.wrap(..)으로 감싼다
     @Bean(name = DISPLAY_EXECUTOR, defaultCandidate = false)
     ExecutorService externalAccountDisplayExecutor() {
-        return Executors.newVirtualThreadPerTaskExecutor();
+        return RequestIdExecutors.wrap(Executors.newVirtualThreadPerTaskExecutor());
     }
 
     private static JdkClientHttpRequestFactory requestFactory(Duration connectTimeout, Duration readTimeout) {
