@@ -56,6 +56,31 @@ class LogDeviceSelfCheckTest {
                 .doesNotContain(LogDeviceCheck.PROBE);
     }
 
+    /** 어펜더 목록에는 콘솔 어펜더 하나뿐이지만, 루트에 없으면 우리 패키지 밖 로거의 줄(요청 완료 줄 등)이 콘솔에 닿지 않는다. */
+    @Test
+    void 콘솔_어펜더가_루트_로거에_붙어_있지_않으면_준비_완료_검사에서_멈춘다() throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "detach-root-appender");
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
+        assertThat(result.output())
+                .contains(STOPPED_BY_CHECK)
+                .contains("루트 로거에 붙어 있지 않다")
+                .doesNotContain(ForkedMain.STARTED)
+                .doesNotContain(LogDeviceCheck.PROBE);
+    }
+
+    @Test
+    void 로거_하나의_additivity를_끄면_준비_완료_검사에서_멈추고_오류에_그_로거_이름이_있다() throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "disable-additivity");
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
+        assertThat(result.output())
+                .contains(STOPPED_BY_CHECK)
+                .contains("additivity를 끈 로거: com.example.quiet")
+                .doesNotContain(ForkedMain.STARTED)
+                .doesNotContain(LogDeviceCheck.PROBE);
+    }
+
     @Test
     void 컨텍스트를_만드는_중_미처리_예외_처리기를_바꾸면_준비_완료_검사에서_멈춘다() throws Exception {
         ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "replace-uncaught-handler");

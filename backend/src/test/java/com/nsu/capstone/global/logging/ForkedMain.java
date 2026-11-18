@@ -3,6 +3,7 @@ package com.nsu.capstone.global.logging;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.read.ListAppender;
 import com.nsu.capstone.NsuCapstoneApplication;
 import java.util.Arrays;
@@ -21,6 +22,8 @@ import org.springframework.context.annotation.Bean;
  * <ul>
  *   <li>light: 빈이 없는 앱
  *   <li>attach-appender: 컨텍스트를 만드는 중 루트 로거에 어펜더를 하나 더 붙이는 앱
+ *   <li>detach-root-appender: 컨텍스트를 만드는 중 콘솔 어펜더를 루트 로거에서 떼어 하위 로거에만 붙이는 앱
+ *   <li>disable-additivity: 컨텍스트를 만드는 중 로거 하나의 additivity를 끄는 앱
  * </ul>
  */
 public final class ForkedMain {
@@ -53,6 +56,8 @@ public final class ForkedMain {
         Class<?> source = switch (mode) {
             case "light", "httpclient", "uncaught-thread", "hang" -> TestApp.EmptyConfig.class;
             case "attach-appender" -> AttachAppenderConfig.class;
+            case "detach-root-appender" -> DetachRootAppenderConfig.class;
+            case "disable-additivity" -> DisableAdditivityConfig.class;
             case "replace-uncaught-handler" -> ReplaceUncaughtHandlerConfig.class;
             case "app" -> NsuCapstoneApplication.class;
             default -> throw new IllegalArgumentException("알 수 없는 실행 방식: " + mode);
@@ -137,6 +142,36 @@ public final class ForkedMain {
         @Bean
         Object replacedHandler() {
             Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {});
+            return new Object();
+        }
+    }
+
+    /**
+     * 컨텍스트를 만드는 중에 콘솔 어펜더가 루트 로거에서 떨어져 하위 로거에만 붙는 경우. 어펜더는 하나뿐이라 목록 검사는 지나가고, 나머지 로거의
+     * 줄은 콘솔에 닿지 않는다. 멈춘 이유는 어펜더가 붙은 하위 로거(우리 패키지)로 나가는 줄로 읽는다.
+     */
+    @TestConfiguration(proxyBeanMethods = false)
+    static class DetachRootAppenderConfig {
+
+        @Bean
+        Object consoleOnlyUnderOwnPackage() {
+            LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
+            Logger root = context.getLogger(Logger.ROOT_LOGGER_NAME);
+            Appender<ILoggingEvent> console = root.getAppender("CONSOLE");
+            root.detachAppender(console);
+            context.getLogger("com.nsu.capstone").addAppender(console);
+            return new Object();
+        }
+    }
+
+    /** 컨텍스트를 만드는 중에 로거 하나가 additivity를 끄는 경우. 그 로거의 줄은 루트의 콘솔 어펜더로 올라가지 않는다. */
+    @TestConfiguration(proxyBeanMethods = false)
+    static class DisableAdditivityConfig {
+
+        @Bean
+        Object quietLogger() {
+            LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
+            context.getLogger("com.example.quiet").setAdditive(false);
             return new Object();
         }
     }

@@ -63,6 +63,7 @@ final class LogDeviceCheck {
         Appender<ILoggingEvent> appender = singleAppender(context, problems);
         problems.addAll(julHandlerProblems());
         if (appender != null) {
+            problems.addAll(routingProblems(context, appender));
             problems.addAll(encodedEventProblems(context, appender));
         }
         return problems;
@@ -98,6 +99,23 @@ final class LogDeviceCheck {
             return appenders.iterator().next();
         }
         return null;
+    }
+
+    /**
+     * 이벤트가 어펜더에 닿는 길. 콘솔 어펜더가 루트 로거에 붙어 있어야 모든 로거의 줄이 콘솔로 올라가고, additivity를 끈 로거가 있으면 그 로거의 줄은
+     * 루트로 올라가지 않는다.
+     */
+    private static List<String> routingProblems(LoggerContext context, Appender<ILoggingEvent> appender) {
+        List<String> problems = new ArrayList<>();
+        if (!context.getLogger(Logger.ROOT_LOGGER_NAME).isAttached(appender)) {
+            problems.add("콘솔 어펜더 " + appender.getName() + "가 루트 로거에 붙어 있지 않다");
+        }
+        for (Logger logger : context.getLoggerList()) {
+            if (!logger.isAdditive()) {
+                problems.add("additivity를 끈 로거: " + logger.getName());
+            }
+        }
+        return problems;
     }
 
     /** JUL 루트 핸들러는 SLF4J 브리지 하나뿐이어야 한다. Boot가 로깅을 설정하지 않으면 JUL 콘솔 핸들러가 남는다. */
