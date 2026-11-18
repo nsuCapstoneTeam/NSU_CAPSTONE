@@ -149,3 +149,80 @@ export function zoomBox(bounds, aspect, extra = null) {
     h: round(h),
   };
 }
+
+// 라벨·핀 자리 (지도 데이터를 만들 때 scripts/build-region-map.mjs가 씀)
+// 가장 큰 고리(ring) 범위 안에서, 칠해진 곳(rings 전체를 짝홀 규칙으로: 구멍은 빠짐)이면서 테두리와 가장 먼 점
+// rings에는 구멍도 들어 있어 구멍 안의 점은 고르지 않고, 구멍 테두리까지 거리도 셈
+// 격자(24칸)에 칠해진 점이 없으면 더 촘촘한 격자(96칸), 그래도 없으면 변 가운데에서 안쪽으로 조금 들어간 점
+// 결과: { point: [x, y], room: 테두리까지 거리 }
+export function labelPoint(ring, rings = [ring]) {
+  const inside = (x, y) => {
+    let c = false;
+    for (const r of rings) {
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+        const [xi, yi] = r[i];
+        const [xj, yj] = r[j];
+        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+      }
+    }
+    return c;
+  };
+  const segDist = (px, py, [ax, ay], [bx, by]) => {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
+    return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+  };
+  const edgeDistance = (x, y) => {
+    let m = Infinity;
+    for (const r of rings) for (let q = 0; q < r.length; q++) m = Math.min(m, segDist(x, y, r[q], r[(q + 1) % r.length]));
+    return m;
+  };
+  const xs = ring.map((p) => p[0]);
+  const ys = ring.map((p) => p[1]);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+
+  // 격자 n칸으로 찾기. 가운데에 가까운 쪽을 조금 더 좋게
+  const search = (n) => {
+    let found = null;
+    let bestScore = -Infinity;
+    for (let i = 1; i < n; i++) {
+      for (let j = 1; j < n; j++) {
+        const x = x0 + ((x1 - x0) * i) / n;
+        const y = y0 + ((y1 - y0) * j) / n;
+        if (!inside(x, y)) continue;
+        const m = edgeDistance(x, y);
+        const score = m - 0.06 * Math.hypot(x - (x0 + x1) / 2, (y - (y0 + y1) / 2) * 1.4);
+        if (score > bestScore) {
+          bestScore = score;
+          found = { point: [x, y], room: m };
+        }
+      }
+    }
+    return found;
+  };
+  const byGrid = search(24) ?? search(96);
+  if (byGrid) return byGrid;
+
+  // 아주 얇은 띠 모양: 변 가운데에서 양쪽으로 조금씩 들어가 보며 칠해진 점을 찾음
+  const size = Math.max(x1 - x0, y1 - y0) || 1;
+  for (const r of rings) {
+    for (let q = 0; q < r.length; q++) {
+      const [ax, ay] = r[q];
+      const [bx, by] = r[(q + 1) % r.length];
+      const len = Math.hypot(bx - ax, by - ay);
+      if (!len) continue;
+      const [mx, my] = [(ax + bx) / 2, (ay + by) / 2];
+      const [nx, ny] = [-(by - ay) / len, (bx - ax) / len];
+      for (const k of [1e-3, 1e-4]) {
+        for (const side of [1, -1]) {
+          const x = mx + nx * size * k * side;
+          const y = my + ny * size * k * side;
+          if (inside(x, y)) return { point: [x, y], room: edgeDistance(x, y) };
+        }
+      }
+    }
+  }
+  return { point: ring[0], room: 0 };
+}

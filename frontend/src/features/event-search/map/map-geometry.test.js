@@ -5,6 +5,7 @@ import { DEMO_PUBLIC_EVENTS } from '../event-search-data.js';
 import { venuePoint } from '../event-search.js';
 import {
   dropDelays,
+  labelPoint,
   nextPiece,
   pathBounds,
   pieceName,
@@ -126,6 +127,38 @@ test('겹치는 번호 핀은 옆으로 비켜 서고 원래 자리를 남긴다
   assert.ok(Math.abs(out[1].x - out[0].x) >= 26, '비켜 선 핀이 첫 핀과 겹침');
   assert.deepEqual([out[1].ox, out[1].oy], [108, 102]);
   assert.equal(out[2].moved, false);
+});
+
+test('라벨 자리: 격자점이 모두 구멍 안이어도 칠해진 곳을 고른다', () => {
+  // 100×100 바깥 고리 안에 96×96 구멍: 24칸 격자점은 모두 구멍 안 (리뷰 예시)
+  const outer = [
+    [0, 0],
+    [100, 0],
+    [100, 100],
+    [0, 100],
+  ];
+  const hole = [
+    [2, 2],
+    [2, 98],
+    [98, 98],
+    [98, 2],
+  ];
+  const d = [outer, hole].map((r) => `M${r.map((q) => q.join(',')).join(' ')}Z`).join('');
+  const { point } = labelPoint(outer, [outer, hole]);
+  assert.ok(insidePath(d, point), `구멍 안이나 밖: ${point}`);
+  // 격자 사이로도 빠지는 아주 얇은 띠 (두께 0.2)
+  const thinHole = [
+    [0.1, 0.1],
+    [0.1, 99.9],
+    [99.9, 99.9],
+    [99.9, 0.1],
+  ];
+  const thin = labelPoint(outer, [outer, thinHole]);
+  const thinD = [outer, thinHole].map((r) => `M${r.map((q) => q.join(',')).join(' ')}Z`).join('');
+  assert.ok(insidePath(thinD, thin.point), `얇은 띠에서 구멍 안이나 밖: ${thin.point}`);
+  // 구멍이 없으면 가운데 근처
+  const plain = labelPoint(outer).point;
+  assert.ok(Math.abs(plain[0] - 50) < 10 && Math.abs(plain[1] - 50) < 10);
 });
 
 test('예시 행사의 핀 자리는 그 행사의 시·군·구 조각 안에 있다', async () => {

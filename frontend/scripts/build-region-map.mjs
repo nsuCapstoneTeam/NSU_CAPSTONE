@@ -16,6 +16,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DISTRICTS, PROVINCES } from '../src/data/regions.js';
+import { labelPoint } from '../src/features/event-search/map/map-geometry.js';
 
 const SOURCE_URL = 'https://github.com/vuski/admdongkor';
 const LICENSE_URL = 'https://creativecommons.org/licenses/by/4.0/';
@@ -112,52 +113,6 @@ function simplify(points, tol) {
   }
   if (max <= tol) return [a, b];
   return simplify(points.slice(0, index + 1), tol).slice(0, -1).concat(simplify(points.slice(index), tol));
-}
-
-// 라벨·핀 자리: 가장 큰 고리(main) 범위 안에서, 칠해진 곳(rings 전체를 짝홀 규칙으로)이면서 테두리와 가장 먼 점 (격자로 찾음)
-// rings에는 구멍도 들어 있어서 구멍 안의 점은 고르지 않고, 구멍 테두리까지 거리도 셈
-function labelPoint(ring, rings = [ring]) {
-  const inside = (x, y) => {
-    let c = false;
-    for (const r of rings) {
-      for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-        const [xi, yi] = r[i];
-        const [xj, yj] = r[j];
-        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
-      }
-    }
-    return c;
-  };
-  const segDist = (px, py, [ax, ay], [bx, by]) => {
-    const dx = bx - ax;
-    const dy = by - ay;
-    const l2 = dx * dx + dy * dy;
-    const t = l2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
-    return Math.hypot(px - ax - t * dx, py - ay - t * dy);
-  };
-  const xs = ring.map((p) => p[0]);
-  const ys = ring.map((p) => p[1]);
-  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  let best = [(x0 + x1) / 2, (y0 + y1) / 2];
-  let bestScore = -Infinity;
-  let room = 0;
-  for (let i = 1; i < 24; i++) {
-    for (let j = 1; j < 24; j++) {
-      const x = x0 + ((x1 - x0) * i) / 24;
-      const y = y0 + ((y1 - y0) * j) / 24;
-      if (!inside(x, y)) continue;
-      let m = Infinity;
-      for (const r of rings) for (let q = 0; q < r.length; q++) m = Math.min(m, segDist(x, y, r[q], r[(q + 1) % r.length]));
-      // 가운데에 가까운 쪽을 조금 더 좋게
-      const score = m - 0.06 * Math.hypot(x - (x0 + x1) / 2, (y - (y0 + y1) / 2) * 1.4);
-      if (score > bestScore) {
-        bestScore = score;
-        best = [x, y];
-        room = m;
-      }
-    }
-  }
-  return { point: best, room };
 }
 
 const half = (v) => Math.round(v * 2) / 2;
