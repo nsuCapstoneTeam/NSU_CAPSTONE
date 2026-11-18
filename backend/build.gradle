@@ -66,6 +66,10 @@ tasks.named('test') {
 	inputs.dir('src/main/java')
 		.withPathSensitivity(PathSensitivity.RELATIVE)
 		.withPropertyName('lombokStyleSources')
+	// 로그 설정 테스트가 .env.example 원문을 읽는다. 이 파일만 바뀌어도 test가 다시 실행된다.
+	inputs.file('.env.example')
+		.withPathSensitivity(PathSensitivity.RELATIVE)
+		.withPropertyName('envExample')
 }
 
 spotless {
