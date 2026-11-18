@@ -12,6 +12,8 @@ import com.nsu.capstone.identity.oauth.OAuthRedisKeys;
 import com.nsu.capstone.identity.oauth.RedisOAuth2AuthorizationRequestRepository;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.support.UuidV7Generator;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -53,8 +55,12 @@ class LogPrivacyIntegrationTest extends EventIntegrationTestBase {
             assertThat(capture.loggersContaining(Sentinel.EMAIL))
                     .as("가짜 이메일이 든 줄의 로거")
                     .isEmpty();
-            // 양성 대조: 유출 경로가 사라져 테스트가 헛돌지 않게 제약 위반 줄은 남아야 한다
-            assertThat(capture.lines()).anyMatch(line -> line.contains("uk_users_email"));
+            // 양성 대조: 오류 진단은 남아야 테스트가 헛돌지 않는다. 제약 이름이 든 PostgreSQL 본 메시지는 값이 섞일 수 있어
+            // Hibernate 오류 로거를 껐으므로(logging.properties), 메시지 없는 스택 트레이스의 예외 클래스로 확인한다
+            assertThat(capture.lines())
+                    .anyMatch(line -> line.contains("GlobalExceptionHandler")
+                            && line.contains("\"level\":\"ERROR\"")
+                            && line.contains("PSQLException"));
         }
     }
 
@@ -62,6 +68,26 @@ class LogPrivacyIntegrationTest extends EventIntegrationTestBase {
     void NOT_NULL_위반이_나도_출력_바이트에_행_값이_없다() throws Exception {
         try (LogCapture capture = LogCapture.start(environment)) {
             mockMvc.perform(post(PROBE + "/not-null-violation").header("Authorization", bearer(partner)))
+                    .andExpect(status().isInternalServerError());
+
+            assertThat(capture.loggersContaining(Sentinel.EMAIL))
+                    .as("가짜 이메일이 든 줄의 로거")
+                    .isEmpty();
+            // 양성 대조: 오류 줄 자체가 사라져 테스트가 헛돌지 않게 한다
+            assertThat(capture.lines())
+                    .anyMatch(line -> line.contains("GlobalExceptionHandler") && line.contains("\"level\":\"ERROR\""));
+        }
+    }
+
+    /**
+     * security-review 지적: pgjdbc의 logServerErrorDetail=false는 DETAIL 줄만 뺀다. 본 메시지에 입력값을 싣는 오류
+     * (uuid·정수·enum으로 바꾸다 실패, `invalid input syntax for type uuid: "<값>"`)는 Hibernate가 SQLException 메시지를 로그 문장에
+     * 넣는 경로(`org.hibernate.orm.jdbc.error`)로 그대로 나간다. 그 로거는 예외를 마지막 인자로 넘기지 않아 메시지 없는 출력기를 거치지 않는다.
+     */
+    @Test
+    void 본_메시지에_값이_든_SQL_오류가_나도_출력_바이트에_값이_없다() throws Exception {
+        try (LogCapture capture = LogCapture.start(environment)) {
+            mockMvc.perform(post(PROBE + "/invalid-uuid-cast").header("Authorization", bearer(partner)))
                     .andExpect(status().isInternalServerError());
 
             assertThat(capture.loggersContaining(Sentinel.EMAIL))
@@ -144,6 +170,18 @@ class LogPrivacyIntegrationTest extends EventIntegrationTestBase {
                             + " VALUES (?, ?, NULL, 'ARTIST', 'ACTIVE', now(), now())",
                     ids.generate(),
                     Sentinel.EMAIL);
+        }
+
+        @PersistenceContext
+        private EntityManager entityManager;
+
+        @PostMapping("/invalid-uuid-cast")
+        void invalidUuidCast() {
+            // 문자열을 uuid로 바꾸다 실패한다. PostgreSQL 본 메시지(DETAIL이 아님)에 값이 든다
+            entityManager
+                    .createNativeQuery("select cast(:value as uuid)")
+                    .setParameter("value", Sentinel.EMAIL)
+                    .getSingleResult();
         }
 
         @PostMapping("/duplicate-user")
