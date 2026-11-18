@@ -37,7 +37,7 @@ ADR 00이 정한 것(제공자, 출처 판정, `SANDBOX` 저장 항목, 요청 �
 | 환경 | `app.environment` 하나가 환경 값의 유일한 출처다(값은 `DEMO` 하나, 기본값 없음). NSU-129 공개 쓰기 필터도 이 값을 읽는다. PR #219가 머지되면 같은 PR에서 `ConfiguredRequiredTermsPolicy`(강석윤 님 파일)가 Spring 프로필 `demo` 대신 이 값을 읽게 고친다(2026-11-17 지휘 세션 확정: 최종 사용자 경험 차이가 없어 권장안). 서버는 `DEMO`에서만 뜨므로(ADR 00) 로컬 개발을 포함한 모든 서버에서 시연 약관 4개가 필수가 되고, #219의 "기본 환경 2종"은 없어진다. 함께 바뀌는 #219 쪽 파일: 계약 `signup-terms-and-send-limits.md` §1.1(기본 환경 문장)·§3(약관 테스트 기준 두 행), `backend/README.md` 약관 설명, `TestcontainersConfiguration`, `SignupTestTerms`, `DemoSignupTermsIntegrationTest`. `DEMO`가 아닌 약관 집합은 운영 단계 ADR이 운영 환경을 정할 때 다시 둔다 |
 | 요청 제한 | PR #219의 `RedisPublicRequestLimitStore`를 다시 쓴다. 비공개 `reserve`가 미리 만든 키 조각을 받게 바꾸고, 계정 단위 공개 메서드 하나를 더한다(kind `identity-verification`, 계정 UUID 원문). #219 머지 뒤 NSU-105 PR에서 그 파일의 기존 스타일대로 고친다(2026-11-17 확정: 사용자 경험 차이가 없어 권장안을 택함). 시작·완료 서비스가 역할·형식 검사 다음에 부른다. 보안 필터로 두지 않는다 |
 | 화면 | NSU-105는 백엔드만 한다. 화면(마이페이지 버튼, 창을 열기 전 안내, 데스크톱 팝업·모바일 redirect, 결과 안내)은 NSU-149로 이성범 님이 만든다(2026-11-17 사용자 결정). 화면이 부를 API 순서와 흐름은 계약 07 §6에 적는다 |
-| 구현 순서 | PR #219 뒤에 머지한다. #219에 기대지 않는 부분(순수 판정, 채널 정책, 마이그레이션 초안과 저장, PortOne 어댑터, Trust Profile, 설정·시작 검사)은 지금 main 위에서 만든다. 요청 제한, `ErrorCode`, 컨트롤러·`SecurityConfig`, OpenAPI 테스트, 약관 정책 변경은 #219 머지 뒤에 한다. 마이그레이션은 V11이다(#219가 V8·V9, NSU-37이 V10). V10이 main에 없는 동안 V11을 먼저 적용하지 않도록 머지 순서를 지킨다 |
+| 구현 순서 | PR #219는 2026-11-18 머지됐다. 이 PR은 NSU-37 PR 뒤에 머지한다. 구현은 두 단계다(2026-11-18 지휘 세션 요청). **1단계(지금):** NSU-37과 파일이 겹치지 않는 부분. 마이그레이션과 저장, 순수 판정, 채널 정책, PortOne 어댑터, Mock 제공자와 시드 jar, 이름 암호화, 시작·완료 서비스, 요청 제한, 내부 계약 `IdentityVerifications`, 설정·시작 검사, 약관 정책 변경이다. 이 단계의 서비스는 모듈 예외와 사유 enum(이름은 계약 07 §4의 code)을 던진다. 설정 파일은 모듈 설정 클래스가 `@PropertySource`로 읽고 `application.properties`는 고치지 않는다(NSU-37과 같은 방식). **2단계(NSU-37 머지 뒤):** NSU-37이 마지막에 고치는 공유 파일과 그 포트에 기대는 부분. `ErrorCode`와 예외 매핑, 컨트롤러·`SecurityConfig`, OpenAPI 테스트, `IDENTITY` source와 Trust Profile 시험, `lombok-style-files.txt`, `backend/README.md`다. 마이그레이션은 V11이다(#219가 V8·V9, NSU-37이 V10). V10이 main에 없는 동안 V11을 먼저 적용하지 않도록 머지 순서를 지키고, 그 전에는 Testcontainers에서만 적용한다 |
 
 ### 저장 모델
 
@@ -141,6 +141,7 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 | `RedisPublicRequestLimitStore`는 #219 머지 뒤 NSU-105 PR에서 그 파일 스타일대로 고친다 | 지휘 세션, 2026-11-17 |
 | 00 §10.1 태그 추가는 NSU-146 머지 뒤 NSU-105 PR에서 | 지휘 세션, 2026-11-17 |
 | 마이그레이션 번호 V11(#219 V8·V9, NSU-37 V10) | 지휘 세션, 2026-11-17 |
+| 구현을 NSU-37과 겹치지 않는 1단계와 NSU-37 머지 뒤 2단계로 나눔 | 지휘 세션 요청, 2026-11-18(#219 머지 뒤, NSU-146·NSU-37이 쓴 방식) |
 | 계약 번호 07(NSU-37이 `06_external_accounts.md`) | 지휘 세션, 2026-11-17 |
 | Trust Profile 포트·합치는 reader·`IDENTITY` enum·시험 고정값 정리는 NSU-37, NSU-105는 `IDENTITY` source만 | 지휘 세션, 2026-11-17(NSU-37과 겹침 조정) |
 | 모듈을 `verification.identity`로(ADR 06 §19 패키지 경계) | 설계 세션, 2026-11-17(기존 ADR을 따름) |
@@ -179,7 +180,8 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 - 재조회는 네트워크 호출이라 DB 트랜잭션 안에서 부를 수 없다(`.claude/rules/spring-backend.md`). 그래서 "확인 → 호출 → 전이"가 한 트랜잭션이 아니고, 동시 완료와 만료 경합을 DB의 조건부 전이로 막는다.
 - `GlobalExceptionHandler`는 예상하지 못한 예외의 원인 사슬 전체를 로그에 남기고, `RestClient.retrieve()`의 4xx·5xx 예외는 응답 본문을 메시지에 담는다. 그래서 어댑터가 예외를 밖으로 던지면 개인정보가 로그로 갈 수 있다.
 - 설정 함정(Spring Boot 4.1.1): 기본값 없는 `${X}`는 환경변수가 없으면 문자열 `${X}`가 그대로 묶여 빈 값 검사를 통과한다. 새 `config/*.properties`는 `spring.config.import`에 넣지 않으면 조용히 무시된다. Bean Validation 실패 보고는 거절된 값을 시작 로그에 찍는다.
-- PR #219(NSU-123, 강석윤 님, 2026-11-17 열림)가 `TOO_MANY_REQUESTS`·`RATE_LIMIT_UNAVAILABLE`·`Retry-After`·`BusinessException(code, retryAfterSeconds)`·Redis 명령 timeout 1초·`ErrorCode` 한 줄 형식·마이그레이션 V8·V9를 가져온다. 그 PR의 `RedisPublicRequestLimitStore`는 IP만 키로 받는다. 같은 PR이 Spring 프로필 `demo`로 시연 약관 4개를 고른다.
+- PR #219(NSU-123, 강석윤 님, 2026-11-17 열림, 2026-11-18 머지)가 `TOO_MANY_REQUESTS`·`RATE_LIMIT_UNAVAILABLE`·`Retry-After`·`BusinessException(code, retryAfterSeconds)`·Redis 명령 timeout 1초·`ErrorCode` 한 줄 형식·마이그레이션 V8·V9를 가져온다. 그 PR의 `RedisPublicRequestLimitStore`는 IP만 키로 받는다. 같은 PR이 Spring 프로필 `demo`로 시연 약관 4개를 고른다.
+- `RedisPublicRequestLimitStore`는 공유 Redis 연결을 쓴다. 명령 timeout은 `spring.data.redis.timeout=1s`이고, 연결 timeout은 머지 시점에 설정하지 않아 Lettuce 기본값(10초)이다(NSU-123 쪽에서 확인 중). 이 계약은 Redis 장애 때 `503 RATE_LIMIT_UNAVAILABLE`과 PortOne을 부르지 않는 것만 약속하고 응답 시간 상한은 약속하지 않는다. 그래서 연결 timeout 값이 바뀌어도 이 설계는 바뀌지 않는다. 네트워크가 끊긴 경우에만 `503`이 늦게(최대 연결 timeout) 온다.
 - ARTIST 전용 경로는 URL 매처로 역할을 먼저 검사해야 본문이 깨진 요청도 `403`이다(`SecurityConfig` 주석과 기존 테스트). 쓰기 요청에 응답하는 보안 필터를 더하면 CSRF 결정(ADR `authentication/00` Decision 6)과 고정된 필터 목록 테스트를 다시 열어야 한다.
 - 설계 과정: 라우터 2.2절대로 `/pstack:architect`를 돌렸다. 코드 탐색 3개와 종합 설명으로 접점을 정리하고, 인증 시도 저장이 다른 후보 둘(PostgreSQL 시도 테이블, Redis TTL 시도 키)을 경쟁시켜 채점했다. 다른 계열 모델 심판은 이 환경에 없어 건너뛰었고, 다른 계열 검증은 설계 리뷰(Codex)가 맡는다.
 
