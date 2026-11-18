@@ -43,8 +43,8 @@ public class RequestLimiter {
             count = redis.execute(
                     INCREMENT, List.of(RedisKeys.requestLimit(artistId, windowStart)), Long.toString(WINDOW_SECONDS));
         } catch (DataAccessException e) {
-            // Redis 장애의 원인을 남긴다. 예외는 SLF4J 마지막 인자로 통째로 넘긴다(메시지를 문장에 붙이지 않는다)
-            log.warn("요청 제한 카운터를 쓸 수 없다", e);
+            // Redis 장애의 종류를 남긴다. 예외 객체는 메시지와 스택을 함께 찍으므로 넘기지 않는다
+            log.warn("요청 제한 카운터를 쓸 수 없다: 예외 {}", e.getClass().getSimpleName());
             throw new ExternalAccountException(ExternalAccountFailure.RATE_LIMIT_UNAVAILABLE, "요청 제한 카운터를 쓸 수 없다");
         }
         if (count != null && count > LIMIT) {

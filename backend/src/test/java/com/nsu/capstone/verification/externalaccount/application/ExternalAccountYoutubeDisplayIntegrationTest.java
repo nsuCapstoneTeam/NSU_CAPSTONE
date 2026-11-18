@@ -16,6 +16,7 @@ import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailu
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountProvider;
 import com.nsu.capstone.verification.externalaccount.domain.SelectedWork;
 import com.nsu.capstone.verification.externalaccount.provider.ProviderProfile;
+import com.nsu.capstone.verification.externalaccount.provider.YoutubeCandidate;
 import com.nsu.capstone.verification.externalaccount.provider.YoutubeDisplay;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +25,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 /** 06 §6.5와 §11.2: YouTube 표시 정보는 호출자에게 비용(2 units)을 매기고, 실패해도 링크는 남는다. */
@@ -132,6 +134,50 @@ class ExternalAccountYoutubeDisplayIntegrationTest extends ExternalAccountServic
         }
         pool.shutdown();
         verify(youtubeGateway, times(1)).fetchDisplay(eq(CHANNEL), anyList());
+    }
+
+    /** PR #232 Codex 리뷰: 같은 계정이라도 고른 영상 목록이 다른 조회는 서로의 결과를 나눠 쓰지 않는다. */
+    @Test
+    void 조회가_진행_중일_때_영상을_새로_골라_저장하면_응답에_새_영상이_모두_들어_있다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "yt-display-choose-flight@example.com");
+        ExternalAccount youtube = existingAccount(artist, ExternalAccountProvider.YOUTUBE, CHANNEL);
+        selectWorks(artist, youtube, "vid-1");
+        CountDownLatch inGateway = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ProviderProfile channel = new ProviderProfile("채널", null);
+        when(youtubeGateway.fetchDisplay(CHANNEL, List.of("vid-1"))).thenAnswer(invocation -> {
+            inGateway.countDown();
+            // 진행 중인 조회는 새로 고른 영상을 모르는 채 늦게 끝난다. 상한을 두어 나눠 쓰는 구현에서도 테스트가 끝나게 한다
+            release.await(1, TimeUnit.SECONDS);
+            return new YoutubeDisplay(channel, Map.of("vid-1", new ProviderProfile("영상 1", null)));
+        });
+        when(youtubeGateway.fetchDisplay(CHANNEL, List.of("vid-1", "vid-2")))
+                .thenReturn(new YoutubeDisplay(
+                        channel,
+                        Map.of(
+                                "vid-1", new ProviderProfile("영상 1", null),
+                                "vid-2", new ProviderProfile("영상 2", null))));
+        when(youtubeGateway.fetchUploads(CHANNEL))
+                .thenReturn(List.of(
+                        new YoutubeCandidate("vid-1", "영상 1", null, NOW),
+                        new YoutubeCandidate("vid-2", "영상 2", null, NOW)));
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            Future<AccountView> lookup =
+                    pool.submit(() -> service.linksOf(artist.getId(), UserRole.ARTIST, artist.getId())
+                            .get(0));
+            assertThat(inGateway.await(5, TimeUnit.SECONDS)).isTrue();
+
+            AccountView saved = service.chooseWorks(artist.getId(), youtube.id(), List.of("vid-1", "vid-2"));
+
+            release.countDown();
+            lookup.get();
+            assertThat(saved.works()).extracting(WorkView::workId).containsExactly("vid-1", "vid-2");
+            assertThat(saved.works()).extracting(WorkView::title).containsExactly("영상 1", "영상 2");
+        } finally {
+            release.countDown();
+            pool.shutdownNow();
+        }
     }
 
     private void selectWorks(User artist, ExternalAccount account, String... workIds) {

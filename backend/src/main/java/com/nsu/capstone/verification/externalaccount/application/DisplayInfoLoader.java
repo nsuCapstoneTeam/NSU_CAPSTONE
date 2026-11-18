@@ -101,7 +101,12 @@ class DisplayInfoLoader {
                 case YOUTUBE -> loadYoutube(callerId, account, works);
             };
         } catch (RuntimeException e) {
-            log.warn("표시 정보를 받지 못했다: 연결 {}, 플랫폼 {}", account.id(), account.provider(), e);
+            // 예외 객체는 메시지와 스택을 함께 찍는다. 종류만 남긴다
+            log.warn(
+                    "표시 정보를 받지 못했다: 연결 {}, 플랫폼 {}, 예외 {}",
+                    account.id(),
+                    account.provider(),
+                    e.getClass().getSimpleName());
             return AccountDisplay.UNKNOWN;
         }
     }
@@ -121,8 +126,8 @@ class DisplayInfoLoader {
         if (displayCache.recentlyFailed(account.id())) {
             return AccountDisplay.UNKNOWN;
         }
-        // 캐시가 빈 동시 조회는 서버 안에서 한 번만 부르고 결과를 나눠 쓴다
-        return singleFlight.run("youtube-display:" + account.id(), () -> {
+        // 캐시가 빈 동시 조회는 서버 안에서 한 번만 부르고 결과를 나눠 쓴다. 고른 영상이 다른 조회는 결과가 달라 키에 영상 목록을 넣는다
+        return singleFlight.run("youtube-display:" + account.id() + ":" + String.join(",", videoIds), () -> {
             Optional<YoutubeDisplay> filledMeanwhile = displayCache.get(account.id(), videoIds);
             if (filledMeanwhile.isPresent()) {
                 return toAccountDisplay(filledMeanwhile.get());

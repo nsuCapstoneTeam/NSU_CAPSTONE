@@ -85,7 +85,9 @@ public class YoutubeQuota {
                     Long.toString(TTL_SECONDS));
         } catch (DataAccessException e) {
             // 예산을 셀 수 없으면 YouTube를 부르지 않는 쪽이 안전하다. 호출한 쪽은 확보하지 못한 것과 같게 다룬다.
-            log.warn("YouTube 하루 예산 카운터를 쓸 수 없어 확보하지 못한 것으로 본다", e);
+            log.warn(
+                    "YouTube 하루 예산 카운터를 쓸 수 없어 확보하지 못한 것으로 본다: 예외 {}",
+                    e.getClass().getSimpleName());
             return false;
         }
         if (newTotal == null || newTotal < 0) {
