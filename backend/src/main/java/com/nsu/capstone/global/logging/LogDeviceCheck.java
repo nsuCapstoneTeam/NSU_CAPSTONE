@@ -11,10 +11,12 @@ import ch.qos.logback.core.encoder.Encoder;
 import ch.qos.logback.core.spi.FilterReply;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.LogManager;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.ILoggerFactory;
 import org.slf4j.LoggerFactory;
@@ -134,7 +136,10 @@ final class LogDeviceCheck {
         return List.of("콘솔 어펜더 " + appender.getName() + "의 필터가 버리는 레벨: " + String.join(", ", denied));
     }
 
-    /** JUL 루트 핸들러는 SLF4J 브리지 하나뿐이어야 한다. Boot가 로깅을 설정하지 않으면 JUL 콘솔 핸들러가 남는다. */
+    /**
+     * JUL 핸들러는 루트의 SLF4J 브리지 하나뿐이어야 한다. Boot가 로깅을 설정하지 않으면 JUL 콘솔 핸들러가 남고, 이름 있는 JUL 로거에 붙은
+     * 핸들러는 루트를 거치지 않고 평문 stderr로 나간다.
+     */
     private static List<String> julHandlerProblems() {
         List<String> problems = new ArrayList<>();
         java.util.logging.Handler[] handlers =
@@ -146,6 +151,16 @@ final class LogDeviceCheck {
         }
         if (handlers.length == 0) {
             problems.add("JUL 루트 핸들러에 SLF4J 브리지가 없다");
+        }
+        LogManager manager = LogManager.getLogManager();
+        for (String name : Collections.list(manager.getLoggerNames())) {
+            java.util.logging.Logger named = manager.getLogger(name);
+            if (name.isEmpty() || named == null) {
+                continue;
+            }
+            for (java.util.logging.Handler handler : named.getHandlers()) {
+                problems.add("JUL 로거 핸들러: " + name + " (" + handler.getClass().getName() + ")");
+            }
         }
         return problems;
     }

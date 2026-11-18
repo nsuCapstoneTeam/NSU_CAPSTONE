@@ -24,6 +24,7 @@ import org.springframework.context.annotation.Bean;
  *   <li>attach-appender: 컨텍스트를 만드는 중 루트 로거에 어펜더를 하나 더 붙이는 앱
  *   <li>detach-root-appender: 컨텍스트를 만드는 중 콘솔 어펜더를 루트 로거에서 떼어 하위 로거에만 붙이는 앱
  *   <li>disable-additivity: 컨텍스트를 만드는 중 로거 하나의 additivity를 끄는 앱
+ *   <li>attach-jul-handler: 컨텍스트를 만드는 중 이름 있는 JUL 로거에 콘솔 핸들러를 붙이는 앱
  * </ul>
  */
 public final class ForkedMain {
@@ -58,6 +59,7 @@ public final class ForkedMain {
             case "attach-appender" -> AttachAppenderConfig.class;
             case "detach-root-appender" -> DetachRootAppenderConfig.class;
             case "disable-additivity" -> DisableAdditivityConfig.class;
+            case "attach-jul-handler" -> AttachJulHandlerConfig.class;
             case "replace-uncaught-handler" -> ReplaceUncaughtHandlerConfig.class;
             case "app" -> NsuCapstoneApplication.class;
             default -> throw new IllegalArgumentException("알 수 없는 실행 방식: " + mode);
@@ -172,6 +174,23 @@ public final class ForkedMain {
         Object quietLogger() {
             LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
             context.getLogger("com.example.quiet").setAdditive(false);
+            return new Object();
+        }
+    }
+
+    /**
+     * 컨텍스트를 만드는 중에 이름 있는 JUL 로거에 콘솔 핸들러가 붙는 경우. 루트 핸들러는 SLF4J 브리지 하나로 그대로라서 루트만 보는 검사는 지나간다.
+     * JUL은 로거를 약한 참조로만 들고 있어서, 핸들러가 사라지지 않게 로거를 필드로 붙잡는다.
+     */
+    @TestConfiguration(proxyBeanMethods = false)
+    static class AttachJulHandlerConfig {
+
+        private static java.util.logging.Logger named;
+
+        @Bean
+        Object julConsoleHandler() {
+            named = java.util.logging.Logger.getLogger("com.example.jul-probe");
+            named.addHandler(new java.util.logging.ConsoleHandler());
             return new Object();
         }
     }

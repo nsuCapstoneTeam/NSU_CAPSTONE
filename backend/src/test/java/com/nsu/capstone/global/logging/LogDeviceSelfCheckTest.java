@@ -81,6 +81,19 @@ class LogDeviceSelfCheckTest {
                 .doesNotContain(LogDeviceCheck.PROBE);
     }
 
+    /** 루트 핸들러만 보면 놓친다. 이름 있는 JUL 로거의 콘솔 핸들러는 평문을 stderr로 직접 쓴다. */
+    @Test
+    void 컨텍스트를_만드는_중_이름_있는_JUL_로거에_핸들러를_붙이면_준비_완료_검사에서_멈춘다() throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "attach-jul-handler");
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
+        assertThat(result.output())
+                .contains(STOPPED_BY_CHECK)
+                .contains("JUL 로거 핸들러: com.example.jul-probe")
+                .doesNotContain(ForkedMain.STARTED)
+                .doesNotContain(LogDeviceCheck.PROBE);
+    }
+
     @Test
     void 컨텍스트를_만드는_중_미처리_예외_처리기를_바꾸면_준비_완료_검사에서_멈춘다() throws Exception {
         ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "replace-uncaught-handler");
