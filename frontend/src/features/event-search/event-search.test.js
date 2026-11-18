@@ -11,7 +11,6 @@ import {
   provinceName,
   provinceOf,
   publicEvents,
-  regionCounts,
   shortRegion,
   venuePoint,
 } from './event-search.js';
@@ -29,28 +28,11 @@ test('예시 행사는 행사 등록 폼과 같은 형식이고 규칙에도 맞
 });
 
 test('예시 행사는 16개 시·도에 모두 하나 이상 있다', () => {
-  const counts = regionCounts(DEMO_PUBLIC_EVENTS);
-  assert.equal(counts.length, PROVINCES.length);
-  assert.ok(counts.every((r) => r.count > 0));
-});
-
-test('시·도별 행사 수는 많은 순, 같으면 시·도 목록 순서', () => {
-  const events = [
-    { regionCode: '41110' },
-    { regionCode: '11440' },
-    { regionCode: '41130' },
-    { regionCode: '26350' },
-  ];
-  const counts = regionCounts(events);
-  assert.deepEqual(
-    counts.slice(0, 3).map((r) => [r.short, r.count]),
-    [
-      ['경기', 2],
-      ['서울', 1],
-      ['부산', 1],
-    ],
+  const counts = countMap(DEMO_PUBLIC_EVENTS);
+  assert.ok(
+    PROVINCES.every((p) => counts[p.code] > 0),
+    PROVINCES.filter((p) => !(counts[p.code] > 0)).map((p) => p.short).join(', '),
   );
-  assert.equal(counts.at(-1).count, 0);
 });
 
 test('공개 행사만 고른다', () => {

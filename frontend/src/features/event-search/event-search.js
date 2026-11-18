@@ -17,15 +17,6 @@ export const districtName = (code) => DISTRICTS.find((d) => d.code === code)?.na
 // 아티스트에게 보여 줄 행사: 공개 행사만 (비공개 행사 규칙은 docs/api/03 §4, 팀 확정 필요)
 export const publicEvents = (events) => events.filter((e) => e.visibility === 'PUBLIC');
 
-// 시·도별 행사 수 [{ code, name, short, count }]. 많은 순, 같으면 시·도 목록 순서
-export function regionCounts(events) {
-  const counts = new Map();
-  for (const e of events) counts.set(provinceOf(e), (counts.get(provinceOf(e)) ?? 0) + 1);
-  return PROVINCES.map((p) => ({ ...p, count: counts.get(p.code) ?? 0 })).sort(
-    (a, b) => b.count - a.count,
-  );
-}
-
 // 지도에 쓸 행사 수 { 코드: 수 }. provinceCode가 ''이면 시·도별, 있으면 그 시·도의 시·군·구별
 export function countMap(events, provinceCode = '') {
   const counts = {};

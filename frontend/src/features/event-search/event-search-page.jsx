@@ -4,7 +4,6 @@ import PageHeading from '../../components/common/page-heading.jsx';
 import EventDetail from './components/event-detail.jsx';
 import EventList from './components/event-list.jsx';
 import EventPlacePanel from './components/event-place-panel.jsx';
-import RegionRank from './components/region-rank.jsx';
 import { DEMO_PUBLIC_EVENTS } from './event-search-data.js';
 import {
   countMap,
@@ -13,7 +12,6 @@ import {
   eventsIn,
   provinceName,
   publicEvents,
-  regionCounts,
   venuePoint,
 } from './event-search.js';
 import RegionMap from './map/region-map.jsx';
@@ -26,7 +24,6 @@ import './event-search.css';
 // 시·도 지도에는 목록에 보이는 행사마다 번호 핀을 찍고, 목록 행과 핀이 함께 강조됩니다.
 // [체험판] 행사는 예시 데이터입니다. 서버 연결 뒤에는 공개 행사 목록 API로 바꿉니다.
 const EVENTS = publicEvents(DEMO_PUBLIC_EVENTS);
-const COUNTS = regionCounts(EVENTS);
 const NATION_COUNTS = countMap(EVENTS);
 // 목록은 처음 8건, '더 보기'를 누를 때마다 8건씩 더 보여 줌
 const PAGE = 8;
@@ -289,7 +286,7 @@ export default function EventSearch({ notify }) {
           </div>
         </>
       ) : (
-        <div className="es-stage">
+        <div className="es-stage es-zoom">
           <section
             className="panel es-map-card is-nation"
             aria-labelledby="es-map-title"
@@ -303,18 +300,11 @@ export default function EventSearch({ notify }) {
               </h2>
               <p>공개 행사 {EVENTS.length}건</p>
             </div>
-            <div className="es-map-body">
-              <RegionMap
-                level="nation"
-                counts={NATION_COUNTS}
-                onSelect={openProvince}
-              />
-              <RegionRank
-                counts={COUNTS}
-                total={EVENTS.length}
-                onSelect={openProvince}
-              />
-            </div>
+            <RegionMap
+              level="nation"
+              counts={NATION_COUNTS}
+              onSelect={openProvince}
+            />
             <p className="es-map-source">{SOURCE}</p>
           </section>
           {listArea}
