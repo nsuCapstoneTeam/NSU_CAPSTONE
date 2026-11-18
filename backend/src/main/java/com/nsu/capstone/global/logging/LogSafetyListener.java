@@ -27,6 +27,13 @@ class LogSafetyListener implements ApplicationListener<ApplicationEnvironmentPre
     static final List<String> WARN_FLOOR_LOGGERS = List.of(
             "org.apache.tomcat.util.http", "org.apache.coyote.http11.Http11Processor", "jdk.httpclient.HttpClient");
 
+    /**
+     * 켜 두면 입력값이 든 문장을 찍는 로거. 하한(INFO·WARN)이 아니라 OFF로 고정한다. 하한 순회는 낮은 레벨만 올리므로 OFF를 다시 켜는
+     * 설정(환경 변수, 명령행)은 이 목록이 되돌린다. Hibernate는 SQL 오류의 PostgreSQL 본 메시지(`invalid input syntax for type uuid: "<값>"`)를
+     * 예외를 넘기지 않는 WARN 문장으로 찍어 메시지 없는 출력기를 거치지 않는다.
+     */
+    static final List<String> OFF_LOGGERS = List.of("org.hibernate.orm.jdbc.error");
+
     @Override
     public void onApplicationEvent(ApplicationEnvironmentPreparedEvent event) {
         if (isLocalMode(event.getEnvironment())) {
@@ -77,7 +84,7 @@ class LogSafetyListener implements ApplicationListener<ApplicationEnvironmentPre
         for (LoggerConfiguration configuration : loggingSystem.getLoggerConfigurations()) {
             String name = configuration.getName();
             LogLevel configured = configuration.getConfiguredLevel();
-            if (configured == null || isOwnLogger(name)) {
+            if (configured == null || isOwnLogger(name) || OFF_LOGGERS.contains(name)) {
                 continue;
             }
             LogLevel floor = floorOf(name);
@@ -95,6 +102,21 @@ class LogSafetyListener implements ApplicationListener<ApplicationEnvironmentPre
         }
         if (!raised.isEmpty()) {
             log.error("로그 레벨이 하한보다 낮아 하한으로 올렸다: {}", raised);
+        }
+        List<String> reopened = new ArrayList<>();
+        for (String name : OFF_LOGGERS) {
+            LoggerConfiguration configuration = loggingSystem.getLoggerConfiguration(name);
+            LogLevel configured = configuration == null ? null : configuration.getConfiguredLevel();
+            if (configured != LogLevel.OFF) {
+                loggingSystem.setLogLevel(name, LogLevel.OFF);
+                // 직접 준 레벨이 없어 루트를 따르던 경우는 위반이 아니다(설정 파일이 OFF를 주므로 거의 없다)
+                if (configured != null) {
+                    reopened.add(name);
+                }
+            }
+        }
+        if (!reopened.isEmpty()) {
+            log.error("끄기로 한 로거가 켜져 있어 다시 껐다: {}", reopened);
         }
     }
 

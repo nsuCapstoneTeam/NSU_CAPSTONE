@@ -37,8 +37,12 @@ public final class ForkedMain {
     static final String CORRELATION_ID = "corr-1";
 
     /** 시작 뒤 실효 레벨을 "LEVEL 이름=레벨"로 출력할 로거 */
-    private static final List<String> REPORTED_LOGGERS =
-            List.of("ROOT", "org.hibernate.orm.jdbc.extract", "org.apache.tomcat.util.http", "com.nsu.capstone");
+    private static final List<String> REPORTED_LOGGERS = List.of(
+            "ROOT",
+            "org.hibernate.orm.jdbc.extract",
+            "org.hibernate.orm.jdbc.error",
+            "org.apache.tomcat.util.http",
+            "com.nsu.capstone");
 
     private ForkedMain() {}
 

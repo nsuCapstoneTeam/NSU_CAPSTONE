@@ -46,6 +46,16 @@ class LoggingConfigTest {
     }
 
     @Test
+    void 값이_든_문장을_찍는_로거는_설정에서_OFF이고_OFF_고정_목록과_같다() {
+        for (String logger : LogSafetyListener.OFF_LOGGERS) {
+            assertThat(environment.getProperty("logging.level." + logger))
+                    .as("logging.level.%s", logger)
+                    .isEqualTo("OFF");
+        }
+        assertThat(LogSafetyListener.OFF_LOGGERS).contains("org.hibernate.orm.jdbc.error");
+    }
+
+    @Test
     void DevTools가_켜는_거절_값_WARN을_끈다() {
         assertThat(environment.getProperty("spring.mvc.log-resolved-exception", Boolean.class))
                 .isFalse();
