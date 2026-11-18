@@ -22,12 +22,12 @@ class IdentityVerificationConfig {
         return NameCipher.fromBase64(properties.nameEncryptionKey());
     }
 
+    /** 공유 RestClient.Builder 빈을 주입받지 않는다. 다른 모듈이 이름 있는 빌더를 여럿 두면 주입이 모호해지고, PortOne 클라이언트가 그 설정을 물려받아서도 안 된다. */
     @Bean
-    IdentityVerificationProvider identityVerificationProvider(
-            RestClient.Builder restClientBuilder, IdentityVerificationProperties properties) {
+    IdentityVerificationProvider identityVerificationProvider(IdentityVerificationProperties properties) {
         IdentityVerificationProperties.PortOne portone = properties.portone();
         RestClient client = PortOneIdentityVerificationProvider.restClient(
-                restClientBuilder, portone.baseUrl(), portone.connectTimeout(), portone.readTimeout());
+                RestClient.builder(), portone.baseUrl(), portone.connectTimeout(), portone.readTimeout());
         ChannelPolicy channelPolicy = new ChannelPolicy(
                 portone.testChannel().pgProvider(), portone.testChannel().pgMerchantId(), portone.channelKey());
         return new PortOneIdentityVerificationProvider(
