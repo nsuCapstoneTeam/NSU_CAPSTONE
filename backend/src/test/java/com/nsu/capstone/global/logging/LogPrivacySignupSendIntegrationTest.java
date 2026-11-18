@@ -7,6 +7,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import ch.qos.logback.classic.Level;
 import com.nsu.capstone.SignupTestTerms;
 import com.nsu.capstone.TestcontainersConfiguration;
 import com.nsu.capstone.identity.signup.SignupSession;
@@ -27,11 +28,14 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -50,10 +54,30 @@ import org.springframework.web.client.RestClient;
  * 본문·API 비밀이 배포 설정 인코더의 출력 바이트에 남는지 본다. 제공자가 거절하거나, 서버 오류를 내거나, 깨진 JSON을 주거나, 본문을 읽다
  * 끊기거나, 연결이 안 되는 경우를 모두 지나간다.
  */
-@SpringBootTest
+@SpringBootTest(
+        properties = {
+            // 배포 설정에 누가 낮은 레벨을 줘도 하한(Decision 7-3)이 막는지, 같은 흐름으로 함께 본다
+            "logging.level.root=TRACE",
+            "debug=true",
+            "trace=true",
+            "logging.level.org.springframework.web.client=DEBUG",
+            "logging.level.org.hibernate.orm.jdbc.extract=TRACE"
+        })
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class LogPrivacySignupSendIntegrationTest {
+
+    private static Map<String, Level> levelsBefore;
+
+    @BeforeAll
+    static void snapshotLevels() {
+        levelsBefore = LoggerLevels.snapshot();
+    }
+
+    @AfterAll
+    static void restoreLevels() {
+        LoggerLevels.restore(levelsBefore);
+    }
 
     private static final String OTP = "739104";
     private static final String BODY_MARKER = "private-provider-body-6e2a";

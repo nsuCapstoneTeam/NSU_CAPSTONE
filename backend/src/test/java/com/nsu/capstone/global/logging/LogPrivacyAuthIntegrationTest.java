@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import ch.qos.logback.classic.Level;
 import com.nsu.capstone.SignupTestTerms;
 import com.nsu.capstone.TestcontainersConfiguration;
 import com.nsu.capstone.identity.domain.User;
@@ -15,9 +16,12 @@ import com.nsu.capstone.identity.support.UuidV7Generator;
 import com.nsu.capstone.identity.verification.OtpCodeGenerator;
 import com.nsu.capstone.identity.verification.port.EmailSender;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,10 +39,30 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * ADR logging/00 Decision 7: 가짜 이메일·비밀번호·인증 코드를 요청에 실어 로그인 실패, 잘못된 입력, 인증 코드 확인(틀린 코드와 맞는 코드)을
  * 지나가게 한 뒤, 배포 설정 인코더의 출력 바이트에 남는지 본다.
  */
-@SpringBootTest
+@SpringBootTest(
+        properties = {
+            // 배포 설정에 누가 낮은 레벨을 줘도 하한(Decision 7-3)이 막는지, 같은 흐름으로 함께 본다
+            "logging.level.root=TRACE",
+            "debug=true",
+            "trace=true",
+            "logging.level.org.springframework.web.client=DEBUG",
+            "logging.level.org.hibernate.orm.jdbc.extract=TRACE"
+        })
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class LogPrivacyAuthIntegrationTest {
+
+    private static Map<String, Level> levelsBefore;
+
+    @BeforeAll
+    static void snapshotLevels() {
+        levelsBefore = LoggerLevels.snapshot();
+    }
+
+    @AfterAll
+    static void restoreLevels() {
+        LoggerLevels.restore(levelsBefore);
+    }
 
     private static final String PASSWORD = "sentinel-password-6e2a";
     private static final String WRONG_PASSWORD = "sentinel-wrong-password-6e2a";
