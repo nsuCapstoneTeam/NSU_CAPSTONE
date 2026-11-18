@@ -88,7 +88,7 @@ ARTIST가 마이페이지에서 실명 본인확인을 받고, 자기 본인확�
 | 순서 | 검사 | 실패 응답 | 시작 | 완료 | 상태 조회 |
 |---|---|---|---|---|---|
 | 1 | 토큰 | `401 AUTHENTICATION_REQUIRED` | O | O | O |
-| 1-1 | 시연 공개 쓰기(NSU-129) | 허용 경로라 걸리지 않음 | O | O | - |
+| 1-1 | 시연 공개 쓰기(NSU-158) | 허용 경로라 걸리지 않음 | O | O | - |
 | 2 | 역할 ARTIST | `403 ACCESS_DENIED` | O | O | O |
 | 3 | 경로 `identityVerificationId`가 소문자 16진수 32자(§1). 하이픈 UUID·대문자는 받지 않는다 | `400 INVALID_IDENTITY_VERIFICATION_ID` | - | O | - |
 | 4 | 요청 제한(§9) | `429 TOO_MANY_REQUESTS` + `Retry-After`, Redis 불가면 `503 RATE_LIMIT_UNAVAILABLE` | O | O | - |
