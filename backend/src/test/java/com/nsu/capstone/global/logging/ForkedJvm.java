@@ -64,13 +64,14 @@ final class ForkedJvm {
         command.add(ForkedMain.class.getName());
         command.addAll(List.of(programArgs));
 
-        // 자식은 부모의 작업 디렉터리가 아니라 빈 임시 디렉터리에서 시작한다. Boot가 부모 작업 디렉터리의 ./config/application.properties 같은
-        // 개발자의 파일 설정(개발 DB 주소 등)을 읽지 못하게 하려는 것이다.
         // 삭제는 try-with-resources가 맡는다. 본문이 던진 예외가 있으면 삭제 실패는 억제된 예외로 붙고, 없을 때만 삭제 실패가 던져진다.
-        try (TemporaryDirectory directory = new TemporaryDirectory(Files.createTempDirectory("forked-jvm-"), hooks)) {
-            Path workingDirectory = directory.path();
+        try (TemporaryDirectory root = new TemporaryDirectory(Files.createTempDirectory("forked-jvm-"), hooks)) {
+            // 자식은 부모의 작업 디렉터리가 아니라 빈 임시 디렉터리에서 시작한다. Boot가 부모 작업 디렉터리의 ./config/application.properties
+            // 같은 개발자의 파일 설정(개발 DB 주소 등)을 읽지 못하게 하려는 것이다.
+            Path workingDirectory = Files.createDirectory(root.path().resolve("work"));
             // 출력을 파이프로 읽으면 자식이 stdout을 닫을 때까지 readAllBytes가 막혀 아래 waitFor에 닿지 못한다. 파일로 받고 먼저 기다린다.
-            Path outputFile = workingDirectory.resolve("output.log");
+            // 작업 디렉터리를 비워 두려고 출력 파일은 그 밖에 둔다.
+            Path outputFile = root.path().resolve("output.log");
             ProcessBuilder builder = new ProcessBuilder(command)
                     .directory(workingDirectory.toFile())
                     .redirectErrorStream(true)

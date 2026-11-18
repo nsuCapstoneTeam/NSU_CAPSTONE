@@ -6,8 +6,13 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.read.ListAppender;
 import com.nsu.capstone.NsuCapstoneApplication;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.slf4j.bridge.SLF4JBridgeHandler;
@@ -22,7 +27,7 @@ import org.springframework.context.annotation.Bean;
  *
  * <ul>
  *   <li>light: 빈이 없는 앱
- *   <li>config-probe: light와 같고, 설정 키 {@value #CONFIG_PROBE_KEY}의 값을 출력하는 앱
+ *   <li>directory-probe: light와 같고, 시작한 작업 디렉터리와 그 안의 파일 이름을 출력하는 앱
  *   <li>attach-appender: 컨텍스트를 만드는 중 루트 로거에 어펜더를 하나 더 붙이는 앱
  *   <li>detach-root-appender: 컨텍스트를 만드는 중 콘솔 어펜더를 루트 로거에서 떼어 하위 로거에만 붙이는 앱
  *   <li>stop-console-appender: 컨텍스트를 만드는 중 루트에 붙은 콘솔 어펜더를 멈추는 앱
@@ -42,10 +47,11 @@ public final class ForkedMain {
     /** httpclient 모드가 Authorization 헤더에 싣는 가짜 값 */
     static final String FAKE_AUTHORIZATION = "fake-authorization-6d2b";
 
-    /** config-probe 모드가 읽어 "CONFIG-PROBE <값>"으로 출력하는 설정 키. 자식이 어떤 파일 설정을 읽었는지 부모가 본다. */
-    static final String CONFIG_PROBE_KEY = "forked.config.probe";
+    /** directory-probe 모드가 "DIRECTORY-PROBE <user.dir>"로 출력하는 줄의 앞부분. 자식이 어느 작업 디렉터리에서 시작했는지 부모가 본다. */
+    static final String DIRECTORY_PROBE_PREFIX = "DIRECTORY-PROBE ";
 
-    static final String CONFIG_PROBE_PREFIX = "CONFIG-PROBE ";
+    /** directory-probe 모드가 "DIRECTORY-FILES <이름들>"로 출력하는 줄의 앞부분. 작업 디렉터리 안의 파일 이름을 쉼표로 이은 것이다. */
+    static final String DIRECTORY_FILES_PREFIX = "DIRECTORY-FILES ";
 
     /** 시작 뒤 남기는 "상관 ID 확인" 줄의 MDC requestId */
     static final String CORRELATION_ID = "corr-1";
@@ -65,7 +71,7 @@ public final class ForkedMain {
         String mode = args[0];
         String[] bootArgs = Arrays.copyOfRange(args, 1, args.length);
         Class<?> source = switch (mode) {
-            case "light", "httpclient", "uncaught-thread", "hang", "config-probe" -> TestApp.EmptyConfig.class;
+            case "light", "httpclient", "uncaught-thread", "hang", "directory-probe" -> TestApp.EmptyConfig.class;
             case "attach-appender" -> AttachAppenderConfig.class;
             case "detach-root-appender" -> DetachRootAppenderConfig.class;
             case "stop-console-appender" -> StopConsoleAppenderConfig.class;
@@ -81,8 +87,8 @@ public final class ForkedMain {
         WebApplicationType webType = mode.equals("app") ? WebApplicationType.SERVLET : WebApplicationType.NONE;
         try (ConfigurableApplicationContext app =
                 new SpringApplicationBuilder(source).web(webType).run(bootArgs)) {
-            if (mode.equals("config-probe")) {
-                System.out.println(CONFIG_PROBE_PREFIX + app.getEnvironment().getProperty(CONFIG_PROBE_KEY));
+            if (mode.equals("directory-probe")) {
+                printWorkingDirectory();
             }
             if (mode.equals("httpclient")) {
                 callLocalServerWithAuthorization();
@@ -108,6 +114,16 @@ public final class ForkedMain {
             }
         }
         System.out.println(STARTED);
+    }
+
+    /** 부모가 자식의 작업 디렉터리(부모의 것과 다른 빈 디렉터리여야 한다)를 확인하도록 경로와 안의 파일 이름을 출력한다. */
+    private static void printWorkingDirectory() throws IOException {
+        Path directory = Path.of(System.getProperty("user.dir"));
+        System.out.println(DIRECTORY_PROBE_PREFIX + directory);
+        try (Stream<Path> files = Files.list(directory)) {
+            System.out.println(DIRECTORY_FILES_PREFIX
+                    + files.map(file -> file.getFileName().toString()).sorted().collect(Collectors.joining(",")));
+        }
     }
 
     /**

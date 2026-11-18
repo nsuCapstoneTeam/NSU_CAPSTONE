@@ -3,7 +3,6 @@ package com.nsu.capstone.global.logging;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -344,28 +343,27 @@ class ForkedJvmTest {
 
     /**
      * 자식이 부모의 작업 디렉터리에서 시작하면 Boot가 그곳의 ./config/application.properties를 읽는다. 개발자의 개발 DB 주소(spring.flyway.url
-     * 등)가 거기 있으면 전체 앱 테스트가 Testcontainers 대신 개발 DB에 마이그레이션을 돌릴 수 있다.
+     * 등)가 거기 있으면 전체 앱 테스트가 Testcontainers 대신 개발 DB에 마이그레이션을 돌릴 수 있다. 그래서 자식의 작업 디렉터리는 부모의 것과
+     * 다르고 비어 있어야 한다. 저장소에 파일을 만들어 읽히는지 보지 않으므로 개발자의 파일을 건드리지 않고, 건너뛰는 경우도 없다.
      */
     @Test
-    void 자식_JVM은_부모_작업_디렉터리의_Spring_설정_파일을_읽지_않는다() throws Exception {
-        Path configDirectory = Path.of("config");
-        assumeFalse(Files.exists(configDirectory), "개발자의 config 디렉터리를 덮어쓰지 않는다: " + configDirectory.toAbsolutePath());
-        Files.createDirectory(configDirectory);
-        try {
-            Files.writeString(
-                    configDirectory.resolve("application.properties"),
-                    ForkedMain.CONFIG_PROBE_KEY + "=parent-working-directory\n");
+    void 자식_JVM은_부모와_다른_빈_작업_디렉터리에서_시작한다() throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "directory-probe");
 
-            ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "config-probe");
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isZero();
+        Path childDirectory = Path.of(probeValue(result.output(), ForkedMain.DIRECTORY_PROBE_PREFIX));
+        assertThat(childDirectory).as("자식의 작업 디렉터리").isNotEqualTo(Path.of(System.getProperty("user.dir")));
+        assertThat(probeValue(result.output(), ForkedMain.DIRECTORY_FILES_PREFIX))
+                .as("자식의 작업 디렉터리 안의 파일")
+                .isEmpty();
+    }
 
-            assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isZero();
-            assertThat(result.output())
-                    .contains(ForkedMain.CONFIG_PROBE_PREFIX + "null")
-                    .doesNotContain("parent-working-directory");
-        } finally {
-            Files.deleteIfExists(configDirectory.resolve("application.properties"));
-            Files.deleteIfExists(configDirectory);
-        }
+    private static String probeValue(String output, String prefix) {
+        return output.lines()
+                .filter(line -> line.startsWith(prefix))
+                .map(line -> line.substring(prefix.length()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("자식 출력에 '" + prefix + "' 줄이 없다: " + output));
     }
 
     /**
