@@ -12,13 +12,14 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import uuid
 from zoneinfo import ZoneInfo
 
 PREFIX = "signup:limit:v2:"
 RECOVERY_SCRIPT = (Path(__file__).resolve().parents[1]
                    / "src/main/resources/redis/recover-unsent-signup-reservation.lua")
 KINDS = ("destination", "attempt", "ip", "ip-email", "total-phone", "total-email",
-         "session", "oauth", "login", "login-failure")
+         "session", "oauth", "login", "login-failure", "identity-verification")
 # Character.isWhitespace used by Java String.strip excludes nonbreaking spaces.
 JAVA_WHITESPACE = "\t\n\v\f\r\u001c\u001d\u001e\u001f \u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2008\u2009\u200a\u2028\u2029\u205f\u3000"
 
@@ -63,6 +64,17 @@ def window_start(kind, value):
     return int(parsed.timestamp())
 
 
+def account_id(value):
+    """계정 ID는 사람을 직접 가리키지 않아 서버가 digest 없이 UUID 원문을 키로 쓴다."""
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError:
+        raise ValueError("--account는 하이픈이 있는 계정 UUID여야 합니다") from None
+    if "-" not in value:
+        raise ValueError("--account는 하이픈이 있는 계정 UUID여야 합니다")
+    return str(parsed)
+
+
 def secret_input(label):
     if sys.stdin.isatty():
         return getpass.getpass(label + ": ")
@@ -78,6 +90,12 @@ def selection(args):
         if args.recipient or args.ip or args.channel:
             raise ValueError("서버 전체 한도에는 수신처/IP/channel을 지정하지 않습니다")
         suffix = "all"
+    elif args.kind == "identity-verification":
+        if args.recipient or args.ip or args.channel:
+            raise ValueError("본인확인 한도는 --account로만 계정을 지정합니다")
+        suffix = account_id(args.account) if getattr(args, "account", None) else "*"
+    elif getattr(args, "account", None):
+        raise ValueError("--account는 본인확인 한도에서만 사용합니다")
     else:
         needs_pair = args.kind in ("attempt", "login-failure")
         if needs_pair and args.recipient != args.ip:
@@ -193,6 +211,7 @@ def main():
     parser.add_argument("--channel", choices=("email", "phone"))
     parser.add_argument("--recipient", action="store_true", help="표준입력/숨김 프롬프트로 특정 수신처 지정")
     parser.add_argument("--ip", action="store_true", help="표준입력/숨김 프롬프트로 특정 IP 지정")
+    parser.add_argument("--account", help="본인확인 한도(identity-verification)에서 특정 계정 UUID 지정")
     parser.add_argument("--container", help="미지정 시 이 저장소 Compose의 redis 사용")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--quiesced", action="store_true", help="대상 서버의 신규 발송·진행 중 요청을 중지했음을 확인")
