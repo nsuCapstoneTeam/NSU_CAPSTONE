@@ -129,7 +129,9 @@ class RequestIdExecutorsTest {
         java.util.concurrent.CompletableFuture<String> viaExecute = new java.util.concurrent.CompletableFuture<>();
         executor.execute(() -> viaExecute.complete(MDC.get("requestId")));
         String viaInvokeAll = executor.invokeAll(
-                        java.util.List.<java.util.concurrent.Callable<String>>of(() -> MDC.get("requestId")))
+                        java.util.List.<java.util.concurrent.Callable<String>>of(() -> MDC.get("requestId")),
+                        5,
+                        TimeUnit.SECONDS)
                 .getFirst()
                 .get(5, TimeUnit.SECONDS);
         String viaInvokeAny = executor.invokeAny(
