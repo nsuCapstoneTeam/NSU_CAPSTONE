@@ -30,7 +30,7 @@
    - 검증 시나리오: 흐름 A 시작 → B 시작 → (A 콜백 불일치 | 위조 콜백 `?code=x&state=x` | A 결과의 늦은 교환 | A 교환 응답 지연 → B 시작 응답 수신 → A 교환 응답 수신) 중 무엇이 일어나도 B는 끝까지 성공한다.
 5. **배포 전제**: 프런트와 API는 같은 출처다. nginx가 `https://<도메인>/`에서 React를, `https://<도메인>/api/`에서 Spring을 제공한다.
    - 그래서 결과 교환 `fetch`에 쿠키가 기본으로 실리고 CORS credentials 설정이 필요 없다.
-   - HTTPS가 필요하다(`Secure`, `__Host-`). nginx는 HTTP를 HTTPS로 넘기고 `Strict-Transport-Security`(HSTS)를 보낸다. nginx는 `X-Forwarded-Proto`·`X-Forwarded-Host`를 넘기고 Spring은 `server.forward-headers-strategy=framework`를 쓴다. 이것이 없으면 OAuth `redirect_uri`와 쿠키 판단이 틀어진다.
+   - HTTPS가 필요하다(`Secure`, `__Host-`). nginx는 HTTP를 HTTPS로 넘기고 `Strict-Transport-Security`(HSTS)를 보낸다. nginx는 `X-Forwarded-Proto`·`X-Forwarded-Host`를 넘기고 Spring은 `server.forward-headers-strategy=framework`를 쓴다. 이 설정은 신뢰 프록시에서만 요청을 받는 환경에 한정한다. nginx가 외부 `Forwarded`를 제거하고 `X-Forwarded-For`를 `$remote_addr`로 덮어쓰며 host·proto·port를 직접 설정한다. 전달 헤더를 덧붙이는 설정은 사용하지 않는다. 백엔드 포트의 외부 직접 접근을 차단한다. 구체적인 설정·배포 점검은 [backend README](../../../backend/README.md#프록시-ip-신뢰-경계)를 따른다. 이것이 없으면 OAuth `redirect_uri`와 쿠키 판단이 틀어진다.
    - 로컬 개발은 Vite 프록시로 `/api`를 Spring에 넘겨 같은 출처로 만든다. HTTP 개발에서만 `auth.oauth.binding-cookie-secure=false`로 개발용 쿠키 이름을 쓴다(Decision 1).
 
 ## Context

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.nsu.capstone.SignupTestTerms;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.domain.User;
@@ -32,25 +33,22 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 class LoginServiceTest {
 
-    private static final UUID USER_ID =
-        UUID.fromString("0199f278-cc35-7c24-9d82-0242ac120010");
+    private static final UUID USER_ID = UUID.fromString("0199f278-cc35-7c24-9d82-0242ac120010");
     private static final String EMAIL = "user@example.com";
     private static final String PASSWORD = "password";
 
     private final UserRepository userRepository = mock(UserRepository.class);
     private final JwtAccessTokenService tokenService = mock(JwtAccessTokenService.class);
-    private final PasswordEncoder passwordEncoder = PasswordEncoderFactories
-        .createDelegatingPasswordEncoder();
+    private final PasswordEncoder passwordEncoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
 
     private LoginService loginService;
 
     @BeforeEach
     void setUp() {
-        DatabaseUserDetailsService userDetailsService =
-            new DatabaseUserDetailsService(userRepository);
+        DatabaseUserDetailsService userDetailsService = new DatabaseUserDetailsService(userRepository);
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
-        loginService = new LoginService(new ProviderManager(provider), tokenService);
+        loginService = new LoginService(new ProviderManager(provider), tokenService, SignupTestTerms.limits());
     }
 
     @ParameterizedTest
@@ -58,10 +56,9 @@ class LoginServiceTest {
     void logsInActiveUserUsingStoredRole(UserRole role) {
         User user = user(role, UserStatus.ACTIVE, passwordEncoder.encode(PASSWORD));
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
-        when(tokenService.issue(any(LoginPrincipal.class)))
-            .thenReturn(new IssuedAccessToken("access-token", 1800));
+        when(tokenService.issue(any(LoginPrincipal.class))).thenReturn(new IssuedAccessToken("access-token", 1800));
 
-        LoginResponse response = loginService.login(EMAIL, PASSWORD);
+        LoginResponse response = loginService.login(EMAIL, PASSWORD, "127.0.0.1");
 
         assertEquals("access-token", response.accessToken());
         assertEquals("Bearer", response.tokenType());
@@ -81,11 +78,7 @@ class LoginServiceTest {
 
     @Test
     void rejectsWrongPasswordWithoutIssuingToken() {
-        User user = user(
-            UserRole.ARTIST,
-            UserStatus.ACTIVE,
-            passwordEncoder.encode("different")
-        );
+        User user = user(UserRole.ARTIST, UserStatus.ACTIVE, passwordEncoder.encode("different"));
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
 
         assertInvalidCredentials(PASSWORD);
@@ -100,7 +93,9 @@ class LoginServiceTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = UserStatus.class, names = {"SUSPENDED", "WITHDRAWN"})
+    @EnumSource(
+            value = UserStatus.class,
+            names = {"SUSPENDED", "WITHDRAWN"})
     void rejectsInactiveStatusWithoutIssuingToken(UserStatus status) {
         User user = user(UserRole.ARTIST, status, passwordEncoder.encode(PASSWORD));
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
@@ -108,11 +103,25 @@ class LoginServiceTest {
         assertInvalidCredentials(PASSWORD);
     }
 
+    @Test
+    void databaseFailureReleasesFailureReservationAndDoesNotIssueToken() {
+        var limits = org.mockito.Mockito.mock(com.nsu.capstone.identity.signup.RedisPublicRequestLimitStore.class);
+        var provider = new DaoAuthenticationProvider(new DatabaseUserDetailsService(userRepository));
+        provider.setPasswordEncoder(passwordEncoder);
+        var service = new LoginService(new ProviderManager(provider), tokenService, limits);
+        when(limits.login(EMAIL, "203.0.113.10")).thenReturn("failure-slot");
+        when(userRepository.findByEmail(EMAIL))
+                .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("database unavailable"));
+        assertThrows(
+                org.springframework.security.authentication.InternalAuthenticationServiceException.class,
+                () -> service.login(EMAIL, PASSWORD, "203.0.113.10"));
+        verify(limits).loginSucceeded("failure-slot");
+        verify(tokenService, never()).issue(any());
+    }
+
     private void assertInvalidCredentials(String password) {
-        BusinessException exception = assertThrows(
-            BusinessException.class,
-            () -> loginService.login(EMAIL, password)
-        );
+        BusinessException exception =
+                assertThrows(BusinessException.class, () -> loginService.login(EMAIL, password, "127.0.0.1"));
         assertEquals(ErrorCode.INVALID_LOGIN_CREDENTIALS, exception.getErrorCode());
         verify(tokenService, never()).issue(any());
     }

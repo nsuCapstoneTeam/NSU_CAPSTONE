@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.nsu.capstone.SignupTestTerms;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.domain.User;
@@ -17,11 +18,16 @@ import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.domain.UserStatus;
 import com.nsu.capstone.identity.presentation.dto.EventPartnerSignupResponse;
 import com.nsu.capstone.identity.repository.UserRepository;
+import com.nsu.capstone.identity.repository.UserTermsAgreementRepository;
+import com.nsu.capstone.identity.signup.SignupMethod;
 import com.nsu.capstone.identity.signup.SignupSession;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
+import java.sql.SQLException;
+import java.time.Clock;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,6 +35,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
@@ -42,9 +49,14 @@ class EventPartnerSignupServiceTest {
     private static final String PHONE = "01098765432";
     private static final String PASSWORD = "password";
 
-    @Mock UserRepository userRepository;
-    @Mock SignupSessionStore signupSessionStore;
-    @Mock UserIdGenerator userIdGenerator;
+    @Mock
+    UserRepository userRepository;
+
+    @Mock
+    SignupSessionStore signupSessionStore;
+
+    @Mock
+    UserIdGenerator userIdGenerator;
 
     private PasswordEncoder passwordEncoder;
     private EventPartnerSignupService service;
@@ -54,17 +66,20 @@ class EventPartnerSignupServiceTest {
         MockitoAnnotations.openMocks(this);
         passwordEncoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
         service = new EventPartnerSignupService(
-            userRepository,
-            signupSessionStore,
-            passwordEncoder,
-            userIdGenerator,
-            new SignupRequiredConditionsValidator()
-        );
+                userRepository,
+                signupSessionStore,
+                passwordEncoder,
+                userIdGenerator,
+                new SignupRequiredConditionsValidator(),
+                SignupTestTerms.policy(),
+                Clock.systemUTC(),
+                new SignupPersistenceService(userRepository, Mockito.mock(UserTermsAgreementRepository.class)),
+                SignupTestTerms.limits());
     }
 
     @Test
     void createsEventPartnerSessionWithUnverifiedConditions() {
-        var response = service.createSession(EMAIL, PHONE);
+        var response = service.createSession(EMAIL, PHONE, SignupTestTerms.agreements(), "127.0.0.1");
 
         ArgumentCaptor<SignupSession> captor = ArgumentCaptor.forClass(SignupSession.class);
         verify(signupSessionStore).save(captor.capture());
@@ -75,7 +90,7 @@ class EventPartnerSignupServiceTest {
         assertEquals(UserRole.EVENT_PARTNER, session.role());
         assertFalse(session.emailVerified());
         assertFalse(session.phoneVerified());
-        assertFalse(session.requiredTermsAgreed());
+        assertTrue(session.requiredTermsAgreed());
         assertFalse(session.adultConfirmed());
     }
 
@@ -107,10 +122,7 @@ class EventPartnerSignupServiceTest {
         when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(verifiedSession()));
         when(userRepository.existsByEmail(EMAIL)).thenReturn(true);
 
-        BusinessException exception = assertThrows(
-            BusinessException.class,
-            () -> service.signup(SESSION_ID, PASSWORD)
-        );
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.signup(SESSION_ID, PASSWORD));
 
         assertEquals(ErrorCode.EMAIL_ALREADY_EXISTS, exception.getErrorCode());
         verify(userRepository, never()).saveAndFlush(any());
@@ -123,12 +135,12 @@ class EventPartnerSignupServiceTest {
         when(userRepository.existsByEmail(EMAIL)).thenReturn(false);
         when(userIdGenerator.generate()).thenReturn(USER_ID);
         when(userRepository.saveAndFlush(any(User.class)))
-            .thenThrow(new DataIntegrityViolationException("duplicate"));
+                .thenThrow(new DataIntegrityViolationException(
+                        "duplicate",
+                        new ConstraintViolationException(
+                                "duplicate", new SQLException("duplicate", "23505"), "uk_users_email")));
 
-        BusinessException exception = assertThrows(
-            BusinessException.class,
-            () -> service.signup(SESSION_ID, PASSWORD)
-        );
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.signup(SESSION_ID, PASSWORD));
 
         assertEquals(ErrorCode.EMAIL_ALREADY_EXISTS, exception.getErrorCode());
         verify(signupSessionStore, never()).deleteById(any());
@@ -136,16 +148,10 @@ class EventPartnerSignupServiceTest {
 
     @ParameterizedTest
     @MethodSource("invalidSessions")
-    void rejectsInvalidOrIncompleteSessionWithoutCreatingUser(
-        SignupSession session,
-        ErrorCode expectedError
-    ) {
+    void rejectsInvalidOrIncompleteSessionWithoutCreatingUser(SignupSession session, ErrorCode expectedError) {
         when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(session));
 
-        BusinessException exception = assertThrows(
-            BusinessException.class,
-            () -> service.signup(SESSION_ID, PASSWORD)
-        );
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.signup(SESSION_ID, PASSWORD));
 
         assertEquals(expectedError, exception.getErrorCode());
         verify(userRepository, never()).saveAndFlush(any());
@@ -154,12 +160,19 @@ class EventPartnerSignupServiceTest {
 
     private static Stream<Arguments> invalidSessions() {
         return Stream.of(
-            Arguments.of(session(false, true, true, true, UserRole.EVENT_PARTNER), ErrorCode.EMAIL_VERIFICATION_REQUIRED),
-            Arguments.of(session(true, false, true, true, UserRole.EVENT_PARTNER), ErrorCode.PHONE_VERIFICATION_REQUIRED),
-            Arguments.of(session(true, true, false, true, UserRole.EVENT_PARTNER), ErrorCode.REQUIRED_TERMS_AGREEMENT_REQUIRED),
-            Arguments.of(session(true, true, true, false, UserRole.EVENT_PARTNER), ErrorCode.ADULT_CONFIRMATION_REQUIRED),
-            Arguments.of(session(true, true, true, true, UserRole.ARTIST), ErrorCode.SIGNUP_SESSION_INVALID)
-        );
+                Arguments.of(
+                        session(false, true, true, true, UserRole.EVENT_PARTNER),
+                        ErrorCode.EMAIL_VERIFICATION_REQUIRED),
+                Arguments.of(
+                        session(true, false, true, true, UserRole.EVENT_PARTNER),
+                        ErrorCode.PHONE_VERIFICATION_REQUIRED),
+                Arguments.of(
+                        session(true, true, false, true, UserRole.EVENT_PARTNER),
+                        ErrorCode.REQUIRED_TERMS_AGREEMENT_REQUIRED),
+                Arguments.of(
+                        session(true, true, true, false, UserRole.EVENT_PARTNER),
+                        ErrorCode.ADULT_CONFIRMATION_REQUIRED),
+                Arguments.of(session(true, true, true, true, UserRole.ARTIST), ErrorCode.SIGNUP_SESSION_INVALID));
     }
 
     private SignupSession verifiedSession() {
@@ -167,21 +180,21 @@ class EventPartnerSignupServiceTest {
     }
 
     private static SignupSession session(
-        boolean emailVerified,
-        boolean phoneVerified,
-        boolean requiredTermsAgreed,
-        boolean adultConfirmed,
-        UserRole role
-    ) {
+            boolean emailVerified,
+            boolean phoneVerified,
+            boolean requiredTermsAgreed,
+            boolean adultConfirmed,
+            UserRole role) {
         return new SignupSession(
-            SESSION_ID,
-            EMAIL,
-            PHONE,
-            emailVerified,
-            phoneVerified,
-            requiredTermsAgreed,
-            adultConfirmed,
-            role
-        );
+                SESSION_ID,
+                EMAIL,
+                PHONE,
+                emailVerified,
+                phoneVerified,
+                requiredTermsAgreed,
+                adultConfirmed,
+                role,
+                SignupMethod.LOCAL,
+                (requiredTermsAgreed) ? SignupTestTerms.consent() : null);
     }
 }

@@ -16,28 +16,52 @@ import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import com.nsu.capstone.identity.oauth.OAuthOpaqueValueService;
 import com.nsu.capstone.identity.oauth.OAuthRedisKeys;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import jakarta.servlet.http.Cookie;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -74,14 +98,10 @@ class OAuthAuthorizationFlowIntegrationTest {
 
     private static final AtomicReference<String> GOOGLE_NONCE = new AtomicReference<>();
     private static final AtomicReference<String> KAKAO_NONCE = new AtomicReference<>();
-    private static final java.util.concurrent.atomic.AtomicLong TOKEN_DELAY_MILLIS =
-            new java.util.concurrent.atomic.AtomicLong();
-    private static final java.util.concurrent.atomic.AtomicLong JWKS_DELAY_MILLIS =
-            new java.util.concurrent.atomic.AtomicLong();
-    private static final java.util.concurrent.atomic.AtomicLong USERINFO_DELAY_MILLIS =
-            new java.util.concurrent.atomic.AtomicLong();
-    private static final java.util.concurrent.atomic.AtomicInteger JWKS_REQUESTS =
-            new java.util.concurrent.atomic.AtomicInteger();
+    private static final AtomicLong TOKEN_DELAY_MILLIS = new AtomicLong();
+    private static final AtomicLong JWKS_DELAY_MILLIS = new AtomicLong();
+    private static final AtomicLong USERINFO_DELAY_MILLIS = new AtomicLong();
+    private static final AtomicInteger JWKS_REQUESTS = new AtomicInteger();
     private static final long STALLED_PROVIDER_MILLIS = 3000;
     private static HttpServer providerServer;
     private static RSAKey providerKey;
@@ -91,13 +111,13 @@ class OAuthAuthorizationFlowIntegrationTest {
     MockMvc mockMvc;
 
     @Autowired
-    org.springframework.security.web.SecurityFilterChain securityFilterChain;
+    SecurityFilterChain securityFilterChain;
 
     @Autowired
-    org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
+    StringRedisTemplate redisTemplate;
 
     @Autowired
-    com.nsu.capstone.identity.oauth.OAuthOpaqueValueService opaqueValueService;
+    OAuthOpaqueValueService opaqueValueService;
 
     @DynamicPropertySource
     static void providerProperties(DynamicPropertyRegistry registry) {
@@ -121,15 +141,26 @@ class OAuthAuthorizationFlowIntegrationTest {
         }
     }
 
-    @org.junit.jupiter.api.AfterEach
+    @AfterEach
     void resetProviderDelays() {
         TOKEN_DELAY_MILLIS.set(0);
         JWKS_DELAY_MILLIS.set(0);
         USERINFO_DELAY_MILLIS.set(0);
     }
 
+    @Autowired
+    StringRedisTemplate requestLimitRedis;
+
+    @BeforeEach
+    void resetPublicRequestBudget() {
+        for (String kind : List.of("session", "oauth", "login", "login-failure")) {
+            var keys = requestLimitRedis.keys("signup:limit:v2:" + kind + ":*");
+            if (!keys.isEmpty()) requestLimitRedis.delete(keys);
+        }
+    }
+
     @Test
-    @org.junit.jupiter.api.Timeout(20)
+    @Timeout(20)
     void stalledTokenEndpointEndsCallbackWithinReadTimeoutAsProviderUnavailable() throws Exception {
         Flow flow = startFlow("google");
         TOKEN_DELAY_MILLIS.set(STALLED_PROVIDER_MILLIS);
@@ -138,7 +169,7 @@ class OAuthAuthorizationFlowIntegrationTest {
     }
 
     @Test
-    @org.junit.jupiter.api.Timeout(20)
+    @Timeout(20)
     void stalledUserInfoEndpointEndsCallbackWithinReadTimeoutAsProviderUnavailable() throws Exception {
         Flow flow = startFlow("google");
         USERINFO_DELAY_MILLIS.set(STALLED_PROVIDER_MILLIS);
@@ -147,10 +178,9 @@ class OAuthAuthorizationFlowIntegrationTest {
     }
 
     @Test
-    @org.junit.jupiter.api.Timeout(20)
+    @Timeout(20)
     // decoder가 JWKS를 캐시하므로 새 컨텍스트에서 시작해야 이 테스트가 JWKS를 실제로 조회한다
-    @org.springframework.test.annotation.DirtiesContext(
-            methodMode = org.springframework.test.annotation.DirtiesContext.MethodMode.BEFORE_METHOD)
+    @DirtiesContext(methodMode = DirtiesContext.MethodMode.BEFORE_METHOD)
     void stalledJwkSetEndpointEndsCallbackWithinReadTimeoutAsProviderUnavailable() throws Exception {
         Flow flow = startFlow("google");
         JWKS_DELAY_MILLIS.set(STALLED_PROVIDER_MILLIS);
@@ -166,16 +196,15 @@ class OAuthAuthorizationFlowIntegrationTest {
 
         completeCallback(startFlow("google"));
 
-        org.junit.jupiter.api.Assertions.assertEquals(
-                afterFirstCallback, JWKS_REQUESTS.get(), "두 번째 콜백이 Provider JWKS를 다시 조회했다");
+        Assertions.assertEquals(afterFirstCallback, JWKS_REQUESTS.get(), "두 번째 콜백이 Provider JWKS를 다시 조회했다");
     }
 
     private void assertStalledProviderEndsAsUnavailable(Flow flow) throws Exception {
         long startedAt = System.nanoTime();
         String code = completeCallback(flow);
-        long elapsedMillis = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
 
-        org.junit.jupiter.api.Assertions.assertTrue(
+        Assertions.assertTrue(
                 elapsedMillis < STALLED_PROVIDER_MILLIS - 500, "콜백이 read timeout 안에 끝나지 않았다: " + elapsedMillis + "ms");
         exchange(code, flow.bindingCookie())
                 .andExpect(status().isServiceUnavailable())
@@ -184,17 +213,18 @@ class OAuthAuthorizationFlowIntegrationTest {
 
     @Test
     void oauthFilterChainKeepsOnlyTheFiltersTheCsrfDecisionAssumes() {
-        java.util.List<String> filters = securityFilterChain.getFilters().stream()
+        List<String> filters = securityFilterChain.getFilters().stream()
                 .map(filter -> filter.getClass().getSimpleName())
                 .toList();
         String message = "보안 필터 목록이 바뀌었다. ADR authentication/00 Decision 6을 다시 본다";
 
-        org.junit.jupiter.api.Assertions.assertEquals(
-                java.util.List.of(
+        Assertions.assertEquals(
+                List.of(
                         "DisableEncodeUrlFilter",
                         "WebAsyncManagerIntegrationFilter",
                         "SecurityContextHolderFilter",
                         "HeaderWriterFilter",
+                        "OAuthRequestLimitFilter",
                         "OAuth2AuthorizationRequestRedirectFilter",
                         "OAuth2ProtectedResourceMetadataFilter",
                         "OAuth2LoginAuthenticationFilter",
@@ -207,14 +237,14 @@ class OAuthAuthorizationFlowIntegrationTest {
                         "AuthorizationFilter"),
                 filters,
                 message);
-        for (String forbidden : java.util.List.of(
+        for (String forbidden : List.of(
                 "CsrfFilter",
                 "LogoutFilter",
                 "BasicAuthenticationFilter",
                 "UsernamePasswordAuthenticationFilter",
                 "DefaultLoginPageGeneratingFilter",
                 "RememberMeAuthenticationFilter")) {
-            org.junit.jupiter.api.Assertions.assertFalse(filters.contains(forbidden), message);
+            Assertions.assertFalse(filters.contains(forbidden), message);
         }
     }
 
@@ -231,23 +261,22 @@ class OAuthAuthorizationFlowIntegrationTest {
                 .andExpect(status().is3xxRedirection())
                 .andReturn();
 
-        java.util.List<String> setCookies = result.getResponse().getHeaders("Set-Cookie");
-        org.junit.jupiter.api.Assertions.assertEquals(1, setCookies.size());
+        List<String> setCookies = result.getResponse().getHeaders("Set-Cookie");
+        Assertions.assertEquals(1, setCookies.size());
         String setCookie = setCookies.getFirst();
-        org.junit.jupiter.api.Assertions.assertTrue(setCookie.startsWith("__Host-NSU_OAUTH_BINDING="), setCookie);
-        for (String attribute : java.util.List.of("HttpOnly", "Secure", "SameSite=Lax", "Path=/", "Max-Age=420")) {
-            org.junit.jupiter.api.Assertions.assertTrue(setCookie.contains(attribute), attribute + " 없음: " + setCookie);
+        Assertions.assertTrue(setCookie.startsWith("__Host-NSU_OAUTH_BINDING="), setCookie);
+        for (String attribute : List.of("HttpOnly", "Secure", "SameSite=Lax", "Path=/", "Max-Age=420")) {
+            Assertions.assertTrue(setCookie.contains(attribute), attribute + " 없음: " + setCookie);
         }
-        org.junit.jupiter.api.Assertions.assertFalse(setCookie.contains("Domain"), setCookie);
+        Assertions.assertFalse(setCookie.contains("Domain"), setCookie);
 
         String nonce =
                 result.getResponse().getCookie("__Host-NSU_OAUTH_BINDING").getValue();
         String state =
                 queryParameters(result.getResponse().getHeader("Location")).getFirst("state");
         String stored = redisTemplate.opsForValue().get(OAuthRedisKeys.authorization(opaqueValueService.digest(state)));
-        org.junit.jupiter.api.Assertions.assertTrue(
-                stored.contains(opaqueValueService.digest(nonce)), "스냅샷에 nonce digest가 없다");
-        org.junit.jupiter.api.Assertions.assertFalse(stored.contains(nonce), "원문 nonce가 저장됐다");
+        Assertions.assertTrue(stored.contains(opaqueValueService.digest(nonce)), "스냅샷에 nonce digest가 없다");
+        Assertions.assertFalse(stored.contains(nonce), "원문 nonce가 저장됐다");
     }
 
     @Test
@@ -259,7 +288,7 @@ class OAuthAuthorizationFlowIntegrationTest {
                 .andExpect(header().doesNotExist("Location"))
                 .andExpect(jsonPath("$.code", equalTo("AUTHENTICATION_REQUIRED")));
 
-        org.junit.jupiter.api.Assertions.assertEquals(before, storedAuthorizationRequestCount());
+        Assertions.assertEquals(before, storedAuthorizationRequestCount());
     }
 
     @Test
@@ -273,7 +302,7 @@ class OAuthAuthorizationFlowIntegrationTest {
     }
 
     private int storedAuthorizationRequestCount() {
-        java.util.Set<String> keys = redisTemplate.keys("auth:oauth:authorization:*");
+        Set<String> keys = redisTemplate.keys("auth:oauth:authorization:*");
         return keys == null ? 0 : keys.size();
     }
 
@@ -301,16 +330,15 @@ class OAuthAuthorizationFlowIntegrationTest {
                 .andExpect(status().is3xxRedirection())
                 .andExpect(header().string("Location", equalTo(FALLBACK_LOCATION)))
                 .andExpect(header().doesNotExist("Set-Cookie"))
-                .andExpect(result -> org.junit.jupiter.api.Assertions.assertNull(
-                        result.getRequest().getSession(false)));
+                .andExpect(result -> Assertions.assertNull(result.getRequest().getSession(false)));
     }
 
     @Test
     void callbackWithoutBindingCookieFallsBackAndKeepsAuthorizationRequest() throws Exception {
         Flow flow = startFlow("google");
 
-        org.junit.jupiter.api.Assertions.assertEquals(FALLBACK_LOCATION, callbackLocation(flow, flow.state()));
-        org.junit.jupiter.api.Assertions.assertTrue(authorizationRequestExists(flow.state()));
+        Assertions.assertEquals(FALLBACK_LOCATION, callbackLocation(flow, flow.state()));
+        Assertions.assertTrue(authorizationRequestExists(flow.state()));
     }
 
     @Test
@@ -318,19 +346,18 @@ class OAuthAuthorizationFlowIntegrationTest {
         Flow victim = startFlow("google");
         Flow attacker = startFlow("google");
 
-        org.junit.jupiter.api.Assertions.assertEquals(
+        Assertions.assertEquals(
                 FALLBACK_LOCATION, callbackLocation(attacker, victim.state(), attacker.bindingCookie()));
-        org.junit.jupiter.api.Assertions.assertTrue(authorizationRequestExists(victim.state()));
+        Assertions.assertTrue(authorizationRequestExists(victim.state()));
     }
 
     @Test
     void forgedCallbackDoesNotDisturbTheFlowInProgress() throws Exception {
         Flow flow = startFlow("google");
 
-        org.junit.jupiter.api.Assertions.assertEquals(
-                FALLBACK_LOCATION, callbackLocation(flow, "x", flow.bindingCookie()));
-        org.junit.jupiter.api.Assertions.assertTrue(authorizationRequestExists(flow.state()));
-        org.junit.jupiter.api.Assertions.assertTrue(callbackLocation(flow, flow.state(), flow.bindingCookie())
+        Assertions.assertEquals(FALLBACK_LOCATION, callbackLocation(flow, "x", flow.bindingCookie()));
+        Assertions.assertTrue(authorizationRequestExists(flow.state()));
+        Assertions.assertTrue(callbackLocation(flow, flow.state(), flow.bindingCookie())
                 .startsWith("https://frontend.test/oauth/result?code="));
     }
 
@@ -350,8 +377,8 @@ class OAuthAuthorizationFlowIntegrationTest {
                 .andExpect(jsonPath("$.code", equalTo("OAUTH_RESULT_INVALID")));
     }
 
-    @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(
+    @ParameterizedTest
+    @ValueSource(
             strings = {
                 "LOGIN:6f1c1c36-0f45-4a8f-9a53-6e0a1d6a0c11",
                 "UNKNOWN_TYPE:digest:payload",
@@ -363,13 +390,13 @@ class OAuthAuthorizationFlowIntegrationTest {
         Flow flow = startFlow("google");
         String code = "legacy-result-code";
         String key = OAuthRedisKeys.result(opaqueValueService.digest(code));
-        redisTemplate.opsForValue().set(key, storedValue, java.time.Duration.ofMinutes(5));
+        redisTemplate.opsForValue().set(key, storedValue, Duration.ofMinutes(5));
 
         exchange(code, flow.bindingCookie())
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code", equalTo("OAUTH_RESULT_INVALID")))
                 .andExpect(header().doesNotExist("Set-Cookie"));
-        org.junit.jupiter.api.Assertions.assertFalse(redisTemplate.hasKey(key));
+        Assertions.assertFalse(redisTemplate.hasKey(key));
     }
 
     @Test
@@ -406,10 +433,10 @@ class OAuthAuthorizationFlowIntegrationTest {
         int workers = 8;
         Flow flow = startFlow("google");
         GOOGLE_NONCE.set(flow.providerNonce());
-        java.util.concurrent.CountDownLatch ready = new java.util.concurrent.CountDownLatch(workers);
-        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
-        java.util.List<java.util.concurrent.Future<String>> locations = new java.util.ArrayList<>();
-        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(workers)) {
+        CountDownLatch ready = new CountDownLatch(workers);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<String>> locations = new ArrayList<>();
+        try (var executor = Executors.newFixedThreadPool(workers)) {
             for (int index = 0; index < workers; index++) {
                 locations.add(executor.submit(() -> {
                     ready.countDown();
@@ -424,7 +451,7 @@ class OAuthAuthorizationFlowIntegrationTest {
                 }));
             }
             try {
-                org.junit.jupiter.api.Assertions.assertTrue(ready.await(5, java.util.concurrent.TimeUnit.SECONDS));
+                Assertions.assertTrue(ready.await(5, TimeUnit.SECONDS));
             } finally {
                 // 준비 대기가 실패해도 작업이 start.await()에 갇혀 executor.close()가 멈추지 않게 한다
                 start.countDown();
@@ -437,21 +464,19 @@ class OAuthAuthorizationFlowIntegrationTest {
             if (value.startsWith("https://frontend.test/oauth/result?code=")) {
                 winners++;
             } else {
-                org.junit.jupiter.api.Assertions.assertEquals(FALLBACK_LOCATION, value);
+                Assertions.assertEquals(FALLBACK_LOCATION, value);
             }
         }
-        org.junit.jupiter.api.Assertions.assertEquals(1, winners);
+        Assertions.assertEquals(1, winners);
     }
 
     @Test
     void productionRejectsTheDevelopmentCookieName() throws Exception {
         Flow flow = startFlow("google");
-        jakarta.servlet.http.Cookie devCookie =
-                new jakarta.servlet.http.Cookie("NSU_OAUTH_BINDING_DEV", flow.bindingNonce());
+        Cookie devCookie = new Cookie("NSU_OAUTH_BINDING_DEV", flow.bindingNonce());
 
-        org.junit.jupiter.api.Assertions.assertEquals(
-                FALLBACK_LOCATION, callbackLocation(flow, flow.state(), devCookie));
-        org.junit.jupiter.api.Assertions.assertTrue(authorizationRequestExists(flow.state()));
+        Assertions.assertEquals(FALLBACK_LOCATION, callbackLocation(flow, flow.state(), devCookie));
+        Assertions.assertTrue(authorizationRequestExists(flow.state()));
     }
 
     @Test
@@ -529,8 +554,7 @@ class OAuthAuthorizationFlowIntegrationTest {
                 .andExpect(header().string("Location", containsString(authorizationUri)))
                 .andExpect(header().string("Location", containsString("state=")))
                 .andExpect(header().string("Location", containsString("/api/v1/auth/oauth/callback/" + provider)))
-                .andExpect(result -> org.junit.jupiter.api.Assertions.assertNull(
-                        result.getRequest().getSession(false)));
+                .andExpect(result -> Assertions.assertNull(result.getRequest().getSession(false)));
     }
 
     private static final String BINDING_COOKIE = "__Host-NSU_OAUTH_BINDING";
@@ -539,8 +563,8 @@ class OAuthAuthorizationFlowIntegrationTest {
 
     private record Flow(String provider, String state, String providerNonce, String bindingNonce) {
 
-        jakarta.servlet.http.Cookie bindingCookie() {
-            return new jakarta.servlet.http.Cookie(BINDING_COOKIE, bindingNonce);
+        Cookie bindingCookie() {
+            return new Cookie(BINDING_COOKIE, bindingNonce);
         }
     }
 
@@ -557,7 +581,7 @@ class OAuthAuthorizationFlowIntegrationTest {
                 authorization.getResponse().getCookie(BINDING_COOKIE).getValue());
     }
 
-    private String callbackLocation(Flow flow, String state, jakarta.servlet.http.Cookie... cookies) throws Exception {
+    private String callbackLocation(Flow flow, String state, Cookie... cookies) throws Exception {
         if ("google".equals(flow.provider())) {
             GOOGLE_NONCE.set(flow.providerNonce());
         } else {
@@ -579,12 +603,11 @@ class OAuthAuthorizationFlowIntegrationTest {
     private String completeCallback(Flow flow) throws Exception {
         String location = callbackLocation(flow, flow.state(), flow.bindingCookie());
         String code = queryParameters(location).getFirst("code");
-        org.junit.jupiter.api.Assertions.assertNotNull(code, location);
+        Assertions.assertNotNull(code, location);
         return code;
     }
 
-    private org.springframework.test.web.servlet.ResultActions exchange(
-            String code, jakarta.servlet.http.Cookie... cookies) throws Exception {
+    private ResultActions exchange(String code, Cookie... cookies) throws Exception {
         var request = post("/api/v1/auth/oauth/result")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"code\":\"" + code + "\"}");
@@ -616,12 +639,12 @@ class OAuthAuthorizationFlowIntegrationTest {
             KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
             generator.initialize(2048);
             KeyPair keyPair = generator.generateKeyPair();
-            providerKey = new RSAKey.Builder((java.security.interfaces.RSAPublicKey) keyPair.getPublic())
-                    .privateKey((java.security.interfaces.RSAPrivateKey) keyPair.getPrivate())
+            providerKey = new RSAKey.Builder((RSAPublicKey) keyPair.getPublic())
+                    .privateKey((RSAPrivateKey) keyPair.getPrivate())
                     .keyID("test-key")
                     .build();
             providerServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-            providerServer.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
+            providerServer.setExecutor(Executors.newCachedThreadPool());
             providerBaseUri = "http://127.0.0.1:" + providerServer.getAddress().getPort();
             providerServer.createContext(
                     "/google/token",
@@ -652,7 +675,7 @@ class OAuthAuthorizationFlowIntegrationTest {
         }
     }
 
-    private static void stall(java.util.concurrent.atomic.AtomicLong delayMillis) {
+    private static void stall(AtomicLong delayMillis) {
         try {
             Thread.sleep(delayMillis.get());
         } catch (InterruptedException interrupted) {
