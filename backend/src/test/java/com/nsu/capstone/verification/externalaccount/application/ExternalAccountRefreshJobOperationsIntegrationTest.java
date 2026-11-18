@@ -175,6 +175,38 @@ class ExternalAccountRefreshJobOperationsIntegrationTest extends ExternalAccount
         }
     }
 
+    /** PR #232 Claude 대체 리뷰: Redis를 비우면 마지막 성공 기록이 없어 3일 경고가 꺼지므로, 확인 주기 7일 + 3일을 넘은 행으로 잡는다. */
+    @Test
+    void 마지막_성공_기록이_없어도_가장_오래된_확인이_10일을_넘었으면_ERROR_로그를_남긴다() {
+        Logger logger = (Logger) LoggerFactory.getLogger(ExternalAccountRefreshJob.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            User artist = newUser(UserRole.ARTIST, "ops-no-success@example.com");
+            account(artist, "UCstale", NOW.minusSeconds(11 * 86_400L));
+            when(youtubeGateway.findPublicChannelIds(anyList()))
+                    .thenThrow(new ExternalAccountException(
+                            ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE, "YouTube 장애"));
+            assertThat(redis.hasKey(LAST_SUCCESS_KEY)).isFalse();
+
+            job.run();
+            assertThat(errors(appender)).hasSize(1);
+            assertThat(errors(appender).get(0).getFormattedMessage())
+                    .contains("ExternalAccountRefreshJob", "마지막 성공 없음", "대상 행 수");
+            appender.list.clear();
+
+            // 10일을 넘지 않은 행(8일)만 있으면 기록이 없어도 조용하다
+            jdbcTemplate.update(
+                    "UPDATE external_accounts SET refreshed_at = ?",
+                    java.sql.Timestamp.from(NOW.minusSeconds(8 * 86_400L)));
+            job.run();
+            assertThat(errors(appender)).isEmpty();
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
     /** 06 §11.3: 잠금을 3초 안에 잡지 못한 아티스트는 확인 실패로 두고(성공 기록 없음) 다음 아티스트를 계속 처리한다. */
     @Test
     void 잠금을_잡지_못한_아티스트는_건너뛰고_다음_아티스트를_처리하며_그_실행은_성공으로_기록하지_않는다() throws Exception {

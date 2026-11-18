@@ -1,6 +1,7 @@
 package com.nsu.capstone.verification.externalaccount.application;
 
 import com.nsu.capstone.identity.application.UserIdGenerator;
+import com.nsu.capstone.verification.externalaccount.config.ExternalAccountProperties;
 import com.nsu.capstone.verification.externalaccount.domain.AuditActor;
 import com.nsu.capstone.verification.externalaccount.domain.AuditEvent;
 import com.nsu.capstone.verification.externalaccount.domain.AuditEventType;
@@ -52,9 +53,12 @@ public class ExternalAccountRefreshJob {
     private static final Duration DELETE_AFTER = Duration.ofDays(30);
     /** 마지막 성공이 이보다 오래되면 알린다. 30일 삭제보다 10일 이상 먼저 알아채게 하는 값이다. */
     private static final Duration SUCCESS_STALE_AFTER = Duration.ofDays(3);
+    /** 마지막 성공 기록이 없을 때, 가장 오래된 확인이 이보다 오래되면 알린다(확인 주기 7일 + 3일). */
+    private static final Duration NO_RECORD_STALE_AFTER = Duration.ofDays(10);
     /** 가장 오래된 확인이 이보다 오래되면 알린다. */
     private static final Duration OLDEST_STALE_AFTER = Duration.ofDays(20);
 
+    private final ExternalAccountProperties properties;
     private final ExternalAccountRepository repository;
     private final YoutubeGateway youtubeGateway;
     private final YoutubeQuota youtubeQuota;
@@ -83,6 +87,9 @@ public class ExternalAccountRefreshJob {
         }
         try {
             Instant now = clock.instant();
+            if (!properties.youtube().enabled()) {
+                log.info("YouTube가 꺼져 있어 ID 확인 호출은 하지 않고, 30일 넘게 확인하지 못한 행만 정리한다");
+            }
             warnIfStalled(now);
             boolean channelsVerified = checkChannels(now);
             boolean videosVerified = checkVideos(now);
@@ -102,8 +109,11 @@ public class ExternalAccountRefreshJob {
         Optional<Instant> lastSuccess = jobState.lastSuccess();
         Optional<Instant> oldest = repository.findOldestYoutubeRefreshedAt();
         boolean noRecentSuccess = lastSuccess.isPresent() && lastSuccess.get().isBefore(now.minus(SUCCESS_STALE_AFTER));
+        // Redis를 비우면 마지막 성공 기록이 사라져 3일 검사가 꺼진다. 그때는 확인 주기(7일) + 3일을 넘긴 행으로 대신 잡는다
+        boolean noRecordAndOverdue =
+                lastSuccess.isEmpty() && oldest.isPresent() && oldest.get().isBefore(now.minus(NO_RECORD_STALE_AFTER));
         boolean oldestTooOld = oldest.isPresent() && oldest.get().isBefore(now.minus(OLDEST_STALE_AFTER));
-        if (noRecentSuccess || oldestTooOld) {
+        if (noRecentSuccess || noRecordAndOverdue || oldestTooOld) {
             log.error(
                     "ExternalAccountRefreshJob이 멈춘 것으로 보인다: 마지막 성공 {}, 가장 오래된 refreshed_at {}, 대상 행 수 {}",
                     lastSuccess.map(Instant::toString).orElse("없음"),
@@ -164,6 +174,10 @@ public class ExternalAccountRefreshJob {
      * (ID와 응답 본문은 넣지 않는다). 작업은 호출 한 번(ID 50개 이하)에 1 unit를 쓰고 호출자 상한 없이 10,000까지 쓸 수 있다.
      */
     private PublicIdCheck verified(Function<List<String>, PublicIdCheck> call, List<String> ids) {
+        // 꺼진 기능은 확인 호출을 하지 않는다. 30일 미확인 삭제는 확인 실패와 같은 길로 그대로 한다(06 §11.1)
+        if (!properties.youtube().enabled()) {
+            return null;
+        }
         if (!youtubeQuota.tryReserveForJob(1)) {
             log.warn("YouTube 하루 예산이 차서 ID 확인을 건너뛴다: {}개", ids.size());
             return null;
