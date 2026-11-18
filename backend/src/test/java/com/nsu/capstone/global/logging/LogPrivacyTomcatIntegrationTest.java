@@ -22,6 +22,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.Environment;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -33,7 +34,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import({
     LogPrivacyTomcatIntegrationTest.ParameterProbeFilterConfig.class,
-    LogPrivacyTomcatIntegrationTest.CommitThenFailController.class
+    LogPrivacyTomcatIntegrationTest.CommitThenFailController.class,
+    LogPrivacyTomcatIntegrationTest.CommitThenStandardFailController.class
 })
 class LogPrivacyTomcatIntegrationTest extends EventIntegrationTestBase {
 
@@ -41,6 +43,8 @@ class LogPrivacyTomcatIntegrationTest extends EventIntegrationTestBase {
 
     /** 인증이 필요한 경로(anyRequest().authenticated())에 둔다. */
     static final String COMMIT_THEN_FAIL = "/api/v1/test-log-probe/commit-then-fail";
+
+    static final String COMMIT_THEN_STANDARD_FAIL = "/api/v1/test-log-probe/commit-then-standard-fail";
 
     @LocalServerPort
     int port;
@@ -165,9 +169,9 @@ class LogPrivacyTomcatIntegrationTest extends EventIntegrationTestBase {
                         + "\r\nContent-Type: application/json\r\nContent-Length: 2\r\nIdempotency-Key: "
                         + Sentinel.EMAIL + "\u0085\r\nConnection: close\r\n\r\n{}"));
 
-        // 알려진 한계(ADR Consequences): 이 헤더는 MVC가 읽다가 방화벽이 거절해 지금은 500이다. 400 VALIDATION_ERROR는 PR2에서 바꾼다.
-        // 헤더 원문은 메시지 없는 출력기 때문에 로그에 남지 않는다.
-        assertThat(response.status()).as("PR1의 실제 상태").isEqualTo(500);
+        // MVC가 @RequestHeader를 읽다가 방화벽이 거절한다. 계약 §8: 400 VALIDATION_ERROR, 본문은 정확히 {code, message}
+        assertThat(response.status()).as("계약 §8의 상태").isEqualTo(400);
+        assertThat(response.raw()).contains("\"code\":\"VALIDATION_ERROR\"");
         assertThat(capture.loggersContaining(Sentinel.EMAIL))
                 .as("가짜 값이 든 줄의 로거")
                 .isEmpty();
@@ -212,6 +216,39 @@ class LogPrivacyTomcatIntegrationTest extends EventIntegrationTestBase {
                 .as("양성 대조: 필터가 예외를 ID와 함께 한 번 남겼다")
                 .anyMatch(
                         line -> line.contains(RequestIdFilter.class.getName()) && line.contains("\"level\":\"ERROR\""));
+    }
+
+    /**
+     * 응답을 이미 보낸 뒤 Spring 표준 예외(ResponseEntityExceptionHandler가 다루는 것)가 나면 Spring 기본 구현은
+     * "Response already committed. Ignoring: " + ex를 이 클래스 이름의 로거로 WARN에 남긴다. 예외 문자열(메시지 포함)이 로그 문장에 들어가
+     * 메시지 없는 출력기를 거치지 않는다(ADR 11회차 지적). GlobalExceptionHandler가 예외 클래스 이름만 남겨야 한다.
+     */
+    @Test
+    void 응답을_보낸_뒤_Spring_표준_예외가_나도_WARN_문장에_가짜_이메일이_없다() throws IOException {
+        RawHttp.Response response = RawHttp.send(
+                port,
+                RawHttp.bytes("GET " + COMMIT_THEN_STANDARD_FAIL + " HTTP/1.1\r\nHost: localhost\r\nAuthorization: "
+                        + bearer(partner) + "\r\nConnection: close\r\n\r\n"));
+
+        assertThat(response.raw()).as("양성 대조: 응답 일부가 이미 나갔다").contains("partial");
+        assertThat(capture.loggersContaining(Sentinel.EMAIL))
+                .as("가짜 값이 든 줄의 로거")
+                .isEmpty();
+        assertThat(capture.lines())
+                .as("양성 대조: 처리기가 커밋 뒤 예외를 알리는 WARN을 남겼다")
+                .anyMatch(line -> line.contains("GlobalExceptionHandler") && line.contains("\"level\":\"WARN\""));
+    }
+
+    /** 테스트 전용: 본문 일부를 flush(커밋)한 뒤 가짜 이메일이 든 메시지로 Spring 표준 예외를 던진다. */
+    @RestController
+    static class CommitThenStandardFailController {
+
+        @GetMapping(COMMIT_THEN_STANDARD_FAIL)
+        void commitThenFail(HttpServletResponse response) throws Exception {
+            response.getWriter().write("partial");
+            response.flushBuffer();
+            throw new HttpMediaTypeNotSupportedException("지원하지 않는 형식 " + Sentinel.EMAIL);
+        }
     }
 
     /** 테스트 전용: 본문 일부를 flush(커밋)한 뒤 가짜 이메일이 든 메시지로 예외를 던진다. */

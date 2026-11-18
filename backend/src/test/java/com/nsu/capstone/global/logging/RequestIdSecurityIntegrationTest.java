@@ -2,6 +2,7 @@ package com.nsu.capstone.global.logging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -72,6 +73,28 @@ class RequestIdSecurityIntegrationTest extends EventIntegrationTestBase {
 
         assertRejectedWithRequestId(
                 mockMvc.perform(get("/api/v1/me/events").header("Authorization", artistToken)), 403, "ACCESS_DENIED");
+    }
+
+    /**
+     * MVC가 읽는 헤더(Idempotency-Key)에 제어 문자(U+0085)와 가짜 이메일이 있으면 방화벽이 MVC 안에서 거절한다. 계약 §8: 400
+     * VALIDATION_ERROR이고 본문은 정확히 {code, message}이며 어떤 줄에도 가짜 값이 없다. 실제 Tomcat에서는 LogPrivacyTomcatIntegrationTest가 같은 것을 본다.
+     */
+    @Test
+    void MVC가_읽는_헤더의_방화벽_거절은_400_VALIDATION_ERROR이고_로그에_가짜_값이_없다() throws Exception {
+        String partnerToken = bearer(partner);
+
+        mockMvc.perform(post("/api/v1/events")
+                        .header("Authorization", partnerToken)
+                        .header("Idempotency-Key", Sentinel.EMAIL + "\u0085")
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.*").value(org.hamcrest.Matchers.hasSize(2)));
+
+        assertThat(capture.loggersContaining(Sentinel.EMAIL))
+                .as("가짜 값이 든 줄의 로거")
+                .isEmpty();
     }
 
     private void assertRejectedWithRequestId(ResultActions result, int expectedStatus, String expectedCode)
