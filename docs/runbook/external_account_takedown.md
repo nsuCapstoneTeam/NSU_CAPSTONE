@@ -41,11 +41,15 @@ YouTube 영상 자체가 문제인 신고는 YouTube에 신고하도록 안내�
 
 읽기만 하는 조회다. 신고자가 알려 준 링크에서 플랫폼 계정 ID를 뽑아 찾는다. YouTube는 `https://www.youtube.com/channel/<채널 ID>`의 채널 ID, Spotify는 `https://open.spotify.com/artist/<아티스트 ID>`의 아티스트 ID다.
 
-신고자가 준 링크는 믿을 수 없는 입력이다. ID 자리에 따옴표나 세미콜론이 든 링크를 보내 SQL을 끼워 넣을 수 있으므로 값을 SQL 문장에 붙여 넣지 않고 `\set` 변수로 넘긴다. 그 전에 ID가 영문자·숫자·`-`·`_`만으로 22~24자인지 눈으로 확인한다. 아니면 조회하지 말고 신고자에게 링크를 다시 받는다.
+신고자가 준 링크는 믿을 수 없는 입력이다. ID 자리에 따옴표나 세미콜론이 든 링크를 보내 SQL을 끼워 넣을 수 있으므로 값을 SQL 문장에 붙여 넣지 않고 `\set` 변수로 넘긴다.
+
+값을 `\set` 줄에 붙이기 전에 ID가 영문자·숫자·`-`·`_`만으로 22~24자인지 눈으로 확인한다. 이 확인은 건너뛰지 않는다. `\set` 줄은 psql 슬래시 명령이라 값에 작은따옴표(`'`)나 역슬래시(`\`)가 있으면 따옴표가 닫히고 뒤의 `\`가 새 명령(셸 실행 `\!` 포함)이 된다. 그런 문자가 하나라도 보이면 붙이지 말고 조회하지도 않는다. 신고자에게 링크를 다시 받는다.
+
+`\set` 줄 끝에는 주석을 달 수 없다. psql 슬래시 명령은 `--`를 주석으로 보지 않아 값에 그대로 붙는다. 아래 `provider` 값은 `YOUTUBE`나 `SPOTIFY` 중 하나만 적는다.
 
 ```sql
 \set platform_id '여기에 ID만'
-\set provider 'SPOTIFY'                 -- 또는 'YOUTUBE'
+\set provider 'SPOTIFY'
 
 SELECT id, artist_id, provider, connected_at
 FROM external_accounts

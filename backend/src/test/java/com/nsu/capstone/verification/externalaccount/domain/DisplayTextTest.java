@@ -41,6 +41,16 @@ class DisplayTextTest {
         assertThat(DisplayText.clean("줄1 줄2 줄3", 100)).isEqualTo("줄1줄2줄3");
     }
 
+    /** 보안 재확인 지적: 보이지 않는 서식 문자 전반과 글자 모양이 빈 문자로 이름을 비워 보이게 하거나 다른 이름과 같은 모양을 만든다. */
+    @Test
+    void 보이지_않는_서식_문자_전반과_빈_모양_문자도_지운다() {
+        assertThat(DisplayText.clean("a⁠b­c؜d", 100)).isEqualTo("abcd"); // word joiner, 소프트 하이픈, 아랍 표시
+        assertThat(DisplayText.clean("ㅤ", 100)).isNull(); // 한글 채움 문자뿐이면 이름이 없는 것이다
+        assertThat(DisplayText.clean("ﾠᅟᅠ⠀", 100)).isNull();
+        assertThat(DisplayText.clean(" 밴드 ", 100)).isEqualTo("밴드"); // NBSP는 strip()이 못 지운다
+        assertThat(DisplayText.clean("a󠁁b", 100)).isEqualTo("ab"); // 태그 문자(U+E0041)
+    }
+
     @Test
     void 이모지와_한글에_쓰이는_ZWJ_ZWNJ는_지우지_않는다() {
         String family = "👨‍👩‍👧";

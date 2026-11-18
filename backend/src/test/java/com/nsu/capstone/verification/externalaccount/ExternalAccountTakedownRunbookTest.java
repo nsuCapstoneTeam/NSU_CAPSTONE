@@ -59,6 +59,27 @@ class ExternalAccountTakedownRunbookTest extends ExternalAccountIntegrationTestB
         assertThat(runbook).contains(":'platform_id'");
     }
 
+    /**
+     * psql 슬래시 명령({@code \set})은 줄 끝의 {@code --}를 주석으로 보지 않는다. 그대로 복사하면 변수 값에 주석이 붙어
+     * 조회가 0줄이 되고, 24시간 안에 처리해야 하는 신고에서 연결이 없다고 잘못 판단할 수 있다.
+     */
+    @Test
+    void 슬래시_명령_줄에는_줄_끝_주석을_붙이지_않는다() throws IOException {
+        List<String> offending = Files.readAllLines(RUNBOOK).stream()
+                .filter(line -> line.startsWith("\\set") && line.contains("--"))
+                .toList();
+
+        assertThat(offending).isEmpty();
+    }
+
+    @Test
+    void 값을_붙이기_전_형식_확인은_건너뛰지_않는_단계로_적고_따옴표와_역슬래시를_금지한다() throws IOException {
+        String runbook = Files.readString(RUNBOOK);
+
+        assertThat(runbook).contains("건너뛰지 않는다");
+        assertThat(runbook).contains("작은따옴표(`'`)나 역슬래시(`\\`)");
+    }
+
     @Test
     void 삭제_SQL은_연결과_고른_영상을_지우고_운영자_감사_기록을_남긴다() throws IOException {
         User artist = newUser(UserRole.ARTIST, "runbook-delete@example.com");

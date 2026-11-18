@@ -15,20 +15,28 @@ public final class DisplayText {
     private DisplayText() {}
 
     /**
-     * 제어 문자와 줄·문단 구분자, 그리고 글자 모양을 속이는 서식 문자를 지운다. 방향을 바꾸거나(U+202A~202E, U+2066~2069,
-     * U+200E~200F) 보이지 않게 이름을 흉내 내는(U+200B, U+FEFF) 문자다. ZWJ(U+200D)·ZWNJ(U+200C)는 이모지 조합과 한글 등
-     * 정상 글자에 쓰이므로 남긴다.
+     * 제어 문자, 줄·문단 구분자, 보이지 않는 서식 문자(Cf 전반), 글자 모양이 빈 문자를 지운다. 방향을 바꾸거나 이름 앞뒤에
+     * 끼워 다른 이름과 같은 모양을 만들거나 이름이 비어 보이게 하는 문자들이다. ZWJ(U+200D)·ZWNJ(U+200C)는 이모지 조합과
+     * 한글 등 정상 글자에 쓰이므로 남긴다.
      */
     private static boolean isUnsafeForDisplay(int codePoint) {
+        if (codePoint == 0x200C || codePoint == 0x200D) {
+            return false;
+        }
         int type = Character.getType(codePoint);
-        if (type == Character.CONTROL || type == Character.LINE_SEPARATOR || type == Character.PARAGRAPH_SEPARATOR) {
+        if (type == Character.CONTROL
+                || type == Character.FORMAT
+                || type == Character.LINE_SEPARATOR
+                || type == Character.PARAGRAPH_SEPARATOR) {
             return true;
         }
-        return codePoint == 0x200B
-                || codePoint == 0xFEFF
-                || (codePoint >= 0x200E && codePoint <= 0x200F)
-                || (codePoint >= 0x202A && codePoint <= 0x202E)
-                || (codePoint >= 0x2066 && codePoint <= 0x2069);
+        // 글자 모양이 비어 보이는 문자: NBSP(strip()이 못 지움), 한글 채움 문자, 점자 빈칸
+        return codePoint == 0x00A0
+                || codePoint == 0x3164
+                || codePoint == 0xFFA0
+                || codePoint == 0x115F
+                || codePoint == 0x1160
+                || codePoint == 0x2800;
     }
 
     /** 정리한 뒤 비어 있으면 {@code null}이다. */
