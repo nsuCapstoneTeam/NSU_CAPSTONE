@@ -23,6 +23,9 @@ class LogDeviceSelfCheckTest {
     /** 검사가 시작을 멈추며 남기는 로그 문장의 앞부분 */
     private static final String STOPPED_BY_CHECK = "로그 출력 장치가 배포 설정과 다르다";
 
+    /** 준비 완료 검사를 통과하면 남기는 INFO 줄의 앞부분. 배포 확인이 이 앞부분을 찾으므로 문구를 바꿔도 앞부분은 그대로 둔다. */
+    private static final String CHECK_CONFIRMED = "로그 보호 장치 확인 완료";
+
     @Test
     void 기본_설정이면_통과한다() throws Exception {
         ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "light");
@@ -180,6 +183,28 @@ class LogDeviceSelfCheckTest {
         assertThat(local.output()).contains(ForkedMain.STARTED);
         assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
         assertThat(result.output()).doesNotContain(ForkedMain.STARTED).doesNotContain(LogDeviceCheck.PROBE);
+    }
+
+    /**
+     * 배포 확인(NSU-129)은 경고 부재가 아니라 이 줄의 존재를 본다. 필터와 레벨은 줄을 지울 수만 있고 만들 수는 없어서, 줄이 있으면
+     * 로컬 모드가 아니고 검사를 통과했다는 뜻이다.
+     */
+    @Test
+    void 배포_설정으로_띄우면_확인_완료_INFO_줄이_정확히_한_줄_남는다() throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "light");
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isZero();
+        assertThat(result.output().lines().filter(line -> line.contains(CHECK_CONFIRMED)))
+                .hasSize(1)
+                .allSatisfy(line -> assertThat(line).contains("\"level\":\"INFO\""));
+    }
+
+    @Test
+    void 로컬_모드이면_확인_완료_줄이_없다() throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of("LOG_LOCAL_MODE", "true"), "light");
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isZero();
+        assertThat(result.output()).contains(ForkedMain.STARTED).doesNotContain(CHECK_CONFIRMED);
     }
 
     @Test
