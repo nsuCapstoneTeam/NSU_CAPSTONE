@@ -161,7 +161,9 @@ class OpenApiDocsIntegrationTest {
             for (Map.Entry<String, JsonNode> operation : path.getValue().properties()) {
                 String name = operation.getKey() + " " + path.getKey();
                 JsonNode security = operation.getValue().get("security");
-                if (path.getKey().startsWith("/api/v1/auth/")) {
+                // 외부 계정 연결의 Google 콜백도 로그인 없이 부르는 공개 API다(API 06 §4)
+                if (path.getKey().startsWith("/api/v1/auth/")
+                        || path.getKey().startsWith("/api/v1/external-accounts/oauth/callback/")) {
                     publicApis.add(name);
                     if (security == null || !security.isEmpty()) {
                         publicApisWithAuth.add(name);
@@ -175,9 +177,9 @@ class OpenApiDocsIntegrationTest {
             }
         }
 
-        assertThat(publicApis).hasSize(18);
+        assertThat(publicApis).hasSize(19);
         assertThat(publicApisWithAuth).isEmpty();
-        assertThat(otherApis).hasSize(11);
+        assertThat(otherApis).hasSize(17);
         assertThat(otherApisWithOverride).isEmpty();
     }
 
@@ -216,6 +218,9 @@ class OpenApiDocsIntegrationTest {
         }
         if (path.startsWith("/api/v1/me/event-partner-profile")) {
             return "EVENT_PARTNER 프로필";
+        }
+        if (path.contains("external-accounts")) {
+            return "외부 계정";
         }
         if (path.startsWith("/api/v1/artists/")) {
             return "Trust Profile";

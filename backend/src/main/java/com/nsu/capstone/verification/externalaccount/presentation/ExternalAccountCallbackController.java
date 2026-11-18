@@ -1,6 +1,7 @@
 package com.nsu.capstone.verification.externalaccount.presentation;
 
 import com.nsu.capstone.verification.externalaccount.config.ExternalAccountProperties;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.net.URI;
 import java.util.Map;
@@ -32,6 +33,7 @@ public class ExternalAccountCallbackController {
 
     private final ExternalAccountProperties properties;
 
+    @SecurityRequirements
     @GetMapping("/youtube")
     public ResponseEntity<Void> youtube(
             @RequestParam(required = false) String code,

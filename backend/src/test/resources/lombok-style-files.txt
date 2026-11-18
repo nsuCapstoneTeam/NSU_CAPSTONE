@@ -128,7 +128,6 @@ src/main/java/com/nsu/capstone/verification/externalaccount/presentation/ArtistE
 src/main/java/com/nsu/capstone/verification/externalaccount/presentation/ExternalAccountBindingCookie.java
 src/main/java/com/nsu/capstone/verification/externalaccount/presentation/ExternalAccountCallbackController.java
 src/main/java/com/nsu/capstone/verification/externalaccount/presentation/ExternalAccountController.java
-src/main/java/com/nsu/capstone/verification/externalaccount/presentation/ExternalAccountWebConfig.java
 src/main/java/com/nsu/capstone/verification/externalaccount/presentation/MyExternalAccountsInterceptor.java
 src/main/java/com/nsu/capstone/verification/externalaccount/presentation/dto/AuthorizationResponse.java
 src/main/java/com/nsu/capstone/verification/externalaccount/presentation/dto/ChooseWorksRequest.java

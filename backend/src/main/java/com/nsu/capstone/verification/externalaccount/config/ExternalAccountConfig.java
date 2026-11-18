@@ -1,5 +1,7 @@
 package com.nsu.capstone.verification.externalaccount.config;
 
+import com.nsu.capstone.verification.externalaccount.presentation.MyExternalAccountsInterceptor;
+import com.nsu.capstone.verification.externalaccount.redis.RequestLimiter;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
@@ -12,6 +14,8 @@ import org.springframework.context.annotation.PropertySource;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * 외부 계정 모듈 설정. 공유 설정 파일을 고치지 않고 모듈 설정 파일을 직접 읽는다.
@@ -43,6 +47,21 @@ public class ExternalAccountConfig {
                 .requestFactory(requestFactory(
                         properties.http().readConnectTimeout(),
                         properties.http().readReadTimeout()));
+    }
+
+    /**
+     * {@code /api/v1/me/external-accounts/**}에만 역할·요청 제한 인터셉터를 건다. 조회 API와 콜백은 건너뛴다(06 §1).
+     * 설정 클래스 안의 {@code @Bean}이라 {@code @WebMvcTest} 슬라이스에는 읽히지 않는다.
+     */
+    @Bean
+    WebMvcConfigurer externalAccountWebMvcConfigurer(RequestLimiter requestLimiter) {
+        MyExternalAccountsInterceptor interceptor = new MyExternalAccountsInterceptor(requestLimiter);
+        return new WebMvcConfigurer() {
+            @Override
+            public void addInterceptors(InterceptorRegistry registry) {
+                registry.addInterceptor(interceptor).addPathPatterns("/api/v1/me/external-accounts/**");
+            }
+        };
     }
 
     /**

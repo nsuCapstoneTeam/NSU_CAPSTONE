@@ -9,7 +9,6 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
@@ -18,8 +17,10 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * <p>검사 순서는 {@code 401} → {@code 403 DEMO_WRITE_NOT_ALLOWED} → {@code 403 ACCESS_DENIED}(역할) → {@code 429} →
  * {@code 400}(본문 검증) 순이다. 인터셉터는 본문을 읽기 전에 돌므로 역할과 제한이 본문 검증보다 먼저다. 역할이 맞지 않는 요청은
  * 제한 카운트를 쓰지 않는다. 그렇지 않으면 다른 역할의 요청이 아티스트의 한도를 깎는다.
+ *
+ * <p>컴포넌트가 아니다. {@code HandlerInterceptor} 타입의 빈은 {@code @WebMvcTest} 슬라이스에도 읽혀 Redis가 없는 슬라이스가 깨지므로,
+ * 모듈 설정({@code ExternalAccountConfig})이 만들어 등록한다.
  */
-@Component
 @RequiredArgsConstructor
 public class MyExternalAccountsInterceptor implements HandlerInterceptor {
 

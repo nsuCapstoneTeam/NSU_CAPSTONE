@@ -6,10 +6,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.nsu.capstone.verification.externalaccount.ExternalAccountIntegrationTestBase;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountException;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
+import com.nsu.capstone.verification.externalaccount.redis.RequestLimiter;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -25,7 +27,14 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 class MyExternalAccountsInterceptorTest extends ExternalAccountIntegrationTestBase {
 
     @Autowired
+    RequestLimiter requestLimiter;
+
     MyExternalAccountsInterceptor interceptor;
+
+    @BeforeEach
+    void createInterceptor() {
+        interceptor = new MyExternalAccountsInterceptor(requestLimiter);
+    }
 
     @AfterEach
     void clearSecurityContext() {
