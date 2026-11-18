@@ -20,6 +20,9 @@ final class ForkedJvm {
 
     private static final long TIMEOUT_SECONDS = 120;
 
+    /** 강제 종료를 요청한 자식이 실제로 끝나기를 기다리는 시간 */
+    private static final long TERMINATION_SECONDS = 10;
+
     /**
      * 자식이 물려받는 환경 변수. LANG과 LC_*는 stdout 인코딩을 정한다. 개발자 셸의 SPRING_DATASOURCE_*, SPRING_FLYWAY_*, LOG_*,
      * JAVA_TOOL_OPTIONS는 물려주지 않는다. 필요한 값은 테스트가 env로 직접 준다.
@@ -66,14 +69,34 @@ final class ForkedJvm {
             builder.environment().clear();
             builder.environment().putAll(childEnvironment(System.getenv(), env));
             Process process = builder.start();
-            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-                throw new IllegalStateException("자식 JVM이 " + timeoutSeconds + "초 안에 끝나지 않았다. 출력 끝: "
-                        + tail(Files.readString(outputFile, StandardCharsets.UTF_8)));
+            try {
+                if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                    terminate(process);
+                    throw new IllegalStateException("자식 JVM이 " + timeoutSeconds + "초 안에 끝나지 않았다. 출력 끝: "
+                            + tail(Files.readString(outputFile, StandardCharsets.UTF_8)));
+                }
+                return new Result(process.exitValue(), Files.readString(outputFile, StandardCharsets.UTF_8));
+            } catch (InterruptedException e) {
+                terminate(process);
+                // 던진 예외와 함께 인터럽트 상태도 호출자에게 남긴다. 자식이 끝난 것을 확인한 뒤에 세워야 위 종료 대기가 바로 깨지지 않는다
+                Thread.currentThread().interrupt();
+                throw e;
             }
-            return new Result(process.exitValue(), Files.readString(outputFile, StandardCharsets.UTF_8));
         } finally {
             FileSystemUtils.deleteRecursively(workingDirectory);
+        }
+    }
+
+    /** 자식을 강제 종료하고 실제로 끝난 것을 제한된 시간 안에 확인한다. 끝나기 전에 출력 파일과 작업 디렉터리를 지우지 않으려는 것이다. */
+    private static void terminate(Process process) {
+        process.destroyForcibly();
+        try {
+            if (!process.waitFor(TERMINATION_SECONDS, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("자식 JVM이 강제 종료 요청 뒤 " + TERMINATION_SECONDS + "초 안에 끝나지 않았다");
+            }
+        } catch (InterruptedException e) {
+            // 종료 대기가 또 인터럽트되어도 자식은 이미 종료를 요청받았다. 호출자가 받을 인터럽트를 잃지 않게 상태를 세운다
+            Thread.currentThread().interrupt();
         }
     }
 
