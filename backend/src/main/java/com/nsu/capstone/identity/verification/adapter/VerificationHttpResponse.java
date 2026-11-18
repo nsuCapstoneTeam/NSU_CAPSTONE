@@ -2,6 +2,7 @@ package com.nsu.capstone.identity.verification.adapter;
 
 import com.nsu.capstone.identity.verification.port.VerificationDeliveryException;
 import com.nsu.capstone.identity.verification.port.VerificationDeliveryException.Outcome;
+import java.io.IOException;
 import java.net.ConnectException;
 import java.net.UnknownHostException;
 import java.net.http.HttpConnectTimeoutException;
@@ -43,6 +44,12 @@ public final class VerificationHttpResponse {
                 try {
                     return response.bodyTo(bodyType);
                 } catch (RuntimeException exception) {
+                    // bodyTo wraps response-stream IO failures as RestClientException too.
+                    for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+                        if (cause instanceof IOException) {
+                            throw new VerificationDeliveryException(Outcome.UNKNOWN, exception, false);
+                        }
+                    }
                     throw new VerificationDeliveryException(Outcome.UNKNOWN, exception);
                 }
             });
