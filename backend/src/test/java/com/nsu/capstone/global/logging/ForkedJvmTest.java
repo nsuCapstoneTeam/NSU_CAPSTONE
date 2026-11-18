@@ -115,7 +115,7 @@ class ForkedJvmTest {
      */
     @Test
     void terminate는_강제_종료를_요청하고_끝난_것을_확인한_뒤_돌아온다() {
-        SluggishProcess process = new SluggishProcess(true);
+        FakeProcess process = FakeProcess.hangingUntilDestroyed();
 
         ForkedJvm.terminate(process);
 
@@ -125,7 +125,7 @@ class ForkedJvmTest {
 
     @Test
     void terminate는_요청_뒤에도_자식이_끝나지_않으면_확인한_다음_예외를_던진다() {
-        SluggishProcess process = new SluggishProcess(false);
+        FakeProcess process = FakeProcess.survivesDestroy();
 
         assertThatThrownBy(() -> ForkedJvm.terminate(process))
                 .isInstanceOf(IllegalStateException.class)
@@ -133,16 +133,80 @@ class ForkedJvmTest {
         assertThat(process.calls()).containsExactly("destroyForcibly", "waitFor");
     }
 
-    /** 강제 종료를 요청받아도 waitFor로 확인할 때까지는 살아 있는 척하는 프로세스. 호출 순서를 기록한다. */
-    private static final class SluggishProcess extends Process {
+    /**
+     * 시간 초과 진단이 출력 파일을 읽을 때 잘못된 UTF-8을 만나도 시간 초과 예외가 나와야 한다. 자식이 평문 stderr로 인코딩이 다른 바이트를 찍는
+     * 경우에 진단 때문에 엉뚱한 예외로 끝나면 원인이 가려진다.
+     */
+    @Test
+    void 시간_초과_진단은_잘못된_UTF_8을_대체_문자로_읽는다() {
+        ForkedJvm.Hooks hooks =
+                fakeChild(FakeProcess.hangingUntilDestroyed(), new byte[] {'a', (byte) 0xFF, (byte) 0xFE, 'z'});
+
+        assertThatThrownBy(() -> ForkedJvm.run(hooks, 1, List.of(), Map.of(), "hang"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("1초")
+                .hasMessageContaining("a��z");
+    }
+
+    @Test
+    void 시간_초과_진단이_출력을_읽지_못해도_시간_초과_예외가_주_예외로_남는다() {
+        ForkedJvm.Hooks hooks = fakeChild(FakeProcess.hangingUntilDestroyed(), null);
+
+        assertThatThrownBy(() -> ForkedJvm.run(hooks, 1, List.of(), Map.of(), "hang"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("1초")
+                .satisfies(e -> assertThat(e.getSuppressed()).singleElement().isInstanceOf(IOException.class));
+    }
+
+    @Test
+    void 자식이_정상_종료하면_잘못된_UTF_8_출력도_대체_문자로_돌려준다() throws Exception {
+        ForkedJvm.Hooks hooks = fakeChild(FakeProcess.exited(), new byte[] {'a', (byte) 0xFF, 'z'});
+
+        ForkedJvm.Result result = ForkedJvm.run(hooks, 1, List.of(), Map.of(), "light");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.output()).isEqualTo("a�z");
+    }
+
+    /** 실제 프로세스 대신 process를 돌려주고, output이 있으면 자식이 리디렉션 파일에 쓴 것처럼 채운다. */
+    private static ForkedJvm.Hooks fakeChild(Process process, byte[] output) {
+        return new ForkedJvm.Hooks() {
+            @Override
+            public Process start(ProcessBuilder builder) throws IOException {
+                if (output != null) {
+                    Files.write(builder.redirectOutput().file().toPath(), output);
+                }
+                return process;
+            }
+        };
+    }
+
+    /** 가짜 프로세스. 호출 순서를 기록한다. 끝난 것으로 알려지는 때는 만든 방식에 따라 다르다. */
+    private static final class FakeProcess extends Process {
 
         private final boolean endsAfterDestroy;
         private final List<String> calls = new ArrayList<>();
         private boolean destroyed;
         private boolean ended;
 
-        SluggishProcess(boolean endsAfterDestroy) {
+        private FakeProcess(boolean endsAfterDestroy, boolean ended) {
             this.endsAfterDestroy = endsAfterDestroy;
+            this.ended = ended;
+        }
+
+        /** 제한 시간 안에는 끝나지 않는다. 강제 종료를 요청한 뒤 waitFor로 확인하면 끝난 것으로 알려진다. 확인 전에는 살아 있는 척한다. */
+        static FakeProcess hangingUntilDestroyed() {
+            return new FakeProcess(true, false);
+        }
+
+        /** 강제 종료를 요청받아도 끝나지 않는다. */
+        static FakeProcess survivesDestroy() {
+            return new FakeProcess(false, false);
+        }
+
+        /** 처음부터 종료 코드 0으로 끝나 있다. */
+        static FakeProcess exited() {
+            return new FakeProcess(false, true);
         }
 
         List<String> calls() {
@@ -192,7 +256,10 @@ class ForkedJvmTest {
 
         @Override
         public int exitValue() {
-            throw new UnsupportedOperationException();
+            if (!ended) {
+                throw new IllegalThreadStateException();
+            }
+            return 0;
         }
 
         @Override

@@ -79,10 +79,9 @@ final class ForkedJvm {
             try {
                 if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
                     terminate(process);
-                    throw new IllegalStateException("자식 JVM이 " + timeoutSeconds + "초 안에 끝나지 않았다. 출력 끝: "
-                            + tail(Files.readString(outputFile, StandardCharsets.UTF_8)));
+                    throw timedOut(timeoutSeconds, outputFile);
                 }
-                return new Result(process.exitValue(), Files.readString(outputFile, StandardCharsets.UTF_8));
+                return new Result(process.exitValue(), readOutput(outputFile));
             } catch (InterruptedException e) {
                 terminate(process);
                 // 던진 예외와 함께 인터럽트 상태도 호출자에게 남긴다. 자식이 끝난 것을 확인한 뒤에 세워야 위 종료 대기가 바로 깨지지 않는다
@@ -92,6 +91,23 @@ final class ForkedJvm {
         } finally {
             FileSystemUtils.deleteRecursively(workingDirectory);
         }
+    }
+
+    /** 진단으로 출력 끝을 붙인다. 출력을 읽지 못해도 시간 초과가 주 예외로 남고, 읽기 실패는 억제된 예외로 붙는다. */
+    private static IllegalStateException timedOut(long timeoutSeconds, Path outputFile) {
+        String message = "자식 JVM이 " + timeoutSeconds + "초 안에 끝나지 않았다";
+        try {
+            return new IllegalStateException(message + ". 출력 끝: " + tail(readOutput(outputFile)));
+        } catch (IOException e) {
+            IllegalStateException timeout = new IllegalStateException(message + ". 출력을 읽지 못했다");
+            timeout.addSuppressed(e);
+            return timeout;
+        }
+    }
+
+    /** 잘못된 UTF-8은 예외 대신 대체 문자로 읽는다. 자식이 찍은 바이트가 진단과 단언 메시지를 막지 않게 한다. */
+    private static String readOutput(Path outputFile) throws IOException {
+        return new String(Files.readAllBytes(outputFile), StandardCharsets.UTF_8);
     }
 
     /** 자식을 강제 종료하고 실제로 끝난 것을 제한된 시간 안에 확인한다. 끝나기 전에 출력 파일과 작업 디렉터리를 지우지 않으려는 것이다. */
