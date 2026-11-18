@@ -51,6 +51,18 @@ class ExternalAccountTakedownRunbookTest extends ExternalAccountIntegrationTestB
         assertThat(runbook).as("처리 기한은 접수 뒤 24시간이다").contains("24시간");
     }
 
+    /** 2026-11-18 사용자가 접수 메일 주소를 정했다(ADR 2번·14번). 접수 창구와 아티스트 알림 문구에 같은 주소가 있고 미정 표시는 없다. */
+    @Test
+    void 접수_창구와_아티스트_알림_문구에_메일_주소를_적고_미정_표시는_남기지_않는다() throws IOException {
+        String runbook = Files.readString(RUNBOOK);
+        String intake = runbook.substring(runbook.indexOf("## 접수 창구"), runbook.indexOf("## 처리 기한"));
+        String notice = runbook.substring(runbook.indexOf("## 아티스트 알림 문구"), runbook.indexOf("## 같은 링크를 다시 걸 때"));
+
+        assertThat(intake).contains("404notfound.kdy@gmail.com");
+        assertThat(notice).contains("404notfound.kdy@gmail.com");
+        assertThat(runbook).doesNotContain("결정 필요", "{팀 메일 주소}");
+    }
+
     /** 보안 리뷰 지적: 신고자가 준 링크에서 뽑은 값은 믿을 수 없는 입력이다. SQL 문자열에 붙이지 않고 psql 변수로 넘긴다. */
     @Test
     void 신고자가_준_값을_SQL_따옴표_안에_직접_붙이라고_안내하지_않는다() throws IOException {
