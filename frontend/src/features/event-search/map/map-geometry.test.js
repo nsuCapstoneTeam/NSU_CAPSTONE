@@ -9,6 +9,7 @@ import {
   pathBounds,
   pieceName,
   placePins,
+  spreadMarkers,
   toMapPoint,
   zoomBox,
 } from './map-geometry.js';
@@ -28,7 +29,23 @@ test('지도 데이터: 전국은 시·도 16곳, 시·도마다 시·군·구�
   }
 });
 
-test('지도 데이터: 조각마다 경로·라벨·색 번호가 있고 라벨이 지도 안에 있다', async () => {
+// SVG 경로 'M x,y x,y ... Z'의 고리 안에 점이 있는지 (구멍은 홀수·짝수로)
+const insidePath = (d, [x, y]) => {
+  let hits = 0;
+  for (const part of d.split('Z').filter(Boolean)) {
+    const ring = part.slice(1).trim().split(' ').map((q) => q.split(',').map(Number));
+    let c = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+    }
+    if (c) hits += 1;
+  }
+  return hits % 2 === 1;
+};
+
+test('지도 데이터: 조각마다 경로·라벨·색 번호가 있고 라벨이 칠해진 곳(구멍 밖)에 있다', async () => {
   for (const level of levels) {
     const data = await load(level);
     assert.ok(data.width > 0 && data.width <= 600 && data.height > 0 && data.height <= 460, level);
@@ -36,6 +53,7 @@ test('지도 데이터: 조각마다 경로·라벨·색 번호가 있고 라벨
       assert.match(p.d, /^M[\d.]+,[\d.]+ .*Z$/, `${level} ${p.code}`);
       const [x, y] = p.label;
       assert.ok(x >= 0 && x <= data.width && y >= 0 && y <= data.height, `${level} ${p.code}`);
+      assert.ok(insidePath(p.d, p.label), `${level} ${p.code} 라벨이 조각 밖이나 구멍 안`);
       assert.ok(Number.isInteger(p.tone) && p.tone >= 0 && p.tone <= 4, `${level} ${p.code}`);
       assert.ok(pieceName(level, p.code), `${level} ${p.code}`);
     }
@@ -93,21 +111,22 @@ test('겹치는 핀은 비켜 서고, 핀과 겹치는 이름은 숨김', () => 
   assert.equal(spots.free.hidden, false);
 });
 
-// SVG 경로 'M x,y x,y ... Z'의 고리 안에 점이 있는지 (구멍은 홀수·짝수로)
-const insidePath = (d, [x, y]) => {
-  let hits = 0;
-  for (const part of d.split('Z').filter(Boolean)) {
-    const ring = part.slice(1).trim().split(' ').map((q) => q.split(',').map(Number));
-    let c = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [xi, yi] = ring[i];
-      const [xj, yj] = ring[j];
-      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
-    }
-    if (c) hits += 1;
-  }
-  return hits % 2 === 1;
-};
+test('겹치는 번호 핀은 옆으로 비켜 서고 원래 자리를 남긴다', () => {
+  // 서울 예시 행사 두 곳처럼 8px만 떨어진 핀, 떨어져 있는 핀
+  const out = spreadMarkers(
+    [
+      { id: 'a', x: 100, y: 100 },
+      { id: 'b', x: 108, y: 102 },
+      { id: 'c', x: 300, y: 100 },
+    ],
+    26,
+  );
+  assert.equal(out[0].moved, false);
+  assert.equal(out[1].moved, true);
+  assert.ok(Math.abs(out[1].x - out[0].x) >= 26, '비켜 선 핀이 첫 핀과 겹침');
+  assert.deepEqual([out[1].ox, out[1].oy], [108, 102]);
+  assert.equal(out[2].moved, false);
+});
 
 test('예시 행사의 핀 자리는 그 행사의 시·군·구 조각 안에 있다', async () => {
   for (const e of DEMO_PUBLIC_EVENTS) {

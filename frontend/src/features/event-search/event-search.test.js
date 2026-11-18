@@ -104,6 +104,10 @@ test('공연장 좌표: 숫자·문자열 좌표를 [경도, 위도]로, 없거�
   assert.equal(venuePoint({ venueLat: 'abc', venueLng: 126.92 }), null);
   assert.equal(venuePoint({ venueLat: 126.92, venueLng: 37.56 }), null); // 위도·경도를 바꿔 넣은 경우
   assert.equal(venuePoint({ venueLat: 40.7, venueLng: -74 }), null);
+  // 숫자나 문자열이 아닌 값은 Number()로 바뀌더라도 좌표로 보지 않음
+  assert.equal(venuePoint({ venueLat: [37.56], venueLng: 126.92 }), null);
+  assert.equal(venuePoint({ venueLat: { valueOf: () => 37.56 }, venueLng: 126.92 }), null);
+  assert.equal(venuePoint({ venueLat: true, venueLng: 126.92 }), null);
   const withPoint = DEMO_PUBLIC_EVENTS.filter((e) => venuePoint(e));
   assert.equal(withPoint.length, DEMO_PUBLIC_EVENTS.length - 1);
 });

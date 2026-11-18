@@ -2,19 +2,23 @@
 // 행정동 경계 GeoJSON을 시·도 / 시·군·구 조각으로 합치고, 화면용 SVG 경로로 줄여서
 // src/features/event-search/map/map-data/ 에 파일로 씁니다. 라이브러리 없이 Node만 씁니다.
 //
-// 경계 자료: vuski/admdongkor ver20260701 (통계청 SGIS 행정동 경계, 공공누리 제1유형 → CC BY 4.0)
+// 경계 자료: vuski/admdongkor (통계청 SGIS 행정동 경계, 공공누리 제1유형 → CC BY 4.0)
 //   https://raw.githubusercontent.com/vuski/admdongkor/master/ver20260701/HangJeongDong_ver20260701.geojson
 //
 // 실행 (frontend 폴더에서):
-//   node scripts/build-region-map.mjs <HangJeongDong_ver20260701.geojson 경로>
+//   node scripts/build-region-map.mjs <HangJeongDong_verYYYYMMDD.geojson 경로>
+//   판(verYYYYMMDD)은 파일 이름에서 읽어 생성 파일 머리말에 적습니다. 파일 이름을 바꾸지 마세요.
 //
-// 행정구역이 바뀌면 새 판 GeoJSON으로 다시 실행하고, data/regions.js와 코드가 맞는지 함께 확인합니다.
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+// 행정구역이 바뀌면 data/regions.js를 먼저 새 코드에 맞추고 실행합니다(목록에 없는 코드가 있으면 멈춤).
+// 시·도 코드가 바뀌면 map/map-loaders.js의 LOADERS도 함께 고칩니다.
+// 파일은 임시 폴더에 모두 만든 뒤 한 번에 바꿔 넣어서, 중간에 실패해도 기존 지도 데이터는 그대로입니다.
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DISTRICTS, PROVINCES } from '../src/data/regions.js';
 
-const SOURCE_VERSION = 'ver20260701';
+const SOURCE_URL = 'https://github.com/vuski/admdongkor';
+const LICENSE_URL = 'https://creativecommons.org/licenses/by/4.0/';
 const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '../src/features/event-search/map/map-data');
 
 // 지도에서 뺄 섬 (너무 멀리 있어 지도가 작아짐). 화면에는 칩으로 따로 보여 줍니다.
@@ -110,14 +114,17 @@ function simplify(points, tol) {
   return simplify(points.slice(0, index + 1), tol).slice(0, -1).concat(simplify(points.slice(index), tol));
 }
 
-// 라벨·핀 자리: 가장 큰 고리 안에서 테두리와 가장 먼 점 (격자로 찾음)
-function labelPoint(ring) {
+// 라벨·핀 자리: 가장 큰 고리(main) 범위 안에서, 칠해진 곳(rings 전체를 짝홀 규칙으로)이면서 테두리와 가장 먼 점 (격자로 찾음)
+// rings에는 구멍도 들어 있어서 구멍 안의 점은 고르지 않고, 구멍 테두리까지 거리도 셈
+function labelPoint(ring, rings = [ring]) {
   const inside = (x, y) => {
     let c = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [xi, yi] = ring[i];
-      const [xj, yj] = ring[j];
-      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+    for (const r of rings) {
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+        const [xi, yi] = r[i];
+        const [xj, yj] = r[j];
+        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+      }
     }
     return c;
   };
@@ -140,7 +147,7 @@ function labelPoint(ring) {
       const y = y0 + ((y1 - y0) * j) / 24;
       if (!inside(x, y)) continue;
       let m = Infinity;
-      for (let q = 0; q < ring.length; q++) m = Math.min(m, segDist(x, y, ring[q], ring[(q + 1) % ring.length]));
+      for (const r of rings) for (let q = 0; q < r.length; q++) m = Math.min(m, segDist(x, y, r[q], r[(q + 1) % r.length]));
       // 가운데에 가까운 쪽을 조금 더 좋게
       const score = m - 0.06 * Math.hypot(x - (x0 + x1) / 2, (y - (y0 + y1) / 2) * 1.4);
       if (score > bestScore) {
@@ -154,6 +161,17 @@ function labelPoint(ring) {
 }
 
 const half = (v) => Math.round(v * 2) / 2;
+
+// 이웃과 함께 쓰는 변은 두 조각이 반대 방향으로 지나가므로, 늘 같은 방향으로 줄여야 같은 점이 남음
+// (Douglas-Peucker는 거리가 같은 점이 둘이면 먼저 만난 점을 골라 방향에 따라 결과가 달라질 수 있음)
+function simplifyShared(seg, tol) {
+  const [a, b] = [seg[0], seg[seg.length - 1]];
+  const forward = a[0] < b[0] || (a[0] === b[0] && a[1] <= b[1]);
+  return forward ? simplify(seg, tol) : simplify([...seg].reverse(), tol).reverse();
+}
+
+// 화면 좌표로 반올림한 뒤에도 넓이가 남는 고리인지
+const visible = (r) => r.length >= 3 && Math.abs(signedArea(r.map((q) => [half(q[0]), half(q[1])]).concat([[half(r[0][0]), half(r[0][1])]]))) > 0;
 
 // 한 화면(전국 또는 시·도 하나)에 들어갈 조각들을 화면 좌표로 바꾸고 줄임
 // 이웃 조각과 함께 쓰는 변은 같은 점에서 끊어 따로 줄여서, 줄인 뒤에도 틈이나 겹침이 생기지 않게 함
@@ -195,7 +213,7 @@ function buildLevel(pieces, { tol, minArea }) {
   const same = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 
   const out = pieces.map((p, pieceIndex) => {
-    let rings = p.rings
+    const shapes = p.rings
       .map((ring) => {
         const r = ring.slice(0, -1);
         const n = r.length;
@@ -219,9 +237,10 @@ function buildLevel(pieces, { tol, minArea }) {
               far = i;
             }
           });
-          return simplify(P.slice(0, far + 1), tol)
+          const simplified = simplify(P.slice(0, far + 1), tol)
             .slice(0, -1)
             .concat(simplify(P.slice(far).concat([P[0]]), tol).slice(0, -1));
+          return { simplified, original: P };
         }
         const result = [];
         for (let j = 0; j < fixed.length; j++) {
@@ -238,16 +257,20 @@ function buildLevel(pieces, { tol, minArea }) {
               break;
             }
           }
-          result.push(...simplify(seg, tol).slice(0, -1));
+          result.push(...simplifyShared(seg, tol).slice(0, -1));
         }
-        return result;
-      })
-      .filter((r) => r.length >= 3);
+        return { simplified: result, original: P };
+      });
+    let rings = shapes.map((x) => x.simplified).filter(visible);
+    // 줄이다가 고리가 모두 사라지면(아주 작은 시·군·구) 줄이지 않은 모양을 씀
+    if (!rings.length) rings = shapes.map((x) => x.original).filter(visible);
+    if (!rings.length) throw new Error(`지도에 그릴 수 없는 조각: ${p.code}`);
     const areas = rings.map((r) => Math.abs(signedArea(r.concat([r[0]]))));
     const biggest = Math.max(...areas);
     const main = rings[areas.indexOf(biggest)];
     rings = rings.filter((_, i) => areas[i] >= minArea || areas[i] === biggest);
-    const { point, room } = labelPoint(main);
+    // 라벨 자리는 구멍(다른 시·군·구를 둘러싼 자리)을 뺀 실제 칠해진 곳에서 찾음
+    const { point, room } = labelPoint(main, rings);
     const d = rings.map((r) => `M${r.map((q) => `${half(q[0])},${half(q[1])}`).join(' ')}Z`).join('');
     // room: 라벨 자리에서 테두리까지 거리(px). 작으면 화면에서 이름을 생략
     return {
@@ -264,21 +287,27 @@ function buildLevel(pieces, { tol, minArea }) {
   return { width: half((maxX - minX) * s), height: half((maxY - minY) * s), proj, pieces: out };
 }
 
-function writeModule(name, data, note) {
+function writeModule(dir, version, name, data, note) {
   const header = [
     `// 자동 생성 파일 (scripts/build-region-map.mjs) — 손으로 고치지 마세요.`,
-    `// 경계: 통계청 통계지리정보서비스(SGIS) 행정동 경계(공공누리 제1유형)를 vuski/admdongkor ${SOURCE_VERSION}이 가공한 자료(CC BY 4.0)를 다시 합치고 줄였습니다.`,
+    `// 경계: 통계청 통계지리정보서비스(SGIS) 행정동 경계(공공누리 제1유형)를 vuski/admdongkor ${version}이 가공한 자료(CC BY 4.0)를 다시 합치고 줄였습니다.`,
+    `// 원본: ${SOURCE_URL} (${version}), 라이선스: ${LICENSE_URL}`,
     note ? `// ${note}` : null,
   ]
     .filter(Boolean)
     .join('\n');
-  writeFileSync(join(OUT_DIR, `${name}.js`), `${header}\nexport default ${JSON.stringify(data)};\n`);
+  writeFileSync(join(dir, `${name}.js`), `${header}\nexport default ${JSON.stringify(data)};\n`);
 }
 
 // ---------- 실행 ----------
 const input = process.argv[2];
 if (!input) {
-  console.error('사용법: node scripts/build-region-map.mjs <HangJeongDong_ver20260701.geojson>');
+  console.error('사용법: node scripts/build-region-map.mjs <HangJeongDong_verYYYYMMDD.geojson>');
+  process.exit(1);
+}
+const version = input.match(/ver\d{8}/)?.[0];
+if (!version) {
+  console.error('파일 이름에서 판(verYYYYMMDD)을 찾지 못했어요. 받은 파일 이름 그대로 넣어 주세요.');
   process.exit(1);
 }
 const geo = JSON.parse(readFileSync(input, 'utf8'));
@@ -297,7 +326,11 @@ for (const f of geo.features) {
 const missing = DISTRICTS.filter((d) => !byDistrict.has(d.code));
 if (missing.length) throw new Error(`경계가 없는 시·군·구: ${missing.map((d) => d.code + d.name).join(', ')}`);
 
-mkdirSync(OUT_DIR, { recursive: true });
+// 임시 폴더에 모두 만든 뒤 한 번에 바꿔 넣음 (중간에 실패하면 기존 파일은 그대로)
+const TMP_DIR = `${OUT_DIR}.tmp`;
+const OLD_DIR = `${OUT_DIR}.old`;
+rmSync(TMP_DIR, { recursive: true, force: true });
+mkdirSync(TMP_DIR, { recursive: true });
 const keep = (filter, code) => (ring) => {
   if (!filter) return true;
   const [lon, lat] = centroid(ring);
@@ -308,7 +341,7 @@ const nationPieces = PROVINCES.map((p) => ({
   code: p.code,
   rings: dissolve(byProvince.get(p.code)).filter(keep(LEFT_OUT.nation, p.code)),
 }));
-writeModule('nation', { ...buildLevel(nationPieces, NATION), away: [] }, '전국 시·도 (백령도 등 서해 먼 섬, 울릉도·독도는 뺐습니다)');
+writeModule(TMP_DIR, version, 'nation', { ...buildLevel(nationPieces, NATION), away: [] }, '전국 시·도 (백령도 등 서해 먼 섬, 울릉도·독도는 뺐습니다)');
 
 for (const p of PROVINCES) {
   const all = DISTRICTS.filter((d) => d.code.startsWith(p.code)).map((d) => ({
@@ -319,6 +352,15 @@ for (const p of PROVINCES) {
   const opts = ISLAND_HEAVY.has(p.code) ? { ...PROVINCE, minArea: 14 } : PROVINCE;
   // away: 지도에서 통째로 뺀 시·군·구 (옹진군, 울릉군). 화면에서 지도 옆 칩으로 보여 줌
   const away = all.filter((piece) => !piece.rings.length).map((piece) => piece.code);
-  writeModule(p.code, { ...buildLevel(pieces, opts), away }, `${p.name} 시·군·구`);
+  writeModule(TMP_DIR, version, p.code, { ...buildLevel(pieces, opts), away }, `${p.name} 시·군·구`);
 }
-console.log(`지도 데이터 ${PROVINCES.length + 1}개 파일을 만들었어요: ${OUT_DIR}`);
+rmSync(OLD_DIR, { recursive: true, force: true });
+if (existsSync(OUT_DIR)) renameSync(OUT_DIR, OLD_DIR);
+try {
+  renameSync(TMP_DIR, OUT_DIR);
+} catch (error) {
+  if (existsSync(OLD_DIR)) renameSync(OLD_DIR, OUT_DIR);
+  throw error;
+}
+rmSync(OLD_DIR, { recursive: true, force: true });
+console.log(`지도 데이터 ${PROVINCES.length + 1}개 파일을 만들었어요 (${version}): ${OUT_DIR}`);

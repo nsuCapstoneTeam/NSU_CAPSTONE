@@ -1,6 +1,5 @@
 import Icon from '../../../components/common/icon.jsx';
 import { regionLabel } from '../../my-page/event-place.js';
-import { venuePoint } from '../event-search.js';
 import PlaceMiniMap from '../map/place-mini-map.jsx';
 
 // 장소 보기 (NSU-116): 장소 이름, 주소, 지역, 위치 지도
@@ -23,12 +22,8 @@ export default function EventPlaceBlock({ event }) {
           지역 <strong>{region}</strong>
         </span>
       )}
+      {/* 지도 아래 안내(핀이 대략적인 자리인지 등)는 지도가 실제로 그린 것에 맞춰 PlaceMiniMap이 붙임 */}
       <PlaceMiniMap event={event} />
-      <small className="es-map-note">
-        {venuePoint(event)
-          ? '체험판이라 핀은 대략적인 자리예요. 정확한 위치는 주소로 확인해 주세요.'
-          : '아직 지도에서 공연장 위치를 찾지 못했어요. 주소로 확인해 주세요.'}
-      </small>
     </div>
   );
 }

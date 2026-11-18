@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import Icon from '../../../components/common/icon.jsx';
 import Tag from '../../../components/common/tag.jsx';
 import { budgetText } from '../../my-page/organizer-events.js';
@@ -24,6 +25,8 @@ export default function EventList({
   hotId = '',
   onHot = () => {},
 }) {
+  // 키보드 포커스가 있는 행 (핀이 있는 행사만). 마우스가 다른 행을 지나갔다 빠져도 이 행의 핀 강조로 돌아감
+  const focused = useRef('');
   return (
     <section
       className="panel es-list"
@@ -70,9 +73,15 @@ export default function EventList({
                   className={`es-row${hotId === event.id ? ' is-hot' : ''}`}
                   onClick={() => onOpen(event.id)}
                   onPointerEnter={() => onHot(pin ? event.id : '')}
-                  onPointerLeave={() => onHot('')}
-                  onFocus={() => onHot(pin ? event.id : '')}
-                  onBlur={() => onHot('')}
+                  onPointerLeave={() => onHot(focused.current)}
+                  onFocus={() => {
+                    focused.current = pin ? event.id : '';
+                    onHot(focused.current);
+                  }}
+                  onBlur={() => {
+                    focused.current = '';
+                    onHot('');
+                  }}
                 >
                   {pinNumbers && (
                     <span

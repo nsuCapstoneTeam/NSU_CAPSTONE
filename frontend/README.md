@@ -136,7 +136,12 @@ frontend/
 행사 찾기 지도의 시·도·시·군·구 경계는 `src/features/event-search/map/map-data/`에 있고, `scripts/build-region-map.mjs`가 만듭니다. 손으로 고치지 마세요.
 
 - 원본: [vuski/admdongkor](https://github.com/vuski/admdongkor) `ver20260701` 행정동 경계 (통계청 SGIS 자료, 공공누리 제1유형 → CC BY 4.0). 화면 아래에 출처를 표시합니다.
-- 행정구역이 바뀌면 새 판 GeoJSON을 받아 `node scripts/build-region-map.mjs <파일 경로>`로 다시 만들고, `src/data/regions.js`와 코드가 맞는지 테스트(`map-geometry.test.js`)로 확인합니다.
+- 행정구역이 바뀌면 이 순서로 다시 만듭니다.
+  1. `src/data/regions.js`를 새 시·군·구 코드에 맞춥니다. 스크립트는 목록에 없는 코드를 만나면 멈춥니다.
+  2. 시·도 코드가 바뀌었으면 `src/features/event-search/map/map-loaders.js`의 `LOADERS`도 고칩니다. 지도 테스트는 생성 파일을 직접 불러와서 이 목록이 빠진 것은 잡지 못합니다.
+  3. 새 판 GeoJSON을 받은 파일 이름 그대로(`HangJeongDong_verYYYYMMDD.geojson`) 두고 `node scripts/build-region-map.mjs <파일 경로>`로 다시 만듭니다. 판은 파일 이름에서 읽어 생성 파일 머리말에 적습니다.
+  4. `node --test src/features/event-search/map/map-geometry.test.js`로 지역 목록과 지도 조각이 맞는지 확인합니다.
+- 스크립트는 임시 폴더에 모든 파일을 만든 뒤 한 번에 바꿔 넣습니다. 중간에 실패해도 기존 지도 데이터는 그대로입니다.
 - 원본 GeoJSON(약 35MB)은 저장소에 넣지 않습니다.
 
 새 기능은 `src/features/<기능-이름>/` 폴더를 만들고 그 안에 화면(`*-page.jsx`), 전용 컴포넌트, CSS를 함께 두세요. 두 개 이상의 기능에서 쓰는 것만 `src/components/common/`으로 옮깁니다.

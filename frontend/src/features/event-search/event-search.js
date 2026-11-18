@@ -56,10 +56,13 @@ export function shortRegion(event) {
 // 공연장 좌표 [경도, 위도]. 없거나 숫자가 아니거나 한국 밖이면 null (지도에 핀을 찍지 않음)
 // 행사의 venueLat·venueLng를 읽습니다. 카카오 로컬 API처럼 좌표를 문자열로 주는 경우도 받습니다.
 // (API 필드 이름은 팀 확정 필요. 바뀌면 이 함수만 고치면 됩니다)
+// 숫자나 비어 있지 않은 문자열만 숫자로 바꿈 (배열·객체 같은 다른 값은 좌표로 보지 않음)
+const coordinate = (v) =>
+  typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : Number.NaN;
+
 export function venuePoint(event) {
-  const lat = Number(event?.venueLat);
-  const lng = Number(event?.venueLng);
-  if (event?.venueLat == null || event?.venueLng == null) return null;
+  const lat = coordinate(event?.venueLat);
+  const lng = coordinate(event?.venueLng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   if (lat < 33 || lat > 39 || lng < 124 || lng > 132) return null;
   return [lng, lat];

@@ -94,6 +94,20 @@ export function placePins(items) {
   return result;
 }
 
+// 번호 핀끼리 겹치면 옆으로 비켜 세움 (원래 자리에는 점을 남김). 화면 px 기준
+// spots: [{ x, y, ... }] 앞에 있는 핀(목록 번호가 빠른 핀)이 먼저 자리를 차지함, size: 핀 지름
+// 결과: 같은 순서로 [{ ...spot, x: 비켜 선 자리, ox, oy: 원래 자리, moved }]
+export function spreadMarkers(spots, size = 26) {
+  const placed = [];
+  const steps = [0, 1, -1, 2, -2, 3, -3].map((k) => k * (size + 2));
+  return spots.map((m) => {
+    const free = (dx) => !placed.some((p) => Math.abs(p.x - (m.x + dx)) < size && Math.abs(p.y - m.y) < size);
+    const dx = steps.find(free) ?? 0;
+    placed.push({ x: m.x + dx, y: m.y });
+    return { ...m, x: m.x + dx, ox: m.x, oy: m.y, moved: dx !== 0 };
+  });
+}
+
 // 경도·위도를 지도 좌표로: proj는 지도 데이터의 [minX, minY, s] (scripts/build-region-map.mjs)
 const COS36 = Math.cos((36 * Math.PI) / 180);
 export function toMapPoint(proj, [lng, lat]) {

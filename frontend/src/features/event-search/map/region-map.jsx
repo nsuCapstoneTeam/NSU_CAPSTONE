@@ -7,8 +7,10 @@ import {
   pieceName,
   pinSize,
   placePins,
+  spreadMarkers,
   toMapPoint,
 } from './map-geometry.js';
+import { DISTRICTS, PROVINCES } from '../../../data/regions.js';
 import { preloadMap, useMapData } from './map-loaders.js';
 import './region-map.css';
 
@@ -48,7 +50,7 @@ export default function RegionMap({ level, counts, selected = '', onSelect, ...m
         >
           {error ? (
             <>
-              <p>지도를 불러오지 못했어요. 목록은 그대로 쓸 수 있어요.</p>
+              <p>지도를 불러오지 못했어요. 목록은 그대로 쓸 수 있고, 아래에서 지역을 골라도 돼요.</p>
               <button
                 type="button"
                 className="secondary"
@@ -56,12 +58,47 @@ export default function RegionMap({ level, counts, selected = '', onSelect, ...m
               >
                 지도 다시 불러오기
               </button>
+              <RegionButtons
+                level={level}
+                counts={counts}
+                selected={selected}
+                onSelect={onSelect}
+              />
             </>
           ) : (
             <p>지도를 불러오는 중이에요.</p>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// 지도를 못 불러왔을 때 대신 쓰는 지역 버튼 (행사가 있는 지역만)
+function RegionButtons({ level, counts, selected, onSelect }) {
+  const nation = level === 'nation';
+  const codes = (nation ? PROVINCES : DISTRICTS.filter((d) => d.code.startsWith(level)))
+    .map((r) => r.code)
+    .filter((code) => (counts[code] ?? 0) > 0);
+  if (!codes.length) return null;
+  return (
+    <div
+      className="rm-fallback"
+      role="group"
+      aria-label={nation ? '시·도 고르기' : '시·군·구 고르기'}
+    >
+      {codes.map((code) => (
+        <button
+          key={code}
+          type="button"
+          className={`rm-away-chip${selected === code ? ' is-on' : ''}`}
+          aria-pressed={selected === code}
+          aria-label={`${pieceName(level, code)} 행사 ${counts[code]}건`}
+          onClick={() => onSelect(code)}
+        >
+          {pieceName(level, code)} <b>{counts[code]}</b>
+        </button>
+      ))}
     </div>
   );
 }
@@ -106,9 +143,10 @@ function MapStage({
   const firstCode = [...pieces].sort((a, b) => a.label[1] - b.label[1] || a.label[0] - b.label[0])[0]?.code;
   const tabCode = (has(cursor) && cursor) || (has(selected) && selected) || firstCode;
   const active = hover || focus;
-  // 떠오른 조각: 고른 조각, 마우스·키보드로 가리킨 조각, 목록에서 가리킨 행사의 시·군·구
+  // 떠오른 조각: 고른 조각, 마우스로 가리킨 조각, 키보드 포커스가 있는 조각, 목록에서 가리킨 행사의 시·군·구
+  // (마우스가 지도 위에 있어도 키보드 포커스 조각은 따로 떠오르고 파란 테두리가 보이게)
   const markerCode = markers.find((m) => m.id === (hotMarker || pickedMarker))?.code ?? '';
-  const lifted = [selected, active, markerCode].filter((c, i, list) => c && has(c) && list.indexOf(c) === i);
+  const lifted = [selected, hover, focus, markerCode].filter((c, i, list) => c && has(c) && list.indexOf(c) === i);
 
   const count = (code) => counts[code] ?? 0;
   const label = (code) => `${pieceName(level, code)} 행사 ${count(code)}건`;
@@ -147,13 +185,16 @@ function MapStage({
     return { x: (PAD + p.label[0]) * scale, y: (PAD + LIFT + p.label[1] * SQUASH - up) * scale };
   };
   // 행사 장소 번호 핀 (좌표가 없거나 지도 밖 섬이면 빼고)
-  const spots = markers
-    .filter((m) => m.at && data.proj && has(m.code))
-    .map((m) => {
-      const [mx, my] = toMapPoint(data.proj, m.at);
-      const up = lifted.includes(m.code) ? LIFT : 0;
-      return { ...m, x: (PAD + mx) * scale, y: (PAD + LIFT + my * SQUASH - up) * scale };
-    });
+  // 자리가 겹치는 핀은 옆으로 비켜 세워 각각 누를 수 있게 함 (원래 자리에는 점)
+  const spots = spreadMarkers(
+    markers
+      .filter((m) => m.at && data.proj && has(m.code))
+      .map((m) => {
+        const [mx, my] = toMapPoint(data.proj, m.at);
+        const up = lifted.includes(m.code) ? LIFT : 0;
+        return { ...m, x: (PAD + mx) * scale, y: (PAD + LIFT + my * SQUASH - up) * scale };
+      }),
+  );
   const hotSpot = spots.find((m) => m.id === hotMarker);
   // 행사 수 핀은 번호 핀이 없을 때만. 이름만 있는 라벨은 자리가 넉넉하고 다른 핀과 겹치지 않을 때만
   const showPin = (p) => nation || (count(p.code) > 0 && !markers.length);
@@ -251,10 +292,13 @@ function MapStage({
               const tone = pieces.find((p) => p.code === code).tone ?? 0;
               const picked = code === selected;
               return (
+                // 떠오른 조각도 같은 지역으로 누르고 가리킬 수 있게 (키보드는 아래 원래 조각으로)
                 <g
                   key={code}
                   className={`rm-lifted${picked ? ' is-picked' : ''}${code === focus ? ' is-focus' : ''}`}
                   aria-hidden="true"
+                  onPointerEnter={() => enter(code)}
+                  onClick={() => onSelect(code)}
                 >
                   <g transform={`translate(0 ${-LIFT / SQUASH})`}>
                     {sides(STEP, depth + LIFT).map((o) => (
@@ -316,13 +360,23 @@ function MapStage({
         </div>
 
         <div className="rm-markers">
+          {spots
+            .filter((m) => m.moved)
+            .map((m) => (
+              <i
+                key={`dot-${m.id}`}
+                className="rm-dot"
+                style={{ left: m.ox, top: m.oy }}
+                aria-hidden="true"
+              />
+            ))}
           {spots.map((m) => (
             <button
               key={m.id}
               type="button"
               tabIndex={-1}
               aria-hidden="true"
-              className={`rm-marker${m.id === hotMarker ? ' is-hot' : ''}${m.id === pickedMarker ? ' is-picked' : ''}`}
+              className={`rm-marker${m.id === hotMarker ? ' is-hot' : ''}${m.id === pickedMarker ? ' is-picked' : ''}${m.moved ? ' is-moved' : ''}`}
               style={{ left: m.x, top: m.y }}
               onPointerEnter={() => onMarkerEnter(m.id)}
               onPointerLeave={() => onMarkerEnter('')}

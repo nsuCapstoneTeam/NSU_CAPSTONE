@@ -53,6 +53,7 @@ export function preloadMap(level) {
 // { data, error, retry }: data는 받기 전이면 null
 export function useMapData(level) {
   const [, setVersion] = useState(0);
+  // failed: { level, reload } (reload: 지도 파일 자체를 못 받은 경우)
   const [failed, setFailed] = useState(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -61,7 +62,8 @@ export function useMapData(level) {
     let alive = true;
     loadMap(level).then(
       () => alive && setVersion((v) => v + 1),
-      () => alive && setFailed(level),
+      // 파일을 받지 못하면 브라우저는 TypeError를 냄 (네트워크 끊김, 배포 뒤 예전 파일이 지워짐)
+      (err) => alive && setFailed({ level, reload: err instanceof TypeError }),
     );
     return () => {
       alive = false;
@@ -70,8 +72,14 @@ export function useMapData(level) {
 
   return {
     data: loaded.get(level) ?? null,
-    error: failed === level,
+    error: failed?.level === level,
+    // 다시 시도. 파일 자체를 못 받았으면 같은 주소를 다시 요청해도 실패할 수 있어(배포 뒤 예전 파일이 지워진 경우)
+    // 페이지를 새로 불러옴 (Vite 문서가 권하는 방식)
     retry: () => {
+      if (failed?.reload) {
+        window.location.reload();
+        return;
+      }
       setFailed(null);
       setAttempt((a) => a + 1);
     },

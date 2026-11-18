@@ -80,7 +80,7 @@
 
 /* 떠오른 조각 */
 .rm-lifted {
-  pointer-events: none;
+  cursor: pointer;
   animation: rm-lift 160ms ease-out both;
 }
 .rm-lifted .rm-top {
@@ -223,6 +223,15 @@
   color: var(--muted);
   font-size: 12px;
 }
+/* 지도를 못 불러왔을 때 대신 쓰는 지역 버튼 */
+.rm-fallback {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 520px;
+  margin-top: 6px;
+}
 .rm-away-chip {
   display: inline-flex;
   align-items: baseline;
@@ -272,7 +281,8 @@
 }
 
 /* 자리가 좁아 비켜 선 핀: 꼬리 대신 원래 자리에 점 */
-.rm-pin.is-moved::after {
+.rm-pin.is-moved::after,
+.rm-marker.is-moved::after {
   display: none;
 }
 .rm-dot {
@@ -405,6 +415,8 @@
 .rm-mini-wait {
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 10px;
   color: var(--muted);
   font-size: 13px;
 }

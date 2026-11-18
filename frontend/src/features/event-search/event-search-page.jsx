@@ -14,6 +14,8 @@ import {
   publicEvents,
   venuePoint,
 } from './event-search.js';
+import { useMapData } from './map/map-loaders.js';
+import MapSource from './map/map-source.jsx';
 import RegionMap from './map/region-map.jsx';
 import { PROVINCES } from '../../data/regions.js';
 import './event-search.css';
@@ -27,8 +29,6 @@ const EVENTS = publicEvents(DEMO_PUBLIC_EVENTS);
 const NATION_COUNTS = countMap(EVENTS);
 // 목록은 처음 8건, '더 보기'를 누를 때마다 8건씩 더 보여 줌
 const PAGE = 8;
-const SOURCE =
-  '지도 경계: 통계청 SGIS 행정동 경계(공공누리 제1유형)를 vuski/admdongkor가 가공한 자료(CC BY 4.0)를 합쳐서 그렸어요.';
 
 // 지도·목록 칸 위쪽이 화면 위로 지나갔으면 그 위치로 올림
 function scrollToLayout() {
@@ -36,6 +36,16 @@ function scrollToLayout() {
   if (!layout) return;
   const top = layout.getBoundingClientRect().top + window.scrollY - 16;
   if (window.scrollY > top) window.scrollTo({ top, behavior: 'instant' });
+}
+
+// 지도 핀으로 장소를 열었을 때 장소 제목이 화면 밖(좁은 화면에서 지도 아래)이면 보이게 내림
+function revealPlace() {
+  const title = document.getElementById('es-place-title');
+  if (!title) return;
+  const { top } = title.getBoundingClientRect();
+  if (top < 0 || top > window.innerHeight - 80) {
+    window.scrollTo({ top: top + window.scrollY - 16, behavior: 'instant' });
+  }
 }
 
 // 시·군·구를 고른 뒤 목록이 짧아져 목록 제목이 화면 위로 사라졌으면 지도·목록 칸 위쪽으로 올림 (NSU-116 리뷰)
@@ -60,6 +70,8 @@ export default function EventSearch({ notify }) {
   const [visible, setVisible] = useState(PAGE);
   // 목록 행이나 지도 핀에 마우스를 올린 행사 id (서로 함께 강조)
   const [hot, setHot] = useState('');
+  // 화면 낭독기에 알릴 문구 (시·군·구를 고르거나 풀면 바뀐 행사 수)
+  const [announce, setAnnounce] = useState('');
   // 화면이 바뀐 뒤 포커스를 옮길 요소 id (그린 뒤 한 번 옮기고 비움)
   const focusId = useRef(null);
   // 장소·상세로 가기 전 스크롤 위치 (돌아오면 그 자리로)
@@ -82,12 +94,16 @@ export default function EventSearch({ notify }) {
       ? provinceName(province)
       : '전체 지역';
   const current = placeId ? EVENTS.find((e) => e.id === placeId) : null;
-  // 시·도 지도의 번호 핀: 목록에 보이는 행사 중 좌표가 있는 행사에 차례로 번호
-  // (좌표가 없는 행사는 번호 없이 목록에 '지도 위치 없음'으로 표시)
-  const markers = province
+  // 시·도 지도 데이터 (지도가 쓰는 것과 같은 데이터, 한 번만 받음). 핀 번호를 지도에 실제로 찍히는 행사에만 붙이려고 씀
+  const { data: provinceMap } = useMapData(province || 'nation');
+  const onMap = (e) => Boolean(provinceMap?.pieces.some((p) => p.code === String(e.regionCode)));
+  // 시·도 지도의 번호 핀: 목록에 보이는 행사 중 지도에 핀을 찍을 수 있는 행사에 차례로 번호
+  // (좌표가 없거나 지도 밖 섬 지역이면 번호 없이 '지도 위치 없음'. 지도를 아직 못 받았으면 번호를 붙이지 않음)
+  const mapReady = Boolean(province && provinceMap);
+  const markers = mapReady
     ? list
         .slice(0, visible)
-        .filter((e) => venuePoint(e))
+        .filter((e) => venuePoint(e) && onMap(e))
         .map((e, i) => {
           const { day, when } = dateParts(e);
           return {
@@ -101,7 +117,7 @@ export default function EventSearch({ notify }) {
           };
         })
     : [];
-  const pinNumbers = province ? Object.fromEntries(markers.map((m) => [m.id, m.n])) : null;
+  const pinNumbers = mapReady ? Object.fromEntries(markers.map((m) => [m.id, m.n])) : null;
 
   // 전국 지도·순위에서 시·도를 누름: 그 시·도 지도와 목록으로
   function openProvince(code) {
@@ -116,8 +132,12 @@ export default function EventSearch({ notify }) {
 
   // 시·도 지도에서 시·군·구를 누름: 목록이 그 시·군·구 행사만. 한 번 더 누르면 풀림
   function pickDistrict(code) {
+    const next = code === district ? '' : code;
+    const name = next ? districtName(next) : provinceName(province);
     setHot('');
-    setDistrict(code === district ? '' : code);
+    setDistrict(next);
+    // 포커스는 지도에 그대로 두고, 바뀐 결과는 화면 낭독기에 알림
+    setAnnounce(`${name} 행사 ${eventsIn(EVENTS, province, next).length}건을 보여 줘요.`);
     setPlaceId(null);
     setVisible(PAGE);
     requestAnimationFrame(revealList);
@@ -154,6 +174,12 @@ export default function EventSearch({ notify }) {
     setPlaceId(id);
     setFocusId('es-place-title');
     requestAnimationFrame(scrollToLayout);
+  }
+
+  // 지도 핀을 누름: 장소를 열고, 좁은 화면에서 장소가 지도 아래에 열리면 제목이 보이게 내림
+  function openFromMap(id) {
+    openPlace(id);
+    requestAnimationFrame(() => requestAnimationFrame(revealPlace));
   }
 
   // 목록으로 돌아가면 누른 행과 스크롤 위치를 그대로
@@ -231,6 +257,12 @@ export default function EventSearch({ notify }) {
         title="행사 찾기"
         description="공개된 행사를 지역별로 모아 보여 줘요. 지도에서 지역을 누르면 그 안으로 들어가고, 행사를 누르면 장소와 상세 내용을 볼 수 있어요."
       />
+      <p
+        className="es-sr-only"
+        aria-live="polite"
+      >
+        {announce}
+      </p>
 
       {province ? (
         <>
@@ -278,9 +310,9 @@ export default function EventSearch({ notify }) {
                 hotMarker={hot}
                 pickedMarker={placeId ?? ''}
                 onMarkerEnter={setHot}
-                onMarker={openPlace}
+                onMarker={openFromMap}
               />
-              <p className="es-map-source">{SOURCE}</p>
+              <MapSource className="es-map-source" />
             </section>
             {listArea}
           </div>
@@ -305,7 +337,7 @@ export default function EventSearch({ notify }) {
               counts={NATION_COUNTS}
               onSelect={openProvince}
             />
-            <p className="es-map-source">{SOURCE}</p>
+            <MapSource className="es-map-source" />
           </section>
           {listArea}
         </div>
