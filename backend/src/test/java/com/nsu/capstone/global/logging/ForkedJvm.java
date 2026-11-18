@@ -1,5 +1,6 @@
 package com.nsu.capstone.global.logging;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -65,10 +66,11 @@ final class ForkedJvm {
 
         // 자식은 부모의 작업 디렉터리가 아니라 빈 임시 디렉터리에서 시작한다. Boot가 부모 작업 디렉터리의 ./config/application.properties 같은
         // 개발자의 파일 설정(개발 DB 주소 등)을 읽지 못하게 하려는 것이다.
-        Path workingDirectory = Files.createTempDirectory("forked-jvm-");
-        // 출력을 파이프로 읽으면 자식이 stdout을 닫을 때까지 readAllBytes가 막혀 아래 waitFor에 닿지 못한다. 파일로 받고 먼저 기다린다.
-        Path outputFile = workingDirectory.resolve("output.log");
-        try {
+        // 삭제는 try-with-resources가 맡는다. 본문이 던진 예외가 있으면 삭제 실패는 억제된 예외로 붙고, 없을 때만 삭제 실패가 던져진다.
+        try (TemporaryDirectory directory = new TemporaryDirectory(Files.createTempDirectory("forked-jvm-"), hooks)) {
+            Path workingDirectory = directory.path();
+            // 출력을 파이프로 읽으면 자식이 stdout을 닫을 때까지 readAllBytes가 막혀 아래 waitFor에 닿지 못한다. 파일로 받고 먼저 기다린다.
+            Path outputFile = workingDirectory.resolve("output.log");
             ProcessBuilder builder = new ProcessBuilder(command)
                     .directory(workingDirectory.toFile())
                     .redirectErrorStream(true)
@@ -88,8 +90,14 @@ final class ForkedJvm {
                 Thread.currentThread().interrupt();
                 throw e;
             }
-        } finally {
-            FileSystemUtils.deleteRecursively(workingDirectory);
+        }
+    }
+
+    private record TemporaryDirectory(Path path, Hooks hooks) implements Closeable {
+
+        @Override
+        public void close() throws IOException {
+            hooks.deleteDirectory(path);
         }
     }
 
@@ -143,11 +151,15 @@ final class ForkedJvm {
         return output.substring(Math.max(0, output.length() - 500));
     }
 
-    /** 테스트가 자식 프로세스를 직접 받거나 가짜로 바꾸는 길. 기본은 실제 프로세스를 띄운다. */
+    /** 테스트가 자식 프로세스를 직접 받거나 가짜로 바꾸고, 작업 디렉터리 삭제 실패를 흉내 내는 길. 기본은 실제 프로세스와 실제 삭제다. */
     interface Hooks {
 
         default Process start(ProcessBuilder builder) throws IOException {
             return builder.start();
+        }
+
+        default void deleteDirectory(Path directory) throws IOException {
+            FileSystemUtils.deleteRecursively(directory);
         }
     }
 

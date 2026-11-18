@@ -168,17 +168,79 @@ class ForkedJvmTest {
         assertThat(result.output()).isEqualTo("a�z");
     }
 
+    /**
+     * 작업 디렉터리를 지우지 못해도 앞서 던진 예외(시간 초과, 인터럽트)가 가려지면 안 된다. 앞선 실패가 없을 때만 삭제 실패를 그대로 던진다.
+     */
+    @Test
+    void 작업_디렉터리_삭제가_실패해도_시간_초과_예외가_주_예외로_남는다() {
+        FakeHooks hooks =
+                fakeChild(FakeProcess.hangingUntilDestroyed(), new byte[0]).failingToDelete();
+
+        assertThatThrownBy(() -> ForkedJvm.run(hooks, 1, List.of(), Map.of(), "hang"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("1초")
+                .satisfies(ForkedJvmTest::hasSuppressedDeleteFailure);
+    }
+
+    @Test
+    void 작업_디렉터리_삭제가_실패해도_인터럽트_예외가_주_예외로_남는다() {
+        FakeHooks hooks =
+                fakeChild(FakeProcess.interruptedWhileWaiting(), new byte[0]).failingToDelete();
+
+        try {
+            assertThatThrownBy(() -> ForkedJvm.run(hooks, 1, List.of(), Map.of(), "hang"))
+                    .isInstanceOf(InterruptedException.class)
+                    .satisfies(ForkedJvmTest::hasSuppressedDeleteFailure);
+        } finally {
+            // run이 호출자에게 남긴 인터럽트 상태가 다음 테스트로 새지 않게 지운다
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void 앞선_실패가_없으면_작업_디렉터리_삭제_실패를_그대로_던진다() {
+        FakeHooks hooks = fakeChild(FakeProcess.exited(), new byte[0]).failingToDelete();
+
+        assertThatThrownBy(() -> ForkedJvm.run(hooks, 1, List.of(), Map.of(), "light"))
+                .isInstanceOf(IOException.class)
+                .hasMessage(DELETE_FAILURE);
+    }
+
+    private static final String DELETE_FAILURE = "작업 디렉터리 삭제 실패";
+
+    private static void hasSuppressedDeleteFailure(Throwable thrown) {
+        assertThat(thrown.getSuppressed())
+                .anySatisfy(suppressed ->
+                        assertThat(suppressed).isInstanceOf(IOException.class).hasMessage(DELETE_FAILURE));
+    }
+
     /** 실제 프로세스 대신 process를 돌려주고, output이 있으면 자식이 리디렉션 파일에 쓴 것처럼 채운다. */
-    private static ForkedJvm.Hooks fakeChild(Process process, byte[] output) {
-        return new ForkedJvm.Hooks() {
-            @Override
-            public Process start(ProcessBuilder builder) throws IOException {
-                if (output != null) {
-                    Files.write(builder.redirectOutput().file().toPath(), output);
-                }
-                return process;
+    private static FakeHooks fakeChild(Process process, byte[] output) {
+        return new FakeHooks(process, output, false);
+    }
+
+    private record FakeHooks(Process process, byte[] output, boolean deleteFails) implements ForkedJvm.Hooks {
+
+        @Override
+        public Process start(ProcessBuilder builder) throws IOException {
+            if (output != null) {
+                Files.write(builder.redirectOutput().file().toPath(), output);
             }
-        };
+            return process;
+        }
+
+        @Override
+        public void deleteDirectory(Path directory) throws IOException {
+            // 실제로 지워 임시 디렉터리를 남기지 않고, 지운 뒤에 실패를 알린다
+            ForkedJvm.Hooks.super.deleteDirectory(directory);
+            if (deleteFails) {
+                throw new IOException(DELETE_FAILURE);
+            }
+        }
+
+        FakeHooks failingToDelete() {
+            return new FakeHooks(process, output, true);
+        }
     }
 
     /** 가짜 프로세스. 호출 순서를 기록한다. 끝난 것으로 알려지는 때는 만든 방식에 따라 다르다. */
@@ -188,6 +250,7 @@ class ForkedJvmTest {
         private final List<String> calls = new ArrayList<>();
         private boolean destroyed;
         private boolean ended;
+        private boolean interruptFirstWait;
 
         private FakeProcess(boolean endsAfterDestroy, boolean ended) {
             this.endsAfterDestroy = endsAfterDestroy;
@@ -209,6 +272,13 @@ class ForkedJvmTest {
             return new FakeProcess(false, true);
         }
 
+        /** 제한 시간을 기다리는 첫 waitFor가 인터럽트된다. 강제 종료한 뒤의 확인은 {@link #hangingUntilDestroyed()}처럼 끝난다. */
+        static FakeProcess interruptedWhileWaiting() {
+            FakeProcess process = new FakeProcess(true, false);
+            process.interruptFirstWait = true;
+            return process;
+        }
+
         List<String> calls() {
             return calls;
         }
@@ -221,8 +291,12 @@ class ForkedJvmTest {
         }
 
         @Override
-        public boolean waitFor(long timeout, TimeUnit unit) {
+        public boolean waitFor(long timeout, TimeUnit unit) throws InterruptedException {
             calls.add("waitFor");
+            if (interruptFirstWait) {
+                interruptFirstWait = false;
+                throw new InterruptedException();
+            }
             if (destroyed && endsAfterDestroy) {
                 ended = true;
             }
