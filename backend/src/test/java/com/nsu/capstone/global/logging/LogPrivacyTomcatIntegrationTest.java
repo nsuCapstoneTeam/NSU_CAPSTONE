@@ -127,11 +127,12 @@ class LogPrivacyTomcatIntegrationTest extends EventIntegrationTestBase {
      * Tomcat은 이것을 클라이언트 오류로 다루고 DEBUG로만 남긴다. 요청 ID 필터가 잡아 ERROR와 500으로 바꾸면 누구나 ERROR 경보를 만들 수 있다.
      * 테스트 환경에는 OAuth 제공자 설정이 없어, 같은 위치에서 파라미터를 읽는 테스트용 필터를 둔다.
      *
-     * <p>익명 요청의 최종 상태는 401이다. Tomcat이 400으로 /error를 디스패치하지만 보안 체인이 익명 /error를 거절하기 때문이다
-     * (ADR Consequences가 "소스로 추론만 했다"고 한 부분의 실제 기록). 400으로 바꾸는 일은 이번 이슈의 범위가 아니다.
+     * <p>지금 동작 기록: 익명 요청의 최종 상태는 401이다. Tomcat이 400으로 /error를 디스패치하지만 보안 체인이 익명 /error를 거절하기
+     * 때문이다(ADR이 "지금 상태 기록"으로 남긴 부분). 계약 §8의 400과 다른 이 동작은 이 이슈(로그)의 범위가 아니라 별도 이슈로 다룬다
+     * (SecurityConfig, 설계 세션 결정). 로그 보호에는 영향이 없다. 별도 이슈에서 바꾸면 이 기대값을 함께 바꾼다.
      */
     @Test
-    void 필터_체인_안에서_잘못된_퍼센트_인코딩_쿼리는_필터가_잡지_않아_ERROR_줄이_없다() throws IOException {
+    void 필터_체인_안에서_잘못된_퍼센트_인코딩_쿼리는_필터가_잡지_않아_ERROR_줄이_없다_지금_동작은_최종_401() throws IOException {
         RawHttp.Response response = RawHttp.send(
                 port,
                 RawHttp.bytes("GET " + PARAMETER_PROBE + "?state=%ZZ" + Sentinel.EMAIL

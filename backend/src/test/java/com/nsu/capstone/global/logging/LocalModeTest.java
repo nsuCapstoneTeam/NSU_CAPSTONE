@@ -4,7 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * ADR logging/00 Decision 4: 보호 장치를 끄는 길은 로컬 모드 하나뿐이다. 로컬 모드에서는 레벨 하한과 JVM 디버그 옵션 검사를 건너뛰고
@@ -13,6 +17,45 @@ import org.junit.jupiter.api.Test;
 class LocalModeTest {
 
     private static final Map<String, String> LOCAL_ENV = Map.of("LOG_LOCAL_MODE", "true", "LOG_FORMAT", "");
+
+    /**
+     * 배포에서 로컬 모드가 켜졌는지는 설정 이름 목록이 아니라 시작 로그에 로컬 모드 WARN이 있는지로 확인한다(ADR Decision 9, backend-verify F3).
+     * 그래서 로컬 모드를 켜는 길이 하나가 아니어도(환경 변수 이름 변형, 값 1, JSON 속성, 명령행) WARN은 항상 정확히 한 번 남아야 한다.
+     * 로그 형식은 JSON 그대로 둔다(LOG_FORMAT을 비우지 않는다). 로컬 모드의 WARN도 JSON 줄이어야 수집기가 찾는다.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("localModeEntrances")
+    void 로컬_모드를_어떤_길로_켜든_시작_로그에_WARN이_정확히_한_번_남는다(
+            String name, List<String> jvmArgs, Map<String, String> env, String arg) throws Exception {
+        String[] programArgs = arg.isEmpty() ? new String[] {"light"} : new String[] {"light", arg};
+
+        ForkedJvm.Result result = ForkedJvm.run(jvmArgs, env, programArgs);
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isZero();
+        assertThat(result.output().lines().filter(line -> line.contains("로컬 전용 로그 모드")))
+                .as("로컬 모드 WARN 줄")
+                .singleElement()
+                .asString()
+                .contains("\"level\":\"WARN\"");
+    }
+
+    static Stream<Arguments> localModeEntrances() {
+        return Stream.of(
+                Arguments.of("LOG_LOCAL_MODE=true", List.of(), Map.of("LOG_LOCAL_MODE", "true"), ""),
+                Arguments.of("LOG_LOCAL_MODE=1", List.of(), Map.of("LOG_LOCAL_MODE", "1"), ""),
+                Arguments.of("NSU_LOGGING_LOCAL_MODE=true", List.of(), Map.of("NSU_LOGGING_LOCAL_MODE", "true"), ""),
+                Arguments.of(
+                        "SPRING_APPLICATION_JSON",
+                        List.of(),
+                        Map.of("SPRING_APPLICATION_JSON", "{\"nsu.logging.local-mode\":true}"),
+                        ""),
+                Arguments.of("명령행 --nsu.logging.local-mode=true", List.of(), Map.of(), "--nsu.logging.local-mode=true"),
+                Arguments.of(
+                        "시스템 속성 -Dnsu.logging.local-mode=true",
+                        List.of("-Dnsu.logging.local-mode=true"),
+                        Map.of(),
+                        ""));
+    }
 
     @Test
     void 로컬_모드는_평문으로_뜨고_하한과_디버그_옵션_검사를_건너뛰며_WARN_한_줄을_남긴다() throws Exception {
