@@ -199,11 +199,11 @@ IntelliJ Run Configuration의 환경변수에도 다음 이름으로 설정할 �
 | `VERIFICATION_READ_TIMEOUT` | `10s` | 제공자 읽기 timeout |
 | `VERIFICATION_PENDING_RECOVERY` | `15s` | 미발송 예약은 발급부터 복구, 결과 미기록 코드는 발송 시작 기록부터 확인 가능. 재발송 제한 해제 시간이 아님 |
 | `VERIFICATION_ALERT_TIMEOUT` | `3s` | Slack 연결·응답 본문을 포함한 전체 전송 제한 |
-| `REDIS_COMMAND_TIMEOUT` | `1s` | 공유 Redis 연결의 명령 timeout(`spring.data.redis.timeout`). 공개 경로 한도 명령 때문에 1초 이하로 둔다 |
-| `REDIS_CONNECT_TIMEOUT` | `1s` | 공유 Redis 연결의 연결 timeout(`spring.data.redis.connect-timeout`). 설정하지 않으면 Lettuce 기본값 10초 |
+| `REDIS_COMMAND_TIMEOUT` | `1s` | 공유 Redis 연결의 명령 timeout(`spring.data.redis.timeout`). 공개 경로 한도 명령 때문에 0보다 크고 1초 이하여야 한다 |
+| `REDIS_CONNECT_TIMEOUT` | `1s` | 공유 Redis 연결의 연결 timeout(`spring.data.redis.connect-timeout`). 0보다 커야 한다 |
 | `REDIS_MAXMEMORY` | `256mb` | Compose Redis 데이터 메모리 한도. Compose 실행 환경 또는 `.env`에서 설정 |
 
-시간은 모두 1ms 이상이어야 하고, 대기 복구 시간은 연결·읽기 timeout 합보다 길어야 한다. `REDIS_MAXMEMORY`는 양의 정수와 선택 단위 `b`·`kb`·`mb`·`gb`로 지정한다. 0이나 잘못된 단위는 컨테이너 기동 시 거절한다. `compose.yaml`은 `noeviction`을 고정하므로 메모리가 차면 카운터를 지우지 않고 쓰기를 거절한다. 설정 파일 변경만으로 실행 중인 컨테이너가 바뀌지는 않는다.
+`VERIFICATION_*` 시간은 모두 1ms 이상이어야 하고, 대기 복구 시간은 연결·읽기 timeout 합보다 길어야 한다. `REDIS_COMMAND_TIMEOUT`·`REDIS_CONNECT_TIMEOUT`이 조건을 벗어나거나 빈 값이면 기동에 실패한다. 빈 값을 허용하면 Lettuce 기본값(명령 60초, 연결 10초)이 적용되기 때문이다. `REDIS_MAXMEMORY`는 양의 정수와 선택 단위 `b`·`kb`·`mb`·`gb`로 지정한다. 0이나 잘못된 단위는 컨테이너 기동 시 거절한다. `compose.yaml`은 `noeviction`을 고정하므로 메모리가 차면 카운터를 지우지 않고 쓰기를 거절한다. 설정 파일 변경만으로 실행 중인 컨테이너가 바뀌지는 않는다.
 
 SMS·이메일 전체 한도 80%에서 WARN·Slack 알림을 보낸다. 제공자 확정 실패·결과 모름은 채널별 10분 고정 창의 6번째부터 알린다. 알림은 한 작업자·최대 32개 대기 큐로 발송 요청과 분리한다. 큐 크기는 시연용 초기값이며 부하 측정 결과가 아니다. 큐 포화·Redis 장애는 WARN으로 남기고 발송 API의 결과를 바꾸지 않는다. 장애 횟수는 채널·창별 메모리 누적값을 다음 작업에서 Redis에 병합하며, 응답 유실 재시도도 중복 집계하지 않는다. 장애 집계는 현재·직전 10분 창만 유지한다. Redis 장애가 창의 보존 시간을 넘기거나 반영 전 프로세스가 종료되면 누락될 수 있다.
 

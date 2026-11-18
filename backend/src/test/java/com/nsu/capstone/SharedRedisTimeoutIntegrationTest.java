@@ -40,6 +40,7 @@ import org.testcontainers.containers.GenericContainer;
 @Import(TestcontainersConfiguration.class)
 class SharedRedisTimeoutIntegrationTest {
     private static final long COMMAND_TIMEOUT_MILLIS = 700;
+    private static final long CONNECT_TIMEOUT_MILLIS = 600;
     // Lettuce schedules timeouts on a timer with coarse ticks; leave room for it and request handling, but stay
     // below the 1s default so a missing placeholder is caught.
     private static final long LOWER_BOUND_MILLIS = COMMAND_TIMEOUT_MILLIS - 100;
@@ -77,7 +78,7 @@ class SharedRedisTimeoutIntegrationTest {
         var configuration = factory.getClientConfiguration();
         assertEquals(Duration.ofMillis(COMMAND_TIMEOUT_MILLIS), configuration.getCommandTimeout());
         assertEquals(
-                Duration.ofMillis(600),
+                Duration.ofMillis(CONNECT_TIMEOUT_MILLIS),
                 configuration
                         .getClientOptions()
                         .orElseThrow()
