@@ -29,10 +29,10 @@ class LogSafetyListener implements ApplicationListener<ApplicationEnvironmentPre
 
     /**
      * 켜 두면 입력값이 든 문장을 찍는 로거. 하한(INFO·WARN)이 아니라 OFF로 고정한다. 하한 순회는 낮은 레벨만 올리므로 OFF를 다시 켜는
-     * 설정(환경 변수, 명령행)은 이 목록이 되돌린다. Hibernate는 SQL 오류의 PostgreSQL 본 메시지(`invalid input syntax for type uuid: "<값>"`)를
-     * 예외를 넘기지 않는 WARN 문장으로 찍어 메시지 없는 출력기를 거치지 않는다.
+     * 설정(환경 변수, 명령행)은 이 목록이 되돌린다. Hibernate는 SQL 오류의 PostgreSQL 본 메시지(`invalid input syntax for type uuid: "<값>"`)와
+     * SQL 경고(`SQLWarning`)의 본 메시지를 예외를 넘기지 않는 WARN 문장으로 찍어 메시지 없는 출력기를 거치지 않는다.
      */
-    static final List<String> OFF_LOGGERS = List.of("org.hibernate.orm.jdbc.error");
+    static final List<String> OFF_LOGGERS = List.of("org.hibernate.orm.jdbc.error", "org.hibernate.orm.jdbc.warn");
 
     @Override
     public void onApplicationEvent(ApplicationEnvironmentPreparedEvent event) {

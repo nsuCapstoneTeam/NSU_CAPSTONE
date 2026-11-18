@@ -41,6 +41,7 @@ public final class ForkedMain {
             "ROOT",
             "org.hibernate.orm.jdbc.extract",
             "org.hibernate.orm.jdbc.error",
+            "org.hibernate.orm.jdbc.warn",
             "org.apache.tomcat.util.http",
             "com.nsu.capstone");
 

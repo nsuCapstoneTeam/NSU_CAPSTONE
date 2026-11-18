@@ -52,7 +52,8 @@ class LoggingConfigTest {
                     .as("logging.level.%s", logger)
                     .isEqualTo("OFF");
         }
-        assertThat(LogSafetyListener.OFF_LOGGERS).contains("org.hibernate.orm.jdbc.error");
+        assertThat(LogSafetyListener.OFF_LOGGERS)
+                .contains("org.hibernate.orm.jdbc.error", "org.hibernate.orm.jdbc.warn");
     }
 
     @Test
