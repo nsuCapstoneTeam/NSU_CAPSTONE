@@ -27,6 +27,7 @@ class ExternalAccountExceptionMappingTest {
             Map.entry(ExternalAccountFailure.YOUTUBE_CHANNEL_NOT_FOUND, HttpStatus.UNPROCESSABLE_ENTITY),
             Map.entry(ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE, HttpStatus.SERVICE_UNAVAILABLE),
             Map.entry(ExternalAccountFailure.EXTERNAL_PROVIDER_DISABLED, HttpStatus.SERVICE_UNAVAILABLE),
+            Map.entry(ExternalAccountFailure.EXTERNAL_ACCOUNT_BUSY, HttpStatus.SERVICE_UNAVAILABLE),
             Map.entry(ExternalAccountFailure.TOO_MANY_REQUESTS, HttpStatus.TOO_MANY_REQUESTS),
             Map.entry(ExternalAccountFailure.RATE_LIMIT_UNAVAILABLE, HttpStatus.SERVICE_UNAVAILABLE)));
 
@@ -70,10 +71,14 @@ class ExternalAccountExceptionMappingTest {
 
     @Test
     void 다른_사유에는_Retry_After를_붙이지_않는다() {
-        ResponseEntity<ErrorResponse> response = handler.handleBusinessException(
+        ResponseEntity<ErrorResponse> unavailable = handler.handleBusinessException(
                 new ExternalAccountException(ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE, "플랫폼 장애"));
+        // 06 §10: 잠금 대기 초과는 끝나는 때를 알 수 없어 Retry-After를 붙이지 않는다
+        ResponseEntity<ErrorResponse> busy = handler.handleBusinessException(
+                new ExternalAccountException(ExternalAccountFailure.EXTERNAL_ACCOUNT_BUSY, "아티스트 잠금 대기 초과"));
 
-        assertThat(response.getHeaders().containsHeader(HttpHeaders.RETRY_AFTER))
+        assertThat(unavailable.getHeaders().containsHeader(HttpHeaders.RETRY_AFTER))
                 .isFalse();
+        assertThat(busy.getHeaders().containsHeader(HttpHeaders.RETRY_AFTER)).isFalse();
     }
 }

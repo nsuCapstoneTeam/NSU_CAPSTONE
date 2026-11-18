@@ -7,6 +7,8 @@ import static org.mockito.Mockito.mock;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.queryParam;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withForbiddenRequest;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withResourceNotFound;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
@@ -133,6 +135,46 @@ class GoogleYoutubeGatewayUploadsTest {
         assertThat(gateway.fetchUploads(CHANNEL_ID)).isEmpty();
 
         server.verify();
+    }
+
+    /** 06 §7: 업로드가 없는 채널은 YouTube가 이 재생목록을 주지 않을 수 있어 404 playlistNotFound가 온다. */
+    @Test
+    void 업로드_재생목록_조회가_404면_영상이_없는_채널이라_빈_목록이고_영상_호출을_하지_않는다() {
+        server.expect(requestTo(startsWith(API_BASE + "/channels")))
+                .andRespond(withSuccess(
+                        "{\"items\":[{\"contentDetails\":{\"relatedPlaylists\":{\"uploads\":\"" + UPLOADS + "\"}}}]}",
+                        APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/playlistItems")))
+                .andRespond(withResourceNotFound()
+                        .body("{\"error\":{\"errors\":[{\"reason\":\"playlistNotFound\"}]}}")
+                        .contentType(APPLICATION_JSON));
+
+        assertThat(gateway.fetchUploads(CHANNEL_ID)).isEmpty();
+
+        server.verify();
+    }
+
+    @Test
+    void 빈_채널로_보는_것은_재생목록_조회의_404뿐이다_다른_4xx와_다른_호출의_404는_PROVIDER_UNAVAILABLE이다() {
+        String channelWithUploads =
+                "{\"items\":[{\"contentDetails\":{\"relatedPlaylists\":{\"uploads\":\"" + UPLOADS + "\"}}}]}";
+        server.expect(requestTo(startsWith(API_BASE + "/channels")))
+                .andRespond(withSuccess(channelWithUploads, APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/playlistItems"))).andRespond(withForbiddenRequest());
+        server.expect(requestTo(startsWith(API_BASE + "/channels")))
+                .andRespond(withSuccess(channelWithUploads, APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/playlistItems")))
+                .andRespond(withSuccess("{\"items\":[{\"contentDetails\":{\"videoId\":\"v1\"}}]}", APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/videos"))).andRespond(withResourceNotFound());
+        server.expect(requestTo(startsWith(API_BASE + "/channels"))).andRespond(withResourceNotFound());
+
+        for (int i = 0; i < 3; i++) {
+            assertThatThrownBy(() -> gateway.fetchUploads(CHANNEL_ID))
+                    .isInstanceOfSatisfying(
+                            ExternalAccountException.class,
+                            e -> assertThat(e.getFailure())
+                                    .isEqualTo(ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE));
+        }
     }
 
     @Test

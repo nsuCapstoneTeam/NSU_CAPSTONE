@@ -1,5 +1,6 @@
 package com.nsu.capstone.verification.externalaccount.application;
 
+import com.nsu.capstone.verification.externalaccount.config.ExternalAccountConfig;
 import com.nsu.capstone.verification.externalaccount.config.ExternalAccountProperties;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccount;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountException;
@@ -21,9 +22,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import lombok.AccessLevel;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -32,7 +32,6 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 class DisplayInfoLoader {
 
     private static final String SPOTIFY_KIND = "artist";
@@ -47,6 +46,24 @@ class DisplayInfoLoader {
     private final ExecutorService executor;
 
     private final SingleFlight singleFlight = new SingleFlight();
+
+    // 실행기 bean이 기본 후보가 아니라서 이름을 지정해야 한다. Lombok은 매개변수의 @Qualifier를 생성자로 옮기지 않아 손으로 쓴다.
+    DisplayInfoLoader(
+            ExternalAccountProperties properties,
+            YoutubeGateway youtubeGateway,
+            SpotifyGateway spotifyGateway,
+            YoutubeQuota youtubeQuota,
+            ProfileCache profileCache,
+            DisplayCache displayCache,
+            @Qualifier(ExternalAccountConfig.DISPLAY_EXECUTOR) ExecutorService executor) {
+        this.properties = properties;
+        this.youtubeGateway = youtubeGateway;
+        this.spotifyGateway = spotifyGateway;
+        this.youtubeQuota = youtubeQuota;
+        this.profileCache = profileCache;
+        this.displayCache = displayCache;
+        this.executor = executor;
+    }
 
     Map<UUID, AccountDisplay> load(
             UUID callerId, List<ExternalAccount> accounts, Map<UUID, List<SelectedWork>> worksByAccount) {

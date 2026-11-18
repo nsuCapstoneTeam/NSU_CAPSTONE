@@ -55,6 +55,10 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     private static final int REVOKE_ATTEMPTS = 2;
     /** 작업물 후보는 최신 공개 영상 50개까지다(06 §7). */
     private static final int UPLOADS_LIMIT = 50;
+    /** ID 확인 응답이 온전하지 않을 때 ERROR 로그에 적는 작업 이름. 이 게이트웨이의 ID 확인 호출은 이 작업만 쓴다. */
+    private static final String REFRESH_JOB = "ExternalAccountRefreshJob";
+    /** 한 응답에서 "없음"이 이 수 이상이고 요청한 ID의 절반 이상이면 API 동작이 바뀐 것으로 보고 응답 전체를 믿지 않는다(06 §11.1). */
+    private static final int MASS_MISSING_MIN = 5;
 
     private static final Set<String> CODE_REJECTED_ERRORS = Set.of("invalid_grant", "invalid_request");
 
@@ -164,6 +168,12 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     }
 
     private ChannelList getWithApiKey(RestClient client, String path, Map<String, String> params) {
+        return getWithApiKey(client, path, params, false);
+    }
+
+    /** {@code notFoundIsEmpty}가 {@code true}면 404를 실패가 아니라 "그 자원이 없음"으로 보고 {@code null}을 돌려준다. */
+    private ChannelList getWithApiKey(
+            RestClient client, String path, Map<String, String> params, boolean notFoundIsEmpty) {
         UriComponentsBuilder uri = UriComponentsBuilder.fromUriString(youtube.apiBaseUri() + path);
         params.forEach(uri::queryParam);
         try {
@@ -172,6 +182,11 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
                     .retrieve()
                     .body(ChannelList.class);
         } catch (RestClientException e) {
+            if (notFoundIsEmpty
+                    && e instanceof RestClientResponseException response
+                    && response.getStatusCode().value() == 404) {
+                return null;
+            }
             // API 키와 URL은 예외 메시지에, 오류 내용은 응답 본문에 들어 있을 수 있어 둘 다 옮기지 않는다. 상태만 남긴다
             if (e instanceof RestClientResponseException response) {
                 log.warn(
@@ -206,8 +221,12 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
         if (uploadsPlaylist == null) {
             return List.of();
         }
-        ChannelList playlistItems = getWithApiKeyOnWritePath(
-                "/playlistItems", Map.of("part", "contentDetails", "playlistId", uploadsPlaylist, "maxResults", "50"));
+        // 업로드가 없는 채널은 이 재생목록을 주지 않아 404 playlistNotFound가 온다. 영상이 없는 채널이므로 빈 목록이다(06 §7).
+        ChannelList playlistItems = getWithApiKey(
+                restClient,
+                "/playlistItems",
+                Map.of("part", "contentDetails", "playlistId", uploadsPlaylist, "maxResults", "50"),
+                true);
         List<String> videoIds = playlistItems == null || playlistItems.items() == null
                 ? List.of()
                 : playlistItems.items().stream()
@@ -276,24 +295,53 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     /**
      * 응답(2xx)이 있어야 "없음"을 판정할 수 있다. 응답을 못 받으면 getWithApiKey가 예외를 던진다.
      *
-     * <p>정상 응답은 항상 {@code items}나 {@code pageInfo}를 가진다(0건이면 {@code items} 없이 {@code pageInfo}만 온다).
-     * 프록시나 CDN이 주는 빈 본문·{@code {}} 같은 비정상 2xx를 "배치 전체가 없음"으로 읽으면 일일 작업이 연결을 한꺼번에
-     * 지우므로, 둘 다 없으면 확인 실패로 본다.
+     * <p>"없음"은 온전한 응답에서만 판정한다(06 §11.1, ADR 14번). 정상 응답은 항상 {@code items}나 {@code pageInfo}를 가진다
+     * (0건이면 {@code items} 없이 {@code pageInfo}만 온다). 프록시나 CDN이 주는 빈 본문·{@code {}} 같은 비정상 2xx를
+     * "배치 전체가 없음"으로 읽으면 일일 작업이 연결을 한꺼번에 지우므로, 다음 중 하나면 확인 실패로 보고 예외를 던진다.
+     * 빈 응답, 일부만 온 응답, {@code id}나 {@code status}가 없는 항목, 요청 ID 대부분이 "없음"인 응답이다.
      */
     private Set<String> publicIds(String path, List<String> ids) {
         ChannelList response = getWithApiKeyOnWritePath(path, Map.of("part", "id,status", "id", String.join(",", ids)));
-        if (response == null || (response.items() == null && response.pageInfo() == null)) {
-            throw unavailable("YouTube 응답이 비정상이라 존재 여부를 확인하지 못했다");
+        if (response == null
+                || (response.items() == null
+                        && (response.pageInfo() == null || response.pageInfo().totalResults() == null))) {
+            throw incompleteResponse(ids.size(), "EMPTY_RESPONSE");
         }
-        if (response.items() == null) {
-            return Set.of();
+        if (isPartial(response)) {
+            throw incompleteResponse(ids.size(), "PARTIAL_RESPONSE");
         }
-        return response.items().stream()
-                .filter(item -> item.id() != null
-                        && item.status() != null
-                        && "public".equals(item.status().privacyStatus()))
+        List<ChannelList.Channel> items = response.items() == null ? List.of() : response.items();
+        if (items.stream().anyMatch(item -> item == null || item.id() == null || item.status() == null)) {
+            throw incompleteResponse(ids.size(), "ITEM_INCOMPLETE");
+        }
+        Set<String> publicIds = items.stream()
+                .filter(item -> "public".equals(item.status().privacyStatus()))
                 .map(ChannelList.Channel::id)
                 .collect(Collectors.toSet());
+        long missing = ids.stream().filter(id -> !publicIds.contains(id)).count();
+        if (missing >= MASS_MISSING_MIN && missing * 2 >= ids.size()) {
+            throw incompleteResponse(ids.size(), "TOO_MANY_MISSING");
+        }
+        return publicIds;
+    }
+
+    /** 다음 쪽이 있거나, 전체 건수가 받은 항목 수보다 크면 일부만 온 응답이다. */
+    private static boolean isPartial(ChannelList response) {
+        int received = response.items() == null ? 0 : response.items().size();
+        Integer total = response.pageInfo() == null ? null : response.pageInfo().totalResults();
+        return response.nextPageToken() != null || (total != null && total > received);
+    }
+
+    /**
+     * 온전하지 않은 응답은 확인 실패다(06 §11.1). 운영자가 알아채도록 ERROR 한 줄을 남기되 ID와 응답 본문은 넣지 않는다.
+     */
+    private ExternalAccountException incompleteResponse(int requestedCount, String reason) {
+        log.error(
+                "YouTube ID 확인 응답이 온전하지 않아 이 배치는 확인 실패로 둔다: 작업 {}, 요청한 ID {}개, 사유 {}",
+                REFRESH_JOB,
+                requestedCount,
+                reason);
+        return unavailable("YouTube 응답이 온전하지 않다: " + reason);
     }
 
     /** 폐기를 보내고, 실패하면 한 번 더 보낸다. 폐기를 확인했는지 돌려준다. */
@@ -409,7 +457,10 @@ public class GoogleYoutubeGateway implements YoutubeGateway {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record ChannelList(List<Channel> items, Object pageInfo) {
+    private record ChannelList(List<Channel> items, PageInfo pageInfo, String nextPageToken) {
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        private record PageInfo(Integer totalResults) {}
 
         @JsonIgnoreProperties(ignoreUnknown = true)
         private record Channel(String id, Snippet snippet, Status status, ContentDetails contentDetails) {}

@@ -28,6 +28,7 @@ public class ExternalAccountConfig {
 
     public static final String WRITE_REST_CLIENT = "externalAccountWriteRestClientBuilder";
     public static final String READ_REST_CLIENT = "externalAccountReadRestClientBuilder";
+    public static final String DISPLAY_EXECUTOR = "externalAccountDisplayExecutor";
 
     /** 연결·존재 확인·후보처럼 결과가 저장이나 오류로 이어지는 호출: 연결 3초, 응답 5초, 재시도 없음. */
     @Bean(WRITE_REST_CLIENT)
@@ -67,9 +68,12 @@ public class ExternalAccountConfig {
     /**
      * 표시 정보를 계정마다 병렬로 받는 실행기(가상 스레드). 응답 전체 3초 상한 때문에 병렬이 필요하다. 종료 때 Spring이 닫는다.
      *
+     * <p>기본 후보에서 뺀다. Spring Boot는 {@code Executor} bean이 하나라도 있으면 기본 실행기
+     * {@code applicationTaskExecutor}를 만들지 않으므로, 빼지 않으면 다른 모듈의 {@code @Async}·MVC 비동기 처리가
+     * 이 실행기로 조용히 바뀐다. 받는 쪽은 {@link #DISPLAY_EXECUTOR}로 이름을 지정한다.
      */
     // shortcut: 요청 ID를 이어 주지 않는 실행기, NSU-146 머지 뒤 RequestIdExecutors.wrap(..)으로 감싼다
-    @Bean
+    @Bean(name = DISPLAY_EXECUTOR, defaultCandidate = false)
     ExecutorService externalAccountDisplayExecutor() {
         return Executors.newVirtualThreadPerTaskExecutor();
     }

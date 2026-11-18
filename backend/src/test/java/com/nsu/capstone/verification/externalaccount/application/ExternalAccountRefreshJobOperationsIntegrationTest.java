@@ -173,6 +173,25 @@ class ExternalAccountRefreshJobOperationsIntegrationTest extends ExternalAccount
         }
     }
 
+    /** 06 §11.3: 잠금을 3초 안에 잡지 못한 아티스트는 확인 실패로 두고(성공 기록 없음) 다음 아티스트를 계속 처리한다. */
+    @Test
+    void 잠금을_잡지_못한_아티스트는_건너뛰고_다음_아티스트를_처리하며_그_실행은_성공으로_기록하지_않는다() throws Exception {
+        User busy = newUser(UserRole.ARTIST, "ops-busy@example.com");
+        User free = newUser(UserRole.ARTIST, "ops-free@example.com");
+        // 더 오래된 busy 쪽이 먼저 처리되므로, free가 갱신됐다면 건너뛴 뒤에도 작업이 이어진 것이다
+        ExternalAccount busyAccount = account(busy, "UCbusy", NOW.minusSeconds(9 * 86_400L));
+        ExternalAccount freeAccount = account(free, "UCfree", EIGHT_DAYS_AGO);
+        when(youtubeGateway.findPublicChannelIds(anyList())).thenReturn(Set.of("UCbusy", "UCfree"));
+
+        whileAnotherTransactionHoldsLockOf(busy, job::run);
+
+        assertThat(repository.findById(busyAccount.id()).orElseThrow().refreshedAt())
+                .isEqualTo(NOW.minusSeconds(9 * 86_400L));
+        assertThat(repository.findById(freeAccount.id()).orElseThrow().refreshedAt())
+                .isEqualTo(NOW);
+        assertThat(redis.hasKey(LAST_SUCCESS_KEY)).isFalse();
+    }
+
     private static List<ILoggingEvent> errors(ListAppender<ILoggingEvent> appender) {
         return new ArrayList<>(appender.list.stream()
                 .filter(event -> event.getLevel() == Level.ERROR)

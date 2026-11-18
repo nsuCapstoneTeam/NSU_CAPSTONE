@@ -11,6 +11,10 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.nsu.capstone.verification.externalaccount.config.ExternalAccountProperties;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountException;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
@@ -18,8 +22,12 @@ import com.nsu.capstone.verification.externalaccount.redis.YoutubeQuota;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
@@ -30,9 +38,13 @@ class GoogleYoutubeGatewayVerifyIdsTest {
 
     private MockRestServiceServer server;
     private GoogleYoutubeGateway gateway;
+    private final Logger gatewayLogger = (Logger) LoggerFactory.getLogger(GoogleYoutubeGateway.class);
+    private final ListAppender<ILoggingEvent> logs = new ListAppender<>();
 
     @BeforeEach
     void setUp() {
+        logs.start();
+        gatewayLogger.addAppender(logs);
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
         ExternalAccountProperties properties = new ExternalAccountProperties(
@@ -57,6 +69,11 @@ class GoogleYoutubeGatewayVerifyIdsTest {
                         Duration.ofSeconds(2),
                         Duration.ofSeconds(3)));
         gateway = new GoogleYoutubeGateway(builder, builder, properties, mock(YoutubeQuota.class));
+    }
+
+    @AfterEach
+    void tearDown() {
+        gatewayLogger.detachAppender(logs);
     }
 
     @Test
@@ -125,6 +142,35 @@ class GoogleYoutubeGatewayVerifyIdsTest {
     }
 
     @Test
+    void 본문이_비었거나_items도_pageInfo도_없으면_ERROR_로그를_남긴다() {
+        server.expect(requestTo(startsWith(API_BASE + "/channels"))).andRespond(withSuccess("", APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/videos"))).andRespond(withSuccess("{}", APPLICATION_JSON));
+
+        assertUnavailable(() -> gateway.findPublicChannelIds(List.of("UC1", "UC2")));
+        assertUnavailable(() -> gateway.findPublicVideoIds(List.of("v1")));
+
+        assertThat(errorLines())
+                .hasSize(2)
+                .satisfiesExactly(
+                        channelLine -> assertThat(channelLine)
+                                .contains("ExternalAccountRefreshJob", "요청한 ID 2개", "EMPTY_RESPONSE"),
+                        videoLine -> assertThat(videoLine)
+                                .contains("ExternalAccountRefreshJob", "요청한 ID 1개", "EMPTY_RESPONSE"));
+    }
+
+    @Test
+    void items가_없고_pageInfo에_totalResults도_없으면_0건이라는_말이_없으므로_확인_실패다() {
+        server.expect(requestTo(startsWith(API_BASE + "/channels")))
+                .andRespond(withSuccess("{\"pageInfo\":{}}", APPLICATION_JSON));
+
+        assertUnavailable(() -> gateway.findPublicChannelIds(List.of("UC1")));
+
+        assertThat(errorLines())
+                .singleElement()
+                .satisfies(line -> assertThat(line).contains("요청한 ID 1개", "EMPTY_RESPONSE"));
+    }
+
+    @Test
     void 정상적인_0건_응답은_items가_빈_배열이든_pageInfo만_있든_모두_없음이다() {
         server.expect(requestTo(startsWith(API_BASE + "/channels")))
                 .andRespond(withSuccess("{\"items\":[]}", APPLICATION_JSON));
@@ -169,6 +215,135 @@ class GoogleYoutubeGatewayVerifyIdsTest {
         } finally {
             logger.detachAppender(appender);
         }
+    }
+
+    /** 06 §11.1 온전하지 않은 응답 2: 응답이 일부만 왔다면 안 온 ID가 "없음"이 아닐 수 있다. */
+    @Test
+    void nextPageToken이_있는_응답은_일부만_온_것이라_확인_실패이고_ERROR_로그를_남긴다() {
+        server.expect(requestTo(startsWith(API_BASE + "/channels"))).andRespond(withSuccess("""
+                        {"items":[{"id":"UC1","status":{"privacyStatus":"public"}}],
+                         "nextPageToken":"PAGE-TOKEN","pageInfo":{"totalResults":1}}""", APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/videos"))).andRespond(withSuccess("""
+                        {"items":[{"id":"v1","status":{"privacyStatus":"public"}}],
+                         "nextPageToken":"PAGE-TOKEN","pageInfo":{"totalResults":1}}""", APPLICATION_JSON));
+
+        assertUnavailable(() -> gateway.findPublicChannelIds(List.of("UC1", "UC2")));
+        assertUnavailable(() -> gateway.findPublicVideoIds(List.of("v1", "v2")));
+
+        assertThat(errorLines())
+                .hasSize(2)
+                .allSatisfy(line -> assertThat(line)
+                        .contains("ExternalAccountRefreshJob", "요청한 ID 2개", "PARTIAL_RESPONSE")
+                        .doesNotContain("UC1", "UC2", "v1", "v2", "PAGE-TOKEN", "API-KEY"));
+    }
+
+    @Test
+    void totalResults가_받은_items_수보다_크면_일부만_온_것이라_확인_실패이고_ERROR_로그를_남긴다() {
+        server.expect(requestTo(startsWith(API_BASE + "/channels"))).andRespond(withSuccess("""
+                        {"items":[{"id":"UC1","status":{"privacyStatus":"public"}}],
+                         "pageInfo":{"totalResults":3,"resultsPerPage":1}}""", APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/videos")))
+                .andRespond(withSuccess("{\"pageInfo\":{\"totalResults\":3,\"resultsPerPage\":5}}", APPLICATION_JSON));
+
+        assertUnavailable(() -> gateway.findPublicChannelIds(List.of("UC1", "UC2", "UC3")));
+        assertUnavailable(() -> gateway.findPublicVideoIds(List.of("v1", "v2", "v3")));
+
+        assertThat(errorLines())
+                .hasSize(2)
+                .allSatisfy(line ->
+                        assertThat(line).contains("ExternalAccountRefreshJob", "요청한 ID 3개", "PARTIAL_RESPONSE"));
+    }
+
+    @Test
+    void id나_status가_없는_항목이_든_응답은_확인_실패이고_ERROR_로그를_남긴다() {
+        server.expect(requestTo(startsWith(API_BASE + "/channels"))).andRespond(withSuccess("""
+                        {"items":[
+                          {"id":"UC1","status":{"privacyStatus":"public"}},
+                          {"id":"UC2"}
+                        ],"pageInfo":{"totalResults":2}}""", APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/videos"))).andRespond(withSuccess("""
+                        {"items":[
+                          {"id":"v1","status":{"privacyStatus":"public"}},
+                          {"status":{"privacyStatus":"public"}}
+                        ],"pageInfo":{"totalResults":2}}""", APPLICATION_JSON));
+
+        assertUnavailable(() -> gateway.findPublicChannelIds(List.of("UC1", "UC2")));
+        assertUnavailable(() -> gateway.findPublicVideoIds(List.of("v1", "v2")));
+
+        assertThat(errorLines())
+                .hasSize(2)
+                .allSatisfy(line -> assertThat(line)
+                        .contains("ExternalAccountRefreshJob", "요청한 ID 2개", "ITEM_INCOMPLETE")
+                        .doesNotContain("UC2", "v2"));
+    }
+
+    /** 06 §11.1 온전하지 않은 응답 4: 채널이 이만큼 한꺼번에 사라지는 일은 API 동작이 바뀐 것일 가능성이 더 크다. */
+    @Test
+    void 요청한_50개_중_25개가_없음이면_응답_전체를_확인_실패로_보고_ERROR_로그를_남긴다() {
+        List<String> channelIds = idsOf("UC", 50);
+        List<String> videoIds = idsOf("v", 50);
+        server.expect(requestTo(startsWith(API_BASE + "/channels")))
+                .andRespond(withSuccess(publicItemsJson(channelIds.subList(0, 25)), APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/videos")))
+                .andRespond(withSuccess(publicItemsJson(videoIds.subList(0, 25)), APPLICATION_JSON));
+
+        assertUnavailable(() -> gateway.findPublicChannelIds(channelIds));
+        assertUnavailable(() -> gateway.findPublicVideoIds(videoIds));
+
+        assertThat(errorLines())
+                .hasSize(2)
+                .allSatisfy(line ->
+                        assertThat(line).contains("ExternalAccountRefreshJob", "요청한 ID 50개", "TOO_MANY_MISSING"));
+    }
+
+    @Test
+    void 요청한_50개_중_4개만_없음이면_그_4개만_빠진_채_돌려주고_ERROR_로그는_없다() {
+        List<String> channelIds = idsOf("UC", 50);
+        List<String> videoIds = idsOf("v", 50);
+        server.expect(requestTo(startsWith(API_BASE + "/channels")))
+                .andRespond(withSuccess(publicItemsJson(channelIds.subList(0, 46)), APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/videos")))
+                .andRespond(withSuccess(publicItemsJson(videoIds.subList(0, 46)), APPLICATION_JSON));
+
+        assertThat(gateway.findPublicChannelIds(channelIds))
+                .containsExactlyInAnyOrderElementsOf(channelIds.subList(0, 46));
+        assertThat(gateway.findPublicVideoIds(videoIds)).containsExactlyInAnyOrderElementsOf(videoIds.subList(0, 46));
+
+        assertThat(errorLines()).isEmpty();
+    }
+
+    /** "없음"이 5개 이상일 때만 응답을 의심한다. 작은 배치에서 채널 몇 개가 실제로 사라진 것은 정상 삭제 경로다. */
+    @Test
+    void 없음이_5개_미만이면_모두_없음이어도_정상_판정이고_5개부터는_확인_실패다() {
+        server.expect(requestTo(startsWith(API_BASE + "/channels")))
+                .andRespond(withSuccess("{\"pageInfo\":{\"totalResults\":0}}", APPLICATION_JSON));
+        server.expect(requestTo(startsWith(API_BASE + "/channels")))
+                .andRespond(withSuccess("{\"pageInfo\":{\"totalResults\":0}}", APPLICATION_JSON));
+
+        assertThat(gateway.findPublicChannelIds(idsOf("UC", 4))).isEmpty();
+        assertUnavailable(() -> gateway.findPublicChannelIds(idsOf("UC", 5)));
+
+        assertThat(errorLines())
+                .singleElement()
+                .satisfies(line -> assertThat(line).contains("요청한 ID 5개", "TOO_MANY_MISSING"));
+    }
+
+    private static List<String> idsOf(String prefix, int count) {
+        return IntStream.range(0, count).mapToObj(index -> prefix + index).toList();
+    }
+
+    private static String publicItemsJson(List<String> publicIds) {
+        String items = publicIds.stream()
+                .map(id -> "{\"id\":\"" + id + "\",\"status\":{\"privacyStatus\":\"public\"}}")
+                .collect(Collectors.joining(","));
+        return "{\"items\":[" + items + "],\"pageInfo\":{\"totalResults\":" + publicIds.size() + "}}";
+    }
+
+    private List<String> errorLines() {
+        return logs.list.stream()
+                .filter(event -> event.getLevel() == Level.ERROR)
+                .map(ILoggingEvent::getFormattedMessage)
+                .toList();
     }
 
     private static void assertUnavailable(Runnable call) {

@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.verification.externalaccount.ExternalAccountIntegrationTestBase;
+import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountException;
+import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,9 +51,12 @@ class ExternalAccountLockIntegrationTest extends ExternalAccountIntegrationTestB
         return Boolean.TRUE.equals(acquired);
     }
 
-    /** backend-verify 지적: 잠금을 쥔 쪽이 풀리지 않으면 대기하는 요청이 DB 연결을 하나씩 잡고 쌓인다. 기다리는 시간에 상한이 있어야 한다. */
+    /**
+     * backend-verify 지적: 잠금을 쥔 쪽이 풀리지 않으면 대기하는 요청이 DB 연결을 하나씩 잡고 쌓인다. 기다리는 시간에 상한이 있어야 한다.
+     * 06 §11.3: 상한(3초)을 넘으면 DB 예외가 아니라 EXTERNAL_ACCOUNT_BUSY로 끝나야 API가 500이 아닌 503을 준다.
+     */
     @Test
-    void 잠금을_오래_쥔_트랜잭션이_있으면_기다리는_쪽은_몇_초_안에_예외로_끝난다() throws Exception {
+    void 잠금을_오래_쥔_트랜잭션이_있으면_기다리는_쪽은_몇_초_안에_EXTERNAL_ACCOUNT_BUSY로_끝난다() throws Exception {
         User artist = newUser(UserRole.ARTIST, "lock-timeout@example.com");
         java.util.concurrent.CountDownLatch holding = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
@@ -74,7 +79,10 @@ class ExternalAccountLockIntegrationTest extends ExternalAccountIntegrationTestB
 
             assertThatThrownBy(() -> waiter.get(8, java.util.concurrent.TimeUnit.SECONDS))
                     .isInstanceOf(java.util.concurrent.ExecutionException.class)
-                    .hasMessageContaining("lock timeout");
+                    .cause()
+                    .isInstanceOfSatisfying(
+                            ExternalAccountException.class,
+                            e -> assertThat(e.getFailure()).isEqualTo(ExternalAccountFailure.EXTERNAL_ACCOUNT_BUSY));
             assertThat(java.time.Duration.ofNanos(System.nanoTime() - start))
                     .isLessThan(java.time.Duration.ofSeconds(6));
         } finally {

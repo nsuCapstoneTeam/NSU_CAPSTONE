@@ -7,6 +7,7 @@ import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailu
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountProvider;
 import com.nsu.capstone.verification.externalaccount.domain.SelectedWork;
 import com.nsu.capstone.verification.externalaccount.domain.StaleWork;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -18,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.postgresql.util.PSQLException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -30,6 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class ExternalAccountRepository {
 
     private static final String YOUTUBE_CHANNEL_UNIQUE_INDEX = "uk_external_accounts_youtube_channel";
+    /** PostgreSQL SQL state {@code lock_not_available}: {@code lock_timeout}을 넘겨 끊긴 대기 */
+    private static final String LOCK_NOT_AVAILABLE = "55P03";
 
     private static final String COLUMNS = "id, artist_id, provider, provider_account_id, connected_at, refreshed_at";
 
@@ -53,11 +57,33 @@ public class ExternalAccountRepository {
         // 잠금을 쥔 쪽이 풀리지 않을 때 대기하는 요청이 DB 연결을 하나씩 잡고 쌓이지 않게 기다리는 시간에 상한을 둔다.
         // SET LOCAL이라 이 트랜잭션에만 적용되고, 잠금을 쥐는 트랜잭션은 DB 작업만 하는 짧은 것이다(외부 호출은 밖에서 한다).
         jdbc.sql("SET LOCAL lock_timeout = '3s'").update();
-        jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended('extacct:' || :artistId, 0))")
-                .param("artistId", artistId.toString())
-                .query()
-                .singleRow();
+        try {
+            jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended('extacct:' || :artistId, 0))")
+                    .param("artistId", artistId.toString())
+                    .query()
+                    .singleRow();
+        } catch (DataAccessException e) {
+            // 대기 초과만 503으로 옮기고, 다른 DB 오류는 그대로 올려 500과 오류 로그로 남긴다(06 §10, §11.3)
+            if (isLockTimeout(e)) {
+                throw new ExternalAccountException(
+                        ExternalAccountFailure.EXTERNAL_ACCOUNT_BUSY, "아티스트 잠금을 3초 안에 잡지 못했다");
+            }
+            throw e;
+        }
         return new LockedArtist(artistId);
+    }
+
+    /**
+     * PostgreSQL이 {@code lock_timeout}으로 끊었는지. Spring이 이 오류를 어떤 예외로 옮기든(지금은
+     * {@code UncategorizedSQLException}) 원인 {@link SQLException}의 SQL state로 구분한다.
+     */
+    private static boolean isLockTimeout(DataAccessException e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sql) {
+                return LOCK_NOT_AVAILABLE.equals(sql.getSQLState());
+            }
+        }
+        return false;
     }
 
     public void insert(LockedArtist locked, ExternalAccount account) {

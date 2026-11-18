@@ -7,6 +7,7 @@ import com.nsu.capstone.verification.externalaccount.domain.AuditEventType;
 import com.nsu.capstone.verification.externalaccount.domain.AuditReason;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccount;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountException;
+import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountFailure;
 import com.nsu.capstone.verification.externalaccount.domain.ExternalAccountProvider;
 import com.nsu.capstone.verification.externalaccount.domain.StaleWork;
 import com.nsu.capstone.verification.externalaccount.provider.YoutubeGateway;
@@ -35,9 +36,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * YouTube 채널·영상 ID 확인 작업(06 §11.1, ADR 14번). YouTube 정책이 ID도 30일 안에 갱신하거나 삭제하게 하므로,
  * 하루 한 번 확인한 지 7일 넘은 ID를 API 키로 50개씩 다시 조회한다.
  *
- * <p>"없음"은 YouTube가 2xx로 답했는데 그 ID가 응답에 없거나 {@code public}이 아닐 때만이다. 403, 4xx, 5xx, 시간 초과는
- * 확인 실패이고 행을 지우지 않는다. 30일을 넘긴 행은 확인하지 못했어도 지운다. 행을 바꿀 때는 아티스트마다 트랜잭션을 따로
- * 열고 그 아티스트의 잠금을 잡은 뒤, 같은 채널·영상일 때만 바꾼다.
+ * <p>"없음"은 YouTube가 온전한 2xx로 답했는데 그 ID가 응답에 없거나 {@code public}이 아닐 때만이다. 403, 4xx, 5xx, 시간 초과,
+ * 온전하지 않은 2xx 응답(게이트웨이가 판정한다)은 확인 실패이고 행을 지우지 않는다. 30일을 넘긴 행은 확인하지 못했어도
+ * 지운다. 행을 바꿀 때는 아티스트마다 트랜잭션을 따로 열고 그 아티스트의 잠금을 잡은 뒤, 같은 채널·영상일 때만 바꾼다.
+ * 잠금을 3초 안에 잡지 못한 아티스트는 이번 실행에서 확인 실패로 두고 다음으로 넘어간다(06 §11.3).
  */
 @Slf4j
 @Component
@@ -120,9 +122,9 @@ public class ExternalAccountRefreshJob {
             allVerified &= publicIds != null;
             for (ExternalAccount account : batch) {
                 if (publicIds != null && publicIds.contains(account.providerAccountId())) {
-                    refreshChannel(account, now);
+                    allVerified &= refreshChannel(account, now);
                 } else if (publicIds != null) {
-                    deleteChannel(account, AuditReason.CHANNEL_NOT_PUBLIC, now);
+                    allVerified &= deleteChannel(account, AuditReason.CHANNEL_NOT_PUBLIC, now);
                 } else if (account.refreshedAt().isBefore(now.minus(DELETE_AFTER))) {
                     deleteChannel(account, AuditReason.UNVERIFIED_30_DAYS, now);
                 }
@@ -144,9 +146,9 @@ public class ExternalAccountRefreshJob {
                     continue;
                 }
                 if (publicIds != null && publicIds.contains(work.providerWorkId())) {
-                    refreshWork(work, now);
+                    allVerified &= refreshWork(work, now);
                 } else if (publicIds != null) {
-                    deleteWork(work);
+                    allVerified &= deleteWork(work);
                 } else if (work.refreshedAt().isBefore(now.minus(DELETE_AFTER))) {
                     deleteWork(work);
                 }
@@ -172,14 +174,16 @@ public class ExternalAccountRefreshJob {
         }
     }
 
-    private void refreshChannel(ExternalAccount account, Instant now) {
-        inLockOf(
-                account.artistId(),
-                locked -> repository.refreshAccount(locked, account.id(), account.providerAccountId(), now));
+    /** 아래 네 메서드는 아티스트 잠금을 잡아 처리했으면 {@code true}, 잠금 대기를 넘겨 건너뛰었으면 {@code false}를 돌려준다. */
+    private boolean refreshChannel(ExternalAccount account, Instant now) {
+        return inLockOf(
+                        account.artistId(),
+                        locked -> repository.refreshAccount(locked, account.id(), account.providerAccountId(), now))
+                != LockOutcome.BUSY;
     }
 
-    private void deleteChannel(ExternalAccount account, AuditReason reason, Instant now) {
-        boolean deleted = inLockOf(account.artistId(), locked -> {
+    private boolean deleteChannel(ExternalAccount account, AuditReason reason, Instant now) {
+        LockOutcome outcome = inLockOf(account.artistId(), locked -> {
             if (!repository.deleteAccountOfChannel(locked, account.id(), account.providerAccountId())) {
                 return false;
             }
@@ -196,35 +200,54 @@ public class ExternalAccountRefreshJob {
                             now));
             return true;
         });
-        if (deleted) {
+        if (outcome == LockOutcome.CHANGED) {
             displayCache.evict(account.id());
             candidateCache.evict(account.id());
         }
+        return outcome != LockOutcome.BUSY;
     }
 
-    private void refreshWork(StaleWork work, Instant now) {
-        inLockOf(
-                work.artistId(),
-                locked -> repository.refreshWork(locked, work.externalAccountId(), work.providerWorkId(), now));
+    private boolean refreshWork(StaleWork work, Instant now) {
+        return inLockOf(
+                        work.artistId(),
+                        locked -> repository.refreshWork(locked, work.externalAccountId(), work.providerWorkId(), now))
+                != LockOutcome.BUSY;
     }
 
-    private void deleteWork(StaleWork work) {
-        boolean deleted = inLockOf(
+    private boolean deleteWork(StaleWork work) {
+        LockOutcome outcome = inLockOf(
                 work.artistId(),
                 locked -> repository.deleteWork(locked, work.externalAccountId(), work.providerWorkId()));
-        if (deleted) {
+        if (outcome == LockOutcome.CHANGED) {
             displayCache.evict(work.externalAccountId());
         }
+        return outcome != LockOutcome.BUSY;
     }
 
-    /** 아티스트마다 트랜잭션을 따로 열고 그 아티스트의 잠금을 잡은 뒤 실행한다. 한 행의 오류가 다른 행을 막지 않는다. */
-    private boolean inLockOf(java.util.UUID artistId, Function<LockedArtist, Boolean> work) {
+    /** 잠금 안에서 한 일의 결과. {@code UNCHANGED}에는 그사이 행이 바뀌어 건드리지 않은 경우와 반영 오류가 든다. */
+    private enum LockOutcome {
+        CHANGED,
+        UNCHANGED,
+        BUSY
+    }
+
+    /**
+     * 아티스트마다 트랜잭션을 따로 열고 그 아티스트의 잠금을 잡은 뒤 실행한다. 한 행의 오류가 다른 행을 막지 않는다.
+     * 잠금을 3초 안에 잡지 못하면(06 §11.3) 그 아티스트는 이번 실행에서 확인하지 못한 것이라 {@code BUSY}를 돌려준다.
+     */
+    private LockOutcome inLockOf(java.util.UUID artistId, Function<LockedArtist, Boolean> work) {
         try {
-            return Boolean.TRUE.equals(
+            boolean changed = Boolean.TRUE.equals(
                     transactionTemplate.execute(status -> work.apply(repository.lockArtist(artistId))));
+            return changed ? LockOutcome.CHANGED : LockOutcome.UNCHANGED;
         } catch (RuntimeException e) {
+            if (e instanceof ExternalAccountException failure
+                    && failure.getFailure() == ExternalAccountFailure.EXTERNAL_ACCOUNT_BUSY) {
+                log.warn("아티스트 잠금을 잡지 못해 이번 실행에서는 건너뛴다: 아티스트 {}", artistId);
+                return LockOutcome.BUSY;
+            }
             log.error("YouTube ID 확인 결과를 반영하지 못했다: 아티스트 {}", artistId, e);
-            return false;
+            return LockOutcome.UNCHANGED;
         }
     }
 
