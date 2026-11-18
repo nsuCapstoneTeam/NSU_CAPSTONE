@@ -2,7 +2,7 @@
 
 - 상태: **Proposed** (설계 리뷰와 PR 리뷰에서 확정)
 - 결정일: **2026-11-11** (NSU-146). 사람 결정(김동엽, grill): 응답 헤더 `X-Request-Id`만 내보내고 에러 본문은 그대로 둔다, 이름은 `requestId`, 들어온 ID는 믿지 않는다, 기본 형식은 logstash JSON, 내부 UUID는 로그에 남겨도 된다, 앱 안의 남은 유출 경로는 이번에 고친다, 로그 테스트는 새 CI job으로 돌린다, 개인정보 규칙은 서비스가 받거나 만드는 값에 적용하고 요청자가 경로에 직접 넣은 글자는 뺀다(설계 리뷰 4회차 뒤)
-- 요구사항: SSOT 최종 승인 v1.17.1(현재 리비전 v1.19 초안)에는 앱 로그·요청 ID·로그 마스킹 규칙이 없다. 관련 항목은 `SEC-120`(OAuth Access Token 평문 저장 금지), `MVP-128`(초기에 Elasticsearch 등 미개발)이다
+- 요구사항: SSOT 최종 승인 v1.17.1(현재 리비전 v1.21 초안, 2026-11-18 확인)에는 앱 로그·요청 ID·로그 마스킹 규칙이 없다. 관련 항목은 `SEC-120`(OAuth Access Token 평문 저장 금지), `MVP-128`(초기에 Elasticsearch 등 미개발)이다
 - 설계 과정: `/pstack:architect`(조사 10건, 구조가 다른 후보 2개, 합성)를 거쳐 사람 판단 항목만 grill로 정했다. 합성 결과는 [Synthesis decision](#synthesis-decision)에 있다
 - 설계 리뷰: Codex adversarial review(grill `20261111T084617Z-c1f27111`) 1~13회차(12회차는 Codex 한도로 Claude 적대적 리뷰가 대신했다). 회차마다 고친 것은 [Synthesis decision](#synthesis-decision)의 "설계 리뷰 N회차 뒤 바뀐 것"에 있다. 사람 결정이 들어간 회차: 4회차는 고치지 않고 AC3의 경계를 정했다(Decision 7). 5~7회차(nginx 설정)는 배포 요구사항으로 정리하고 그 확인을 NSU-129로 넘겼다(Decision 9)
 
@@ -42,18 +42,18 @@
 4. **배포 로그는 Spring Boot 내장 logstash JSON이다**(사람 결정).
    - `config/logging.properties`(새 파일, `application.properties`에서 import): `logging.structured.format.console=${LOG_FORMAT:logstash}`. 설정이 없으면 JSON이다. 배포에서 변수를 빠뜨려도 AC1이 깨지지 않는다.
    - **로그 보호 장치(7-3 레벨 하한과 JVM 옵션 검사, 7-4 메시지 없는 출력기)는 출력 형식과 상관없이 늘 켜진다. 끄는 길은 로컬 모드 하나뿐이다**(설계 리뷰 12회차 지적). 로컬 모드는 `LOG_LOCAL_MODE=true`(`nsu.logging.local-mode`)다.
-     - **로컬 모드가 아니면 설정 이름이 아니라 실제로 붙은 출력 장치를 검사한다(출력 장치 자기 검사).** 12회차(형식·파일·사용자 설정으로 우회)와 13회차(출력기 설정 `logging.structured.json.stacktrace.printer=standard`로 우회)가 같은 종류라서, 설정 이름을 하나씩 막던 방식을 이 검사로 바꿨다. 7-3과 같은 리스너가 Boot가 로깅을 초기화한 직후(컨텍스트를 만들기 전)와 앱 준비 완료(`ApplicationReadyEvent`) 때 한 번씩 확인한다. 하나라도 어긋나면 시작하지 않는다.
+     - **로컬 모드가 아니면 설정 이름이 아니라 실제로 붙은 출력 장치를 검사한다(출력 장치 자기 검사).** 12회차(형식·파일·사용자 설정으로 우회)와 13회차(출력기 설정 `logging.structured.json.stacktrace.printer=standard`로 우회)가 같은 종류라서, 설정 이름을 하나씩 막던 방식을 이 검사로 바꿨다. Boot가 로깅을 초기화한 직후(컨텍스트를 만들기 전, 7-3과 같은 환경 준비 리스너)와 앱 준비 완료(`ApplicationReadyEvent`, 별도 리스너) 때 한 번씩 확인한다. 두 리스너 모두 `META-INF/spring.factories`로 등록한다. 하나라도 어긋나면 시작하지 않는다.
        - Logback의 모든 로거에 붙은 어펜더가 Boot 콘솔 어펜더 하나뿐이다. JUL 루트 핸들러는 SLF4J 브리지 하나뿐이다. `-Dorg.springframework.boot.logging.LoggingSystem=none`처럼 Boot가 로깅을 설정하지 않으면 Logback 기본 평문 어펜더와 JUL 콘솔 핸들러가 남아 여기서 걸린다.
        - JVM 기본 미처리 예외 처리기(`Thread.getDefaultUncaughtExceptionHandler()`)가 우리 처리기다. 같은 리스너가 컨텍스트를 만들기 전에 건다. 이 처리기는 스레드에서 처리하지 못한 예외를 정적 문장의 SLF4J ERROR로 넘긴다(예외는 마지막 인자라 7-4 출력기를 거친다). JDK 기본 처리(`ThreadGroup.uncaughtException`)는 `Exception in thread "…"`와 예외 메시지를 System.err에 평문으로 찍어 어펜더·출력기를 모두 거치지 않기 때문이다(구현 중 보안 리뷰 지적). 스레드에 처리기를 따로 다는 코드는 S5의 MDC 전파 래퍼만 쓰게 해서 막는다. 로컬 모드에서는 걸지 않는다.
        - 그 어펜더의 인코더로 시험 이벤트 하나를 인코딩한다(쓰지 않고 바이트만 만든다). 시험 이벤트는 MDC `requestId`와, 메시지와 원인 메시지에 시험 문자열을 담은 예외를 가진다. 결과가 한 줄 JSON이고, AC1 필드(`@timestamp`, `level`, `logger_name`, `message`, `requestId`)와 `stack_trace`가 있고, 시험 문자열이 어디에도 없어야 한다.
        - 그래서 형식(`logging.structured.format.console`의 빈 값·`ecs`·`gelf`·사용자 클래스), 출력기(`stacktrace.printer`의 `standard`·`logging-system`·다른 클래스), 필드 설정(`logging.structured.json.exclude`·`rename`·`customizer`), 파일 출력(`logging.file.*`), 사용자 Logback 설정(`logging.config`, `logback-spring.xml`) 중 무엇을 바꿔도 걸린다. 설정이 어디서 왔는지(설정 파일, 환경 변수, 명령행)도 따지지 않는다. Boot가 출력 설정을 새로 더해도 이 검사는 그대로 쓴다.
        - 오류에는 어긋난 항목(어펜더 이름·종류, 빠진 필드, 시험 문자열이 나온 필드 이름)만 담는다.
-     - 로컬 모드이면 평문을 쓸 수 있고 7-3 하한, JVM 옵션 검사, 출력 장치 자기 검사, 미처리 예외 처리기를 건너뛴다. 시작할 때 "로컬 전용 로그 모드다. 배포에서 쓰지 않는다"를 WARN으로 남긴다.
+     - 로컬 모드이면 평문을 쓸 수 있고 7-3 하한, JVM 옵션 검사, 출력 장치 자기 검사, 미처리 예외 처리기를 건너뛴다. 시작할 때 "로컬 전용 로그 모드다. 로그 보호 장치를 건너뛴다. 배포에서 쓰지 않는다"를 WARN으로 남긴다. 배포 확인은 앞부분 `로컬 전용 로그 모드`로 찾으므로, 문구를 바꿔도 이 앞부분은 그대로 둔다.
      - 로컬 모드를 켜는 것은 속성 `nsu.logging.local-mode` 하나다. Spring 설정이라 들어오는 길(환경 변수 `LOG_LOCAL_MODE`·`NSU_LOGGING_LOCAL_MODE`, `SPRING_APPLICATION_JSON`, 명령행 `--nsu.logging.local-mode`)과 값 표기(`true`, `1` 등)를 가리지 않는다(구현 중 backend-verify 지적). 들어온 길을 가려 막지 않는다. 설정 이름을 하나씩 막는 방식이 되고, 켜는 사람은 배포 설정을 바꿀 수 있는 운영자뿐이기 때문이다. 대신 켜지면 위 WARN이 반드시 남으므로, 배포 확인(NSU-129)은 이름 목록이 아니라 **배포 시작 로그에 이 WARN이 없음**을 본다.
      - 예시 파일(`.env.example`)에는 안전한 쪽만 둔다. `LOG_LOCAL_MODE`와 `LOG_FORMAT=`은 주석으로만 적고, README가 로컬에서 두 줄의 주석을 풀라고 안내한다. 예시 파일을 그대로 복사해 시연 서버를 띄워도 보호 장치가 켜진다.
    - 한 줄에 JSON 하나다. `@timestamp`, `level`, `logger_name`, `message`, `requestId`가 필드다. MDC 값은 Boot가 자동으로 필드로 넣는다.
    - logstash를 고른 이유: 필드가 평평해 Datadog이 `level`을 상태로 기본 인식하고, Grafana Loki·CloudWatch도 그대로 읽는다. 수집 도구는 정하지 않았다(범위 밖). 도구를 정할 때 다른 형식(ECS 등)으로 바꾸려면 시작 검사, 출력기, 개인정보 테스트를 함께 바꿔야 한다. 형식마다 예외를 쓰는 필드가 다르기 때문이다.
-   - 로컬은 `.env`에 `LOG_LOCAL_MODE=true`와 `LOG_FORMAT=`(빈 값)을 두면 Boot 평문이고, `logging.pattern.correlation=[%X{requestId:-}] `로 줄마다 요청 ID가 붙는다.
+   - 로컬은 `.env`에 `LOG_LOCAL_MODE=true`와 `LOG_FORMAT=`(빈 값)을 두면 Boot 평문이고, `logging.pattern.correlation=[%X{requestId:-}]`(Boot가 뒤에 한 칸을 붙인다)로 줄마다 요청 ID가 붙는다. `.env`는 앱이 직접 읽지 않으므로 다른 `.env` 값처럼 실행 환경 변수로 넘긴다.
    - `logging.structured.json.stacktrace.max-length=8192`. 오류 줄이 Docker json-file 드라이버의 줄 분할(16 KiB)에 걸리지 않게 한다.
    - `logging.structured.json.stacktrace.root=first`. 가장 깊은 원인 예외부터 찍는다(구현 중 발견). 기본값(`last`)은 바깥 예외부터 찍는데, Tomcat·Spring·Security 필터를 지나는 바깥 스택(프레임 약 100개)이 8192자를 채우면 뒤의 `Caused by`가 잘린다. 7-4로 메시지를 뺀 출력에서 원인 클래스까지 잘리면 장애 원인을 좁힐 수 없다. `first`이면 잘려도 바깥 래퍼 프레임만 빠진다. 성능·메모리·확장성·사용자 경험은 차이 없다(같은 출력기, 순서만 다름). 7-4 출력기가 이 설정을 실제로 따르는지 테스트가 확인한다(8192자를 넘는 바깥 스택 뒤에 원인이 있는 예외 → 출력에 원인 클래스가 있음). 수집 도구를 정할 때 그 도구가 원인 먼저 순서(`Wrapped by:`)를 읽는지 확인한다.
 5. **요청이 끝날 때 한 줄을 남긴다.**
@@ -61,7 +61,7 @@
    - 경로는 원본 주소가 아니라 Spring MVC가 고른 경로 패턴(`HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE`, 예: `/api/v1/events/{eventId}`)을 남긴다. 패턴이 없으면(Security가 `DispatcherServlet` 전에 거절, 맞는 경로 없음) 고정값 `UNMATCHED`를 남긴다. 원본 경로에는 사용자가 넣은 값(예: 주소에 넣은 이메일)이 들어갈 수 있다(설계 리뷰 3회차 지적). Spring의 `http.server.requests` 지표도 같은 방식이다. 쿼리, IP, 헤더, 본문도 남기지 않는다.
 6. **필터 밖으로 나온 예외는 필터가 ID와 함께 남긴다.**
    - 아직 응답을 커밋하지 않은 `REQUEST` 디스패치에서 서버 오류 예외가 나오면, 필터가 ID를 붙여 ERROR로 한 번 남기고 Tomcat이 서버 오류에 하던 것과 같은 500과 `/error` 디스패치로 바꾼다(`ERROR_EXCEPTION` 속성, `sendError(500)`). 그래서 Tomcat이 필터 밖에서 쓰던 ID 없는 `Servlet.service() … threw exception` 줄이 생기지 않는다.
-   - Tomcat이 클라이언트 오류로 분류하는 예외(`BadRequestException`, `InvalidParameterException`, 이것을 원인으로 가진 예외)는 잡지 않고 그대로 넘긴다. Tomcat은 이것을 400 등으로 정해 `/error`로 보내고 DEBUG로만 남긴다. 다만 지금 보안 설정은 익명 요청의 `/error` 디스패치를 막아서, 클라이언트가 받는 최종 상태는 401이다(방화벽이 거절한 `;` 경로·비표준 메서드도 같다. 실제 Tomcat 테스트가 지금 동작으로 기록한다). 익명에게도 실제 상태를 돌려줄지는 보안 설정 변경이라 이 이슈 밖에서 다룬다(Consequences). 필터가 잡아 ERROR와 500으로 바꾸면, 잘못된 퍼센트 인코딩 쿼리 같은 요청으로 누구나 ERROR 경보를 만들 수 있다(설계 리뷰 12회차 지적).
+   - Tomcat이 클라이언트 오류로 분류하는 예외(`BadRequestException`, `InvalidParameterException`, `CloseNowException`, 이것을 원인으로 가진 예외)는 잡지 않고 그대로 넘긴다. Tomcat은 이것을 400 등으로 정해 `/error`로 보내고 DEBUG로만 남긴다. 다만 지금 보안 설정은 익명 요청의 `/error` 디스패치를 막아서, 클라이언트가 받는 최종 상태는 401이다(방화벽이 거절한 `;` 경로·비표준 메서드도 같다. 실제 Tomcat 테스트가 지금 동작으로 기록한다). 익명에게도 실제 상태를 돌려줄지는 보안 설정 변경이라 이 이슈 밖에서 다룬다(Consequences). 필터가 잡아 ERROR와 500으로 바꾸면, 잘못된 퍼센트 인코딩 쿼리 같은 요청으로 누구나 ERROR 경보를 만들 수 있다(설계 리뷰 12회차 지적).
    - 커밋한 뒤나 `ERROR`·`ASYNC` 디스패치 안에서 나온 예외는 남기고 다시 던진다. 다시 던질 때는 정적 메시지를 가진 `ServletException`으로 감싸고 원래 예외는 원인으로 둔다. Tomcat(`StandardWrapperValve`)은 `ServletException`의 메시지를 로그 문장에 그대로 넣고, `DispatcherServlet`은 빠져나가는 예외를 `"Request processing failed: " + ex`로 감싸기 때문이다(설계 리뷰 11회차 지적). 원인 예외는 스택 트레이스로만 남아 7-4의 출력기를 거친다. 클라이언트 연결 끊김(`DisconnectedClientHelper`)은 남기지 않고 그대로 넘긴다.
 7. **개인정보는 로그에 나오는 곳에서 가리지 않고, 나오기 전에 막는다.**
    - **AC3를 지키는 장치(요약)**: 로컬 모드가 아니면 로그가 나가는 길은 logstash 콘솔 인코더 하나뿐이다(Decision 4 출력 장치 자기 검사). 그 길에는 관문 셋이 있다. ① 레벨 하한(7-3): 프레임워크·라이브러리가 본문·바인드 값·헤더를 찍는 레벨로 내려가지 못한다. ② 메시지 없는 출력기(7-4): 어느 로거든 예외 메시지가 출력되지 않는다. ③ 정적 검사 S2·S2b·S6(Decision 8): 우리 코드가 로그 문장에 개인정보·객체·예외 메시지·응답 본문을 넣지 못한다. 로거를 거치지 않는 출력(JVM 디버그 옵션)은 시작 검사가 막는다. 검증은 하나의 방식으로 한다. 가짜 값을 넣은 대표 흐름을 실제 인코더 출력 바이트로 검사하는 개인정보 테스트다(Decision 8). 아래 경로별 항목과 리뷰에서 나온 사례는 이 장치의 입력 사례이지, 막는 방법의 목록이 아니다.
@@ -70,7 +70,7 @@
      - 그래서 프레임워크가 경로 조작 시도나 지원하지 않는 메서드 같은 보안·요청 경고에 요청 줄을 그대로 찍는 줄(예: Spring `ResourceHandlerUtils`의 WARN, `/v3/api-docs/WEB-INF/…`, `org.springframework.web.servlet.PageNotFound`의 "Request method '…' is not supported")과 nginx 접근 로그의 경로는 남긴다. 공격을 알아차리는 신호이고, JSON 이스케이프로 로그 위조는 막힌다. 시연 서버를 초기화할 때 다른 로그와 함께 지운다(NSU-129).
      - 우리 코드가 만드는 줄은 이 경계와 상관없이 주소 원문을 쓰지 않는다(완료 줄은 경로 패턴, Decision 5).
      - 쿼리 문자열은 이 경계에 넣지 않는다. OAuth `code`·`state`처럼 서비스가 받는 값이 들어가기 때문이다.
-   - 허용: 내부 UUID(회원·아티스트·행사·곡·요청 ID)(사람 결정). 우리 DB와 합치면 사람을 알아볼 수 있으므로, 처리방침에 접속 기록으로 적는다(NSU-133). 시연 서버 초기화 때 로그도 지운다(NSU-129, identity_verification/00).
+   - 허용: 내부 UUID(회원·아티스트·행사·곡·요청 ID)(사람 결정). NSU-105의 인증 시도 ID도 여기에 든다. 서버가 만든 UUIDv7이고, 그 값만으로는 기록을 만들 수 없다(시도와 회원을 묶는 복합 FK, 본인 인증 필요). 가입 세션 ID는 그 값만으로 가입을 이어 갈 수 있어 금지 값이다. 우리 DB와 합치면 사람을 알아볼 수 있으므로, 처리방침에 접속 기록으로 적는다(NSU-133). 시연 서버 초기화 때 로그도 지운다(NSU-129, identity_verification/00).
    - 막는 방법:
      1. pgjdbc `logServerErrorDetail=false`(`config/database.properties`, `spring.datasource.hikari.data-source-properties.*`). PostgreSQL `Detail`(`Key (email)=(…)`, `Failing row contains (…)`)이 예외 메시지에 붙지 않는다. 지금 기본 설정에서 유일하게 확인된 유출(Hibernate `org.hibernate.orm.jdbc.error` WARN과 `GlobalExceptionHandler` ERROR)이 여기서 막힌다. 제약 이름은 본 메시지에 남아 기존 분류(`ArtistOAuthSignupService`의 `getConstraintName()`)는 그대로 동작한다.
      2. INFO에서도 원문을 찍는 Tomcat 로거 두 개를 `config/logging.properties`에서 WARN으로 고정한다. `org.apache.tomcat.util.http`(잘못된 쿠키 원문, `Cookie.logInvalidHeader`), `org.apache.coyote.http11.Http11Processor`(잘못된 요청 주소와 쿼리 문자열)다. 설정 파일 값은 환경 변수나 자식 로거 설정이 덮어쓸 수 있으므로, 배포에서는 7-3이 이 두 로거와 그 자식의 하한을 WARN으로 강제한다(설계 리뷰 2회차 지적).
@@ -78,7 +78,7 @@
         - 하한은 두 가지다. INFO에서도 원문을 찍는 로거와 그 아래 모든 자식 로거는 **WARN**이다: `org.apache.tomcat.util.http`, `org.apache.coyote.http11.Http11Processor`, `jdk.httpclient.HttpClient`(JVM 옵션 `-Djdk.httpclient.HttpClient.log=headers`를 주면 Resend API 키가 든 `Authorization` 헤더를 INFO로 찍는다, 설계 리뷰 3회차 지적). 그 밖에 `com.nsu.capstone` 밖의 모든 로거와 루트는 **INFO**다. 하한 표는 한 곳(이 검사기)에만 두고, 7-2의 설정 값과 같은지 테스트가 확인한다.
         - 로컬 모드가 아니면 JVM 디버그 옵션이 하나라도 있을 때 **앱을 시작하지 않는다.** 대상은 이름이 `jdk.internal.httpclient.`로 시작하는 모든 시스템 속성(`debug`, `hpack.debug` 등 내부 디버그 스위치), `jdk.httpclient.HttpClient.log`, `javax.net.debug`다. 내부 접두어 전체를 막는 이유: JDK 25의 HPACK 인코더는 `jdk.internal.httpclient.hpack.debug`가 있으면 헤더 이름과 값(Resend `Authorization`, OAuth `Basic` 헤더)을 System.err에 찍는다. 이름 하나씩 막으면 이런 옵션이 빠진다(설계 리뷰 12회차 지적). `jdk.httpclient.`의 일반 조정 옵션(연결 풀 크기 등)은 막지 않는다. 시스템 속성은 `JAVA_TOOL_OPTIONS`로 들어와도 같이 보인다. 앱 컨텍스트를 만들기 전(환경을 준비하는 단계)에 검사해, 옵션 이름을 담은 오류로 멈춘다. 이 옵션들은 로거를 거치지 않고 stderr·stdout에 헤더·요청 원문·TLS 평문을 찍어 레벨로 막을 수 없다. 레벨 하한은 되돌려 쓸 수 있지만 이 출력은 되돌릴 수 없어서 시작을 막는다. 잘못된 설정이면 앱이 뜨지 않게 한 `OAuthProperties` 검증([authentication/01](../authentication/01_oauth_browser_binding.md) Decision 1)과 같은 방식이다.
         - 적용 시점은 Boot가 로그 레벨을 적용한 직후, 빈을 하나도 만들기 전이다. `ApplicationEnvironmentPreparedEvent`에서 `LoggingApplicationListener` 바로 다음 순서로 도는 리스너가 한다. `META-INF/spring.factories`로 등록해 테스트 컨텍스트에도 적용된다. 빈을 만드는 중에도 로그가 나오기 때문이다. 예를 들어 Hibernate는 `SessionFactory`를 만들면서 시스템 속성을 포함한 설정 전체를 `org.hibernate.orm.factory` DEBUG로 찍는다. 그 안에 JWT 비밀키 같은 값이 있고, 나중에 레벨을 올려도 이미 남은 줄은 되돌릴 수 없다(설계 리뷰 8회차 지적). 이 뒤로 레벨을 바꾸는 길(actuator `loggers`)은 열지 않으므로 한 번 적용하면 된다.
-        - 이 리스너가 `LoggingSystem`에 설정된 레벨을 모두 본다. 하한보다 낮은 것은 루트, 상위 패키지, 그 아래 자식 로거에 직접 준 레벨을 가리지 않고 하한으로 올린다. 설정 파일, 환경 변수, 명령행 등 어디서 왔는지 따지지 않는다. 올린 로거 이름을 ERROR 한 줄로 남긴다.
+        - 이 리스너가 `LoggingSystem`에 설정된 레벨을 모두 본다. 하한보다 낮은 것은 루트, 상위 패키지, 그 아래 자식 로거에 직접 준 레벨을 가리지 않고 하한으로 올린다. 설정 파일, 환경 변수, 명령행 등 어디서 왔는지 따지지 않는다. 올린 로거 이름을 ERROR 한 줄로 남긴다. WARN 하한 로거에 직접 준 레벨이 없어 루트를 따를 때는, 위반이 아니므로 ERROR 없이 WARN으로 못 박는다.
         - 그래서 `DEBUG=true`, `TRACE=true`, `LOGGING_LEVEL_ROOT=TRACE`, `logging.level.web=DEBUG`, `LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB_CLIENT=DEBUG`, `logging.level.org.hibernate.orm.jdbc.extract=TRACE` 중 무엇을 줘도 프레임워크·라이브러리가 본문, 바인드 값, 조회 값, 헤더를 찍지 않는다.
         - 위험한 로거를 하나씩 고정하는 금지 목록은 쓰지 않는다. 빠진 로거(Hibernate `org.hibernate.orm.jdbc.extract`의 조회 값 TRACE)나 자식 로거에 직접 준 레벨(Logback은 자식의 명시 레벨을 부모보다 먼저 쓴다)로 뚫리기 때문이다(설계 리뷰 1회차 지적).
         - 우리 코드(`com.nsu.capstone`)는 DEBUG로 열 수 있다. 우리 코드의 로그 인자는 정적 검사(Decision 8)가 레벨과 상관없이 막는다.
@@ -172,6 +172,7 @@ final class RequestId {
 
 // global/logging/RequestIdFilter.java — package-private @Component @Order(HIGHEST_PRECEDENCE)
 class RequestIdFilter extends OncePerRequestFilter {
+    // 설계 때 스케치다. 구현은 요청 속성에 ID 문자열만 두고 아래 흐름을 doFilterInternal 안에 쓴다
     private record Tag(String requestId, long startNanos) {}   // 요청 속성에 한 번 저장
     protected boolean shouldNotFilterErrorDispatch();          // false
     protected boolean shouldNotFilterAsyncDispatch();          // false
@@ -203,6 +204,7 @@ public static ExecutorService wrap(ExecutorService delegate);
 
 // test: global/codestyle/LogSafetyChecker.java — S1~S6, LombokStyleChecker와 같은 파서
 static List<Violation> check(String relativePath, String source);
+static List<Violation> check(String relativePath, String source, Set<String> knownRecords);   // 다른 파일의 record 이름(S2b)
 ```
 
 모듈 지도:

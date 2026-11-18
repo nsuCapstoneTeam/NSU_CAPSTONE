@@ -111,7 +111,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | 요청 본문·파라미터 검증 실패 (ADR-007). MVC가 요청 인자로 읽는 헤더(예: `Idempotency-Key`)에 허용하지 않는 문자(제어 문자 등)가 있어 서버가 읽기를 거절한 경우도 같다. `Authorization`처럼 보안 처리에서 먼저 읽는 헤더는 보안 처리가 거절하므로 다른 상태(예: `401`)가 될 수 있다([ADR logging/00](../adr/logging/00_structured_logs_and_request_id.md) Decision 7) |
 | 400 | `INVALID_{대상}` | 경로 값의 형식 오류 (예: `INVALID_ARTIST_ID`) |
-| 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음, 만료, 서명 오류 |
+| 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음, 만료, 서명 오류. 지금은 토큰 없이 보낸 요청이 주소·메서드·쿼리 형식 오류로 거절돼도 401이 나간다(서버 오류 응답 경로가 인증을 요구하는 지금 동작, [ADR logging/00](../adr/logging/00_structured_logs_and_request_id.md) Decision 6. 별도 이슈에서 다룬다) |
 | 403 | `ACCESS_DENIED` | 인증은 됐지만 호출 주체에게 허용되지 않은 요청 |
 | 403 | `DEMO_WRITE_NOT_ALLOWED` | 시연 서버(`DEMO`)에서 허용 목록 밖 계정이 상태를 바꾸는 요청(`POST`·`PUT`·`PATCH`·`DELETE`)을 보냄. 인증(`401`) 바로 다음, 역할·본문 검사를 포함한 다른 모든 판정보다 먼저 검사한다. 본문을 읽기 전에 서버·프록시가 거절하는 요청 크기 초과(`413`, 04 §2.2)는 예외다. 가입·로그인·로그아웃·토큰 재발급·실명 본인확인·검색창 즉시 추천·회원 탈퇴는 제외한다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)) |
 | 404 | `{대상}_NOT_FOUND` | 대상이 없거나 호출 주체에게 존재를 드러내지 않는 대상 |
@@ -198,4 +198,4 @@ API를 구현하거나 바꾼 PR이 병합되면 Slack `#dev`에서 프론트 �
 - 화면에 "문의 코드"로 보여 줄지와 사용자가 알릴 곳은 정하지 않았다. 문의 창구를 설계할 때 정한다.
 - 화면과 API가 같은 출처라(로컬 Vite 프록시, 배포 nginx) `fetch` 응답에서 `response.headers.get('X-Request-Id')`로 읽을 수 있다. 다른 출처에서 부르게 되면 `Access-Control-Expose-Headers: X-Request-Id`를 함께 설정한다.
 - 브라우저가 페이지 이동으로 받은 응답(OAuth `302` 등)의 헤더는 화면 코드가 읽을 수 없다. 개발자도구에서만 보인다.
-- 서버가 AI 서버를 부를 때도 같은 값을 `X-Request-Id`로 보낸다(Linear 서버 협의 017, NSU-63).
+- 서버가 AI 서버를 부를 때도 같은 값을 `X-Request-Id`로 보낸다(Linear 서버 협의 017). AI client를 만드는 NSU-63부터 적용한다.
