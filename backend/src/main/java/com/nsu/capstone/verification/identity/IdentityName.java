@@ -1,17 +1,16 @@
 package com.nsu.capstone.verification.identity;
 
 import java.text.Normalizer;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 
 /** 등록부 대조에 쓰는 실명. 유니코드 NFC, 앞뒤 공백 제거, 1~50자, 제어 문자 없음. */
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public final class IdentityName {
 
     private static final int MAX_LENGTH = 50;
 
     private final String value;
-
-    private IdentityName(String value) {
-        this.value = value;
-    }
 
     public static IdentityName of(String raw) {
         if (raw == null) {

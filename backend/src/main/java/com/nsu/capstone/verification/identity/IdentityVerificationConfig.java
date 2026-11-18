@@ -2,6 +2,7 @@ package com.nsu.capstone.verification.identity;
 
 import com.nsu.capstone.identity.signup.RedisPublicRequestLimitStore;
 import com.nsu.capstone.identity.support.UuidV7Generator;
+import com.nsu.capstone.trust.profile.application.VerificationSource;
 import java.time.Clock;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -49,6 +50,12 @@ class IdentityVerificationConfig {
                 properties.attemptLifetime(),
                 properties.requestLimitPerHour());
         return new IdentityVerificationService(repository, provider, limits, nameCipher, clock, ids, settings);
+    }
+
+    /** Trust Profile의 CompositeVerificationReader가 모으는 source 중 IDENTITY를 주는 것(07 §7). */
+    @Bean
+    VerificationSource identityVerificationSource(IdentityVerificationRepository repository) {
+        return new IdentityVerificationSource(repository);
     }
 
     @Bean

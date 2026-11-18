@@ -152,6 +152,14 @@ class IdentityVerificationRepository {
                 .set();
     }
 
+    /** 본인확인 기록이 있는 회원의 ID. 계정 상태와 역할은 보지 않는다. */
+    Set<UUID> idsWithRecord(Collection<UUID> userIds) {
+        return jdbc.sql("SELECT user_id FROM identity_verifications WHERE user_id IN (:userIds)")
+                .param("userIds", userIds)
+                .query((rs, rowNum) -> rs.getObject("user_id", UUID.class))
+                .set();
+    }
+
     Optional<StoredVerification> findVerification(UUID userId) {
         return jdbc.sql("""
                         SELECT id, user_id, attempt_id, source, mock_name_ciphertext, verified_at
