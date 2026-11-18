@@ -39,14 +39,17 @@ public final class RequestIdExecutors {
             delegate.execute(() -> runWithContext(submitterContext, command));
         }
 
+        /**
+         * 작업이 정상으로 끝날 때만 되돌린다. 예외로 끝나면 스레드가 미처리 예외로 끝나고, 같은 스레드에서 이어 도는 미처리 예외 처리기가 요청 ID와 함께
+         * 그 예외를 남겨야 한다. 다음 작업은 시작할 때 자기 MDC를 넣으므로 값이 새지 않는다.
+         */
         private static void runWithContext(Map<String, String> submitterContext, Runnable command) {
             Map<String, String> before = MDC.getCopyOfContextMap();
-            try {
-                setContext(submitterContext);
-                command.run();
-            } finally {
-                setContext(before);
-            }
+            setContext(submitterContext);
+            // shortcut: FutureTask가 예외를 삼키는 실행기(ScheduledThreadPoolExecutor)는 스레드가 살아남아 던진 작업의 MDC가 남는다.
+            // 다음 작업이 덮어쓰므로 감싼 작업끼리는 새지 않는다. 래퍼 밖 작업이 같은 실행기를 쓰게 되면 다시 본다
+            command.run();
+            setContext(before);
         }
 
         /** null이면 비운다(작업 전에 MDC가 비어 있었다). */
