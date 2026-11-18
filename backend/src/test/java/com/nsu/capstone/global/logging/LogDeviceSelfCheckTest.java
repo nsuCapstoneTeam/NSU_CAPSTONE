@@ -86,6 +86,19 @@ class LogDeviceSelfCheckTest {
                 .doesNotContain(LogDeviceCheck.PROBE);
     }
 
+    /** 객체는 하나라 어펜더 개수 검사와 루트 검사는 지나간다. 하위 로거에 다시 붙이면 그 로거의 줄 하나가 두 번 나간다. */
+    @Test
+    void 콘솔_어펜더를_루트가_아닌_로거에도_붙이면_준비_완료_검사에서_멈추고_오류에_그_로거_이름이_있다() throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "attach-console-to-child-logger");
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
+        assertThat(result.output())
+                .contains(STOPPED_BY_CHECK)
+                .contains("루트가 아닌 로거에도 붙은 콘솔 어펜더: com.nsu.capstone")
+                .doesNotContain(ForkedMain.STARTED)
+                .doesNotContain(LogDeviceCheck.PROBE);
+    }
+
     @Test
     void 로거_하나의_additivity를_끄면_준비_완료_검사에서_멈추고_오류에_그_로거_이름이_있다() throws Exception {
         ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "disable-additivity");

@@ -23,6 +23,7 @@ import org.springframework.context.annotation.Bean;
  *   <li>light: 빈이 없는 앱
  *   <li>attach-appender: 컨텍스트를 만드는 중 루트 로거에 어펜더를 하나 더 붙이는 앱
  *   <li>detach-root-appender: 컨텍스트를 만드는 중 콘솔 어펜더를 루트 로거에서 떼어 하위 로거에만 붙이는 앱
+ *   <li>attach-console-to-child-logger: 컨텍스트를 만드는 중 루트에 붙은 콘솔 어펜더를 하위 로거에도 붙이는 앱
  *   <li>disable-additivity: 컨텍스트를 만드는 중 로거 하나의 additivity를 끄는 앱
  *   <li>attach-jul-handler: 컨텍스트를 만드는 중 이름 있는 JUL 로거에 콘솔 핸들러를 붙이는 앱
  * </ul>
@@ -58,6 +59,7 @@ public final class ForkedMain {
             case "light", "httpclient", "uncaught-thread", "hang" -> TestApp.EmptyConfig.class;
             case "attach-appender" -> AttachAppenderConfig.class;
             case "detach-root-appender" -> DetachRootAppenderConfig.class;
+            case "attach-console-to-child-logger" -> AttachConsoleToChildLoggerConfig.class;
             case "disable-additivity" -> DisableAdditivityConfig.class;
             case "attach-jul-handler" -> AttachJulHandlerConfig.class;
             case "replace-uncaught-handler" -> ReplaceUncaughtHandlerConfig.class;
@@ -161,6 +163,23 @@ public final class ForkedMain {
             Logger root = context.getLogger(Logger.ROOT_LOGGER_NAME);
             Appender<ILoggingEvent> console = root.getAppender("CONSOLE");
             root.detachAppender(console);
+            context.getLogger("com.nsu.capstone").addAppender(console);
+            return new Object();
+        }
+    }
+
+    /**
+     * 컨텍스트를 만드는 중에 루트에 붙은 콘솔 어펜더를 하위 로거에도 붙이는 경우. 어펜더 객체는 하나라 목록 검사와 루트 검사는 지나가지만,
+     * additivity가 켜져 있으면 그 로거의 줄이 같은 어펜더로 두 번 나간다.
+     */
+    @TestConfiguration(proxyBeanMethods = false)
+    static class AttachConsoleToChildLoggerConfig {
+
+        @Bean
+        Object consoleAlsoOnChildLogger() {
+            LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
+            Appender<ILoggingEvent> console =
+                    context.getLogger(Logger.ROOT_LOGGER_NAME).getAppender("CONSOLE");
             context.getLogger("com.nsu.capstone").addAppender(console);
             return new Object();
         }

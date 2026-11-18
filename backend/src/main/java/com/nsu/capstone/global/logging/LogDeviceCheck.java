@@ -113,8 +113,8 @@ final class LogDeviceCheck {
     }
 
     /**
-     * 이벤트가 어펜더에 닿는 길. 콘솔 어펜더가 루트 로거에 붙어 있어야 모든 로거의 줄이 콘솔로 올라가고, additivity를 끈 로거가 있으면 그 로거의 줄은
-     * 루트로 올라가지 않는다.
+     * 이벤트가 어펜더에 닿는 길. 콘솔 어펜더가 루트 로거에만 붙어 있어야 모든 로거의 줄이 콘솔로 한 번씩 올라간다. 하위 로거에도 붙어 있으면
+     * 그 로거의 줄이 같은 어펜더로 두 번 나가고, additivity를 끈 로거가 있으면 그 로거의 줄은 루트로 올라가지 않는다.
      */
     private static List<String> routingProblems(LoggerContext context, Appender<ILoggingEvent> appender) {
         List<String> problems = new ArrayList<>();
@@ -122,6 +122,9 @@ final class LogDeviceCheck {
             problems.add("콘솔 어펜더 " + appender.getName() + "가 루트 로거에 붙어 있지 않다");
         }
         for (Logger logger : context.getLoggerList()) {
+            if (!logger.getName().equals(Logger.ROOT_LOGGER_NAME) && logger.isAttached(appender)) {
+                problems.add("루트가 아닌 로거에도 붙은 콘솔 어펜더: " + logger.getName());
+            }
             if (!logger.isAdditive()) {
                 problems.add("additivity를 끈 로거: " + logger.getName());
             }
