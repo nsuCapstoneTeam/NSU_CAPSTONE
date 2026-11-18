@@ -20,6 +20,24 @@ services:
 
   redis:
     image: redis:8.10.2
+    environment:
+      REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:-256mb}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        limit="$$REDIS_MAXMEMORY"
+        number="$${limit%%[!0-9]*}"
+        unit="$${limit#$$number}"
+        case "$$number" in
+          *[1-9]*) ;;
+          *) echo "REDIS_MAXMEMORY must be positive" >&2; exit 1 ;;
+        esac
+        case "$$unit" in
+          ''|b|kb|mb|gb) ;;
+          *) echo "REDIS_MAXMEMORY unit must be b, kb, mb or gb" >&2; exit 1 ;;
+        esac
+        exec docker-entrypoint.sh redis-server --maxmemory "$$limit" --maxmemory-policy noeviction
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
