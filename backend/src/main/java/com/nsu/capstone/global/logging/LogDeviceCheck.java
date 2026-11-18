@@ -54,17 +54,28 @@ final class LogDeviceCheck {
 
     /** @return 어긋난 항목(어펜더 이름·종류, 빠진 필드, 시험 문자열이 나온 필드 이름). 비어 있으면 통과다. */
     static List<String> findProblems() {
+        List<String> problems = new ArrayList<>(uncaughtHandlerProblems());
         ILoggerFactory factory = LoggerFactory.getILoggerFactory();
         if (!(factory instanceof LoggerContext context)) {
-            return List.of("Logback이 아닌 로깅 구현: " + factory.getClass().getName());
+            problems.add("Logback이 아닌 로깅 구현: " + factory.getClass().getName());
+            return problems;
         }
-        List<String> problems = new ArrayList<>();
         Appender<ILoggingEvent> appender = singleAppender(context, problems);
         problems.addAll(julHandlerProblems());
         if (appender != null) {
             problems.addAll(encodedEventProblems(context, appender));
         }
         return problems;
+    }
+
+    /** JVM 기본 미처리 예외 처리기가 우리 처리기여야 한다. 아니면 스레드 예외가 메시지를 평문 stderr로 찍을 수 있다. */
+    private static List<String> uncaughtHandlerProblems() {
+        Thread.UncaughtExceptionHandler handler = Thread.getDefaultUncaughtExceptionHandler();
+        if (handler instanceof UncaughtExceptionLogger) {
+            return List.of();
+        }
+        String shown = handler == null ? "없음(JDK 기본 처리)" : handler.getClass().getName();
+        return List.of("미처리 예외 처리기가 로거로 보내는 처리기가 아니다: " + shown);
     }
 
     /** 모든 로거에 붙은 어펜더가 콘솔 어펜더 하나뿐이어야 한다. 둘 이상이거나 콘솔이 아니면 문제를 적고 null을 돌려준다. */

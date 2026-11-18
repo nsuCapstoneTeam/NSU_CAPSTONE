@@ -3,6 +3,7 @@ package com.nsu.capstone.global.logging;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ch.qos.logback.classic.Level;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import org.apache.coyote.BadRequestException;
+import org.apache.coyote.CloseNowException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -173,6 +176,17 @@ class RequestIdFilterTest {
     }
 
     /**
+     * Tomcat(StandardWrapperValve)은 CloseNowException도 DEBUG로만 남긴다. 소켓이 이미 닫혔거나 HTTP/2 스트림이 끝난 상태에서 나는 예외라
+     * 서버 오류가 아니다. 필터가 ERROR와 500으로 바꾸면 보안 리뷰가 지적한 ERROR 경보 남용 경로가 된다.
+     */
+    @Test
+    void Tomcat이_DEBUG로만_남기는_CloseNowException도_잡지_않고_그대로_넘긴다() {
+        assertThatThrownBy(() -> mockMvc.perform(get("/close-now"))).isInstanceOf(CloseNowException.class);
+
+        assertThat(filterLines()).as("필터가 남긴 ERROR 줄").noneMatch(line -> line.contains("\"level\":\"ERROR\""));
+    }
+
+    /**
      * 응답을 이미 보낸 뒤에는 500으로 바꿀 수 없다. 남기고 다시 던지되, Tomcat(StandardWrapperValve)이 ServletException의 메시지를 로그 문장에
      * 그대로 넣으므로 정적 메시지로 감싸고 원래 예외는 원인에 둔다.
      */
@@ -203,6 +217,28 @@ class RequestIdFilterTest {
         return capture.lines().stream()
                 .filter(line -> line.contains("\"logger_name\":\"" + RequestIdFilter.class.getName() + "\""))
                 .toList();
+    }
+
+    /**
+     * 요청 줄의 메서드는 RFC 토큰 문자이기만 하면 Tomcat이 통과시킨다. 요청 줄 상한(8 KiB)까지 긴 메서드가 그대로 INFO 완료 줄에 들어가면
+     * 로그 한 줄이 요청마다 수천 바이트로 커진다. 표준 메서드가 아니면 고정값으로 남긴다(경로를 UNMATCHED로 바꾼 것과 같은 방식).
+     */
+    @Test
+    void 표준이_아닌_메서드는_완료_줄에_원문_대신_OTHER를_남긴다() throws Exception {
+        String longMethod = "A".repeat(2000);
+
+        mockMvc.perform(request(HttpMethod.valueOf(longMethod), "/no-such-path"))
+                .andExpect(status().isNotFound());
+
+        List<String> lines = completionLines();
+        assertThat(lines).hasSize(1);
+        assertThat(JsonMapper.builder()
+                        .build()
+                        .readTree(lines.get(0))
+                        .get("message")
+                        .asString())
+                .matches("요청 처리 완료: OTHER UNMATCHED -> 404 \\(\\d+ms\\)");
+        assertThat(lines.get(0)).as("완료 줄 길이").hasSizeLessThan(500);
     }
 
     private List<String> completionLines() {
@@ -263,6 +299,9 @@ class RequestIdFilterTest {
                 throws ServletException, IOException {
             if (request.getRequestURI().equals("/disconnected")) {
                 throw new IOException("Broken pipe");
+            }
+            if (request.getRequestURI().equals("/close-now")) {
+                throw new CloseNowException("연결이 이미 닫혔다");
             }
             filterChain.doFilter(request, response);
         }

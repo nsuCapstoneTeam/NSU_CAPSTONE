@@ -27,6 +27,9 @@ public final class ForkedMain {
 
     static final String STARTED = "FORKED-APP-STARTED";
 
+    /** uncaught-thread 모드가 미처리 예외를 던지는 스레드 이름. 로그 문장에 스레드 이름을 넣지 않는지 본다(설계 조건). */
+    static final String THREAD_NAME = "uncaught-probe-thread-9c3e";
+
     /** httpclient 모드가 Authorization 헤더에 싣는 가짜 값 */
     static final String FAKE_AUTHORIZATION = "fake-authorization-6d2b";
 
@@ -43,8 +46,9 @@ public final class ForkedMain {
         String mode = args[0];
         String[] bootArgs = Arrays.copyOfRange(args, 1, args.length);
         Class<?> source = switch (mode) {
-            case "light", "httpclient" -> TestApp.EmptyConfig.class;
+            case "light", "httpclient", "uncaught-thread" -> TestApp.EmptyConfig.class;
             case "attach-appender" -> AttachAppenderConfig.class;
+            case "replace-uncaught-handler" -> ReplaceUncaughtHandlerConfig.class;
             case "app" -> NsuCapstoneApplication.class;
             default -> throw new IllegalArgumentException("알 수 없는 실행 방식: " + mode);
         };
@@ -54,6 +58,9 @@ public final class ForkedMain {
                 new SpringApplicationBuilder(source).web(webType).run(bootArgs)) {
             if (mode.equals("httpclient")) {
                 callLocalServerWithAuthorization();
+            }
+            if (mode.equals("uncaught-thread")) {
+                throwUncaughtFromThread();
             }
             LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
             for (String name : REPORTED_LOGGERS) {
@@ -69,6 +76,20 @@ public final class ForkedMain {
             }
         }
         System.out.println(STARTED);
+    }
+
+    /**
+     * 스레드의 미처리 예외는 로거를 거치지 않고 JDK 기본 처리가 `Exception in thread "<이름>" <클래스>: <메시지>`를 평문 stderr로 찍는다.
+     * 외부 업체 응답에서 온 값이 든 예외를 실행기 작업이 잡지 못하고 던지는 상황을 재현한다.
+     */
+    private static void throwUncaughtFromThread() throws InterruptedException {
+        Thread thread = new Thread(
+                () -> {
+                    throw new IllegalStateException("미처리 예외 " + Sentinel.EMAIL);
+                },
+                THREAD_NAME);
+        thread.start();
+        thread.join();
     }
 
     /**
@@ -94,6 +115,17 @@ public final class ForkedMain {
                             java.net.http.HttpResponse.BodyHandlers.discarding());
         } finally {
             server.stop(0);
+        }
+    }
+
+    /** 컨텍스트를 만드는 중에 JVM 기본 미처리 예외 처리기를 다른 것으로 바꾸는 경우. 준비 완료 검사에서 걸려야 한다. */
+    @TestConfiguration(proxyBeanMethods = false)
+    static class ReplaceUncaughtHandlerConfig {
+
+        @Bean
+        Object replacedHandler() {
+            Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {});
+            return new Object();
         }
     }
 

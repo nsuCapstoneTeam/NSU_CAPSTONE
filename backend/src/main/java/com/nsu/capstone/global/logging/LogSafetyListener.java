@@ -35,6 +35,8 @@ class LogSafetyListener implements ApplicationListener<ApplicationEnvironmentPre
         }
         rejectJvmDebugOptions();
         enforceLevelFloor(LoggingSystem.get(event.getSpringApplication().getClassLoader()));
+        // 스레드의 미처리 예외는 JDK 기본 처리가 메시지를 평문 stderr로 찍는다. 로거로 보내 메시지 없는 출력기를 거치게 한다
+        Thread.setDefaultUncaughtExceptionHandler(new UncaughtExceptionLogger());
         // Boot가 로깅을 초기화하고 레벨을 적용한 직후, 컨텍스트를 만들기 전의 출력 장치를 확인한다
         LogDeviceCheck.failIfUnsafe();
     }

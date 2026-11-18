@@ -35,7 +35,8 @@ class RequestIdTomcatIntegrationTest extends EventIntegrationTestBase {
     private final HttpClient http = HttpClient.newHttpClient();
 
     /**
-     * 방화벽(StrictHttpFirewall)이 ;를 거절하면 RequestRejectedException이 필터 밖으로 나오고 Tomcat이 /error로 두 번째 디스패치를 연다.
+     * 방화벽(StrictHttpFirewall)이 ;를 거절하면 Security의 기본 처리기(HttpStatusRequestRejectedHandler)가 sendError(400)으로 답하고,
+     * Tomcat이 /error로 두 번째 디스패치를 연다. 예외는 필터 밖으로 나오지 않는다.
      * 한 요청의 ID는 하나여야 하고, Tomcat이 ID 없이 쓰던 Servlet.service() 줄이 생기지 않아야 한다.
      */
     @Test

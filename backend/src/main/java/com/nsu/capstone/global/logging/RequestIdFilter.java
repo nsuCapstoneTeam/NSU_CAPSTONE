@@ -7,9 +7,11 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.coyote.BadRequestException;
+import org.apache.coyote.CloseNowException;
 import org.apache.tomcat.util.http.InvalidParameterException;
 import org.slf4j.MDC;
 import org.springframework.core.Ordered;
@@ -27,6 +29,9 @@ class RequestIdFilter extends OncePerRequestFilter {
 
     /** Tomcat의 /error 디스패치도 한 요청이므로 처음 만든 ID를 요청 속성에 두고 다시 쓴다. */
     private static final String REQUEST_ID_ATTRIBUTE = RequestIdFilter.class.getName() + ".REQUEST_ID";
+
+    private static final Set<String> STANDARD_METHODS =
+            Set.of("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE");
 
     @Override
     protected boolean shouldNotFilterErrorDispatch() {
@@ -86,7 +91,9 @@ class RequestIdFilter extends OncePerRequestFilter {
     /** Tomcat이 클라이언트 오류로 분류하는 예외이거나, 그것을 원인으로 가진 예외. */
     private static boolean isClientError(Throwable throwable) {
         for (Throwable cause = throwable; cause != null; cause = cause.getCause()) {
-            if (cause instanceof BadRequestException || cause instanceof InvalidParameterException) {
+            if (cause instanceof BadRequestException
+                    || cause instanceof InvalidParameterException
+                    || cause instanceof CloseNowException) {
                 return true;
             }
             if (cause.getCause() == cause) {
@@ -96,18 +103,22 @@ class RequestIdFilter extends OncePerRequestFilter {
         return false;
     }
 
-    /** 경로는 원본 주소가 아니라 MVC가 고른 경로 패턴이다. 원본에는 사용자가 넣은 값이 들어갈 수 있다. */
+    /**
+     * 경로는 원본 주소가 아니라 MVC가 고른 경로 패턴이고, 메서드는 표준 메서드만 그대로 남긴다. 원본에는 요청자가 넣은 값이 들어갈 수 있고,
+     * Tomcat은 RFC 토큰 문자이기만 하면 요청 줄 상한(8 KiB)까지 긴 메서드도 통과시켜 로그 한 줄이 커진다.
+     */
     private static void logCompletion(HttpServletRequest request, HttpServletResponse response, long startNanos) {
         // 패턴이 없으면(Security가 DispatcherServlet 전에 거절, 맞는 경로 없음) 고정값을 남긴다
         Object pattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
         String path = pattern != null ? pattern.toString() : "UNMATCHED";
+        String method = STANDARD_METHODS.contains(request.getMethod()) ? request.getMethod() : "OTHER";
         long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
         int status = response.getStatus();
         // 헬스 체크 같은 성공 요청의 소음을 막으려고 400 이상만 INFO로 남긴다
         if (status >= 400) {
-            log.info("요청 처리 완료: {} {} -> {} ({}ms)", request.getMethod(), path, status, millis);
+            log.info("요청 처리 완료: {} {} -> {} ({}ms)", method, path, status, millis);
         } else {
-            log.debug("요청 처리 완료: {} {} -> {} ({}ms)", request.getMethod(), path, status, millis);
+            log.debug("요청 처리 완료: {} {} -> {} ({}ms)", method, path, status, millis);
         }
     }
 }

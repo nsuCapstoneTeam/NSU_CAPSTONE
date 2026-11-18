@@ -57,6 +57,18 @@ class LogDeviceSelfCheckTest {
     }
 
     @Test
+    void 컨텍스트를_만드는_중_미처리_예외_처리기를_바꾸면_준비_완료_검사에서_멈춘다() throws Exception {
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "replace-uncaught-handler");
+
+        assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isNotZero();
+        assertThat(result.output())
+                .contains(STOPPED_BY_CHECK)
+                .contains("미처리 예외 처리기")
+                .doesNotContain(ForkedMain.STARTED)
+                .doesNotContain(LogDeviceCheck.PROBE);
+    }
+
+    @Test
     void 로컬_모드이면_같은_설정도_통과한다(@TempDir Path directory) throws Exception {
         ForkedJvm.Result result = ForkedJvm.run(
                 List.of("-Dlogging.file.name=" + directory.resolve("local.log")),

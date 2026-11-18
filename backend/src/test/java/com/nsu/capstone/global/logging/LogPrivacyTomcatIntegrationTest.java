@@ -9,6 +9,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,6 +58,36 @@ class LogPrivacyTomcatIntegrationTest extends EventIntegrationTestBase {
     @AfterEach
     void stopCapture() {
         capture.close();
+    }
+
+    /**
+     * 보안 리뷰의 Unknown: 인증 없는 요청이 필터 밖으로 서버 오류 예외를 만들 수 있으면 누구나 ERROR 경보를 만든다. 잘못된 입력 네 가지를
+     * 실제 Tomcat에 인증 없이 보내, 필터의 "필터 밖으로 나왔다" ERROR 줄이 하나도 남지 않는지 센다.
+     */
+    @Test
+    void 인증_없는_잘못된_입력은_필터_밖_예외의_ERROR_줄을_만들지_않는다() throws IOException {
+        List<String> malformedRequests = List.of(
+                // 잘못된 UTF-8 퍼센트 인코딩 쿼리
+                "GET /api/v1/me/events?q=%C3%28 HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+                // 잘못된 Accept-Language
+                "GET /api/v1/me/events HTTP/1.1\r\nHost: localhost\r\nAccept-Language: !!!;;;q=abc,,\r\n"
+                        + "Connection: close\r\n\r\n",
+                // 헤더 한 줄 상한(8 KiB) 가까운 Authorization
+                "GET /api/v1/me/events HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer " + "A".repeat(7000)
+                        + "\r\nConnection: close\r\n\r\n",
+                // 깨진 Content-Type
+                "POST /api/v1/events HTTP/1.1\r\nHost: localhost\r\nContent-Type: ;;;/\r\nContent-Length: 2\r\n"
+                        + "Connection: close\r\n\r\n{}");
+
+        for (String request : malformedRequests) {
+            RawHttp.Response response = RawHttp.send(port, RawHttp.bytes(request));
+            assertThat(response.status()).as("서버가 응답은 해야 한다").isBetween(400, 499);
+        }
+
+        assertThat(capture.lines())
+                .as("필터가 남기는 ERROR 줄")
+                .noneMatch(
+                        line -> line.contains(RequestIdFilter.class.getName()) && line.contains("\"level\":\"ERROR\""));
     }
 
     @Test
