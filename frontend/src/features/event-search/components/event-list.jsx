@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import Icon from '../../../components/common/icon.jsx';
 import Tag from '../../../components/common/tag.jsx';
 import { budgetText } from '../../my-page/organizer-events.js';
@@ -25,11 +25,20 @@ export default function EventList({
   hotId = '',
   onHot = () => {},
 }) {
-  // 마우스가 올라간 행과 키보드 포커스가 있는 행을 따로 기억 (핀이 있는 행사만, 없으면 '')
-  // 강조할 핀은 마우스 행이 먼저, 없으면 포커스 행. 둘 다 핀이 없을 때만 강조를 풂
+  // 마우스가 올라간 행과 키보드 포커스가 있는 행을 따로 기억 (핀 유무와 상관없이 행사 id)
+  // 강조할 핀은 지금 번호(pinNumbers)로 정함: 마우스 행에 핀이 있으면 그 핀, 없으면 포커스 행의 핀
+  // 둘 다 핀이 없을 때만 강조를 풂
   const hovered = useRef('');
   const focused = useRef('');
-  const showHot = () => onHot(hovered.current || focused.current);
+  const withPin = (id) => (id && pinNumbers?.[id] ? id : '');
+  const showHot = () => onHot(withPin(hovered.current) || withPin(focused.current));
+  // 지도를 다 받기 전에 포커스한 행도, 번호가 생기면 바로 핀을 강조
+  const pinKey = pinNumbers ? Object.keys(pinNumbers).join() : '';
+  useEffect(() => {
+    if (hovered.current || focused.current) showHot();
+    // 번호 목록이 바뀔 때만 다시 계산 (showHot은 매 렌더 새로 만들어짐)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinKey]);
   return (
     <section
       className="panel es-list"
@@ -76,7 +85,7 @@ export default function EventList({
                   className={`es-row${hotId === event.id ? ' is-hot' : ''}`}
                   onClick={() => onOpen(event.id)}
                   onPointerEnter={() => {
-                    hovered.current = pin ? event.id : '';
+                    hovered.current = event.id;
                     showHot();
                   }}
                   onPointerLeave={() => {
@@ -84,7 +93,7 @@ export default function EventList({
                     showHot();
                   }}
                   onFocus={() => {
-                    focused.current = pin ? event.id : '';
+                    focused.current = event.id;
                     showHot();
                   }}
                   onBlur={() => {

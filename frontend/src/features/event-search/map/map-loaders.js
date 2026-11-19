@@ -56,6 +56,13 @@ export function useMapData(level) {
   // failed: { level, reload } (reload: 지도 파일 자체를 못 받은 경우)
   const [failed, setFailed] = useState(null);
   const [attempt, setAttempt] = useState(0);
+  // 레벨이 바뀌면 이전 레벨의 실패 표시를 지움 (A에서 실패 → B → 다시 A로 오면 받는 동안 오류 대신 로딩)
+  // 렌더 중에 이전 레벨과 비교해서 지움 (React 문서의 'props가 바뀔 때 state 조정' 방식)
+  const [shownLevel, setShownLevel] = useState(level);
+  if (shownLevel !== level) {
+    setShownLevel(level);
+    setFailed(null);
+  }
 
   useEffect(() => {
     if (loaded.has(level)) return undefined;

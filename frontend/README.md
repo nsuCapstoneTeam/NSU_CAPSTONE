@@ -141,7 +141,7 @@ frontend/
   2. 시·도 코드가 바뀌었으면 `src/features/event-search/map/map-loaders.js`의 `LOADERS`도 고칩니다. 지도 테스트는 생성 파일을 직접 불러와서 이 목록이 빠진 것은 잡지 못합니다.
   3. 새 판 GeoJSON을 받은 파일 이름 그대로(`HangJeongDong_verYYYYMMDD.geojson`) 두고 `node scripts/build-region-map.mjs <파일 경로>`로 다시 만듭니다. 판은 파일 이름에서 읽어 생성 파일 머리말에 적습니다.
   4. `node --test src/features/event-search/map/map-geometry.test.js`로 지역 목록과 지도 조각이 맞는지 확인합니다.
-- 스크립트는 임시 폴더에 모든 파일을 만든 뒤 한 번에 바꿔 넣습니다. 중간에 실패해도 기존 지도 데이터는 그대로입니다.
+- 스크립트는 임시 폴더에 모든 파일을 만든 뒤 한 번에 바꿔 넣습니다. 중간에 실패해도 기존 지도 데이터는 그대로입니다. 바꿔 넣는 동안은 `map-data.lock` 폴더로 한 번에 한 실행만 바꿔 넣고, 실행 중인 게 없는데 이 폴더가 남아 있으면 지우고 다시 실행하세요.
 - 원본 GeoJSON(약 35MB)은 저장소에 넣지 않습니다.
 
 새 기능은 `src/features/<기능-이름>/` 폴더를 만들고 그 안에 화면(`*-page.jsx`), 전용 컴포넌트, CSS를 함께 두세요. 두 개 이상의 기능에서 쓰는 것만 `src/components/common/`으로 옮깁니다.

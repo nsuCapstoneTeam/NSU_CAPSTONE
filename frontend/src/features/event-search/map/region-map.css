@@ -336,6 +336,16 @@
   background: var(--ink);
   transform: translateX(-50%);
 }
+/* 조각과 함께 떠오른 핀: 원래 자리까지 누르는 자리를 넓혀서
+   핀 아래쪽에 마우스를 올렸다가 핀이 올라가도 마우스가 핀 위에 남게 함 (깜박임 방지) */
+.rm-marker.is-up::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: -2px;
+  right: -2px;
+  height: calc(var(--lift) + 6px);
+}
 .rm-marker.is-hot,
 .rm-marker.is-picked {
   z-index: 4;

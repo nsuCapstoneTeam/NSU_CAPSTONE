@@ -145,6 +145,7 @@ export default function EventSearch({ notify }) {
 
   function backToNation() {
     setHot('');
+    setAnnounce('');
     setProvince('');
     setDistrict('');
     setPlaceId(null);

@@ -191,6 +191,30 @@ export function zoomBox(bounds, aspect, extra = null) {
 // rings에는 구멍도 들어 있어 구멍 안의 점은 고르지 않고, 구멍 테두리까지 거리도 셈
 // 격자(24칸)에 칠해진 점이 없으면 더 촘촘한 격자(96칸), 그래도 없으면 변 가운데에서 안쪽으로 조금 들어간 점
 // 결과: { point: [x, y], room: 테두리까지 거리 }
+// 점이 고리들로 칠해진 곳 안에 있는지 (구멍은 짝홀 규칙). 고리 선분 위의 점은 안이 아님
+// rings: [[[x, y], ...], ...] (닫는 점 없이)
+export function insideRings(rings, [x, y]) {
+  let c = false;
+  for (const r of rings) {
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      const [xi, yi] = r[i];
+      const [xj, yj] = r[j];
+      // 선분 위: 두 끝점과 한 줄에 있고 두 끝점 사이
+      const cross = (xj - xi) * (y - yi) - (yj - yi) * (x - xi);
+      if (
+        Math.abs(cross) < 1e-9 &&
+        x >= Math.min(xi, xj) &&
+        x <= Math.max(xi, xj) &&
+        y >= Math.min(yi, yj) &&
+        y <= Math.max(yi, yj)
+      )
+        return false;
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+    }
+  }
+  return c;
+}
+
 export function labelPoint(ring, rings = [ring]) {
   const inside = (x, y) => {
     let c = false;

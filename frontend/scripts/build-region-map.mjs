@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DISTRICTS, PROVINCES } from '../src/data/regions.js';
-import { labelPoint } from '../src/features/event-search/map/map-geometry.js';
+import { insideRings, labelPoint } from '../src/features/event-search/map/map-geometry.js';
 
 const SOURCE_URL = 'https://github.com/vuski/admdongkor';
 const LICENSE_URL = 'https://creativecommons.org/licenses/by/4.0/';
@@ -224,14 +224,15 @@ function buildLevel(pieces, { tol, minArea }) {
     const biggest = Math.max(...areas);
     const main = rings[areas.indexOf(biggest)];
     rings = rings.filter((_, i) => areas[i] >= minArea || areas[i] === biggest);
-    // 라벨 자리는 구멍(다른 시·군·구를 둘러싼 자리)을 뺀 실제 칠해진 곳에서 찾음
-    const { point, room } = labelPoint(main, rings);
-    const d = rings.map((r) => `M${r.map((q) => `${half(q[0])},${half(q[1])}`).join(' ')}Z`).join('');
+    // 화면에 그리는 좌표: 0.5 단위로 반올림한 고리
+    const drawn = rings.map((r) => r.map((q) => [half(q[0]), half(q[1])]));
+    const { label, room } = placeLabel(main, rings);
+    const d = drawn.map((r) => `M${r.map((q) => `${q[0]},${q[1]}`).join(' ')}Z`).join('');
     // room: 라벨 자리에서 테두리까지 거리(px). 작으면 화면에서 이름을 생략
     return {
       code: p.code,
       d,
-      label: [half(point[0]), half(point[1])],
+      label,
       room: Math.round(room),
       tone: tones[pieceIndex],
     };
@@ -259,6 +260,22 @@ function writeModule(dir, version, name, data, note) {
 export function sourceVersion(inputPath) {
   const name = String(inputPath).split(/[\\/]/).pop();
   return name.match(/ver\d{8}/)?.[0] ?? null;
+}
+
+// 라벨 자리: 구멍(다른 시·군·구를 둘러싼 자리)을 뺀 실제 칠해진 곳에서 찾고 0.5 단위로 줄임
+// 줄인 라벨이 화면에 그리는(0.5 단위로 반올림한) 고리의 경계에 닿거나 밖이면, 그리는 고리로 다시 찾고
+// 그래도 줄인 자리가 경계에 닿으면 찾은 소수 좌표를 그대로 씀
+// main: 가장 큰 고리, rings: 남길 고리 전체 (main 포함). 결과: { label: [x, y], room }
+export function placeLabel(main, rings) {
+  const drawn = rings.map((r) => r.map((q) => [half(q[0]), half(q[1])]));
+  let { point, room } = labelPoint(main, rings);
+  let label = [half(point[0]), half(point[1])];
+  if (!insideRings(drawn, label)) {
+    ({ point, room } = labelPoint(drawn[rings.indexOf(main)], drawn));
+    label = [half(point[0]), half(point[1])];
+    if (!insideRings(drawn, label)) label = point.map((v) => Number(v.toFixed(4)));
+  }
+  return { label, room };
 }
 
 // ---------- 실행 ----------
@@ -291,10 +308,21 @@ function main() {
   if (missing.length) throw new Error(`경계가 없는 시·군·구: ${missing.map((d) => d.code + d.name).join(', ')}`);
 
   // 임시 폴더에 모두 만든 뒤 한 번에 바꿔 넣음 (중간에 실패하면 기존 파일은 그대로)
-  const TMP_DIR = `${OUT_DIR}.tmp`;
-  const OLD_DIR = `${OUT_DIR}.old`;
+  // 임시 폴더는 실행마다 따로 (동시에 두 번 실행해도 서로의 임시 파일을 지우지 않음)
+  const TMP_DIR = `${OUT_DIR}.tmp-${process.pid}`;
   rmSync(TMP_DIR, { recursive: true, force: true });
   mkdirSync(TMP_DIR, { recursive: true });
+  try {
+    writeAll(TMP_DIR, version, byDistrict, byProvince);
+    swapIn(TMP_DIR);
+  } finally {
+    rmSync(TMP_DIR, { recursive: true, force: true });
+  }
+  console.log(`지도 데이터 ${PROVINCES.length + 1}개 파일을 만들었어요 (${version}): ${OUT_DIR}`);
+}
+
+// 지도 데이터 파일 17개를 dir에 씀
+function writeAll(TMP_DIR, version, byDistrict, byProvince) {
   const keep = (filter, code) => (ring) => {
     if (!filter) return true;
     const [lon, lat] = centroid(ring);
@@ -318,16 +346,39 @@ function main() {
     const away = all.filter((piece) => !piece.rings.length).map((piece) => piece.code);
     writeModule(TMP_DIR, version, p.code, { ...buildLevel(pieces, opts), away }, `${p.name} 시·군·구`);
   }
-  rmSync(OLD_DIR, { recursive: true, force: true });
-  if (existsSync(OUT_DIR)) renameSync(OUT_DIR, OLD_DIR);
+}
+
+// 다 만든 폴더를 map-data로 바꿔 넣음. 잠금 폴더(map-data.lock)로 한 번에 한 실행만 바꿔 넣음
+// 이전 실행이 바꿔 넣는 도중 멈춰서 map-data 없이 .old만 남았으면 먼저 되돌림
+// 백업(.old)은 새 폴더가 자리 잡은 뒤에만 지움
+function swapIn(TMP_DIR) {
+  const OLD_DIR = `${OUT_DIR}.old`;
+  const LOCK_DIR = `${OUT_DIR}.lock`;
   try {
-    renameSync(TMP_DIR, OUT_DIR);
+    mkdirSync(LOCK_DIR);
   } catch (error) {
-    if (existsSync(OLD_DIR)) renameSync(OLD_DIR, OUT_DIR);
-    throw error;
+    if (error.code !== 'EEXIST') throw error;
+    throw new Error(
+      `다른 실행이 지도 데이터를 바꿔 넣는 중이에요. 끝난 뒤 다시 실행해 주세요. 실행 중인 게 없다면 ${LOCK_DIR} 폴더를 지우고 다시 실행해 주세요.`,
+    );
   }
-  rmSync(OLD_DIR, { recursive: true, force: true });
-  console.log(`지도 데이터 ${PROVINCES.length + 1}개 파일을 만들었어요 (${version}): ${OUT_DIR}`);
+  try {
+    if (!existsSync(OUT_DIR) && existsSync(OLD_DIR)) {
+      renameSync(OLD_DIR, OUT_DIR);
+      console.log('지난 실행이 남긴 백업(map-data.old)을 먼저 되돌렸어요.');
+    }
+    rmSync(OLD_DIR, { recursive: true, force: true });
+    if (existsSync(OUT_DIR)) renameSync(OUT_DIR, OLD_DIR);
+    try {
+      renameSync(TMP_DIR, OUT_DIR);
+    } catch (error) {
+      if (existsSync(OLD_DIR)) renameSync(OLD_DIR, OUT_DIR);
+      throw error;
+    }
+    rmSync(OLD_DIR, { recursive: true, force: true });
+  } finally {
+    rmSync(LOCK_DIR, { recursive: true, force: true });
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

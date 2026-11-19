@@ -5,6 +5,7 @@ import { DEMO_PUBLIC_EVENTS } from '../event-search-data.js';
 import { venuePoint } from '../event-search.js';
 import {
   dropDelays,
+  insideRings,
   labelPoint,
   nextPiece,
   pathBounds,
@@ -30,21 +31,13 @@ test('지도 데이터: 전국은 시·도 16곳, 시·도마다 시·군·구�
   }
 });
 
-// SVG 경로 'M x,y x,y ... Z'의 고리 안에 점이 있는지 (구멍은 홀수·짝수로)
-const insidePath = (d, [x, y]) => {
-  let hits = 0;
-  for (const part of d.split('Z').filter(Boolean)) {
-    const ring = part.slice(1).trim().split(' ').map((q) => q.split(',').map(Number));
-    let c = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [xi, yi] = ring[i];
-      const [xj, yj] = ring[j];
-      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
-    }
-    if (c) hits += 1;
-  }
-  return hits % 2 === 1;
-};
+// SVG 경로 'M x,y x,y ... Z'의 칠해진 곳 안에 점이 있는지 (구멍은 짝홀 규칙, 경계 위의 점은 안이 아님)
+const ringsOf = (d) =>
+  d
+    .split('Z')
+    .filter(Boolean)
+    .map((part) => part.slice(1).trim().split(' ').map((q) => q.split(',').map(Number)));
+const insidePath = (d, point) => insideRings(ringsOf(d), point);
 
 test('지도 데이터: 조각마다 경로·라벨·색 번호가 있고 라벨이 칠해진 곳(구멍 밖)에 있다', async () => {
   for (const level of levels) {
@@ -226,4 +219,27 @@ test('spreadMarkers: 칸에 빈자리가 없으면 칸 안에 겹쳐 두고 crow
   for (const m of out) assert.ok(inStage(m, 60, 40), `칸 밖 (${m.x}, ${m.y})`);
   assert.ok(out.some((m) => m.crowded));
   assert.deepEqual([out[5].ox, out[5].oy], [-10, 5]);
+});
+
+test('insideRings: 테두리 위의 점은 안으로 보지 않는다 (바깥 테두리·구멍 테두리 모두)', () => {
+  const outer = [
+    [0, 0],
+    [100, 0],
+    [100, 100],
+    [0, 100],
+  ];
+  const hole = [
+    [40, 40],
+    [60, 40],
+    [60, 60],
+    [40, 60],
+  ];
+  const rings = [outer, hole];
+  assert.equal(insideRings(rings, [0, 50]), false, '왼쪽 변');
+  assert.equal(insideRings(rings, [100, 50]), false, '오른쪽 변');
+  assert.equal(insideRings(rings, [50, 0]), false, '위쪽 변');
+  assert.equal(insideRings(rings, [40, 50]), false, '구멍 변');
+  assert.equal(insideRings(rings, [50, 50]), false, '구멍 안');
+  assert.equal(insideRings(rings, [20, 50]), true, '칠해진 곳');
+  assert.equal(insideRings(rings, [99.9, 50]), true, '변 바로 안쪽');
 });

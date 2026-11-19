@@ -186,17 +186,20 @@ function MapStage({
   };
   // 행사 장소 번호 핀 (좌표가 없거나 지도 밖 섬이면 빼고)
   // 자리가 겹치는 핀은 지도 칸 안에서 비켜 세워 각각 누를 수 있게 함 (원래 자리에는 점)
+  // 비켜 세우기는 떠오르기 전 좌표로 계산해서, 조각이 떠올라도 핀끼리의 배치는 그대로 (떠오름은 결과에만 더함)
   const spots = spreadMarkers(
     markers
       .filter((m) => m.at && data.proj && has(m.code))
       .map((m) => {
         const [mx, my] = toMapPoint(data.proj, m.at);
-        const up = lifted.includes(m.code) ? LIFT : 0;
-        return { ...m, x: (PAD + mx) * scale, y: (PAD + LIFT + my * SQUASH - up) * scale };
+        return { ...m, x: (PAD + mx) * scale, y: (PAD + LIFT + my * SQUASH) * scale };
       }),
     26,
     stageWidth ? { width: stageWidth, height: H * scale } : null,
-  );
+  ).map((m) => {
+    const up = lifted.includes(m.code) ? LIFT * scale : 0;
+    return { ...m, y: m.y - up, oy: m.oy - up, up };
+  });
   const hotSpot = spots.find((m) => m.id === hotMarker);
   // 행사 수 핀은 번호 핀이 없을 때만. 이름만 있는 라벨은 자리가 넉넉하고 다른 핀과 겹치지 않을 때만
   const showPin = (p) => nation || (count(p.code) > 0 && !markers.length);
@@ -378,8 +381,8 @@ function MapStage({
               type="button"
               tabIndex={-1}
               aria-hidden="true"
-              className={`rm-marker${m.id === hotMarker ? ' is-hot' : ''}${m.id === pickedMarker ? ' is-picked' : ''}${m.moved ? ' is-moved' : ''}`}
-              style={{ left: m.x, top: m.y }}
+              className={`rm-marker${m.id === hotMarker ? ' is-hot' : ''}${m.id === pickedMarker ? ' is-picked' : ''}${m.moved ? ' is-moved' : ''}${m.up ? ' is-up' : ''}`}
+              style={{ left: m.x, top: m.y, '--lift': `${m.up}px` }}
               onPointerEnter={() => onMarkerEnter(m.id)}
               onPointerLeave={() => onMarkerEnter('')}
               onClick={() => onMarker(m.id)}
