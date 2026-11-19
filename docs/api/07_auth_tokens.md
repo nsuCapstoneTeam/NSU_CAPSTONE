@@ -27,7 +27,7 @@
 | 키 | `auth:refresh:{<digest>}`. `<digest>`는 Refresh Token 원문의 SHA-256 16진수(64자). `{}`는 다른 Auth 키(`auth:oauth:...:{digest}`)와 같은 hash tag 표기다 |
 | 값 | `<users.id>:<절대 만료>`. 절대 만료는 epoch milliseconds다. 예: `0199f278-cc35-7c24-9d82-0242ac120010:1795656000000` |
 | TTL | 절대 만료까지 남은 시간. 로그인 때는 `JWT_REFRESH_TOKEN_TTL`, 재발급 때는 그보다 짧다. 만료되면 Redis가 지운다 |
-| 발급 | `SET key value PX <남은 시간>` |
+| 발급 | `SET key value EX 또는 PX <남은 시간>`. 남은 시간이 초 단위로 딱 떨어지면(로그인) `EX`, 아니면(재발급) `PX`다(Spring Data Redis 4.1.1 `Expiration.from`). 만료 의미는 같다 |
 | 재발급 | `GETDEL key`로 꺼내면서 지운다. 같은 토큰으로 동시에 두 번 요청해도 하나만 성공한다 |
 | 로그아웃 | `DEL key` |
 

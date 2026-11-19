@@ -1,5 +1,7 @@
 package com.nsu.capstone.identity.security;
 
+import com.nsu.capstone.global.exception.BusinessException;
+import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.oauth.OAuthOpaqueValueService;
 import java.time.Clock;
 import java.time.Duration;
@@ -55,8 +57,9 @@ public class RefreshTokenStore {
 
     private IssuedRefreshToken issue(UUID userId, Instant now, Instant expiresAt) {
         Duration remaining = Duration.between(now, expiresAt);
+        // 재발급 중 만료 시각을 넘긴 경우도 만료된 토큰과 같은 401이다(서비스의 확인과 이 시점 사이의 경계)
         if (remaining.isZero() || remaining.isNegative()) {
-            throw new IllegalArgumentException("Refresh Token 절대 만료가 지났다");
+            throw new BusinessException(ErrorCode.REFRESH_TOKEN_INVALID);
         }
         String token = opaqueValueService.generate();
         redisTemplate
