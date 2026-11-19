@@ -13,7 +13,7 @@
 // 시·도 코드가 바뀌면 map/map-loaders.js의 LOADERS도 함께 고칩니다.
 // 파일은 임시 폴더에 모두 만든 뒤 한 번에 바꿔 넣어서, 중간에 실패해도 기존 지도 데이터는 그대로입니다.
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DISTRICTS, PROVINCES } from '../src/data/regions.js';
 import { labelPoint } from '../src/features/event-search/map/map-geometry.js';
@@ -254,68 +254,80 @@ function writeModule(dir, version, name, data, note) {
   writeFileSync(join(dir, `${name}.js`), `${header}\nexport default ${JSON.stringify(data)};\n`);
 }
 
+// 입력 파일 이름에서 판(verYYYYMMDD)을 읽음. 폴더 이름은 보지 않음 (폴더에 다른 판이 있어도 헷갈리지 않게)
+// Windows 경로(\\)와 / 경로를 모두 받음. 없으면 null
+export function sourceVersion(inputPath) {
+  const name = String(inputPath).split(/[\\/]/).pop();
+  return name.match(/ver\d{8}/)?.[0] ?? null;
+}
+
 // ---------- 실행 ----------
-const input = process.argv[2];
-if (!input) {
-  console.error('사용법: node scripts/build-region-map.mjs <HangJeongDong_verYYYYMMDD.geojson>');
-  process.exit(1);
-}
-const version = input.match(/ver\d{8}/)?.[0];
-if (!version) {
-  console.error('파일 이름에서 판(verYYYYMMDD)을 찾지 못했어요. 받은 파일 이름 그대로 넣어 주세요.');
-  process.exit(1);
-}
-const geo = JSON.parse(readFileSync(input, 'utf8'));
-const byDistrict = new Map();
-const byProvince = new Map();
-for (const f of geo.features) {
-  const { sgg, sido } = f.properties;
-  const code = toDistrict(sgg);
-  if (!districtCodes.has(code)) throw new Error(`지역 목록에 없는 시·군·구 코드: ${sgg} (${f.properties.adm_nm})`);
-  const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
-  if (!byDistrict.has(code)) byDistrict.set(code, []);
-  byDistrict.get(code).push(...polys);
-  if (!byProvince.has(sido)) byProvince.set(sido, []);
-  byProvince.get(sido).push(...polys);
-}
-const missing = DISTRICTS.filter((d) => !byDistrict.has(d.code));
-if (missing.length) throw new Error(`경계가 없는 시·군·구: ${missing.map((d) => d.code + d.name).join(', ')}`);
+// 테스트에서 sourceVersion만 불러 쓸 수 있게, 이 파일을 직접 실행할 때만 지도 데이터를 만듦
+function main() {
+  const input = process.argv[2];
+  if (!input) {
+    console.error('사용법: node scripts/build-region-map.mjs <HangJeongDong_verYYYYMMDD.geojson>');
+    process.exit(1);
+  }
+  const version = sourceVersion(input);
+  if (!version) {
+    console.error('파일 이름에서 판(verYYYYMMDD)을 찾지 못했어요. 받은 파일 이름 그대로 넣어 주세요.');
+    process.exit(1);
+  }
+  const geo = JSON.parse(readFileSync(input, 'utf8'));
+  const byDistrict = new Map();
+  const byProvince = new Map();
+  for (const f of geo.features) {
+    const { sgg, sido } = f.properties;
+    const code = toDistrict(sgg);
+    if (!districtCodes.has(code)) throw new Error(`지역 목록에 없는 시·군·구 코드: ${sgg} (${f.properties.adm_nm})`);
+    const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+    if (!byDistrict.has(code)) byDistrict.set(code, []);
+    byDistrict.get(code).push(...polys);
+    if (!byProvince.has(sido)) byProvince.set(sido, []);
+    byProvince.get(sido).push(...polys);
+  }
+  const missing = DISTRICTS.filter((d) => !byDistrict.has(d.code));
+  if (missing.length) throw new Error(`경계가 없는 시·군·구: ${missing.map((d) => d.code + d.name).join(', ')}`);
 
-// 임시 폴더에 모두 만든 뒤 한 번에 바꿔 넣음 (중간에 실패하면 기존 파일은 그대로)
-const TMP_DIR = `${OUT_DIR}.tmp`;
-const OLD_DIR = `${OUT_DIR}.old`;
-rmSync(TMP_DIR, { recursive: true, force: true });
-mkdirSync(TMP_DIR, { recursive: true });
-const keep = (filter, code) => (ring) => {
-  if (!filter) return true;
-  const [lon, lat] = centroid(ring);
-  return !filter(lon, lat, code);
-};
+  // 임시 폴더에 모두 만든 뒤 한 번에 바꿔 넣음 (중간에 실패하면 기존 파일은 그대로)
+  const TMP_DIR = `${OUT_DIR}.tmp`;
+  const OLD_DIR = `${OUT_DIR}.old`;
+  rmSync(TMP_DIR, { recursive: true, force: true });
+  mkdirSync(TMP_DIR, { recursive: true });
+  const keep = (filter, code) => (ring) => {
+    if (!filter) return true;
+    const [lon, lat] = centroid(ring);
+    return !filter(lon, lat, code);
+  };
 
-const nationPieces = PROVINCES.map((p) => ({
-  code: p.code,
-  rings: dissolve(byProvince.get(p.code)).filter(keep(LEFT_OUT.nation, p.code)),
-}));
-writeModule(TMP_DIR, version, 'nation', { ...buildLevel(nationPieces, NATION), away: [] }, '전국 시·도 (백령도 등 서해 먼 섬, 울릉도·독도는 뺐습니다)');
-
-for (const p of PROVINCES) {
-  const all = DISTRICTS.filter((d) => d.code.startsWith(p.code)).map((d) => ({
-    code: d.code,
-    rings: dissolve(byDistrict.get(d.code)).filter(keep(LEFT_OUT[p.code], d.code)),
+  const nationPieces = PROVINCES.map((p) => ({
+    code: p.code,
+    rings: dissolve(byProvince.get(p.code)).filter(keep(LEFT_OUT.nation, p.code)),
   }));
-  const pieces = all.filter((piece) => piece.rings.length);
-  const opts = ISLAND_HEAVY.has(p.code) ? { ...PROVINCE, minArea: 14 } : PROVINCE;
-  // away: 지도에서 통째로 뺀 시·군·구 (옹진군, 울릉군). 화면에서 지도 옆 칩으로 보여 줌
-  const away = all.filter((piece) => !piece.rings.length).map((piece) => piece.code);
-  writeModule(TMP_DIR, version, p.code, { ...buildLevel(pieces, opts), away }, `${p.name} 시·군·구`);
+  writeModule(TMP_DIR, version, 'nation', { ...buildLevel(nationPieces, NATION), away: [] }, '전국 시·도 (백령도 등 서해 먼 섬, 울릉도·독도는 뺐습니다)');
+
+  for (const p of PROVINCES) {
+    const all = DISTRICTS.filter((d) => d.code.startsWith(p.code)).map((d) => ({
+      code: d.code,
+      rings: dissolve(byDistrict.get(d.code)).filter(keep(LEFT_OUT[p.code], d.code)),
+    }));
+    const pieces = all.filter((piece) => piece.rings.length);
+    const opts = ISLAND_HEAVY.has(p.code) ? { ...PROVINCE, minArea: 14 } : PROVINCE;
+    // away: 지도에서 통째로 뺀 시·군·구 (옹진군, 울릉군). 화면에서 지도 옆 칩으로 보여 줌
+    const away = all.filter((piece) => !piece.rings.length).map((piece) => piece.code);
+    writeModule(TMP_DIR, version, p.code, { ...buildLevel(pieces, opts), away }, `${p.name} 시·군·구`);
+  }
+  rmSync(OLD_DIR, { recursive: true, force: true });
+  if (existsSync(OUT_DIR)) renameSync(OUT_DIR, OLD_DIR);
+  try {
+    renameSync(TMP_DIR, OUT_DIR);
+  } catch (error) {
+    if (existsSync(OLD_DIR)) renameSync(OLD_DIR, OUT_DIR);
+    throw error;
+  }
+  rmSync(OLD_DIR, { recursive: true, force: true });
+  console.log(`지도 데이터 ${PROVINCES.length + 1}개 파일을 만들었어요 (${version}): ${OUT_DIR}`);
 }
-rmSync(OLD_DIR, { recursive: true, force: true });
-if (existsSync(OUT_DIR)) renameSync(OUT_DIR, OLD_DIR);
-try {
-  renameSync(TMP_DIR, OUT_DIR);
-} catch (error) {
-  if (existsSync(OLD_DIR)) renameSync(OLD_DIR, OUT_DIR);
-  throw error;
-}
-rmSync(OLD_DIR, { recursive: true, force: true });
-console.log(`지도 데이터 ${PROVINCES.length + 1}개 파일을 만들었어요 (${version}): ${OUT_DIR}`);
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
