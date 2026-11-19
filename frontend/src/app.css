@@ -1,6 +1,6 @@
 /* 전체 공통 스타일: 색상 변수·다크 모드, 기본 요소, 헤더·푸터, 각 화면 공통 레이아웃 */
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&family=Fredoka:wght@500;600&family=Gowun+Dodum&family=Jua&family=Pacifico&display=swap');
 /* 색상·그림자 등 디자인 변수 (라이트 모드 기본값) */
 :root {
   font-family: 'Noto Sans KR', sans-serif;
