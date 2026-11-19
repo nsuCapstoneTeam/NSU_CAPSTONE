@@ -203,3 +203,27 @@ test('spreadMarkers: 같은 좌표에 핀이 옆자리 수(7)보다 많아도 �
   // 여덟 번째 핀부터는 다른 줄로 올라감
   assert.notEqual(out[7].y, 200);
 });
+
+// 핀 전체(동그라미 26px, 기준점 위 6px)가 지도 칸 안에 있는지
+const inStage = (m, w, h) => m.x >= 13 && m.x <= w - 13 && m.y >= 32 && m.y <= h;
+
+test('spreadMarkers: 지도 가장자리에 겹친 핀이 많아도 칸 밖으로 나가지 않고 서로 겹치지 않는다', () => {
+  const spots = Array.from({ length: 10 }, (_, i) => ({ id: `e${i}`, x: 20, y: 60 }));
+  const out = spreadMarkers(spots, 26, { width: 300, height: 200 });
+  for (let i = 0; i < out.length; i++) {
+    assert.ok(inStage(out[i], 300, 200), `${i}번째 핀이 지도 칸 밖 (${out[i].x}, ${out[i].y})`);
+    assert.equal(out[i].crowded, false);
+    for (let j = 0; j < i; j++) {
+      assert.ok(Math.abs(out[i].x - out[j].x) >= 26 || Math.abs(out[i].y - out[j].y) >= 26, `${i}·${j} 겹침`);
+    }
+  }
+});
+
+test('spreadMarkers: 칸에 빈자리가 없으면 칸 안에 겹쳐 두고 crowded로 표시한다 (멈추지 않음)', () => {
+  const spots = Array.from({ length: 6 }, (_, i) => ({ id: `c${i}`, x: -10, y: 5 }));
+  const out = spreadMarkers(spots, 26, { width: 60, height: 40 });
+  assert.equal(out.length, 6);
+  for (const m of out) assert.ok(inStage(m, 60, 40), `칸 밖 (${m.x}, ${m.y})`);
+  assert.ok(out.some((m) => m.crowded));
+  assert.deepEqual([out[5].ox, out[5].oy], [-10, 5]);
+});

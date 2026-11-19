@@ -96,26 +96,51 @@ export function placePins(items) {
 
 // 번호 핀끼리 겹치면 비켜 세움 (원래 자리에는 점을 남김). 화면 px 기준
 // spots: [{ x, y, ... }] 앞에 있는 핀(목록 번호가 빠른 핀)이 먼저 자리를 차지함, size: 핀 지름
-// 같은 줄의 옆자리 7곳(가운데, 오른쪽, 왼쪽 순)을 먼저 보고, 모두 차면 한 줄 위, 한 줄 아래, 두 줄 위… 로 넓혀 감
-// 핀 수만큼만 자리를 차지하므로 언젠가 빈자리가 나와서 모든 핀이 서로 겹치지 않음
-// 결과: 같은 순서로 [{ ...spot, x, y: 비켜 선 자리, ox, oy: 원래 자리, moved }]
-export function spreadMarkers(spots, size = 26) {
-  const placed = [];
+// bounds: { width, height } 지도 칸 크기. 주면 핀 전체(동그라미와 심)가 칸 안에 들어오는 자리만 씀
+// 자리 찾는 순서: 같은 줄 옆자리(오른쪽, 왼쪽 순, 3칸까지) → 위·아래 한 줄과 옆 3칸 → 6칸·두 줄 … 로 넓혀 감
+// 칸 안에 빈자리가 하나도 없으면 원래 자리를 칸 안으로 당겨 겹쳐 두고 crowded로 표시
+//   (겹친 핀의 행사도 옆 목록에서 고를 수 있음)
+// 결과: 같은 순서로 [{ ...spot, x, y: 핀 자리, ox, oy: 원래 자리, moved, crowded }]
+export function spreadMarkers(spots, size = 26, bounds = null) {
   const step = size + 2;
-  const cols = [0, 1, -1, 2, -2, 3, -3];
+  const half = size / 2;
+  // 동그라미는 기준점 위 6px부터 size만큼 (region-map.css .rm-marker)
+  const top = size + 6;
+  const inside = (x, y) =>
+    !bounds || (x >= half && x <= bounds.width - half && y >= top && y <= bounds.height);
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), Math.max(lo, hi));
+  // 후보 칸: bounds가 있으면 칸 전체를 덮을 만큼, 없으면 핀 수만큼 넓히면 늘 빈자리가 있음
+  const cols = bounds ? Math.ceil(bounds.width / step) + 1 : 3 * spots.length;
+  const rows = bounds ? Math.ceil(bounds.height / step) + 1 : spots.length;
+  const offsets = [];
+  for (let r = -rows; r <= rows; r += 1) for (let c = -cols; c <= cols; c += 1) offsets.push([c, r]);
+  const ring = ([c, r]) => Math.max(Math.ceil(Math.abs(c) / 3), Math.abs(r));
+  offsets.sort(
+    (a, b) =>
+      ring(a) - ring(b) ||
+      Math.abs(a[1]) - Math.abs(b[1]) ||
+      Math.abs(a[0]) - Math.abs(b[0]) ||
+      a[1] - b[1] ||
+      b[0] - a[0],
+  );
+  const placed = [];
   return spots.map((m) => {
-    const free = ([dx, dy]) =>
-      !placed.some((p) => Math.abs(p.x - (m.x + dx)) < size && Math.abs(p.y - (m.y + dy)) < size);
-    let spot;
-    for (let ring = 0; !spot; ring += 1) {
-      for (const row of ring ? [-ring, ring] : [0]) {
-        spot = cols.map((c) => [c * step, row * step]).find(free);
-        if (spot) break;
+    const free = (x, y) => !placed.some((p) => Math.abs(p.x - x) < size && Math.abs(p.y - y) < size);
+    let hit = null;
+    for (const [c, r] of offsets) {
+      const x = m.x + c * step;
+      const y = m.y + r * step;
+      if (inside(x, y) && free(x, y)) {
+        hit = [x, y];
+        break;
       }
     }
-    const [dx, dy] = spot;
-    placed.push({ x: m.x + dx, y: m.y + dy });
-    return { ...m, x: m.x + dx, y: m.y + dy, ox: m.x, oy: m.y, moved: dx !== 0 || dy !== 0 };
+    const [x, y] = hit ?? [
+      bounds ? clamp(m.x, half, bounds.width - half) : m.x,
+      bounds ? clamp(m.y, top, bounds.height) : m.y,
+    ];
+    placed.push({ x, y });
+    return { ...m, x, y, ox: m.x, oy: m.y, moved: x !== m.x || y !== m.y, crowded: !hit };
   });
 }
 

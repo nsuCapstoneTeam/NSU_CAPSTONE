@@ -185,7 +185,7 @@ function MapStage({
     return { x: (PAD + p.label[0]) * scale, y: (PAD + LIFT + p.label[1] * SQUASH - up) * scale };
   };
   // 행사 장소 번호 핀 (좌표가 없거나 지도 밖 섬이면 빼고)
-  // 자리가 겹치는 핀은 옆으로 비켜 세워 각각 누를 수 있게 함 (원래 자리에는 점)
+  // 자리가 겹치는 핀은 지도 칸 안에서 비켜 세워 각각 누를 수 있게 함 (원래 자리에는 점)
   const spots = spreadMarkers(
     markers
       .filter((m) => m.at && data.proj && has(m.code))
@@ -194,6 +194,8 @@ function MapStage({
         const up = lifted.includes(m.code) ? LIFT : 0;
         return { ...m, x: (PAD + mx) * scale, y: (PAD + LIFT + my * SQUASH - up) * scale };
       }),
+    26,
+    stageWidth ? { width: stageWidth, height: H * scale } : null,
   );
   const hotSpot = spots.find((m) => m.id === hotMarker);
   // 행사 수 핀은 번호 핀이 없을 때만. 이름만 있는 라벨은 자리가 넉넉하고 다른 핀과 겹치지 않을 때만
