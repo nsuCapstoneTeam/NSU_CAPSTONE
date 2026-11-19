@@ -1,6 +1,9 @@
 package com.nsu.capstone.identity.security;
 
 import com.nsu.capstone.identity.oauth.OAuthOpaqueValueService;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -10,47 +13,74 @@ import org.springframework.stereotype.Repository;
 
 /**
  * Refresh Token은 Redis에만 둔다(SSOT AUTH-156). 원문은 저장하지 않고 SHA-256 digest를 키로 쓴다.
- * 키: {@code auth:refresh:{digest}}, 값: userId, TTL: {@code auth.jwt.refresh-token.ttl}.
+ * 키: {@code auth:refresh:{digest}}, 값: {@code userId:절대 만료(epoch millis)}, TTL: 절대 만료까지 남은 시간.
+ * 절대 만료는 로그인 때 {@code auth.jwt.refresh-token.ttl}로 정하고, 재발급한 토큰은 그 값을 그대로 물려받는다.
  */
 @Repository
 public class RefreshTokenStore {
 
     private static final Logger log = LoggerFactory.getLogger(RefreshTokenStore.class);
+    private static final String SEPARATOR = ":";
 
     private final StringRedisTemplate redisTemplate;
     private final OAuthOpaqueValueService opaqueValueService;
     private final JwtRefreshTokenProperties properties;
+    private final Clock clock;
 
     public RefreshTokenStore(
             StringRedisTemplate redisTemplate,
             OAuthOpaqueValueService opaqueValueService,
-            JwtRefreshTokenProperties properties) {
+            JwtRefreshTokenProperties properties,
+            Clock clock) {
         this.redisTemplate = redisTemplate;
         this.opaqueValueService = opaqueValueService;
         this.properties = properties;
+        this.clock = clock;
     }
 
     public static String key(String tokenDigest) {
         return "auth:refresh:{" + tokenDigest + "}";
     }
 
+    /** 로그인: 절대 만료를 지금부터 설정한 TTL 뒤로 정한다. */
     public IssuedRefreshToken issue(UUID userId) {
+        Instant now = clock.instant();
+        return issue(userId, now, now.plus(properties.ttl()));
+    }
+
+    /** 재발급: 이전 토큰의 절대 만료를 물려받아 남은 시간만큼만 저장한다. */
+    public IssuedRefreshToken issue(UUID userId, Instant expiresAt) {
+        return issue(userId, clock.instant(), expiresAt);
+    }
+
+    private IssuedRefreshToken issue(UUID userId, Instant now, Instant expiresAt) {
+        Duration remaining = Duration.between(now, expiresAt);
+        if (remaining.isZero() || remaining.isNegative()) {
+            throw new IllegalArgumentException("Refresh Token 절대 만료가 지났다");
+        }
         String token = opaqueValueService.generate();
-        redisTemplate.opsForValue().set(key(opaqueValueService.digest(token)), userId.toString(), properties.ttl());
-        return new IssuedRefreshToken(token, properties.ttl().toSeconds());
+        redisTemplate
+                .opsForValue()
+                .set(key(opaqueValueService.digest(token)), userId + SEPARATOR + expiresAt.toEpochMilli(), remaining);
+        return new IssuedRefreshToken(token, remaining.toSeconds());
     }
 
     /** 토큰을 꺼내면서 지운다(일회용). 없거나 만료됐거나 이미 쓴 토큰이면 비어 있다. */
-    public Optional<UUID> consume(String token) {
+    public Optional<StoredRefreshToken> consume(String token) {
         if (token == null || token.isBlank()) {
             return Optional.empty();
         }
-        String userId = redisTemplate.opsForValue().getAndDelete(key(opaqueValueService.digest(token)));
-        if (userId == null) {
+        String value = redisTemplate.opsForValue().getAndDelete(key(opaqueValueService.digest(token)));
+        if (value == null) {
             return Optional.empty();
         }
+        String[] parts = value.split(SEPARATOR, 2);
         try {
-            return Optional.of(UUID.fromString(userId));
+            if (parts.length != 2) {
+                throw new IllegalArgumentException("separator missing");
+            }
+            return Optional.of(
+                    new StoredRefreshToken(UUID.fromString(parts[0]), Instant.ofEpochMilli(Long.parseLong(parts[1]))));
         } catch (IllegalArgumentException exception) {
             log.warn("읽을 수 없는 Refresh Token 값을 폐기했다");
             return Optional.empty();

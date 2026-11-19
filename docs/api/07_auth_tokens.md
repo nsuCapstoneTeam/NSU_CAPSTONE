@@ -14,9 +14,10 @@
 | 토큰 | 형식 | 만료 | 설정 |
 |---|---|---|---|
 | Access Token | JWT(HS256). `sub` = `users.id`, `role` claim | 30분 | `JWT_ACCESS_TOKEN_TTL`(기본 `PT30M`) |
-| Refresh Token | 32바이트 난수의 base64url(패딩 없음, 43자). 뜻이 없는 값이다 | 7일 | `JWT_REFRESH_TOKEN_TTL`(기본 `P7D`). 0 이하면 기동에 실패한다 |
+| Refresh Token | 32바이트 난수의 base64url(패딩 없음, 43자). 뜻이 없는 값이다 | 로그인부터 7일(절대 만료) | `JWT_REFRESH_TOKEN_TTL`(기본 `P7D`). 0 이하면 기동에 실패한다 |
 
-- Refresh Token은 일회용이다. 재발급에 한 번 쓰면 없어지고 새 Refresh Token을 받는다(rotation). 유출된 토큰을 오래 쓰지 못하게 하기 위해서다.
+- Refresh Token은 일회용이다. 재발급에 한 번 쓰면 없어지고 새 Refresh Token을 받는다(rotation).
+- 만료는 로그인(또는 OAuth 로그인) 시각부터 센 절대 만료다. 재발급으로 받은 새 토큰은 이전 토큰의 절대 만료를 그대로 물려받고, 남은 시간만큼만 유효하다. 재발급을 반복해도 로그인 뒤 7일이 지나면 다시 로그인해야 한다. 유출된 토큰을 재발급으로 계속 연장하지 못하게 하기 위해서다(2026-11-19 검토 결정).
 - 7일은 MVP 초기값이다. 측정이나 요구에서 나온 값이 아니며, 설정으로 바꾼다.
 
 ## 2. Redis 키 설계
@@ -24,9 +25,9 @@
 | 항목 | 값 |
 |---|---|
 | 키 | `auth:refresh:{<digest>}`. `<digest>`는 Refresh Token 원문의 SHA-256 16진수(64자). `{}`는 다른 Auth 키(`auth:oauth:...:{digest}`)와 같은 hash tag 표기다 |
-| 값 | `users.id`(UUID 문자열) |
-| TTL | Refresh Token 만료(`JWT_REFRESH_TOKEN_TTL`). 만료되면 Redis가 지운다 |
-| 발급 | `SET key userId EX ttl` |
+| 값 | `<users.id>:<절대 만료>`. 절대 만료는 epoch milliseconds다. 예: `0199f278-cc35-7c24-9d82-0242ac120010:1795656000000` |
+| TTL | 절대 만료까지 남은 시간. 로그인 때는 `JWT_REFRESH_TOKEN_TTL`, 재발급 때는 그보다 짧다. 만료되면 Redis가 지운다 |
+| 발급 | `SET key value PX <남은 시간>` |
 | 재발급 | `GETDEL key`로 꺼내면서 지운다. 같은 토큰으로 동시에 두 번 요청해도 하나만 성공한다 |
 | 로그아웃 | `DEL key` |
 
@@ -41,7 +42,7 @@
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `refreshToken` | string | 재발급·로그아웃에 쓰는 값 |
-| `refreshTokenExpiresIn` | number | Refresh Token 만료까지 남은 초(기본 604800) |
+| `refreshTokenExpiresIn` | number | Refresh Token 절대 만료까지 남은 초. 로그인 응답은 604800(기본), 재발급 응답은 그보다 작다 |
 
 로그인 응답 예:
 
@@ -72,15 +73,15 @@ Content-Type: application/json
 ```
 
 - 로그인 없이 부르는 공개 경로다. Access Token이 만료된 뒤에 부르기 때문이다. `Authorization` 헤더는 보내지 않는다. 만료되거나 잘못된 Bearer 토큰을 붙이면 Spring Security가 먼저 `401 AUTHENTICATION_REQUIRED`로 거절한다.
-- 처리 순서: Refresh Token을 꺼내면서 지운다 → DB에서 사용자를 다시 읽는다 → `ACTIVE`가 아니거나 사용자가 없으면 거절한다 → DB의 현재 `role`로 새 Access Token과 새 Refresh Token을 준다.
+- 처리 순서: Refresh Token을 꺼내면서 지운다 → 절대 만료가 지났으면 거절한다 → DB에서 사용자를 다시 읽는다 → `ACTIVE`가 아니거나 사용자가 없으면 거절한다 → DB의 현재 `role`로 새 Access Token과, 같은 절대 만료를 물려받은 새 Refresh Token을 준다.
 - 거절된 토큰도 이미 지워졌다. 다시 쓸 수 없다.
 
-성공 `200`: 로그인 응답과 같은 형식(§3).
+성공 `200`: 로그인 응답과 같은 형식(§3). `refreshTokenExpiresIn`은 절대 만료까지 남은 초다.
 
 | HTTP | `code` | 상황 |
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | `refreshToken`이 없거나 비었거나 256자를 넘음 |
-| 401 | `REFRESH_TOKEN_INVALID` | 발급하지 않았거나, 만료됐거나, 이미 썼거나, 로그아웃한 토큰. 또는 사용자가 없거나 `ACTIVE`가 아님. 클라이언트는 다시 로그인하게 한다 |
+| 401 | `REFRESH_TOKEN_INVALID` | 발급하지 않았거나, 절대 만료가 지났거나, 이미 썼거나, 로그아웃한 토큰. 또는 사용자가 없거나 `ACTIVE`가 아님. 클라이언트는 다시 로그인하게 한다 |
 
 ## 5. 로그아웃
 
@@ -109,13 +110,14 @@ Content-Type: application/json
 - 재사용 탐지(이미 쓴 토큰이 다시 오면 같은 계열을 모두 폐기)는 없다. 먼저 쓴 쪽이 이기고, 나머지는 `401`이다.
 - 재발급·로그아웃에 요청 제한은 없다. 토큰이 256비트 난수라 추측으로 맞힐 수 없다.
 - Redis를 쓸 수 없으면 로그인은 Refresh Token 없이 성공하고(§3), 재발급·로그아웃은 `500`이다(다른 Auth Redis 저장소와 같다).
+- 재발급은 이전 토큰을 먼저 지우고 새 토큰을 저장한다. 그 사이에 Redis 저장이 실패하면 `500`이고 이전 토큰은 이미 없으므로 다시 로그인해야 한다.
 - OAuth 로그인(`POST /api/v1/auth/oauth/result`)은 비밀번호 로그인과 달리 Access Token만 주는 처리가 없다. 결과 코드를 꺼내 지운 뒤 Refresh Token을 저장하므로, 그 사이에 Redis가 멈추면 `500`이고 결과 코드는 이미 없다. 사용자는 OAuth를 처음부터 다시 시작한다. Redis가 처음부터 멈춰 있으면 결과 코드를 꺼내는 단계에서 실패한다.
 - 프론트 연동(만료 전 재발급, 로그아웃 시 이 API 호출)은 이 이슈 범위 밖이다.
 
 ## 7. 프론트가 할 일
 
 - 로그인·OAuth 로그인 응답의 `refreshToken`을 보관한다. 없으면(Redis 장애 중 로그인) 보관하지 않고 만료 때 다시 로그인하게 한다.
-- 보관 위치는 프런트 연동 이슈에서 정한다. Access Token과 같은 `sessionStorage`(`frontend/src/features/auth/api/auth-token.js`)에 두면 구현은 단순하지만, XSS로 새어 나갔을 때 쓸 수 있는 기간이 Access Token만일 때의 최대 30분에서 재발급을 이어 가는 동안 최대 7일로 늘어난다.
+- 보관 위치는 프런트 연동 이슈에서 정한다. Access Token과 같은 `sessionStorage`(`frontend/src/features/auth/api/auth-token.js`)에 두면 구현은 단순하지만, XSS로 새어 나갔을 때 공격자가 쓸 수 있는 기간이 Access Token만일 때의 최대 30분에서, 재발급을 이어 가면 로그인 뒤 7일(절대 만료)까지로 늘어난다.
 - 보호된 API가 `401 AUTHENTICATION_REQUIRED`를 주면 `POST /api/v1/auth/refresh`를 한 번 부른다. 성공하면 두 토큰을 바꾸고 원래 요청을 다시 보낸다. `401 REFRESH_TOKEN_INVALID`면 로그인 화면으로 보낸다.
 - 같은 Refresh Token으로 재발급을 동시에 두 번 부르지 않는다. 하나만 성공한다.
 - 로그아웃 버튼은 `POST /api/v1/auth/logout`을 부른 뒤 보관한 토큰을 지운다.

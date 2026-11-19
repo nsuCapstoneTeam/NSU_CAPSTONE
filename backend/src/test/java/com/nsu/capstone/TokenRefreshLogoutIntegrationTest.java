@@ -1,8 +1,13 @@
 package com.nsu.capstone;
 
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -18,6 +23,8 @@ import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.security.AuthTokenIssuer;
 import com.nsu.capstone.identity.security.RefreshTokenStore;
 import com.nsu.capstone.identity.support.UuidV7Generator;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -90,7 +97,9 @@ class TokenRefreshLogoutIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.expiresIn").value(1800))
-                .andExpect(jsonPath("$.refreshTokenExpiresIn").value(604800))
+                // 재발급은 로그인 때 정한 절대 만료까지 남은 시간만 준다(7일로 다시 시작하지 않음)
+                .andExpect(jsonPath("$.refreshTokenExpiresIn")
+                        .value(allOf(lessThanOrEqualTo(604800), greaterThan(604740))))
                 .andExpect(jsonPath("$.userId").value(user.getId().toString()))
                 .andExpect(jsonPath("$.role").value("ARTIST"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
@@ -106,6 +115,36 @@ class TokenRefreshLogoutIntegrationTest {
                 .andExpect(status().isOk());
         expectInvalid(refresh(firstRefreshToken));
         refresh(secondRefreshToken).andExpect(status().isOk());
+    }
+
+    @Test
+    void refreshDoesNotExtendAbsoluteLifetimeFromLogin() throws Exception {
+        User user = activeArtist("absolute@example.com");
+        String first = "one-hour-left-" + user.getId();
+        String stored =
+                user.getId() + ":" + Instant.now().plus(Duration.ofHours(1)).toEpochMilli();
+        redisTemplate.opsForValue().set(storedKey(first), stored, Duration.ofHours(1));
+
+        MvcResult refreshed = refresh(first).andExpect(status().isOk()).andReturn();
+        String body = refreshed.getResponse().getContentAsString();
+        String second = JsonPath.read(body, "$.refreshToken");
+        Number secondExpiresIn = JsonPath.read(body, "$.refreshTokenExpiresIn");
+
+        assertEquals(stored, redisTemplate.opsForValue().get(storedKey(second)));
+        assertTrue(secondExpiresIn.longValue() <= Duration.ofHours(1).toSeconds());
+        assertTrue(redisTemplate.getExpire(storedKey(second))
+                <= Duration.ofHours(1).toSeconds());
+    }
+
+    @Test
+    void tokenPastAbsoluteExpiryIsRejectedEvenIfKeyRemains() throws Exception {
+        User user = activeArtist("expired@example.com");
+        String token = "past-absolute-expiry-" + user.getId();
+        long past = Instant.now().minusSeconds(1).toEpochMilli();
+        redisTemplate.opsForValue().set(storedKey(token), user.getId() + ":" + past, Duration.ofMinutes(5));
+
+        expectInvalid(refresh(token));
+        assertFalse(redisTemplate.hasKey(storedKey(token)));
     }
 
     @Test
@@ -197,6 +236,10 @@ class TokenRefreshLogoutIntegrationTest {
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
         }
+    }
+
+    private String storedKey(String refreshToken) {
+        return RefreshTokenStore.key(opaqueValueService.digest(refreshToken));
     }
 
     private User activeArtist(String email) {
