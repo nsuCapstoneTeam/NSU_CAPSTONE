@@ -127,7 +127,10 @@ class SharedRedisTimeoutIntegrationTest {
                         .contentType("application/json")
                         .content("{\"email\":\"" + address + "\",\"password\":\"test-password\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").isNotEmpty()));
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                // Refresh Token은 Redis에만 두므로 장애 중에는 주지 않는다(API 07 §3)
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(jsonPath("$.refreshTokenExpiresIn").doesNotExist()));
         // Password hashing runs after the limit check falls through, so allow it on top of the timeout.
         assertNearCommandTimeout("login", millis, UPPER_BOUND_MILLIS + 300);
     }

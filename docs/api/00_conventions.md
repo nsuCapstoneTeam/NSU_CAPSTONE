@@ -83,6 +83,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 - `Authorization: Bearer {accessToken}` (JWT)
 - `sub` = `users.id`(UUIDv7), `role` claim = `ARTIST` 또는 `EVENT_PARTNER`
 - 계정 상태(`ACTIVE`, `SUSPENDED`, `WITHDRAWN`)에 따른 로그인 허용 여부는 Auth/User 도메인이 정한다.
+- Access Token 만료 뒤 재발급과 로그아웃은 Refresh Token으로 한다([07 토큰 API](./07_auth_tokens.md)).
 
 ## 8. 에러 형식
 
@@ -112,6 +113,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 | 400 | `VALIDATION_ERROR` | 요청 본문·파라미터 검증 실패 (ADR-007) |
 | 400 | `INVALID_{대상}` | 경로 값의 형식 오류 (예: `INVALID_ARTIST_ID`) |
 | 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음, 만료, 서명 오류 |
+| 401 | `REFRESH_TOKEN_INVALID` | 재발급에 쓴 Refresh Token이 없거나, 만료·사용·로그아웃됐거나, 사용자가 `ACTIVE`가 아님. 다시 로그인한다([07 §4](./07_auth_tokens.md#4-재발급)) |
 | 403 | `ACCESS_DENIED` | 인증은 됐지만 호출 주체에게 허용되지 않은 요청 |
 | 403 | `DEMO_WRITE_NOT_ALLOWED` | 시연 서버(`DEMO`)에서 허용 목록 밖 계정이 상태를 바꾸는 요청(`POST`·`PUT`·`PATCH`·`DELETE`)을 보냄. 인증(`401`) 바로 다음, 역할·본문 검사를 포함한 다른 모든 판정보다 먼저 검사한다. 본문을 읽기 전에 서버·프록시가 거절하는 요청 크기 초과(`413`, 04 §2.2)는 예외다. 가입·로그인·로그아웃·토큰 재발급·실명 본인확인·검색창 즉시 추천·회원 탈퇴는 제외한다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)) |
 | 404 | `{대상}_NOT_FOUND` | 대상이 없거나 호출 주체에게 존재를 드러내지 않는 대상 |
@@ -127,7 +129,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 - 응답은 `global/exception`의 `ErrorCode`·`ErrorResponse`·`GlobalExceptionHandler`가 만든다(ADR-007). 새 `code`는 `ErrorCode`에 추가한다.
 - 경로 값 형식 오류를 `INVALID_{대상}`으로 내려면, 컨트롤러가 값을 문자열로 받아 직접 검사하고 `BusinessException`을 던진다. 경로 변수를 `UUID` 타입으로 받으면 변환 실패가 Spring MVC 표준 400(`ProblemDetail`)이 된다.
 - `401`·`403`은 Spring Security 필터 체인에서 만들어지므로 `JsonAuthenticationEntryPoint`·`JsonAccessDeniedHandler`가 같은 형식을 낸다.
-- 공개 경로(로그인, 가입, OAuth, API 문서)를 뺀 경로에서 토큰 없는 요청은 HTTP 메서드와 관계없이 `401`이다. 서버는 Bearer 토큰으로만 인증하므로 CSRF 보호를 쓰지 않는다([ADR authentication/00](../adr/authentication/00_csrf_protection_for_bearer_api.md)).
+- 공개 경로(로그인, 토큰 재발급·로그아웃, 가입, OAuth, API 문서)를 뺀 경로에서 토큰 없는 요청은 HTTP 메서드와 관계없이 `401`이다. 서버는 Bearer 토큰으로만 인증하므로 CSRF 보호를 쓰지 않는다([ADR authentication/00](../adr/authentication/00_csrf_protection_for_bearer_api.md)).
 
 ## 9. 아직 정하지 않은 규칙
 

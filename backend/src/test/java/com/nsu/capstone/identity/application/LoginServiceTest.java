@@ -1,6 +1,7 @@
 package com.nsu.capstone.identity.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -16,10 +17,11 @@ import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.domain.UserStatus;
 import com.nsu.capstone.identity.presentation.dto.LoginResponse;
 import com.nsu.capstone.identity.repository.UserRepository;
+import com.nsu.capstone.identity.security.AuthTokenIssuer;
 import com.nsu.capstone.identity.security.DatabaseUserDetailsService;
 import com.nsu.capstone.identity.security.IssuedAccessToken;
-import com.nsu.capstone.identity.security.JwtAccessTokenService;
-import com.nsu.capstone.identity.security.LoginPrincipal;
+import com.nsu.capstone.identity.security.IssuedRefreshToken;
+import com.nsu.capstone.identity.security.IssuedTokens;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,7 +40,7 @@ class LoginServiceTest {
     private static final String PASSWORD = "password";
 
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final JwtAccessTokenService tokenService = mock(JwtAccessTokenService.class);
+    private final AuthTokenIssuer tokenService = mock(AuthTokenIssuer.class);
     private final PasswordEncoder passwordEncoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
 
     private LoginService loginService;
@@ -48,7 +50,10 @@ class LoginServiceTest {
         DatabaseUserDetailsService userDetailsService = new DatabaseUserDetailsService(userRepository);
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
-        loginService = new LoginService(new ProviderManager(provider), tokenService, SignupTestTerms.limits());
+        // 한도 검사가 Redis를 정상으로 본 경우. null이면 Redis 장애로 Access Token만 준다
+        var limits = SignupTestTerms.limits();
+        when(limits.login(any(), any())).thenReturn("failure-slot");
+        loginService = new LoginService(new ProviderManager(provider), tokenService, limits);
     }
 
     @ParameterizedTest
@@ -56,17 +61,54 @@ class LoginServiceTest {
     void logsInActiveUserUsingStoredRole(UserRole role) {
         User user = user(role, UserStatus.ACTIVE, passwordEncoder.encode(PASSWORD));
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
-        when(tokenService.issue(any(LoginPrincipal.class))).thenReturn(new IssuedAccessToken("access-token", 1800));
+        when(tokenService.issue(USER_ID, role))
+                .thenReturn(new IssuedTokens(
+                        new IssuedAccessToken("access-token", 1800), new IssuedRefreshToken("refresh-token", 604800)));
 
         LoginResponse response = loginService.login(EMAIL, PASSWORD, "127.0.0.1");
 
         assertEquals("access-token", response.accessToken());
         assertEquals("Bearer", response.tokenType());
         assertEquals(1800, response.expiresIn());
+        assertEquals("refresh-token", response.refreshToken());
+        assertEquals(604800L, response.refreshTokenExpiresIn());
         assertEquals(USER_ID, response.userId());
         assertEquals(role, response.role());
         assertEquals(UserStatus.ACTIVE, response.status());
-        verify(tokenService).issue(any(LoginPrincipal.class));
+        verify(tokenService).issue(USER_ID, role);
+    }
+
+    @Test
+    void issuesAccessTokenOnlyWithoutWaitingAgainWhenRateLimitRedisFailed() {
+        var limits = mock(com.nsu.capstone.identity.signup.RedisPublicRequestLimitStore.class);
+        var service = new LoginService(passwordManager(), tokenService, limits);
+        User user = user(UserRole.ARTIST, UserStatus.ACTIVE, passwordEncoder.encode(PASSWORD));
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(limits.login(EMAIL, "127.0.0.1")).thenReturn(null);
+        when(tokenService.issueAccessOnly(USER_ID, UserRole.ARTIST))
+                .thenReturn(new IssuedTokens(new IssuedAccessToken("access-token", 1800), null));
+
+        LoginResponse response = service.login(EMAIL, PASSWORD, "127.0.0.1");
+
+        assertEquals("access-token", response.accessToken());
+        assertNull(response.refreshToken());
+        assertNull(response.refreshTokenExpiresIn());
+        verify(tokenService, never()).issue(any(), any());
+    }
+
+    @Test
+    void issuesAccessTokenOnlyWhenRefreshTokenCannotBeStored() {
+        User user = user(UserRole.ARTIST, UserStatus.ACTIVE, passwordEncoder.encode(PASSWORD));
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(tokenService.issue(USER_ID, UserRole.ARTIST))
+                .thenThrow(new org.springframework.dao.QueryTimeoutException("redis stalled"));
+        when(tokenService.issueAccessOnly(USER_ID, UserRole.ARTIST))
+                .thenReturn(new IssuedTokens(new IssuedAccessToken("access-token", 1800), null));
+
+        LoginResponse response = loginService.login(EMAIL, PASSWORD, "127.0.0.1");
+
+        assertEquals("access-token", response.accessToken());
+        assertNull(response.refreshToken());
     }
 
     @Test
@@ -116,14 +158,23 @@ class LoginServiceTest {
                 org.springframework.security.authentication.InternalAuthenticationServiceException.class,
                 () -> service.login(EMAIL, PASSWORD, "203.0.113.10"));
         verify(limits).loginSucceeded("failure-slot");
-        verify(tokenService, never()).issue(any());
+        verify(tokenService, never()).issue(any(), any());
+        verify(tokenService, never()).issueAccessOnly(any(), any());
+    }
+
+    private ProviderManager passwordManager() {
+        DaoAuthenticationProvider provider =
+                new DaoAuthenticationProvider(new DatabaseUserDetailsService(userRepository));
+        provider.setPasswordEncoder(passwordEncoder);
+        return new ProviderManager(provider);
     }
 
     private void assertInvalidCredentials(String password) {
         BusinessException exception =
                 assertThrows(BusinessException.class, () -> loginService.login(EMAIL, password, "127.0.0.1"));
         assertEquals(ErrorCode.INVALID_LOGIN_CREDENTIALS, exception.getErrorCode());
-        verify(tokenService, never()).issue(any());
+        verify(tokenService, never()).issue(any(), any());
+        verify(tokenService, never()).issueAccessOnly(any(), any());
     }
 
     private User user(UserRole role, UserStatus status, String passwordHash) {

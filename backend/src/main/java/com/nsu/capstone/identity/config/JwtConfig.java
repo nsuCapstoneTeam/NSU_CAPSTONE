@@ -2,6 +2,7 @@ package com.nsu.capstone.identity.config;
 
 import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.security.JwtAccessTokenProperties;
+import com.nsu.capstone.identity.security.JwtRefreshTokenProperties;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Base64;
@@ -24,7 +25,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(JwtAccessTokenProperties.class)
+@EnableConfigurationProperties({JwtAccessTokenProperties.class, JwtRefreshTokenProperties.class})
 public class JwtConfig {
 
     private static final int MINIMUM_HS256_KEY_BYTES = 32;
@@ -52,26 +53,22 @@ public class JwtConfig {
     @Bean
     JwtEncoder jwtEncoder(SecretKey jwtAccessTokenSecretKey) {
         return NimbusJwtEncoder.withSecretKey(jwtAccessTokenSecretKey)
-            .algorithm(MacAlgorithm.HS256)
-            .build();
+                .algorithm(MacAlgorithm.HS256)
+                .build();
     }
 
     @Bean
     JwtDecoder jwtDecoder(SecretKey jwtAccessTokenSecretKey, Clock clock) {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder
-            .withSecretKey(jwtAccessTokenSecretKey)
-            .macAlgorithm(MacAlgorithm.HS256)
-            .build();
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(jwtAccessTokenSecretKey)
+                .macAlgorithm(MacAlgorithm.HS256)
+                .build();
 
         JwtTimestampValidator timestampValidator = new JwtTimestampValidator(Duration.ZERO);
         timestampValidator.setAllowEmptyExpiryClaim(false);
         timestampValidator.setClock(clock);
 
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-            timestampValidator,
-            subjectValidator(),
-            roleValidator()
-        ));
+        decoder.setJwtValidator(
+                new DelegatingOAuth2TokenValidator<>(timestampValidator, subjectValidator(), roleValidator()));
         return decoder;
     }
 

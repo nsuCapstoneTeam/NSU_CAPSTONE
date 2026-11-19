@@ -28,6 +28,12 @@ public class SecurityConfig {
     private static final RequestMatcher LOGIN_ENDPOINT =
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login");
 
+    // Access Token이 만료된 뒤에도 부르는 경로라 공개한다. 본문의 Refresh Token이 자격 증명이다.
+    // 기본 LogoutFilter가 아니라 인가를 거치는 컨트롤러로 만든다(ADR authentication/00 Decision 4)
+    private static final RequestMatcher TOKEN_ENDPOINTS = new OrRequestMatcher(
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/refresh"),
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/logout"));
+
     private static final RequestMatcher OAUTH_AUTHORIZATION_ENDPOINT =
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/auth/oauth/authorization/{provider}");
 
@@ -86,6 +92,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 PRE_LOGIN_SIGNUP_ENDPOINTS,
                                 LOGIN_ENDPOINT,
+                                TOKEN_ENDPOINTS,
                                 OAUTH_PUBLIC_ENDPOINTS,
                                 EXTERNAL_ACCOUNT_CALLBACK_ENDPOINT,
                                 API_DOCS_ENDPOINTS)

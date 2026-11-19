@@ -151,7 +151,7 @@ class OpenApiDocsIntegrationTest {
     }
 
     @Test
-    @DisplayName("공개 API(가입·로그인·OAuth)에는 인증 표시가 없고, 나머지는 기본 인증을 따른다")
+    @DisplayName("공개 API(가입·로그인·토큰 재발급·로그아웃·OAuth)에는 인증 표시가 없고, 나머지는 기본 인증을 따른다")
     void marksOnlyNonPublicApisAsAuthenticated() throws Exception {
         List<String> publicApis = new ArrayList<>();
         List<String> publicApisWithAuth = new ArrayList<>();
@@ -177,7 +177,7 @@ class OpenApiDocsIntegrationTest {
             }
         }
 
-        assertThat(publicApis).hasSize(19);
+        assertThat(publicApis).hasSize(21);
         assertThat(publicApisWithAuth).isEmpty();
         assertThat(otherApis).hasSize(17);
         assertThat(otherApisWithOverride).isEmpty();
@@ -201,7 +201,9 @@ class OpenApiDocsIntegrationTest {
     }
 
     private static String expectedTag(String path) {
-        if (path.startsWith("/api/v1/auth/login")) {
+        if (path.startsWith("/api/v1/auth/login")
+                || path.equals("/api/v1/auth/refresh")
+                || path.equals("/api/v1/auth/logout")) {
             return "로그인";
         }
         if (path.startsWith("/api/v1/auth/oauth/")) {
