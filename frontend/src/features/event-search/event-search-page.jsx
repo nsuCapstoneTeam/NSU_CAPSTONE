@@ -166,19 +166,25 @@ export default function EventSearch({ notify }) {
     setVisible(visible + PAGE);
   }
 
-  // 목록 행을 누르면 목록 자리에 장소. 목록 아래쪽에서 눌렀으면 장소 패널이 보이게 위로 올림
-  function openPlace(id) {
+  // 목록 자리에 장소를 엶 (스크롤은 부르는 쪽에서)
+  function showPlace(id) {
     // 장소를 보는 중에 다른 핀을 누르면 목록 스크롤 자리는 그대로 둠
     if (!placeId) listScroll.current = window.scrollY;
     setHot('');
     setPlaceId(id);
     setFocusId('es-place-title');
+  }
+
+  // 목록 행을 누름: 목록 아래쪽에서 눌렀으면 장소 패널이 보이게 지도·목록 칸 위쪽으로 올림
+  function openPlace(id) {
+    showPlace(id);
     requestAnimationFrame(scrollToLayout);
   }
 
-  // 지도 핀을 누름: 장소를 열고, 좁은 화면에서 장소가 지도 아래에 열리면 제목이 보이게 내림
+  // 지도 핀을 누름: 지도 칸으로 올리지 않고, 장소 제목이 화면 밖일 때만 제목이 보이게 움직임
+  // (두 열 화면에서 제목이 이미 보이면 스크롤 그대로, 좁은 화면에서 지도 아래에 열리면 내림)
   function openFromMap(id) {
-    openPlace(id);
+    showPlace(id);
     requestAnimationFrame(() => requestAnimationFrame(revealPlace));
   }
 

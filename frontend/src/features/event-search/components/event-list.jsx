@@ -25,8 +25,11 @@ export default function EventList({
   hotId = '',
   onHot = () => {},
 }) {
-  // 키보드 포커스가 있는 행 (핀이 있는 행사만). 마우스가 다른 행을 지나갔다 빠져도 이 행의 핀 강조로 돌아감
+  // 마우스가 올라간 행과 키보드 포커스가 있는 행을 따로 기억 (핀이 있는 행사만, 없으면 '')
+  // 강조할 핀은 마우스 행이 먼저, 없으면 포커스 행. 둘 다 핀이 없을 때만 강조를 풂
+  const hovered = useRef('');
   const focused = useRef('');
+  const showHot = () => onHot(hovered.current || focused.current);
   return (
     <section
       className="panel es-list"
@@ -72,15 +75,21 @@ export default function EventList({
                   id={`es-row-${event.id}`}
                   className={`es-row${hotId === event.id ? ' is-hot' : ''}`}
                   onClick={() => onOpen(event.id)}
-                  onPointerEnter={() => onHot(pin ? event.id : '')}
-                  onPointerLeave={() => onHot(focused.current)}
+                  onPointerEnter={() => {
+                    hovered.current = pin ? event.id : '';
+                    showHot();
+                  }}
+                  onPointerLeave={() => {
+                    hovered.current = '';
+                    showHot();
+                  }}
                   onFocus={() => {
                     focused.current = pin ? event.id : '';
-                    onHot(focused.current);
+                    showHot();
                   }}
                   onBlur={() => {
                     focused.current = '';
-                    onHot('');
+                    showHot();
                   }}
                 >
                   {pinNumbers && (

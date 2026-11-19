@@ -186,3 +186,20 @@ test('작은 지도: 경로 범위를 구하고, 핀까지 들어오는 가로�
   const tiny = zoomBox({ x0: 5, y0: 5, x1: 6, y1: 6 }, 2);
   assert.equal(tiny.w, 60);
 });
+
+test('spreadMarkers: 같은 좌표에 핀이 옆자리 수(7)보다 많아도 모든 핀이 서로 겹치지 않는다', () => {
+  const spots = Array.from({ length: 12 }, (_, i) => ({ id: `p${i}`, x: 200, y: 200 }));
+  const out = spreadMarkers(spots, 26);
+  assert.equal(out.length, 12);
+  assert.equal(out[0].moved, false);
+  for (let i = 0; i < out.length; i++) {
+    assert.deepEqual([out[i].ox, out[i].oy], [200, 200], '원래 자리가 바뀜');
+    if (i) assert.equal(out[i].moved, true);
+    for (let j = 0; j < i; j++) {
+      const apart = Math.abs(out[i].x - out[j].x) >= 26 || Math.abs(out[i].y - out[j].y) >= 26;
+      assert.ok(apart, `${i}번째와 ${j}번째 핀이 겹침`);
+    }
+  }
+  // 여덟 번째 핀부터는 다른 줄로 올라감
+  assert.notEqual(out[7].y, 200);
+});

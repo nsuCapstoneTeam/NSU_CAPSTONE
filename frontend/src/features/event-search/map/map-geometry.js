@@ -94,17 +94,28 @@ export function placePins(items) {
   return result;
 }
 
-// 번호 핀끼리 겹치면 옆으로 비켜 세움 (원래 자리에는 점을 남김). 화면 px 기준
+// 번호 핀끼리 겹치면 비켜 세움 (원래 자리에는 점을 남김). 화면 px 기준
 // spots: [{ x, y, ... }] 앞에 있는 핀(목록 번호가 빠른 핀)이 먼저 자리를 차지함, size: 핀 지름
-// 결과: 같은 순서로 [{ ...spot, x: 비켜 선 자리, ox, oy: 원래 자리, moved }]
+// 같은 줄의 옆자리 7곳(가운데, 오른쪽, 왼쪽 순)을 먼저 보고, 모두 차면 한 줄 위, 한 줄 아래, 두 줄 위… 로 넓혀 감
+// 핀 수만큼만 자리를 차지하므로 언젠가 빈자리가 나와서 모든 핀이 서로 겹치지 않음
+// 결과: 같은 순서로 [{ ...spot, x, y: 비켜 선 자리, ox, oy: 원래 자리, moved }]
 export function spreadMarkers(spots, size = 26) {
   const placed = [];
-  const steps = [0, 1, -1, 2, -2, 3, -3].map((k) => k * (size + 2));
+  const step = size + 2;
+  const cols = [0, 1, -1, 2, -2, 3, -3];
   return spots.map((m) => {
-    const free = (dx) => !placed.some((p) => Math.abs(p.x - (m.x + dx)) < size && Math.abs(p.y - m.y) < size);
-    const dx = steps.find(free) ?? 0;
-    placed.push({ x: m.x + dx, y: m.y });
-    return { ...m, x: m.x + dx, ox: m.x, oy: m.y, moved: dx !== 0 };
+    const free = ([dx, dy]) =>
+      !placed.some((p) => Math.abs(p.x - (m.x + dx)) < size && Math.abs(p.y - (m.y + dy)) < size);
+    let spot;
+    for (let ring = 0; !spot; ring += 1) {
+      for (const row of ring ? [-ring, ring] : [0]) {
+        spot = cols.map((c) => [c * step, row * step]).find(free);
+        if (spot) break;
+      }
+    }
+    const [dx, dy] = spot;
+    placed.push({ x: m.x + dx, y: m.y + dy });
+    return { ...m, x: m.x + dx, y: m.y + dy, ox: m.x, oy: m.y, moved: dx !== 0 || dy !== 0 };
   });
 }
 
