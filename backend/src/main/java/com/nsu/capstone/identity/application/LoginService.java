@@ -49,15 +49,15 @@ public class LoginService {
             throw new BusinessException(ErrorCode.INVALID_LOGIN_CREDENTIALS);
         }
 
-        limits.loginSucceeded(reservation);
+        boolean redisAvailable = limits.loginSucceeded(reservation);
         LoginPrincipal principal = (LoginPrincipal) authentication.getPrincipal();
         return LoginResponse.of(
-                issueTokens(principal, reservation != null), principal.userId(), principal.role(), principal.status());
+                issueTokens(principal, redisAvailable), principal.userId(), principal.role(), principal.status());
     }
 
     /**
      * Redis를 쓸 수 없어도 로그인은 열어 둔다(signup-terms-and-send-limits §1.6 fail-open).
-     * 그때는 Refresh Token 없이 Access Token만 준다. 한도 검사에서 이미 장애를 봤으면 다시 기다리지 않는다.
+     * 그때는 Refresh Token 없이 Access Token만 준다. 한도 검사나 실패 슬롯 반납에서 이미 장애를 봤으면 다시 기다리지 않는다.
      */
     private IssuedTokens issueTokens(LoginPrincipal principal, boolean redisAvailable) {
         if (redisAvailable) {

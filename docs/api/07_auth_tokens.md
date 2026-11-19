@@ -27,7 +27,7 @@
 | 키 | `auth:refresh:{<digest>}`. `<digest>`는 Refresh Token 원문의 SHA-256 16진수(64자). `{}`는 다른 Auth 키(`auth:oauth:...:{digest}`)와 같은 hash tag 표기다 |
 | 값 | `<users.id>:<절대 만료>`. 절대 만료는 epoch milliseconds다. 예: `0199f278-cc35-7c24-9d82-0242ac120010:1795656000000` |
 | TTL | 절대 만료까지 남은 시간. 로그인 때는 `JWT_REFRESH_TOKEN_TTL`, 재발급 때는 그보다 짧다. 만료되면 Redis가 지운다 |
-| 발급 | `SET key value EX 또는 PX <남은 시간>`. 남은 시간이 초 단위로 딱 떨어지면(로그인) `EX`, 아니면(재발급) `PX`다(Spring Data Redis 4.1.1 `Expiration.from`). 만료 의미는 같다 |
+| 발급 | `SET key value EX 또는 PX <남은 시간>`. 남은 시간이 초 단위로 딱 떨어지면(로그인) `EX`, 아니면(재발급) `PX`다(Spring Data Redis 4.1.1 `Expiration.from`). 만료 의미는 같다. 남은 시간이 1ms 미만이면 `EX 0`이 되어 Redis가 거절하므로 저장하지 않고 `401 REFRESH_TOKEN_INVALID`로 거절한다(§4) |
 | 재발급 | `GETDEL key`로 꺼내면서 지운다. 같은 토큰으로 동시에 두 번 요청해도 하나만 성공한다 |
 | 로그아웃 | `DEL key` |
 
@@ -61,7 +61,7 @@
 
 `SIGNUP_REQUIRED` 응답에는 토큰 필드가 없다.
 
-Redis를 쓸 수 없을 때 로그인은 막지 않는다([signup-terms-and-send-limits §1.6](./signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때)의 fail-open). 그때 로그인 응답에는 `refreshToken`·`refreshTokenExpiresIn`이 없고 Access Token만 있다. 한도 검사에서 이미 Redis 장애를 봤으면 Refresh Token 저장을 시도하지 않아, 응답 시간이 Redis timeout 한 번 수준으로 유지된다. 클라이언트는 두 필드가 없을 수 있다고 보고, Access Token이 만료되면 다시 로그인하게 한다.
+Redis를 쓸 수 없을 때 로그인은 막지 않는다([signup-terms-and-send-limits §1.6](./signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때)의 fail-open). 그때 로그인 응답에는 `refreshToken`·`refreshTokenExpiresIn`이 없고 Access Token만 있다. 한도 검사나 로그인 성공 뒤 실패 슬롯 반납에서 이미 Redis 장애를 봤으면 Refresh Token 저장을 시도하지 않아, 응답 시간이 Redis timeout 한 번 수준으로 유지된다. 클라이언트는 두 필드가 없을 수 있다고 보고, Access Token이 만료되면 다시 로그인하게 한다.
 
 ## 4. 재발급
 

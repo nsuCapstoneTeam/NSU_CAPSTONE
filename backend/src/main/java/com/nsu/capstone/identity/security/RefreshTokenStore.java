@@ -57,8 +57,9 @@ public class RefreshTokenStore {
 
     private IssuedRefreshToken issue(UUID userId, Instant now, Instant expiresAt) {
         Duration remaining = Duration.between(now, expiresAt);
-        // 재발급 중 만료 시각을 넘긴 경우도 만료된 토큰과 같은 401이다(서비스의 확인과 이 시점 사이의 경계)
-        if (remaining.isZero() || remaining.isNegative()) {
+        // 재발급 중 만료 시각을 넘긴 경우도 만료된 토큰과 같은 401이다(서비스의 확인과 이 시점 사이의 경계).
+        // 1ms 미만은 Spring Data Redis가 EX 0으로 바꿔 Redis가 거절하므로 같이 거절한다
+        if (remaining.toMillis() <= 0) {
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_INVALID);
         }
         String token = opaqueValueService.generate();

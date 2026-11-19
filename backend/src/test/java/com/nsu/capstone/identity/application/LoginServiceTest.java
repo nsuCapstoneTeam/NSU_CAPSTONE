@@ -53,6 +53,7 @@ class LoginServiceTest {
         // 한도 검사가 Redis를 정상으로 본 경우. null이면 Redis 장애로 Access Token만 준다
         var limits = SignupTestTerms.limits();
         when(limits.login(any(), any())).thenReturn("failure-slot");
+        when(limits.loginSucceeded("failure-slot")).thenReturn(true);
         loginService = new LoginService(new ProviderManager(provider), tokenService, limits);
     }
 
@@ -93,6 +94,25 @@ class LoginServiceTest {
         assertEquals("access-token", response.accessToken());
         assertNull(response.refreshToken());
         assertNull(response.refreshTokenExpiresIn());
+        verify(tokenService, never()).issue(any(), any());
+    }
+
+    @Test
+    void issuesAccessTokenOnlyWithoutWaitingAgainWhenFailureSlotReleaseFailed() {
+        // 한도 검사 뒤 인증 중에 Redis가 멈춰 반납이 timeout난 경우. 저장에서 다시 기다리지 않는다
+        var limits = mock(com.nsu.capstone.identity.signup.RedisPublicRequestLimitStore.class);
+        var service = new LoginService(passwordManager(), tokenService, limits);
+        User user = user(UserRole.ARTIST, UserStatus.ACTIVE, passwordEncoder.encode(PASSWORD));
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(limits.login(EMAIL, "127.0.0.1")).thenReturn("failure-slot");
+        when(limits.loginSucceeded("failure-slot")).thenReturn(false);
+        when(tokenService.issueAccessOnly(USER_ID, UserRole.ARTIST))
+                .thenReturn(new IssuedTokens(new IssuedAccessToken("access-token", 1800), null));
+
+        LoginResponse response = service.login(EMAIL, PASSWORD, "127.0.0.1");
+
+        assertEquals("access-token", response.accessToken());
+        assertNull(response.refreshToken());
         verify(tokenService, never()).issue(any(), any());
     }
 
