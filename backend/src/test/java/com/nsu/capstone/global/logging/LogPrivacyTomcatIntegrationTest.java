@@ -26,6 +26,8 @@ import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.filter.OncePerRequestFilter;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * ADR logging/00 Decision 7: 실제 Tomcat에 잘못된 요청을 바이트 그대로 보내도 어떤 줄에도 가짜 값이 없다.
@@ -40,6 +42,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 class LogPrivacyTomcatIntegrationTest extends EventIntegrationTestBase {
 
     private static final String PARAMETER_PROBE = "/test/log-probe/parameter";
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /** 인증이 필요한 경로(anyRequest().authenticated())에 둔다. */
     static final String COMMIT_THEN_FAIL = "/api/v1/test-log-probe/commit-then-fail";
@@ -172,7 +176,9 @@ class LogPrivacyTomcatIntegrationTest extends EventIntegrationTestBase {
 
         // MVC가 @RequestHeader를 읽다가 방화벽이 거절한다. 계약 §8: 400 VALIDATION_ERROR, 본문은 정확히 {code, message}
         assertThat(response.status()).as("계약 §8의 상태").isEqualTo(400);
-        assertThat(response.raw()).contains("\"code\":\"VALIDATION_ERROR\"");
+        JsonNode error = JSON.readTree(response.body());
+        assertThat(error.propertyNames()).as("오류 본문의 필드").containsExactlyInAnyOrder("code", "message");
+        assertThat(error.get("code").asString()).isEqualTo("VALIDATION_ERROR");
         assertThat(capture.loggersContaining(Sentinel.EMAIL))
                 .as("가짜 값이 든 줄의 로거")
                 .isEmpty();
@@ -213,10 +219,23 @@ class LogPrivacyTomcatIntegrationTest extends EventIntegrationTestBase {
         assertThat(capture.loggersContaining(Sentinel.EMAIL))
                 .as("가짜 값이 든 줄의 로거")
                 .isEmpty();
-        assertThat(capture.lines())
-                .as("양성 대조: 필터가 예외를 ID와 함께 한 번 남겼다")
-                .anyMatch(
-                        line -> line.contains(RequestIdFilter.class.getName()) && line.contains("\"level\":\"ERROR\""));
+        // 양성 대조: 필터가 이 요청의 원래 예외를 응답의 X-Request-Id와 함께 정확히 한 번 남겼다.
+        // 커밋 뒤 /error 디스패치가 다시 필터를 지나며 같은 ID로 ERROR 줄을 더 남길 수 있으므로(ADR Decision 1·2), 컨트롤러가 던진 예외의 줄만 센다
+        String requestId = response.header("X-Request-Id");
+        assertThat(requestId).as("응답의 X-Request-Id").isNotBlank();
+        List<JsonNode> filterErrors = capture.lines().stream()
+                .filter(line -> line.contains(RequestIdFilter.class.getName()) && line.contains("\"level\":\"ERROR\""))
+                .map(JSON::readTree)
+                .toList();
+        assertThat(filterErrors)
+                .as("필터가 남긴 모든 ERROR 줄의 요청 ID")
+                .isNotEmpty()
+                .allSatisfy(json -> assertThat(json.get("requestId").asString()).isEqualTo(requestId));
+        assertThat(filterErrors.stream()
+                        .filter(json ->
+                                json.get("stack_trace").asString().contains(CommitThenFailController.class.getName())))
+                .as("컨트롤러가 던진 예외의 필터 ERROR 줄")
+                .hasSize(1);
     }
 
     /**
