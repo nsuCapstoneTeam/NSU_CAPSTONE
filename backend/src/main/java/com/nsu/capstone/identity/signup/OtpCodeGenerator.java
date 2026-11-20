@@ -4,7 +4,7 @@ import java.security.SecureRandom;
 import org.springframework.stereotype.Component;
 
 @Component
-class OtpCodeGenerator {
+public class OtpCodeGenerator {
 
     private final SecureRandom secureRandom;
     private final int length;

@@ -27,9 +27,27 @@ jobs:
       - name: Spotless 검사
         working-directory: backend
         run: ./gradlew spotlessCheck
-      - name: Lombok 스타일 검사
+      - name: 코드 스타일 검사(Lombok 스타일, 로그 안전 규칙)
         working-directory: backend
         run: ./gradlew test --tests 'com.nsu.capstone.global.codestyle.*'
+
+  # 로그에 개인정보가 새지 않고 요청 ID가 붙는지 PR마다 확인한다(ADR logging/00 Decision 9).
+  # 실제 Tomcat과 Testcontainers(PostgreSQL, Redis)를 쓰므로 Docker가 있는 ubuntu-latest에서 돈다.
+  backend-log-safety:
+    runs-on: ubuntu-latest
+    # 별도 JVM 테스트가 끝나지 않는 자식을 만나도 기본 제한(6시간)까지 붙잡히지 않게 한다.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: 로그 안전 테스트
+        working-directory: backend
+        # shortcut: global.logging 테스트만 돌린다. NSU-135가 전체 테스트를 CI에 올리면 그 job에 합친다.
+        run: ./gradlew test --tests 'com.nsu.capstone.global.logging.*'
 
   frontend-lint:
     runs-on: ubuntu-latest
