@@ -3,6 +3,7 @@ package com.nsu.capstone.verification.identity;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.classic.spi.ThrowableProxyUtil;
 import ch.qos.logback.core.read.ListAppender;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,8 +37,8 @@ final class LogCapture implements AutoCloseable {
                 }
             }
             if (event.getThrowableProxy() != null) {
-                all.append(event.getThrowableProxy().getClassName())
-                        .append(event.getThrowableProxy().getMessage())
+                // 원인 사슬의 클래스와 메시지, 스택 위치를 모두 담는다(최상위 예외 메시지만 보면 원인에 든 값을 놓친다).
+                all.append(ThrowableProxyUtil.asString(event.getThrowableProxy()))
                         .append('\n');
             }
             all.append(event.getMDCPropertyMap()).append('\n');
