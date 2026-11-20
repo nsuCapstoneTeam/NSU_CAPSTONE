@@ -27,12 +27,15 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.json.JsonMapper;
 
 /** ADR logging/00 Decision 7·8: 가짜 값을 넣고 배포 설정 인코더의 출력 바이트에 남는지 본다. */
 @Import(LogPrivacyIntegrationTest.LogProbeController.class)
 class LogPrivacyIntegrationTest extends EventIntegrationTestBase {
 
     private static final String PROBE = "/api/v1/test-log-probe";
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     @Autowired
     Environment environment;
@@ -93,9 +96,13 @@ class LogPrivacyIntegrationTest extends EventIntegrationTestBase {
             assertThat(capture.loggersContaining(Sentinel.EMAIL))
                     .as("가짜 이메일이 든 줄의 로거")
                     .isEmpty();
-            // 양성 대조: 오류 줄 자체가 사라져 테스트가 헛돌지 않게 한다
-            assertThat(capture.lines())
-                    .anyMatch(line -> line.contains("GlobalExceptionHandler") && line.contains("\"level\":\"ERROR\""));
+            // 양성 대조: 오류 줄 자체가 사라져 테스트가 헛돌지 않게 한다. 값이 든 본 메시지는 빠져도 PostgreSQL 예외 클래스는
+            // 메시지 없는 스택 트레이스로 남아야 진단이 가능하다
+            assertThat(capture.lines().stream()
+                            .filter(line ->
+                                    line.contains("GlobalExceptionHandler") && line.contains("\"level\":\"ERROR\""))
+                            .map(JSON::readTree))
+                    .anyMatch(json -> json.get("stack_trace").asString().contains("org.postgresql.util.PSQLException"));
         }
     }
 
@@ -138,6 +145,12 @@ class LogPrivacyIntegrationTest extends EventIntegrationTestBase {
             chain.add(current);
         }
         assertThat(thrown).as("역직렬화 실패는 예외로 알려야 한다").isNotNull();
+        // 양성 대조: 다른 이유로 실패한 예외가 아니라 읽기 실패를 알리는 예외인지 먼저 확인한다
+        assertThat(chain)
+                .as("읽기 실패를 알리는 예외")
+                .anyMatch(throwable -> throwable instanceof IllegalStateException
+                        && throwable.getMessage() != null
+                        && throwable.getMessage().startsWith("Failed to read OAuth authorization request:"));
         assertThat(chain)
                 .as("읽기 실패의 원인으로 붙은 Jackson 예외(메시지에 읽던 JSON 조각이 든다)")
                 .noneMatch(throwable -> throwable.getClass().getName().startsWith("tools.jackson"));
