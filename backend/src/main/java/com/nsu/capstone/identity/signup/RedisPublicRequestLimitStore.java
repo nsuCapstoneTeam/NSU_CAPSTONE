@@ -97,12 +97,15 @@ public class RedisPublicRequestLimitStore {
         }
     }
 
-    public void loginSucceeded(String reservation) {
-        if (reservation == null) return;
+    /** 실패 슬롯을 반납한다. Redis에 반납했으면 true, 예약이 없거나 Redis 장애로 반납하지 못했으면 false다. */
+    public boolean loginSucceeded(String reservation) {
+        if (reservation == null) return false;
         try {
             redis.execute(RELEASE, List.of(reservation));
+            return true;
         } catch (DataAccessException exception) {
             log.warn("로그인 성공 후 실패 슬롯을 반납하지 못했습니다.");
+            return false;
         }
     }
 

@@ -159,7 +159,7 @@ class OpenApiDocsIntegrationTest {
     }
 
     @Test
-    @DisplayName("공개 API(가입·로그인·OAuth)에는 인증 표시가 없고, 나머지는 기본 인증을 따른다")
+    @DisplayName("공개 API(가입·로그인·토큰 재발급·로그아웃·OAuth)에는 인증 표시가 없고, 나머지는 기본 인증을 따른다")
     void marksOnlyNonPublicApisAsAuthenticated() throws Exception {
         List<String> publicApis = new ArrayList<>();
         List<String> publicApisWithAuth = new ArrayList<>();
@@ -185,7 +185,7 @@ class OpenApiDocsIntegrationTest {
             }
         }
 
-        assertThat(publicApis).hasSize(19);
+        assertThat(publicApis).hasSize(21);
         assertThat(publicApisWithAuth).isEmpty();
         assertThat(otherApis).hasSize(20);
         assertThat(otherApisWithOverride).isEmpty();
@@ -209,7 +209,9 @@ class OpenApiDocsIntegrationTest {
     }
 
     private static String expectedTag(String path) {
-        if (path.startsWith("/api/v1/auth/login")) {
+        if (path.startsWith("/api/v1/auth/login")
+                || path.equals("/api/v1/auth/refresh")
+                || path.equals("/api/v1/auth/logout")) {
             return "로그인";
         }
         if (path.startsWith("/api/v1/auth/oauth/")) {
@@ -356,6 +358,36 @@ class OpenApiDocsIntegrationTest {
 
         assertThat(header.isMissingNode()).as("429 응답 헤더 %s", header).isFalse();
         assertThat(type(header.path("schema"))).isEqualTo("integer");
+    }
+
+    @ParameterizedTest(name = "{0} {1}")
+    @CsvSource(delimiter = '|', textBlock = """
+        post | /api/v1/auth/refresh | 200 | LoginResponse | 400=VALIDATION_ERROR,ProblemDetail;401=REFRESH_TOKEN_INVALID
+        post | /api/v1/auth/logout  | 204 | ''            | 400=VALIDATION_ERROR,ProblemDetail
+        """)
+    @DisplayName("토큰 재발급·로그아웃 API의 성공·오류 응답을 계약(07 §4·§5)대로 적는다")
+    void documentsTokenResponsesFromContract(String method, String path, String success, String schema, String errors)
+            throws Exception {
+        Map<String, List<String>> expected = new TreeMap<>();
+        for (String entry : errors.split(";")) {
+            String[] statusAndWords = entry.split("=");
+            expected.put(statusAndWords[0], List.of(statusAndWords[1].split(",")));
+        }
+        JsonNode responses = operation(method, path).path("responses");
+
+        assertThat(responses.propertyNames()).containsExactlyInAnyOrderElementsOf(concat(success, expected.keySet()));
+        assertThat(schemaName(responses.path(success))).isEqualTo(schema);
+        expected.forEach((status, words) -> {
+            JsonNode response = responses.path(status);
+            assertThat(response.path("description").asString("")).as(status).contains(words);
+            assertThat(schemaName(response)).as(status).isEqualTo("ErrorResponse");
+        });
+    }
+
+    private static List<String> concat(String first, Set<String> rest) {
+        List<String> all = new ArrayList<>(rest);
+        all.add(first);
+        return all;
     }
 
     @Test

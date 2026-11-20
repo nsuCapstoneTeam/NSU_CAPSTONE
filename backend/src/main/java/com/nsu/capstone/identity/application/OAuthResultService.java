@@ -11,8 +11,7 @@ import com.nsu.capstone.identity.oauth.OAuthSignupSession;
 import com.nsu.capstone.identity.oauth.OAuthSignupSessionStore;
 import com.nsu.capstone.identity.presentation.dto.OAuthResultResponse;
 import com.nsu.capstone.identity.repository.UserRepository;
-import com.nsu.capstone.identity.security.IssuedAccessToken;
-import com.nsu.capstone.identity.security.JwtAccessTokenService;
+import com.nsu.capstone.identity.security.AuthTokenIssuer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import org.springframework.stereotype.Service;
@@ -23,19 +22,19 @@ public class OAuthResultService {
     private final OAuthResultStore resultStore;
     private final OAuthSignupSessionStore signupSessionStore;
     private final UserRepository userRepository;
-    private final JwtAccessTokenService accessTokenService;
+    private final AuthTokenIssuer tokenIssuer;
     private final OAuthOpaqueValueService opaqueValueService;
 
     public OAuthResultService(
             OAuthResultStore resultStore,
             OAuthSignupSessionStore signupSessionStore,
             UserRepository userRepository,
-            JwtAccessTokenService accessTokenService,
+            AuthTokenIssuer tokenIssuer,
             OAuthOpaqueValueService opaqueValueService) {
         this.resultStore = resultStore;
         this.signupSessionStore = signupSessionStore;
         this.userRepository = userRepository;
-        this.accessTokenService = accessTokenService;
+        this.tokenIssuer = tokenIssuer;
         this.opaqueValueService = opaqueValueService;
     }
 
@@ -72,8 +71,7 @@ public class OAuthResultService {
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new BusinessException(ErrorCode.OAUTH_AUTHENTICATION_FAILED);
         }
-        IssuedAccessToken token = accessTokenService.issue(user.getId(), user.getRole());
-        return OAuthResultResponse.login(token, user);
+        return OAuthResultResponse.login(tokenIssuer.issue(user.getId(), user.getRole()), user);
     }
 
     private OAuthResultResponse signupRequired(OAuthResult result) {
