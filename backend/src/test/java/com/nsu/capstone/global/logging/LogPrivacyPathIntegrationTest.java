@@ -2,6 +2,7 @@ package com.nsu.capstone.global.logging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.event.EventIntegrationTestBase;
 import java.util.List;
@@ -34,7 +35,7 @@ class LogPrivacyPathIntegrationTest extends EventIntegrationTestBase {
 
     @Test
     void 토큰_없이_경로에_이메일을_넣은_401에서도_우리_로그에_이메일이_없다() throws Exception {
-        mockMvc.perform(get("/api/v1/events/" + Sentinel.EMAIL));
+        mockMvc.perform(get("/api/v1/events/" + Sentinel.EMAIL)).andExpect(status().isUnauthorized());
 
         assertNoSentinelInOurLines();
         assertCompletionLineUsesUnmatched();
@@ -56,6 +57,7 @@ class LogPrivacyPathIntegrationTest extends EventIntegrationTestBase {
         mockMvc.perform(get("/v3/api-docs/WEB-INF/" + Sentinel.EMAIL));
 
         assertNoSentinelInOurLines();
+        assertThat(capture.lines()).as("양성 대조: 완료 줄이 남아야 테스트가 헛돌지 않는다").anyMatch(line -> line.contains("요청 처리 완료"));
     }
 
     /** com.nsu.capstone 로거(완료 줄 포함)의 줄에는 주소 원문이 없어야 한다. */
