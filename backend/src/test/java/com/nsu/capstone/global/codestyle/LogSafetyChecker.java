@@ -265,9 +265,18 @@ final class LogSafetyChecker {
         @Override
         public Void visitVariable(VariableTree node, Void unused) {
             if (!scopes.isEmpty()) {
-                scopes.peek().put(node.getName().toString(), simpleTypeName(node.getType()));
+                scopes.peek().put(node.getName().toString(), declaredTypeOf(node));
             }
             return super.visitVariable(node, unused);
+        }
+
+        /** var로 선언했고 초기화가 생성식이면 생성하는 타입을 선언 타입으로 본다. */
+        private static String declaredTypeOf(VariableTree variable) {
+            String type = simpleTypeName(variable.getType());
+            if ((type.isEmpty() || type.equals("var")) && variable.getInitializer() instanceof NewClassTree creation) {
+                return simpleTypeName(creation.getIdentifier());
+            }
+            return type;
         }
 
         @Override

@@ -604,4 +604,21 @@ class LogSafetyCheckerTest {
                 .containsExactly("S4");
         assertThat(check("org.slf4j.MDC.put(\"eventId\", id);")).isEmpty();
     }
+
+    /** var로 선언해도 초기화가 생성식이면 그 타입을 기록해 S2b가 DTO를 알아본다(#39). */
+    @Test
+    void var로_선언한_DTO도_초기화_식의_타입으로_S2b_위반이다() {
+        assertThat(checkClassBody("""
+                        void run() {
+                            var request = new LoginRequest("a");
+                            log.warn("요청 {}", request);
+                        }
+                        """)).extracting("rule").containsExactly("S2b");
+        assertThat(checkClassBody("""
+                        void run() {
+                            var names = new ArrayList<String>();
+                            log.warn("이름 {}", names);
+                        }
+                        """)).isEmpty();
+    }
 }
