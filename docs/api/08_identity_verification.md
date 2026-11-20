@@ -317,7 +317,7 @@ Content-Type: application/json
 
 | 문서 | 바뀌는 곳 |
 |---|---|
-| [00 공통 규칙](./00_conventions.md) §10.1 | 태그 목록에 "실명 본인확인". 00은 지금 NSU-146이 고치고 있어, NSU-146 PR이 머지된 뒤 이 브랜치를 main에 맞추고 NSU-105 PR에서 한 줄 더한다 |
+| [00 공통 규칙](./00_conventions.md) §10.1 | 태그 목록에 "실명 본인확인". NSU-146 PR #231이 머지된 뒤 이 브랜치에 main을 합치고 NSU-105 PR에서 한 줄 더했다 |
 | [00 공통 규칙](./00_conventions.md) §6 | 고치지 않는다. `identityVerificationId`의 32자 표기는 이 문서 §1에 예외와 이유를 적었다 |
 | [가입 약관·발송 한도](./signup-terms-and-send-limits.md) §1.1·§3(PR #219 판) | "기본 환경은 2종, `demo` 프로필은 4종" 문장과 그 테스트 기준 두 행. 환경 값을 `app.environment`(`DEMO`만) 하나로 모으므로 모든 서버에서 4종이 필수다(ADR 01 "환경"). NSU-105 PR에서 고쳤다 |
 | `backend/README.md`(PR #219 판) | `SIGNUP_REQUIRED_TERMS` 설명과 `SPRING_PROFILES_ACTIVE=demo` 안내를 4종 필수로 고치고, 새 설정(`APP_ENVIRONMENT` 등) 설명을 더했다(NSU-105 PR) |
