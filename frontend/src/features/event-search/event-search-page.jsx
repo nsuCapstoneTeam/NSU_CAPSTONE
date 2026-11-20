@@ -1,49 +1,77 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import Icon from '../../components/common/icon.jsx';
 import PageHeading from '../../components/common/page-heading.jsx';
 import EventDetail from './components/event-detail.jsx';
 import EventList from './components/event-list.jsx';
 import EventPlacePanel from './components/event-place-panel.jsx';
-import RegionRank from './components/region-rank.jsx';
 import { DEMO_PUBLIC_EVENTS } from './event-search-data.js';
-import { eventsIn, provinceName, publicEvents, regionCounts } from './event-search.js';
+import {
+  countMap,
+  dateParts,
+  districtName,
+  eventsIn,
+  provinceName,
+  publicEvents,
+  venuePoint,
+} from './event-search.js';
+import { useMapData } from './map/map-loaders.js';
+import MapSource from './map/map-source.jsx';
+import RegionMap from './map/region-map.jsx';
+import { PROVINCES } from '../../data/regions.js';
 import './event-search.css';
 
-// 행사 찾기 (NSU-116, 아티스트용): 지역별 행사 수 → 행사 목록 → 장소 보기 → 행사 상세
-// Figma '행사 찾기 · 시안'의 '행사 위치 보기 → 상세' 흐름. 3D 지도는 경계 자료가 정해지면 2차에서 붙입니다.
+// 행사 찾기 (NSU-116, 아티스트용): 지역 지도 → 행사 목록 → 장소 보기 → 행사 상세
+// 지도(NSU-117): 전국 시·도 지도에서 시·도를 누르면 그 시·도의 시·군·구 지도와 목록으로 바뀌고,
+// 시·군·구를 누르면 목록이 그 시·군·구 행사만 남습니다. Figma '행사 찾기 · 시안'의 '3D 지도' 화면.
+// 시·도 지도에는 목록에 보이는 행사마다 번호 핀을 찍고, 목록 행과 핀이 함께 강조됩니다.
 // [체험판] 행사는 예시 데이터입니다. 서버 연결 뒤에는 공개 행사 목록 API로 바꿉니다.
 const EVENTS = publicEvents(DEMO_PUBLIC_EVENTS);
-const COUNTS = regionCounts(EVENTS);
+const NATION_COUNTS = countMap(EVENTS);
 // 목록은 처음 8건, '더 보기'를 누를 때마다 8건씩 더 보여 줌
 const PAGE = 8;
 
-// 목록 위쪽(지역별 행사·목록 칸)이 화면 위로 지나갔으면 그 위치로 올림
+// 지도·목록 칸 위쪽이 화면 위로 지나갔으면 그 위치로 올림
 function scrollToLayout() {
-  const layout = document.querySelector('.es-layout');
+  const layout = document.querySelector('.es-stage');
   if (!layout) return;
   const top = layout.getBoundingClientRect().top + window.scrollY - 16;
   if (window.scrollY > top) window.scrollTo({ top, behavior: 'instant' });
 }
 
-// 지역을 고른 뒤 목록 제목이 화면 밖(위로 지나갔거나 아래에 가려짐)이면 목록 위쪽이 보이게 옮김
-// 포커스는 preventScroll로 옮기므로, 화면 위치는 여기서만 맞춤 (화면 안이면 그대로)
-function revealList() {
-  const title = document.getElementById('es-list-title');
+// 지도 핀으로 장소를 열었을 때 장소 제목이 화면 밖(좁은 화면에서 지도 아래)이면 보이게 내림
+function revealPlace() {
+  const title = document.getElementById('es-place-title');
   if (!title) return;
-  const { top, bottom } = title.getBoundingClientRect();
-  if (top >= 0 && bottom <= window.innerHeight) return;
-  const list = title.closest('.es-list') ?? title;
-  window.scrollTo({ top: list.getBoundingClientRect().top + window.scrollY - 16, behavior: 'instant' });
+  const { top } = title.getBoundingClientRect();
+  if (top < 0 || top > window.innerHeight - 80) {
+    window.scrollTo({ top: top + window.scrollY - 16, behavior: 'instant' });
+  }
 }
 
+// 시·군·구를 고른 뒤 목록이 짧아져 목록 제목이 화면 위로 사라졌으면 지도·목록 칸 위쪽으로 올림 (NSU-116 리뷰)
+// 좁은 화면에서 제목이 지도 아래에 있을 때는 움직이지 않음 (지도의 핀과 강조로 결과를 바로 볼 수 있음)
+function revealList() {
+  const title = document.getElementById('es-list-title');
+  if (title && title.getBoundingClientRect().top < 0) scrollToLayout();
+}
+
+const shortName = (code) => PROVINCES.find((p) => p.code === code)?.short ?? '';
+
 export default function EventSearch({ notify }) {
-  // 고른 시·도 코드 ('' = 전체 지역)
+  // 고른 시·도 코드 ('' = 전국 지도)
   const [province, setProvince] = useState('');
+  // 고른 시·군·구 코드 ('' = 시·도 전체)
+  const [district, setDistrict] = useState('');
   // 장소를 보고 있는 행사 id (없으면 목록)
   const [placeId, setPlaceId] = useState(null);
   // 상세를 보고 있는지 (placeId 행사의 상세)
   const [showDetail, setShowDetail] = useState(false);
   // 목록에 보이는 행사 수
   const [visible, setVisible] = useState(PAGE);
+  // 목록 행이나 지도 핀에 마우스를 올린 행사 id (서로 함께 강조)
+  const [hot, setHot] = useState('');
+  // 화면 낭독기에 알릴 문구 (시·군·구를 고르거나 풀면 바뀐 행사 수)
+  const [announce, setAnnounce] = useState('');
   // 화면이 바뀐 뒤 포커스를 옮길 요소 id (그린 뒤 한 번 옮기고 비움)
   const focusId = useRef(null);
   // 장소·상세로 가기 전 스크롤 위치 (돌아오면 그 자리로)
@@ -59,17 +87,78 @@ export default function EventSearch({ notify }) {
     focusId.current = id;
   };
 
-  const list = eventsIn(EVENTS, province);
-  const title = province ? provinceName(province) : '전체 지역';
+  const list = eventsIn(EVENTS, province, district);
+  const title = district
+    ? `${shortName(province)} ${districtName(district)}`
+    : province
+      ? provinceName(province)
+      : '전체 지역';
   const current = placeId ? EVENTS.find((e) => e.id === placeId) : null;
+  // 시·도 지도 데이터 (지도가 쓰는 것과 같은 데이터, 한 번만 받음). 핀 번호를 지도에 실제로 찍히는 행사에만 붙이려고 씀
+  const { data: provinceMap } = useMapData(province || 'nation');
+  const onMap = (e) => Boolean(provinceMap?.pieces.some((p) => p.code === String(e.regionCode)));
+  // 시·도 지도의 번호 핀: 목록에 보이는 행사 중 지도에 핀을 찍을 수 있는 행사에 차례로 번호
+  // (좌표가 없거나 지도 밖 섬 지역이면 번호 없이 '지도 위치 없음'. 지도를 아직 못 받았으면 번호를 붙이지 않음)
+  const mapReady = Boolean(province && provinceMap);
+  const markers = mapReady
+    ? list
+        .slice(0, visible)
+        .filter((e) => venuePoint(e) && onMap(e))
+        .map((e, i) => {
+          const { day, when } = dateParts(e);
+          return {
+            id: e.id,
+            n: i + 1,
+            at: venuePoint(e),
+            code: String(e.regionCode),
+            title: e.name,
+            when: `${day} ${when}`,
+            venue: e.venue,
+          };
+        })
+    : [];
+  const pinNumbers = mapReady ? Object.fromEntries(markers.map((m) => [m.id, m.n])) : null;
 
-  function selectRegion(code) {
+  // 전국 지도·순위에서 시·도를 누름: 그 시·도 지도와 목록으로
+  function openProvince(code) {
+    setHot('');
     setProvince(code);
+    setDistrict('');
     setPlaceId(null);
     setVisible(PAGE);
     setFocusId('es-list-title');
-    // 목록이 짧아지면서 제목이 화면 위로 사라지거나, 좁은 화면에서 지역 목록 아래에 가려질 수 있음
+    requestAnimationFrame(scrollToLayout);
+  }
+
+  // 시·도 지도에서 시·군·구를 누름: 목록이 그 시·군·구 행사만. 한 번 더 누르면 풀림
+  function pickDistrict(code) {
+    const next = code === district ? '' : code;
+    const name = next ? districtName(next) : provinceName(province);
+    setHot('');
+    setDistrict(next);
+    // 포커스는 지도에 그대로 두고, 바뀐 결과는 화면 낭독기에 알림
+    setAnnounce(`${name} 행사 ${eventsIn(EVENTS, province, next).length}건을 보여 줘요.`);
+    setPlaceId(null);
+    setVisible(PAGE);
     requestAnimationFrame(revealList);
+  }
+
+  function backToNation() {
+    setHot('');
+    setAnnounce('');
+    setProvince('');
+    setDistrict('');
+    setPlaceId(null);
+    setVisible(PAGE);
+    setFocusId('es-map-title');
+  }
+
+  // 목록 칩의 ✕와 '전체 보기': 시·군·구를 골랐으면 시·도 전체로, 아니면 전국으로
+  function clearRegion() {
+    if (district) {
+      pickDistrict(district);
+      setFocusId('es-list-title');
+    } else backToNation();
   }
 
   // 더 보기: 새로 보인 첫 행으로 포커스
@@ -78,12 +167,26 @@ export default function EventSearch({ notify }) {
     setVisible(visible + PAGE);
   }
 
-  // 목록 행을 누르면 목록 자리에 장소. 목록 아래쪽에서 눌렀으면 장소 패널이 보이게 위로 올림
-  function openPlace(id) {
-    listScroll.current = window.scrollY;
+  // 목록 자리에 장소를 엶 (스크롤은 부르는 쪽에서)
+  function showPlace(id) {
+    // 장소를 보는 중에 다른 핀을 누르면 목록 스크롤 자리는 그대로 둠
+    if (!placeId) listScroll.current = window.scrollY;
+    setHot('');
     setPlaceId(id);
     setFocusId('es-place-title');
+  }
+
+  // 목록 행을 누름: 목록 아래쪽에서 눌렀으면 장소 패널이 보이게 지도·목록 칸 위쪽으로 올림
+  function openPlace(id) {
+    showPlace(id);
     requestAnimationFrame(scrollToLayout);
+  }
+
+  // 지도 핀을 누름: 지도 칸으로 올리지 않고, 장소 제목이 화면 밖일 때만 제목이 보이게 움직임
+  // (두 열 화면에서 제목이 이미 보이면 스크롤 그대로, 좁은 화면에서 지도 아래에 열리면 내림)
+  function openFromMap(id) {
+    showPlace(id);
+    requestAnimationFrame(() => requestAnimationFrame(revealPlace));
   }
 
   // 목록으로 돌아가면 누른 행과 스크롤 위치를 그대로
@@ -107,6 +210,18 @@ export default function EventSearch({ notify }) {
     requestAnimationFrame(() => window.scrollTo({ top: placeScroll.current, behavior: 'instant' }));
   }
 
+  // Esc: 한 단계 위로 (장소 → 목록, 시·군·구 → 시·도 전체, 시·도 → 전국)
+  const onEscape = useEffectEvent((e) => {
+    if (e.key !== 'Escape' || showDetail || e.defaultPrevented) return;
+    if (placeId) closePlace();
+    else if (district) clearRegion();
+    else if (province) backToNation();
+  });
+  useEffect(() => {
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, []);
+
   if (current && showDetail) {
     return (
       <div className="event-search">
@@ -119,39 +234,121 @@ export default function EventSearch({ notify }) {
     );
   }
 
+  const listArea = current ? (
+    <EventPlacePanel
+      event={current}
+      backLabel={`${title} 행사 ${list.length}건`}
+      onBack={closePlace}
+      onOpenDetail={openDetail}
+    />
+  ) : (
+    <EventList
+      title={title}
+      events={list.slice(0, visible)}
+      total={list.length}
+      onMore={showMore}
+      regionSelected={Boolean(province)}
+      clearLabel={district ? `${shortName(province)} 전체 보기` : '전체 지역 보기'}
+      onClearRegion={clearRegion}
+      onOpen={openPlace}
+      pinNumbers={pinNumbers}
+      hotId={hot}
+      onHot={setHot}
+    />
+  );
+
   return (
     <div className="event-search">
       <PageHeading
         eyebrow="FIND YOUR STAGE"
         title="행사 찾기"
-        description="공개된 행사를 지역별로 모아 보여 줘요. 지역을 고르고, 행사를 누르면 장소와 상세 내용을 볼 수 있어요."
+        description="공개된 행사를 지역별로 모아 보여 줘요. 지도에서 지역을 누르면 그 안으로 들어가고, 행사를 누르면 장소와 상세 내용을 볼 수 있어요."
       />
-      <div className="es-layout">
-        <RegionRank
-          counts={COUNTS}
-          total={EVENTS.length}
-          selected={province}
-          onSelect={selectRegion}
-        />
-        {current ? (
-          <EventPlacePanel
-            event={current}
-            backLabel={`${title} 행사 ${list.length}건`}
-            onBack={closePlace}
-            onOpenDetail={openDetail}
-          />
-        ) : (
-          <EventList
-            title={title}
-            events={list.slice(0, visible)}
-            total={list.length}
-            onMore={showMore}
-            regionSelected={Boolean(province)}
-            onClearRegion={() => selectRegion('')}
-            onOpen={openPlace}
-          />
-        )}
-      </div>
+      <p
+        className="es-sr-only"
+        aria-live="polite"
+      >
+        {announce}
+      </p>
+
+      {province ? (
+        <>
+          <div className="es-crumbs">
+            <button
+              type="button"
+              className="secondary es-crumbs-back"
+              onClick={backToNation}
+            >
+              <Icon
+                name="chevron-left"
+                size={16}
+              />
+              전국 보기
+            </button>
+            <nav aria-label="지금 보는 지역">
+              <ol>
+                <li>전국</li>
+                <li aria-current={district ? undefined : 'page'}>{provinceName(province)}</li>
+                {district && <li aria-current="page">{districtName(district)}</li>}
+              </ol>
+            </nav>
+            <small>Esc로 한 단계 돌아가요</small>
+          </div>
+          <div className="es-stage es-zoom">
+            <section
+              className="panel es-map-card"
+              aria-labelledby="es-map-title"
+            >
+              <div className="es-map-head">
+                <h2
+                  id="es-map-title"
+                  tabIndex={-1}
+                >
+                  {provinceName(province)}
+                </h2>
+                <p>시·군·구를 누르면 그 지역 행사만, 번호 핀을 누르면 그 행사 장소를 보여요</p>
+              </div>
+              <RegionMap
+                level={province}
+                counts={countMap(EVENTS, province)}
+                selected={district}
+                onSelect={pickDistrict}
+                markers={markers}
+                hotMarker={hot}
+                pickedMarker={placeId ?? ''}
+                onMarkerEnter={setHot}
+                onMarker={openFromMap}
+              />
+              <MapSource className="es-map-source" />
+            </section>
+            {listArea}
+          </div>
+        </>
+      ) : (
+        <div className="es-stage es-zoom">
+          <section
+            className="panel es-map-card is-nation"
+            aria-labelledby="es-map-title"
+          >
+            <div className="es-map-head">
+              <h2
+                id="es-map-title"
+                tabIndex={-1}
+              >
+                지역별 행사
+              </h2>
+              <p>공개 행사 {EVENTS.length}건</p>
+            </div>
+            <RegionMap
+              level="nation"
+              counts={NATION_COUNTS}
+              onSelect={openProvince}
+            />
+            <MapSource className="es-map-source" />
+          </section>
+          {listArea}
+        </div>
+      )}
       <p className="es-source">행사는 화면 확인용 예시예요. 행사 관계자가 공개로 등록한 행사가 여기에 보이게 될 거예요.</p>
     </div>
   );
