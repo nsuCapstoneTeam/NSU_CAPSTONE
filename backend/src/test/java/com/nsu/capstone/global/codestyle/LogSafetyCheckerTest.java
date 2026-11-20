@@ -501,4 +501,44 @@ class LogSafetyCheckerTest {
                 .containsExactly("S2");
         assertThat(check("this.cache.info(\"가입 {}\", email);")).isEmpty();
     }
+
+    /** 예외를 필드로 들고 있어도 this.x로 로그에 넣으면 같은 S6이다(#30). */
+    @Test
+    void this로_한정한_예외_필드도_S6_위반이다() {
+        assertThat(checkClassBody("""
+                        private final Exception failure = null;
+                        void run(String channel) { log.warn("실패 {} {}", this.failure, channel); }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        private final Exception failure = null;
+                        void run() { log.warn("실패: " + this.failure); }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        private final Exception failure = null;
+                        void run() { log.warn("실패 {}", String.valueOf(this.failure)); }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        private final Exception failure = null;
+                        void run() { log.warn("실패 {}", this.failure.getMessage()); }
+                        """)).extracting("rule").containsExactly("S6");
+    }
+
+    /** this.x는 같은 이름의 지역 변수가 아니라 클래스의 필드 선언을 가리킨다(#31). */
+    @Test
+    void this로_한정한_필드의_타입은_같은_이름의_지역_변수가_아니라_필드_선언에서_찾는다() {
+        assertThat(checkClassBody("""
+                        private final Exception failure = null;
+                        void run(String failure, String channel) { log.warn("실패 {} {}", this.failure, channel); }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        private final UserDto user = null;
+                        void run(String user) { log.warn("사용자 {}", this.user); }
+                        """)).extracting("rule").containsExactly("S2b");
+        assertThat(checkClassBody("""
+                        private final String failure = "x";
+                        void run(String channel) {
+                            try { work(); } catch (Exception failure) { log.warn("실패 {} {}", this.failure, channel); }
+                        }
+                        """)).isEmpty();
+    }
 }

@@ -199,6 +199,9 @@ final class LogSafetyChecker {
         /** 변수 이름 → 선언 타입의 단순 이름. 클래스, 메서드, 블록, 람다마다 한 겹이다. */
         private final Deque<Map<String, String>> scopes = new ArrayDeque<>();
 
+        /** 클래스마다 필드 이름 → 선언 타입. this.x의 타입은 같은 이름의 지역 변수가 아니라 여기서 찾는다. */
+        private final Deque<Map<String, String>> classFields = new ArrayDeque<>();
+
         /** 이 파일에서 선언한 record 이름. 다른 파일의 record는 접미사로 추정한다. */
         private final Set<String> localRecords = new HashSet<>();
 
@@ -239,9 +242,11 @@ final class LogSafetyChecker {
                 }
             }
             scopes.push(fields);
+            classFields.push(fields);
             try {
                 return super.visitClass(node, unused);
             } finally {
+                classFields.pop();
                 scopes.pop();
             }
         }
@@ -271,12 +276,9 @@ final class LogSafetyChecker {
                 arguments.forEach(argument -> checkArgument(argument));
                 // S6: SLF4J는 마지막 인자만 Throwable로 다룬다. 그 앞 자리의 예외는 toString()(메시지 포함)이 문장에 들어간다
                 for (int i = 0; i < arguments.size() - 1; i++) {
-                    if (arguments.get(i) instanceof IdentifierTree identifier
-                            && isExceptionVariable(identifier.getName().toString())) {
-                        report(
-                                identifier,
-                                "S6",
-                                "예외 '" + identifier.getName() + "'는 로그 호출의 마지막 인자로 넘긴다. 앞 자리에 두면 메시지가 문장에 들어간다");
+                    ExpressionTree argument = arguments.get(i);
+                    if (isExceptionOperand(argument)) {
+                        report(argument, "S6", "예외 '" + argument + "'는 로그 호출의 마지막 인자로 넘긴다. 앞 자리에 두면 메시지가 문장에 들어간다");
                     }
                 }
             }
@@ -478,12 +480,8 @@ final class LogSafetyChecker {
                 public Void visitBinary(BinaryTree node, Void unused) {
                     if (node.getKind() == Tree.Kind.PLUS) {
                         for (ExpressionTree operand : List.of(node.getLeftOperand(), node.getRightOperand())) {
-                            if (operand instanceof IdentifierTree identifier
-                                    && isExceptionVariable(identifier.getName().toString())) {
-                                report(
-                                        node,
-                                        "S6",
-                                        "예외 '" + identifier.getName() + "'를 문자열에 이어 붙이지 않는다. 예외를 마지막 인자로 통째로 넘긴다");
+                            if (isExceptionOperand(operand)) {
+                                report(node, "S6", "예외 '" + operand + "'를 문자열에 이어 붙이지 않는다. 예외를 마지막 인자로 통째로 넘긴다");
                             }
                         }
                     }
@@ -537,35 +535,45 @@ final class LogSafetyChecker {
                 return;
             }
             for (ExpressionTree argument : node.getArguments()) {
-                if (argument instanceof IdentifierTree identifier
-                        && isExceptionVariable(identifier.getName().toString())) {
-                    report(
-                            node,
-                            "S6",
-                            "예외 '" + identifier.getName() + "'를 " + method + "()에 넘기지 않는다. 예외를 마지막 인자로 통째로 넘긴다");
+                if (isExceptionOperand(argument)) {
+                    report(node, "S6", "예외 '" + argument + "'를 " + method + "()에 넘기지 않는다. 예외를 마지막 인자로 통째로 넘긴다");
                 }
             }
         }
 
-        /** 호출·필드 접근 체인의 시작 변수가 예외로 보이는지. */
+        /** 호출·필드 접근 체인의 시작 변수(또는 this.필드)가 예외로 보이는지. */
         private boolean isExceptionExpression(ExpressionTree expression) {
             ExpressionTree current = expression;
             while (true) {
                 if (current instanceof MethodInvocationTree invocation
                         && invocation.getMethodSelect() instanceof MemberSelectTree inner) {
                     current = inner.getExpression();
-                } else if (current instanceof MemberSelectTree member) {
+                } else if (current instanceof MemberSelectTree member && !isThis(member.getExpression())) {
                     current = member.getExpression();
                 } else {
                     break;
                 }
             }
-            return current instanceof IdentifierTree identifier
-                    && isExceptionVariable(identifier.getName().toString());
+            return isExceptionOperand(current);
+        }
+
+        /** 변수 하나(x) 또는 this.필드(this.x)가 예외로 보이는지. */
+        private boolean isExceptionOperand(ExpressionTree expression) {
+            if (expression instanceof IdentifierTree identifier) {
+                return isExceptionVariable(identifier.getName().toString());
+            }
+            return expression instanceof MemberSelectTree select
+                    && isThis(select.getExpression())
+                    && isExceptionNamed(
+                            fieldType(select.getIdentifier().toString()),
+                            select.getIdentifier().toString());
         }
 
         private boolean isExceptionVariable(String name) {
-            String type = declaredType(name);
+            return isExceptionNamed(declaredType(name), name);
+        }
+
+        private static boolean isExceptionNamed(String type, String name) {
             if (type != null && (type.endsWith("Exception") || type.endsWith("Error") || type.equals("Throwable"))) {
                 return true;
             }
@@ -583,7 +591,7 @@ final class LogSafetyChecker {
                     && select.getExpression() instanceof IdentifierTree owner
                     && owner.getName().contentEquals("this")) {
                 shown = "this." + select.getIdentifier();
-                typeName = declaredType(select.getIdentifier().toString());
+                typeName = fieldType(select.getIdentifier().toString());
             } else if (argument instanceof NewClassTree creation) {
                 typeName = simpleTypeName(creation.getIdentifier());
                 shown = "new " + typeName + "(...)";
@@ -601,6 +609,10 @@ final class LogSafetyChecker {
                 }
             }
             return null;
+        }
+
+        private String fieldType(String fieldName) {
+            return classFields.isEmpty() ? null : classFields.peek().get(fieldName);
         }
 
         private boolean isDtoType(String typeName) {
