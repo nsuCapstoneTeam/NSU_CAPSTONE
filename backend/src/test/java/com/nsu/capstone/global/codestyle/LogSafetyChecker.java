@@ -123,6 +123,7 @@ final class LogSafetyChecker {
             Map.entry("handleAsync", 1),
             Map.entry("exceptionallyAsync", 1),
             Map.entry("exceptionallyComposeAsync", 1),
+            Map.entry("completeAsync", 1),
             Map.entry("thenCombineAsync", 2),
             Map.entry("thenAcceptBothAsync", 2),
             Map.entry("runAfterBothAsync", 2),
@@ -319,9 +320,10 @@ final class LogSafetyChecker {
                 return;
             }
             if (node.getMethodSelect() instanceof IdentifierTree bare) {
-                // 정적 import로 소유자 없이 부른 Executors 팩토리
-                if (EXECUTOR_FACTORY_METHODS.contains(bare.getName().toString())) {
-                    report(node, "S5", bare.getName() + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
+                // 정적 import로 소유자 없이 부른 Executors 팩토리와 Thread 정적 메서드
+                String name = bare.getName().toString();
+                if (EXECUTOR_FACTORY_METHODS.contains(name) || THREAD_HANDOFF_METHODS.contains(name)) {
+                    report(node, "S5", name + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
                 }
                 return;
             }

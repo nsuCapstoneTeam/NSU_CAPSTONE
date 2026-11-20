@@ -557,4 +557,19 @@ class LogSafetyCheckerTest {
                         void run(String channel) { var e = lookup(); log.warn("값 {} {}", e, channel); }
                         """)).extracting("rule").containsExactly("S6");
     }
+
+    /** Thread의 정적 메서드도 정적 import로 소유자 없이 부를 수 있다(#33). */
+    @Test
+    void 정적_import로_부른_스레드_넘김_메서드도_S5_위반이다() {
+        assertThat(check("startVirtualThread(task);")).extracting("rule").containsExactly("S5");
+        assertThat(check("var builder = ofVirtual();")).extracting("rule").containsExactly("S5");
+        assertThat(check("var builder = ofPlatform();")).extracting("rule").containsExactly("S5");
+    }
+
+    /** completeAsync(공급자)는 실행기 없이 부르면 공용 풀로 넘어간다. 실행기를 함께 넘기면 통과한다(#35). */
+    @Test
+    void 실행기_없는_completeAsync는_S5_위반이고_실행기를_넘기면_통과한다() {
+        assertThat(check("future.completeAsync(() -> 1);")).extracting("rule").containsExactly("S5");
+        assertThat(check("future.completeAsync(() -> 1, executor);")).isEmpty();
+    }
 }
