@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -117,7 +116,7 @@ class LogPrivacyAuthIntegrationTest {
             int status = login(address, WRONG_PASSWORD);
 
             assertThat(status).as("없는 계정의 로그인 응답").isEqualTo(401);
-            assertCompleted(capture, "/api/v1/auth/login", 401);
+            assertCompleted(capture, "/api/v1/auth/login", 401, 1);
             assertNoneContain(capture, "이메일", address);
             assertNoneContain(capture, "비밀번호", WRONG_PASSWORD);
         }
@@ -134,7 +133,7 @@ class LogPrivacyAuthIntegrationTest {
             int status = login(address, WRONG_PASSWORD);
 
             assertThat(status).as("틀린 비밀번호의 로그인 응답").isEqualTo(401);
-            assertCompleted(capture, "/api/v1/auth/login", 401);
+            assertCompleted(capture, "/api/v1/auth/login", 401, 1);
             assertNoneContain(capture, "이메일", address);
             assertNoneContain(capture, "틀린 비밀번호", WRONG_PASSWORD);
             assertNoneContain(capture, "계정의 실제 비밀번호", PASSWORD);
@@ -154,7 +153,8 @@ class LogPrivacyAuthIntegrationTest {
 
             assertThat(invalid).as("형식이 틀린 이메일 응답").isEqualTo(400);
             assertThat(broken).as("깨진 JSON 응답").isEqualTo(400);
-            assertCompleted(capture, "/api/v1/auth/login", 400);
+            // 두 요청이 같은 경로에서 같은 상태를 내므로 줄 하나만 있어도 통과하지 않게 요청 수만큼 센다
+            assertCompleted(capture, "/api/v1/auth/login", 400, 2);
             assertNoneContain(capture, "형식이 틀린 이메일", badAddress);
             assertNoneContain(capture, "깨진 JSON 안의 값", brokenValue);
             assertNoneContain(capture, "비밀번호", WRONG_PASSWORD);
@@ -177,14 +177,14 @@ class LogPrivacyAuthIntegrationTest {
 
             assertThat(wrong).as("틀린 코드 확인 응답").isGreaterThanOrEqualTo(400).isLessThan(500);
             assertThat(right).as("맞는 코드 확인 응답").isEqualTo(204);
-            assertCompleted(capture, "email-verification/confirm", wrong);
+            // 2xx 완료 줄은 DEBUG라 하한 아래로 남지 않는다. 틀린 코드(4xx)의 INFO 완료 줄만 한 번 남는다
+            assertCompleted(capture, "email-verification/confirm", wrong, 1);
             assertNoneContain(capture, "가입 이메일", address);
-            assertNoneContain(capture, "틀린 코드", WRONG_CODE);
-            Pattern code = Pattern.compile("(?<!\\d)" + CODE + "(?!\\d)");
-            assertThat(capture.lines().stream()
-                            .filter(line -> code.matcher(line).find()))
-                    .as("맞는 인증 코드가 든 줄")
+            // 틀린 코드와 맞는 코드 모두 요청 ID에 이어진 숫자를 세지 않는 같은 도우미로 찾는다
+            assertThat(capture.linesContainingNumber(WRONG_CODE))
+                    .as("틀린 코드가 든 줄")
                     .isEmpty();
+            assertThat(capture.linesContainingNumber(CODE)).as("맞는 인증 코드가 든 줄").isEmpty();
         }
     }
 
@@ -219,12 +219,14 @@ class LogPrivacyAuthIntegrationTest {
         return mvc.perform(request).andReturn().getResponse().getStatus();
     }
 
-    /** 양성 대조: 이 요청의 완료 줄이 남았다. 캡처가 헛돌지 않는다. */
-    private static void assertCompleted(LogCapture capture, String route, int status) {
-        assertThat(capture.lines())
-                .as("요청 완료 줄")
-                .anyMatch(line ->
-                        line.contains("요청 처리 완료: POST") && line.contains(route) && line.contains("-> " + status));
+    /** 양성 대조: 이 경로와 상태의 완료 줄이 요청 수만큼 남았다. 캡처가 헛돌지 않는다. */
+    private static void assertCompleted(LogCapture capture, String route, int status, int count) {
+        assertThat(capture.lines().stream()
+                        .filter(line -> line.contains("요청 처리 완료: POST")
+                                && line.contains(route)
+                                && line.contains("-> " + status)))
+                .as("%s %d 요청 완료 줄", route, status)
+                .hasSize(count);
     }
 
     /** 실패 메시지에 값 자체를 싣지 않으려고 종류(kind)만 알려 준다. */
