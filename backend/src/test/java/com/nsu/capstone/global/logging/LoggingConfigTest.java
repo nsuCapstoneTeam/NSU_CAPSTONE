@@ -3,10 +3,12 @@ package com.nsu.capstone.global.logging;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.regex.Pattern;
+import java.util.Locale;
+import java.util.Properties;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -97,24 +99,70 @@ class LoggingConfigTest {
 
     @Test
     void 커밋한_설정에_요청_본문과_헤더를_찍는_설정이_없다() throws IOException {
-        List<Pattern> forbidden = List.of(
-                Pattern.compile("(?i)^logging\\.level\\..*=\\s*(DEBUG|TRACE)\\s*$"),
-                Pattern.compile("(?i)^(debug|trace)\\s*=\\s*true\\s*$"),
-                Pattern.compile("(?i)accesslog\\.enabled\\s*=\\s*true"),
-                Pattern.compile("(?i)log-request-details\\s*=\\s*true"));
-
         try (Stream<Path> files = Files.walk(RESOURCES)) {
             List<Path> properties = files.filter(path -> path.toString().endsWith(".properties"))
                     .toList();
             assertThat(properties).isNotEmpty();
             for (Path file : properties) {
-                for (String line : Files.readAllLines(file)) {
-                    String setting = line.strip();
-                    assertThat(forbidden)
-                            .as("%s: %s", file, setting)
-                            .noneMatch(pattern -> pattern.matcher(setting).find());
-                }
+                assertThat(forbiddenSettings(Files.readString(file)))
+                        .as("%s의 금지된 설정", file)
+                        .isEmpty();
             }
         }
+    }
+
+    /** Properties가 읽는 모든 표기(`:`·공백 구분, 줄 이음, 앞뒤 공백)에서 금지된 설정을 찾는다. 줄 단위 정규식은 이 표기들을 놓친다. */
+    static List<String> forbiddenSettings(String propertiesText) throws IOException {
+        Properties properties = new Properties();
+        properties.load(new StringReader(propertiesText));
+        return properties.stringPropertyNames().stream()
+                .filter(key -> isForbidden(key.strip().toLowerCase(Locale.ROOT), properties.getProperty(key)))
+                .map(key -> key.strip() + "=" + properties.getProperty(key).strip())
+                .sorted()
+                .toList();
+    }
+
+    private static boolean isForbidden(String key, String value) {
+        String setting = value.strip().toLowerCase(Locale.ROOT);
+        boolean verboseLevel = key.startsWith("logging.level.") && (setting.equals("debug") || setting.equals("trace"));
+        boolean debugSwitch = (key.equals("debug") || key.equals("trace")) && setting.equals("true");
+        boolean requestLogging =
+                (key.contains("accesslog.enabled") || key.contains("log-request-details")) && setting.equals("true");
+        return verboseLevel || debugSwitch || requestLogging;
+    }
+
+    @Test
+    void 금지된_설정은_구분자와_줄_이음과_공백이_달라도_찾는다() throws IOException {
+        String text = """
+                logging.level.root : DEBUG
+                logging.level.org.hibernate.SQL=\\
+                    TRACE
+                trace true
+                   server.tomcat.accesslog.enabled  =  true
+                spring.mvc.log-request-details=true
+                debug=true
+                """;
+
+        assertThat(forbiddenSettings(text))
+                .containsExactlyInAnyOrder(
+                        "logging.level.root=DEBUG",
+                        "logging.level.org.hibernate.SQL=TRACE",
+                        "trace=true",
+                        "server.tomcat.accesslog.enabled=true",
+                        "spring.mvc.log-request-details=true",
+                        "debug=true");
+    }
+
+    @Test
+    void 주석과_허용된_값은_금지된_설정이_아니다() throws IOException {
+        String text = """
+                # logging.level.root=DEBUG
+                logging.level.org.apache.tomcat.util.http=WARN
+                logging.level.com.nsu.capstone=INFO
+                debug=false
+                server.tomcat.accesslog.enabled=false
+                """;
+
+        assertThat(forbiddenSettings(text)).isEmpty();
     }
 }
