@@ -10,6 +10,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.data.redis.connection.DataType;
@@ -24,6 +26,8 @@ import org.springframework.test.web.servlet.MvcResult;
 class IdentityVerificationPrivacyApiIntegrationTest extends IdentityVerificationHttpTestBase {
 
     private static final String MARKER = "PII-MARKER-api-5b7e1f";
+    private static final String CAPTURE_CHECK_MESSAGE = "본인확인 캡처 확인";
+    private static final Logger LOG = LoggerFactory.getLogger(IdentityVerificationPrivacyApiIntegrationTest.class);
     private static final FakePortOneServer PORTONE = startPortOne();
 
     @Autowired
@@ -81,6 +85,7 @@ class IdentityVerificationPrivacyApiIntegrationTest extends IdentityVerification
         try (LogCapture logs = new LogCapture();
                 com.nsu.capstone.global.logging.LogCapture deployed =
                         com.nsu.capstone.global.logging.LogCapture.start(environment)) {
+            LOG.info("{} {}", CAPTURE_CHECK_MESSAGE, id);
             result = complete(artist, id).andReturn();
             logged = logs.everything();
             deployedLines = List.copyOf(deployed.lines());
@@ -95,6 +100,8 @@ class IdentityVerificationPrivacyApiIntegrationTest extends IdentityVerification
         assertThat(logged).doesNotContain(MARKER);
         // NSU-146 방식: 배포 설정 인코더가 만든 출력 바이트(한 줄 JSON)에도 가짜 실명·생년월일·CI·DI가 없다
         assertThat(deployedLines).noneMatch(line -> line.contains(MARKER));
+        // 양성 대조: 캡처가 비어 있으면 위 noneMatch가 헛돈다. 시험이 직접 남긴 줄이 인코더 출력에 있어야 한다
+        assertThat(deployedLines).anyMatch(line -> line.contains(CAPTURE_CHECK_MESSAGE) && line.contains(id));
         assertThat(tableText("identity_verifications")).doesNotContain(MARKER);
         assertThat(tableText("identity_verification_attempts")).doesNotContain(MARKER);
         assertThat(redisText()).doesNotContain(MARKER);
