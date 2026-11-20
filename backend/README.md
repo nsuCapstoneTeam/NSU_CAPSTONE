@@ -106,7 +106,7 @@ IDENTITY_NAME_ENCRYPTION_KEY=
 `POSTGRES_PASSWORD`에는 팀원별로 사용할 로컬 비밀번호를 직접 입력한다.
 `SIGNUP_VERIFICATION_HMAC_SECRET`에는 충분히 긴 임의의 비밀값을 입력하고 저장소에 커밋하지 않는다.
 `APP_ENVIRONMENT`는 서버 환경을 정하는 값이고 `DEMO`만 쓸 수 있다. 기본값이 없어 비었거나 다른 값이면 기동에 실패한다(실패 출력에 그 값을 적지 않는다).
-`SIGNUP_REQUIRED_TERMS`는 `약관ID:버전`을 쉼표로 구분해 입력한다. 로컬을 포함한 모든 서버에서 `service`·`privacy`·`demo-notice`·`overseas-transfer` 4종이 필수다(예시: `service:v1,privacy:v1,demo-notice:v1,overseas-transfer:v1`). 필수 ID가 빠지거나 중복·알 수 없는 ID가 있으면 기동에 실패한다. 버전 기본값은 없으며, 예시 버전 대신 실제 배포할 약관 버전을 넣고 화면과 맞춘다. 예전의 `SPRING_PROFILES_ACTIVE=demo` 안내는 없어졌다. 환경은 `APP_ENVIRONMENT` 하나로 정한다.
+`SIGNUP_REQUIRED_TERMS`는 `약관ID:버전`을 쉼표로 구분해 입력한다. 로컬을 포함한 모든 서버에서 `service`·`privacy`·`demo-notice`·`overseas-transfer` 4종이 필수다(예시: `service:v1,privacy:v1,demo-notice:v1,overseas-transfer:v1`). 필수 ID가 빠지거나 중복·알 수 없는 ID가 있으면 기동에 실패한다. 버전 기본값은 없으며, 예시 버전 대신 실제 배포할 약관 버전을 넣고 화면과 맞춘다. 예전의 `SPRING_PROFILES_ACTIVE=demo` 안내는 없어졌다. 환경은 `APP_ENVIRONMENT` 하나로 정한다. 다만 시연 서버 배포 설정에는 `SPRING_PROFILES_ACTIVE=demo`를 계속 둔다. NSU-105 이전 버전으로 앱만 되돌릴 때 그 버전은 이 프로필이 있어야 약관 4종 설정으로 뜬다. 지금 버전은 이 프로필을 읽지 않는다.
 
 세 가입 세션 생성 API는 `agreements`를 필수로 받고 약관 PUT은 제공하지 않는다. 인증 코드 발송 전에도 동의 기록을 확인하며, 최종 가입은 회원과 가입 시 동의 기록을 한 트랜잭션으로 저장한다. 이메일은 앞뒤 공백 제거·소문자화하고 전화번호는 숫자 정규형만 받는다. 상세 계약은 [가입 약관·한도](../docs/api/signup-terms-and-send-limits.md)를 따른다.
 
@@ -175,7 +175,7 @@ ARTIST가 마이페이지에서 받는 실명 본인확인(PortOne V2 + NHN KCP 
 | `PORTONE_API_SECRET` | PortOne V2 API Secret. 서버가 결과를 다시 조회할 때만 쓰고 응답·로그에 내보내지 않는다 |
 | `PORTONE_STORE_ID` | PortOne 상점 ID. 시도 시작 응답으로 브라우저에 공개되는 값이다 |
 | `PORTONE_CHANNEL_KEY` | 본인인증 채널 키. 시도 시작 응답으로 공개되는 값이고, PortOne 응답의 채널과 대조한다 |
-| `PORTONE_TEST_CHANNEL_PG_PROVIDER`, `PORTONE_TEST_CHANNEL_PG_MERCHANT_ID` | PortOne 응답의 `pgProvider`·`pgMerchantId`와 대조하는 테스트 채널 값. 다르면 그 시도는 `REJECTED`가 된다 |
+| `PORTONE_TEST_CHANNEL_PG_PROVIDER`, `PORTONE_TEST_CHANNEL_PG_MERCHANT_ID` | PortOne 응답의 `pgProvider`·`pgMerchantId`와 대조하는 테스트 채널 값. 대소문자까지 같아야 하고, 다르면 성공한 인증도 그 시도는 `REJECTED`가 된다. `pgProvider`는 콘솔 화면의 표시 이름이 아니라 PortOne API의 PG사 값(대문자 enum, 예: `KCP_V2`)이다. 처음 설정할 때는 실제 KCP 테스트 창으로 한 번 본인확인해 응답 값과 맞는지 확인한다 |
 | `IDENTITY_NAME_ENCRYPTION_KEY` | Mock 본인확인의 이름을 암호화하는 AES-256-GCM 키. 무작위 32바이트의 Base64다 |
 
 - 위 값이 비었거나, 환경 변수가 정해지지 않아 `${...}` 자리표시자 그대로이거나, 허용 값이 아니거나(제공자·환경), 이름 키가 Base64 32바이트가 아니면 앱이 뜨지 않는다. 실패 출력에는 속성 이름만 있고 그 값은 없다.
@@ -190,11 +190,15 @@ Mock 본인확인은 HTTP로 만들 수 없다. 시연 서버 안에서 시드 j
 ```bash
 ./gradlew seedJar
 # build/libs/nsu-capstone-0.0.1-SNAPSHOT-seed.jar (서버 jar와 같은 빌드에서 나온다)
-SEED_IDENTITY_EMAIL=<ARTIST 이메일> SEED_IDENTITY_NAME=<이름> java -jar build/libs/nsu-capstone-0.0.1-SNAPSHOT-seed.jar
+read -rs -p '이메일: ' SEED_IDENTITY_EMAIL; echo; read -rs -p '이름: ' SEED_IDENTITY_NAME; echo
+export SEED_IDENTITY_EMAIL SEED_IDENTITY_NAME
+java -jar build/libs/nsu-capstone-0.0.1-SNAPSHOT-seed.jar
+unset SEED_IDENTITY_EMAIL SEED_IDENTITY_NAME
 ```
 
-- 서버와 같은 환경 변수(DB 접속 정보, 위 표의 값)를 주고 실행한다. 이메일과 이름은 프로세스 목록에 남지 않도록 인수가 아니라 환경 변수로만 받는다. 실제 이름을 셸 기록이나 채팅에 붙이지 않는다.
-- Flyway를 끄고 HTTP 포트를 열지 않는다(`server.port=-1`). 둘 다 명령행 인수로 고정해서 `SERVER_PORT` 같은 환경 변수나 설정 파일이 있어도 바뀌지 않는다. 스키마는 같은 버전의 서버가 이미 올려 둔 DB여야 한다.
+- 서버와 같은 환경 변수(DB 접속 정보, 위 표의 값)를 주고 실행한다. 이메일과 이름은 프로세스 목록에 남지 않도록 인수가 아니라 환경 변수로만 받는다.
+- 실제 이름은 명령줄에 값으로 적지 않는다(셸 기록에 평문으로 남는다). 위처럼 `read -rs`로 읽는다. 컨테이너로 돌리면 `docker run --rm -e SEED_IDENTITY_EMAIL -e SEED_IDENTITY_NAME …`처럼 변수 이름만 넘겨 컨테이너 설정에 값이 남지 않게 하고, 끝나면 컨테이너가 지워지게 한다.
+- Flyway를 끄고 HTTP 포트와 actuator 관리 포트를 열지 않는다(`server.port=-1`, `management.server.port=-1`). 모두 명령행 인수로 고정해서 `SERVER_PORT`·`MANAGEMENT_SERVER_PORT` 같은 환경 변수나 설정 파일이 있어도 바뀌지 않는다. 스키마는 같은 버전의 서버가 이미 올려 둔 DB여야 한다.
 - 기록은 HTTP와 같은 시작→완료 서비스 경로를 Mock 제공자로 지나 만든다. 이름은 암호화해 `MOCK` 기록에만 저장한다.
 - 종료 코드: `0` 성공, `2` 환경 변수 `SEED_IDENTITY_EMAIL`·`SEED_IDENTITY_NAME`이 없거나 이름 형식이 틀림, `3` 대상 ARTIST를 찾을 수 없거나 기록을 만들지 못함(이미 본인확인을 마친 계정, 요청 제한 등), `4` HTTP 포트가 열려 있어 중단.
 - 이름의 주인인 팀원에게 "실명을 암호화해 시연 DB에 초기화 날짜까지 저장"하는 동의를 받고(NSU-129) 초기화 때 기록과 이름 키를 폐기한다.

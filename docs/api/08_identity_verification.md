@@ -121,7 +121,7 @@ ARTIST가 마이페이지에서 실명 본인확인을 받고, 자기 본인확�
 | 422 | `IDENTITY_VERIFICATION_FAILED` | PortOne이 실패로 끝남 | 새로 시작 |
 | 422 | `IDENTITY_VERIFICATION_REJECTED` | PortOne은 확인했지만 설정한 테스트 채널의 결과가 아님 | 다시 해도 같다. "지금은 본인확인을 받을 수 없어요"와 문의 안내 |
 | 429 | `TOO_MANY_REQUESTS` | 계정당 1시간 10회를 넘음 | `Retry-After` 초 뒤 다시 |
-| 503 | `IDENTITY_VERIFICATION_UNAVAILABLE` | PortOne 시간 초과·연결 실패·`5xx`·인증 실패, 읽을 수 없는 응답 | 잠시 뒤 **같은 ID로** 완료를 다시 부름(시도는 그대로 열려 있음) |
+| 503 | `IDENTITY_VERIFICATION_UNAVAILABLE` | PortOne 시간 초과·연결 실패·`5xx`·인증 실패, 읽을 수 없는 응답, 확정 저장의 잠금 대기·문장 실행 시간 초과(3초) | 잠시 뒤 **같은 ID로** 완료를 다시 부름(시도는 그대로 열려 있음) |
 | 503 | `RATE_LIMIT_UNAVAILABLE` | 요청 제한 카운터(Redis)를 쓸 수 없음 | 잠시 뒤 다시. `Retry-After` 없음 |
 
 - 409는 "지금 상태로는 안 된다", 422는 "이 시도의 결과는 받을 수 없다(확정)", 503은 "잠시 뒤 같은 요청"이다. 화면은 `code`로 분기한다(00 §8).
@@ -258,6 +258,7 @@ public final class IdentityName { /* Unicode NFC, 앞뒤 공백 제거, 1~50자,
 | 판정 순서 조합 시험: 요청 제한 초과, 계정 `ACTIVE` 아님, 시도 없음·남의 시도, 계정이 이미 확인됨, 시도가 실패·거절로 닫힘, 시도 만료를 조합한 표의 모든 행에서 응답이 §3에서 가장 앞에 걸리는 순서의 응답과 같고, 그 순서보다 뒤의 일(시도·기록 변경, PortOne 호출)이 일어나지 않는다. 예: 실패한 시도 A 뒤 시도 B로 성공한 계정의 A 재전송은 `200` | §3·§5 |
 | 채널 판정: `key` 없는 TEST 채널은 받는다. `channel` 없음, 필수 필드 셋 각각 없음·빈 값, `LIVE`, 모르는 `type`, `pgProvider` 다름, `pgMerchantId` 다름, `key` 다름은 각각 `422 IDENTITY_VERIFICATION_REJECTED`이고 거절 이유가 남는다 | ADR 00 "출처 결정" |
 | PortOne `READY`·`404` → `409 NOT_COMPLETED`, `FAILED` → `422`, `400`·`401`·`403`·`429`·`5xx`·연결 실패·읽기 시간 초과·깨진 JSON·모르는 `status` → `503 IDENTITY_VERIFICATION_UNAVAILABLE`이고 시도는 열려 있다 | §4.2 |
+| 다른 트랜잭션이 시도 행을 3초 넘게 잠근 동안의 완료 → `503 IDENTITY_VERIFICATION_UNAVAILABLE`(`500`이 아님), 시도는 `PENDING`이고 기록이 없다. 잠금이 풀린 뒤 같은 ID로 다시 완료하면 성공한다 | §4.1, ADR 01 "완료 확정" |
 | 읽기 시간 초과는 설정한 timeout과 여유 안에 응답한다 | §4.2 |
 | `verifiedCustomer`·`requestedCustomer`·`pgRawResponse`·오류 본문에 고유 문자열을 넣은 응답(받는 TEST, `LIVE`, 채널 값 다름, `FAILED`, `404`·`401`·`500`, 깨진 JSON) 뒤에 그 문자열이 로그(모든 레벨)·예외 메시지와 원인·API 응답·두 테이블·Redis 어디에도 없다 | ADR 00 "테스트 본인확인 결과", Linear AC |
 | (NSU-146 정적 로그 검사가 main에 들어온 뒤) 실명·CI·DI 등 이 이슈의 개인정보 이름을 로그 인자로 넘기는 코드는 검사가 거절하고, 가짜 실명·CI 값이 로그에 없다 | NSU-146 ADR logging/00, ADR 01 Consequences |
