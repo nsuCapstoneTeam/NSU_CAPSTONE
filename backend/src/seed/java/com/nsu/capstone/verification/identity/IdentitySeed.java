@@ -2,6 +2,13 @@ package com.nsu.capstone.verification.identity;
 
 import com.nsu.capstone.NsuCapstoneApplication;
 import com.nsu.capstone.global.exception.BusinessException;
+import java.io.BufferedReader;
+import java.io.Console;
+import java.io.IOError;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -19,8 +26,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * Mock 본인확인 시드 진입점. 서버 jar에는 들어가지 않고, 같은 빌드의 시드 jar로 시연 서버 안에서 실행한다(ADR identity_verification/01).
  *
  * <p>서블릿 컨텍스트를 {@code server.port=-1}로 띄워 HTTP 포트를 열지 않고, Flyway를 끈다(스키마는 같은 버전의 서버가 이미 올렸다). 기록은 HTTP와 같은 시작→완료
- * 서비스 경로를 Mock 제공자로 지나가 쓴다. 대상 계정과 이름은 환경 변수 {@code SEED_IDENTITY_EMAIL}·{@code SEED_IDENTITY_NAME}으로만 받는다(프로세스 목록에 남기지
- * 않기 위해서다).
+ * 서비스 경로를 Mock 제공자로 지나가 쓴다. 대상 계정(이메일)과 이름은 표준입력으로만 받는다. 환경 변수와 명령행 인수는 읽지 않는다. 환경 변수는 컨테이너 설정과
+ * {@code /proc/<pid>/environ}에, 인수는 프로세스 목록에 남기 때문이다.
  */
 public final class IdentitySeed {
 
@@ -33,16 +40,21 @@ public final class IdentitySeed {
     }
 
     static int run() {
-        String email = System.getenv("SEED_IDENTITY_EMAIL");
-        if (email == null || email.isBlank()) {
-            log.error("SEED_IDENTITY_EMAIL 환경 변수가 필요하다");
+        SeedInput input = readInput();
+        if (input == null) {
+            log.error("표준입력에서 이메일과 이름 두 줄을 읽지 못했다");
+            return 2;
+        }
+        String email = input.email();
+        if (email.isBlank()) {
+            log.error("이메일이 비어 있다");
             return 2;
         }
         IdentityName name;
         try {
-            name = IdentityName.of(System.getenv("SEED_IDENTITY_NAME"));
+            name = IdentityName.of(input.name());
         } catch (IllegalArgumentException invalid) {
-            log.error("SEED_IDENTITY_NAME 환경 변수가 없거나 형식이 올바르지 않다");
+            log.error("이름 형식이 올바르지 않다");
             return 2;
         }
 
@@ -67,6 +79,42 @@ public final class IdentitySeed {
         try (ConfigurableApplicationContext context =
                 application.run("--server.port=-1", "--management.server.port=-1", "--spring.flyway.enabled=false")) {
             return seed(context, email.strip().toLowerCase(Locale.ROOT), openedPorts);
+        }
+    }
+
+    /**
+     * 터미널이면 프롬프트를 보이고 이름은 화면에 보이지 않게 읽는다. 터미널이 아니면(파이프, {@code docker run -i}) 표준입력 첫 줄을 이메일, 둘째 줄을 이름으로 읽는다.
+     * 두 줄을 다 읽지 못하면 null이다. 읽은 값은 로그에 남기지 않는다.
+     */
+    private static SeedInput readInput() {
+        Console console = System.console();
+        try {
+            if (console != null && console.isTerminal()) {
+                String email = console.readLine("이메일: ");
+                char[] typed = console.readPassword("이름: ");
+                if (email == null || typed == null) {
+                    return null;
+                }
+                try {
+                    return new SeedInput(email, new String(typed));
+                } finally {
+                    Arrays.fill(typed, '\0');
+                }
+            }
+            BufferedReader lines = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+            String email = lines.readLine();
+            String name = lines.readLine();
+            return email == null || name == null ? null : new SeedInput(email, name);
+        } catch (IOException | IOError unreadable) {
+            return null;
+        }
+    }
+
+    /** 표준입력에서 읽은 이메일과 이름. 값이므로 문자열로 만들거나 로그에 싣지 않는다. */
+    private record SeedInput(String email, String name) {
+        @Override
+        public String toString() {
+            return "SeedInput[****]";
         }
     }
 
