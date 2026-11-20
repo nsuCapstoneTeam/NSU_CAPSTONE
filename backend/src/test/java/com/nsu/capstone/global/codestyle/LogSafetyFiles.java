@@ -39,12 +39,17 @@ final class LogSafetyFiles {
             failures.add("src/main/java에 검사할 파일이 없다");
         }
         sources.forEach((file, source) -> {
-            String relative = backendRoot.relativize(file).toString();
+            String relative = relativePath(backendRoot, file);
             for (LogSafetyChecker.Violation violation : LogSafetyChecker.check(relative, source, records)) {
                 failures.add(relative + ":" + violation.line() + " [" + violation.rule() + "] " + violation.message());
             }
         });
         return failures;
+    }
+
+    /** 검사기의 허용 경로 비교가 '/' 기준이므로 운영체제와 상관없이 구분자를 '/'로 맞춘다. */
+    static String relativePath(Path backendRoot, Path file) {
+        return backendRoot.relativize(file).toString().replace('\\', '/');
     }
 
     private static Map<Path, String> readSources(Path root) {
