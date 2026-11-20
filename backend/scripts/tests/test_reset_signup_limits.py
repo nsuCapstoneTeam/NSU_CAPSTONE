@@ -72,6 +72,14 @@ class ResetLimitsTest(unittest.TestCase):
         ]
         for args in invalid:
             with self.assertRaises(ValueError): reset.selection(args)
+    def test_account_is_rejected_for_total_phone_so_it_cannot_clear_the_whole_server_counter(self):
+        args = argparse.Namespace(kind="total-phone", window_start="2026-11-10T00:00:00+09:00",
+                                  account="01937a5e-8c2b-7e41-9a7d-4f1c2b3e5d6a", recipient=False, ip=False, channel=None)
+        with self.assertRaises(ValueError): reset.selection(args)
+    def test_account_is_rejected_for_total_email_so_it_cannot_clear_the_whole_server_counter(self):
+        args = argparse.Namespace(kind="total-email", window_start="2026-11-10T09:00:00+09:00",
+                                  account="01937a5e-8c2b-7e41-9a7d-4f1c2b3e5d6a", recipient=False, ip=False, channel=None)
+        with self.assertRaises(ValueError): reset.selection(args)
     def test_email_strip_matches_java_and_phone_rejects_noncanonical_input(self):
         self.assertEqual("me@example.com", reset.normalized_recipient("email", "\u2000ME@example.com\t"))
         self.assertEqual("\u00a0me@example.com\u00a0", reset.normalized_recipient("email", "\u00a0ME@example.com\u00a0"))
