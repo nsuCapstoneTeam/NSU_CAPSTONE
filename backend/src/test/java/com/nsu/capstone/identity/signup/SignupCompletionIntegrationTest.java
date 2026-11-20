@@ -12,7 +12,9 @@ import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.oauth.OAuthRedisKeys;
 import com.nsu.capstone.identity.oauth.OAuthSignupSession;
 import com.nsu.capstone.identity.oauth.OAuthSignupSessionStore;
+import com.nsu.capstone.identity.verification.terms.TermVersion;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
@@ -110,6 +112,19 @@ class SignupCompletionIntegrationTest {
         String id = preparedOAuth();
         SignupSessionFixtures.markAllVerified(redis, id);
         redis.opsForHash().put(SignupRedisKeys.session(id), "agreedAt", "2000-01-01T00:00:00Z");
+
+        assertRejected(ErrorCode.REQUIRED_TERMS_AGREEMENT_REQUIRED, () -> states.claim(id, "owner", UserRole.ARTIST));
+    }
+
+    @Test
+    void oauthClaimRejectsDifferentAgreementsBeforeAdultConfirmation() {
+        String id = preparedOAuth();
+        SignupSessionFixtures.markEmailVerified(redis, id);
+        SignupSessionFixtures.markPhoneVerified(redis, id);
+        var otherAgreements = new SignupTermsConsent(
+                List.of(new TermVersion("service", "v2"), new TermVersion("privacy", "v1")),
+                SignupTestTerms.consent().agreedAt());
+        redis.opsForHash().put(SignupRedisKeys.session(id), "agreements", otherAgreements.encoded());
 
         assertRejected(ErrorCode.REQUIRED_TERMS_AGREEMENT_REQUIRED, () -> states.claim(id, "owner", UserRole.ARTIST));
     }

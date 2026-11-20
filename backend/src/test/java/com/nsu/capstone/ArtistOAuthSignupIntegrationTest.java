@@ -135,6 +135,7 @@ class ArtistOAuthSignupIntegrationTest {
         assertEquals(SignupMethod.OAUTH, session.signupMethod());
         send(id, VerificationChannel.PHONE);
         String challenge = SignupRedisKeys.challenge(id, VerificationChannel.PHONE);
+        assertTrue(redis.opsForHash().hasKey(challenge, "generationId"));
         redis.opsForHash().put(challenge, "failedAttempts", "3");
         var before = redis.opsForHash().entries(challenge);
         long expiresAt = redis.getExpire(SignupRedisKeys.session(id), TimeUnit.MILLISECONDS);
