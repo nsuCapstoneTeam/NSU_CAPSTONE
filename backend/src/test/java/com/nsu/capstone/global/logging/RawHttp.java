@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
@@ -13,6 +14,8 @@ import java.util.Locale;
  * 않는 요청을 실제 Tomcat에 보낼 때 쓴다.
  */
 final class RawHttp {
+
+    private static final int READ_TIMEOUT_MILLIS = 10_000;
 
     private RawHttp() {}
 
@@ -50,7 +53,7 @@ final class RawHttp {
                 if (size == 0) {
                     break;
                 }
-                decoded.append(chunked, lineEnd + 2, lineEnd + 2 + size);
+                decoded.append(chunked, lineEnd + 2, Math.min(chunked.length(), lineEnd + 2 + size));
                 position = lineEnd + 2 + size + 2;
             }
             return decoded.toString();
@@ -67,8 +70,13 @@ final class RawHttp {
      * @return 응답 상태 코드와 응답 원문
      */
     static Response send(int port, byte[] requestBytes) throws IOException {
+        return send(port, requestBytes, READ_TIMEOUT_MILLIS);
+    }
+
+    /** 위와 같고, 응답을 읽는 데 readTimeoutMillis 안에 새 바이트가 오지 않으면 {@link SocketTimeoutException}을 던진다. */
+    static Response send(int port, byte[] requestBytes, int readTimeoutMillis) throws IOException {
         try (Socket socket = new Socket("localhost", port)) {
-            socket.setSoTimeout(10_000);
+            socket.setSoTimeout(readTimeoutMillis);
             OutputStream out = socket.getOutputStream();
             out.write(requestBytes);
             out.flush();
@@ -85,13 +93,10 @@ final class RawHttp {
     private static String readAll(InputStream in) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         byte[] chunk = new byte[4096];
-        try {
-            int read;
-            while ((read = in.read(chunk)) != -1) {
-                buffer.write(chunk, 0, read);
-            }
-        } catch (java.net.SocketTimeoutException timeout) {
-            // Connection: close를 보내므로 정상이면 여기까지 오지 않는다. 읽은 데까지 돌려준다.
+        // Connection: close를 보내므로 정상이면 서버가 닫아 -1로 끝난다. 읽기 시간 초과는 삼키지 않고 던진다
+        int read;
+        while ((read = in.read(chunk)) != -1) {
+            buffer.write(chunk, 0, read);
         }
         return buffer.toString(StandardCharsets.ISO_8859_1);
     }

@@ -1,7 +1,11 @@
 package com.nsu.capstone.global.logging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.SocketTimeoutException;
 import org.junit.jupiter.api.Test;
 
 class RawHttpTest {
@@ -22,6 +26,15 @@ class RawHttpTest {
     void 응답_본문은_빈_줄_뒤의_내용이다() {
         assertThat(new RawHttp.Response(400, RAW).body()).isEqualTo("{\"code\":\"X\"}\r\n");
         assertThat(new RawHttp.Response(-1, "").body()).isEmpty();
+    }
+
+    /** 응답이 끝나지 않으면 읽은 데까지 돌려주지 않고 던진다. 잘린 응답을 정상으로 읽으면 테스트가 엉뚱한 이유로 통과하거나 실패한다. */
+    @Test
+    void 응답이_오지_않으면_읽기_시간_초과를_던진다() throws Exception {
+        try (ServerSocket silent = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            assertThatThrownBy(() -> RawHttp.send(silent.getLocalPort(), RawHttp.bytes("GET / HTTP/1.1\r\n\r\n"), 200))
+                    .isInstanceOf(SocketTimeoutException.class);
+        }
     }
 
     /** Tomcat은 길이를 모르는 오류 본문을 청크로 보낸다(`50\r\n{...}\r\n0\r\n\r\n`). 크기 줄을 풀어야 JSON으로 읽힌다. */
