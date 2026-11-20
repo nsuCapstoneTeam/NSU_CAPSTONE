@@ -52,7 +52,7 @@ class IdentityVerificationConfig {
         return new IdentityVerificationService(repository, provider, limits, nameCipher, clock, ids, settings);
     }
 
-    /** Trust Profile의 CompositeVerificationReader가 모으는 source 중 IDENTITY를 주는 것(07 §7). */
+    /** Trust Profile의 CompositeVerificationReader가 모으는 source 중 IDENTITY를 주는 것(08 §7). */
     @Bean
     VerificationSource identityVerificationSource(IdentityVerificationRepository repository) {
         return new IdentityVerificationSource(repository);

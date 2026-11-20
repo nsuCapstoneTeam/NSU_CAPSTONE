@@ -15,7 +15,7 @@ import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
-/** 계약 07 §10 마지막 매핑 행. Mock 본인확인을 고르는 경로나 환경 값을 알려 주는 경로가 생기면 이 시험이 깨진다. */
+/** 계약 08 §10 마지막 매핑 행. Mock 본인확인을 고르는 경로나 환경 값을 알려 주는 경로가 생기면 이 시험이 깨진다. */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 class IdentityVerificationMappingsIntegrationTest {

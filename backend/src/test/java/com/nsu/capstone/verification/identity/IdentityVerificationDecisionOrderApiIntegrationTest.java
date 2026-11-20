@@ -18,7 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
- * 계약 07 §3·§10의 판정 순서 조합 표를 HTTP 응답으로 확인한다. 여섯 조건의 모든 조합에서 가장 앞에 걸리는 순서의 응답이 나오고, 그 뒤 순서의 일(제공자 호출, 시도·기록
+ * 계약 08 §3·§10의 판정 순서 조합 표를 HTTP 응답으로 확인한다. 여섯 조건의 모든 조합에서 가장 앞에 걸리는 순서의 응답이 나오고, 그 뒤 순서의 일(제공자 호출, 시도·기록
  * 변경)은 일어나지 않는다. 서비스 수준의 같은 표는 {@link IdentityVerificationServiceIntegrationTest}에 있다.
  */
 class IdentityVerificationDecisionOrderApiIntegrationTest extends IdentityVerificationApiIntegrationTestBase {

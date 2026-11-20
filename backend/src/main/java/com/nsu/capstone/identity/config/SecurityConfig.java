@@ -49,7 +49,7 @@ public class SecurityConfig {
     private static final RequestMatcher EVENT_PARTNER_PROFILE_ENDPOINT =
             PathPatternRequestMatcher.pathPattern("/api/v1/me/event-partner-profile");
 
-    // 실명 본인확인 세 경로는 ARTIST 전용이다. 역할 검사를 경로 값 검사와 요청 제한보다 먼저 한다(07 §3 2번)
+    // 실명 본인확인 세 경로는 ARTIST 전용이다. 역할 검사를 경로 값 검사와 요청 제한보다 먼저 한다(08 §3 2번)
     private static final RequestMatcher IDENTITY_VERIFICATION_ENDPOINTS =
             PathPatternRequestMatcher.pathPattern("/api/v1/me/identity-verification/**");
 

@@ -1,4 +1,4 @@
--- 실명 본인확인 시도와 기록 (API 07, ADR identity_verification/00·01, NSU-105)
+-- 실명 본인확인 시도와 기록 (API 08, ADR identity_verification/00·01, NSU-105)
 -- users를 참조하는 FK는 users에 SHARE ROW EXCLUSIVE 잠금을 잡는다.
 -- 가입을 오래 막지 않도록 잠금 대기를 3초로 둔다(V7과 같은 이유).
 SET LOCAL lock_timeout = '3s';

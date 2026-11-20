@@ -9,7 +9,7 @@ import com.nsu.capstone.identity.domain.UserRole;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.json.JsonCompareMode;
 
-/** 계약 07 §2.1, §4.1, §10 "완료" 행. */
+/** 계약 08 §2.1, §4.1, §10 "완료" 행. */
 class IdentityVerificationCompleteApiIntegrationTest extends IdentityVerificationApiIntegrationTestBase {
 
     private static final String VERIFIED_AT_TWO_MINUTES_IN =

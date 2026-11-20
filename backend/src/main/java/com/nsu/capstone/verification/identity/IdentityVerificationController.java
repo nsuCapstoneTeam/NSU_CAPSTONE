@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** ARTIST 본인의 실명 본인확인 상태·시도 시작·시도 완료(계약 07 §1). 비즈니스 규칙은 서비스에 있다. */
+/** ARTIST 본인의 실명 본인확인 상태·시도 시작·시도 완료(계약 08 §1). 비즈니스 규칙은 서비스에 있다. */
 @ApiResponse(
         responseCode = "401",
         description = "AUTHENTICATION_REQUIRED",
@@ -118,7 +118,7 @@ class IdentityVerificationController {
                 UUID.fromString(caller.getSubject()), IdentityVerificationId.parse(identityVerificationId)));
     }
 
-    /** 서비스가 던진 사유를 계약 07 §4.1의 상태 코드와 code로 바꾼다. 응답 본문은 GlobalExceptionHandler와 같은 모양이다. */
+    /** 서비스가 던진 사유를 계약 08 §4.1의 상태 코드와 code로 바꾼다. 응답 본문은 GlobalExceptionHandler와 같은 모양이다. */
     @ExceptionHandler(IdentityVerificationException.class)
     ResponseEntity<ErrorResponse> failed(IdentityVerificationException failure) {
         ErrorCode errorCode = errorCodeOf(failure.getReason());

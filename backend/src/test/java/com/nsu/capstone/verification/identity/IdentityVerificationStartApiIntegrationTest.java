@@ -9,7 +9,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 
-/** 계약 07 §2.2, §10 첫 행(시작 응답)과 "본인확인을 마친 계정의 시작" 행. */
+/** 계약 08 §2.2, §10 첫 행(시작 응답)과 "본인확인을 마친 계정의 시작" 행. */
 class IdentityVerificationStartApiIntegrationTest extends IdentityVerificationApiIntegrationTestBase {
 
     private long attemptCount() {

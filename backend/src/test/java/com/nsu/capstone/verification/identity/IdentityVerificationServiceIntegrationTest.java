@@ -423,7 +423,7 @@ class IdentityVerificationServiceIntegrationTest extends IdentityVerificationInt
     }
 
     /**
-     * 계약 07 §3·§10의 판정 순서 조합 표. 여섯 조건의 모든 조합에서 가장 앞에 걸리는 순서의 응답이 나오고, 그 뒤 순서의 일(제공자 호출, 시도·기록 변경)은
+     * 계약 08 §3·§10의 판정 순서 조합 표. 여섯 조건의 모든 조합에서 가장 앞에 걸리는 순서의 응답이 나오고, 그 뒤 순서의 일(제공자 호출, 시도·기록 변경)은
      * 일어나지 않는다.
      */
     @ParameterizedTest(name = "{0}")

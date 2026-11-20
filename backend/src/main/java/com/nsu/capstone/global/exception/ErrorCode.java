@@ -72,7 +72,7 @@ public enum ErrorCode {
             "EXTERNAL_PROVIDER_DISABLED", HttpStatus.SERVICE_UNAVAILABLE, "이 플랫폼 연결은 아직 사용할 수 없습니다."),
     EXTERNAL_ACCOUNT_BUSY(
             "EXTERNAL_ACCOUNT_BUSY", HttpStatus.SERVICE_UNAVAILABLE, "다른 변경을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."),
-    // 실명 본인확인(API 07 §4)
+    // 실명 본인확인(API 08 §4)
     INVALID_IDENTITY_VERIFICATION_ID(
             "INVALID_IDENTITY_VERIFICATION_ID", HttpStatus.BAD_REQUEST, "본인확인 시도 ID 형식이 올바르지 않습니다."),
     IDENTITY_VERIFICATION_ATTEMPT_NOT_FOUND(

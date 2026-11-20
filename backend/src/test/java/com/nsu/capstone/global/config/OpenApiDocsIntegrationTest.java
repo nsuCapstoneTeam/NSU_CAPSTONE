@@ -308,7 +308,7 @@ class OpenApiDocsIntegrationTest {
         post   | /api/v1/me/identity-verification/attempts | 403=ACCESS_DENIED;409=IDENTITY_ALREADY_VERIFIED;429=TOO_MANY_REQUESTS;503=RATE_LIMIT_UNAVAILABLE
         put    | /api/v1/me/identity-verification/attempts/{identityVerificationId}/completion | 400=INVALID_IDENTITY_VERIFICATION_ID;403=ACCESS_DENIED;404=IDENTITY_VERIFICATION_ATTEMPT_NOT_FOUND;409=IDENTITY_VERIFICATION_ATTEMPT_EXPIRED,IDENTITY_VERIFICATION_NOT_COMPLETED;422=IDENTITY_VERIFICATION_FAILED,IDENTITY_VERIFICATION_REJECTED;429=TOO_MANY_REQUESTS;503=IDENTITY_VERIFICATION_UNAVAILABLE,RATE_LIMIT_UNAVAILABLE
         """)
-    @DisplayName("행사·지역·외부 계정·실명 본인확인 API의 오류 상태와 code를 계약(03 §9, 06 §10, 07 §4)대로 적는다")
+    @DisplayName("행사·지역·외부 계정·실명 본인확인 API의 오류 상태와 code를 계약(03 §9, 06 §10, 08 §4)대로 적는다")
     void documentsErrorResponsesFromContract(String method, String path, String errors) throws Exception {
         Map<String, List<String>> expected = new TreeMap<>();
         for (String entry : errors.split(";")) {

@@ -20,7 +20,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 실명 본인확인의 시작·완료·상태 조회. 판정 순서는 계약 07 §3을 따른다(역할·경로 형식은 컨트롤러 단계가 먼저 본다).
+ * 실명 본인확인의 시작·완료·상태 조회. 판정 순서는 계약 08 §3을 따른다(역할·경로 형식은 컨트롤러 단계가 먼저 본다).
  */
 @Slf4j
 @RequiredArgsConstructor

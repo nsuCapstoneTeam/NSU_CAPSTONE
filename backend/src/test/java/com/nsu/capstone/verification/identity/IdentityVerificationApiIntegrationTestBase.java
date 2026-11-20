@@ -4,7 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.springframework.test.context.bean.override.convention.TestBean;
 
 /**
- * 컨텍스트의 제공자 빈을 시험용 Mock으로 바꿔 PortOne 응답을 코드로 정하고 세 경로를 MockMvc로 부른다. 실제 PortOne은 부르지 않는다(계약 07 §10).
+ * 컨텍스트의 제공자 빈을 시험용 Mock으로 바꿔 PortOne 응답을 코드로 정하고 세 경로를 MockMvc로 부른다. 실제 PortOne은 부르지 않는다(계약 08 §10).
  */
 abstract class IdentityVerificationApiIntegrationTestBase extends IdentityVerificationHttpTestBase {
 

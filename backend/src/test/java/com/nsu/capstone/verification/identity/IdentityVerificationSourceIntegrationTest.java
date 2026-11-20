@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.AdditionalAnswers;
 import org.springframework.beans.factory.annotation.Autowired;
 
-/** 계약 07 §7 Trust Profile 행과 01 §4.3·§7: 기록이 있는 아티스트에게 {@code (IDENTITY, null)} 하나. */
+/** 계약 08 §7 Trust Profile 행과 01 §4.3·§7: 기록이 있는 아티스트에게 {@code (IDENTITY, null)} 하나. */
 class IdentityVerificationSourceIntegrationTest extends IdentityVerificationIntegrationTestBase {
 
     private static final VerificationItem IDENTITY_ITEM = new VerificationItem(VerificationType.IDENTITY, null);

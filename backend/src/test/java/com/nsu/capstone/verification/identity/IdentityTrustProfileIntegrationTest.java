@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 계약 07 §10 마지막 행: 본인확인을 마친 아티스트의 Trust Profile은 자기 조회, EVENT_PARTNER 조회, 일괄 조회 모두 {@code verifications} 맨 앞이
+ * 계약 08 §10 마지막 행: 본인확인을 마친 아티스트의 Trust Profile은 자기 조회, EVENT_PARTNER 조회, 일괄 조회 모두 {@code verifications} 맨 앞이
  * {@code {"type":"IDENTITY","provider":null}}이고 출처, 확인 시각, 이름이 JSON 어디에도 없다.
  */
 class IdentityTrustProfileIntegrationTest extends IdentityVerificationIntegrationTestBase {

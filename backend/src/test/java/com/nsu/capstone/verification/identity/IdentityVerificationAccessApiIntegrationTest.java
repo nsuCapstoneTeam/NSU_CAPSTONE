@@ -12,7 +12,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.test.web.servlet.ResultActions;
 
-/** 계약 07 §1, §3 앞부분(토큰, 역할, 경로 형식)과 §10 "EVENT_PARTNER"·"형식이 아닌 경로 값" 행. */
+/** 계약 08 §1, §3 앞부분(토큰, 역할, 경로 형식)과 §10 "EVENT_PARTNER"·"형식이 아닌 경로 값" 행. */
 class IdentityVerificationAccessApiIntegrationTest extends IdentityVerificationApiIntegrationTestBase {
 
     private static final String SOME_ATTEMPT = "01937a5e8c2b7e419a7d4f1c2b3e5d6a";

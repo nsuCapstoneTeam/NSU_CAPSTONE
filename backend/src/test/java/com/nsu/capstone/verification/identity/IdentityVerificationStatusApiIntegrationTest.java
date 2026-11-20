@@ -12,7 +12,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.json.JsonCompareMode;
 
-/** 계약 07 §2.1, §10 "상태 조회" 행. */
+/** 계약 08 §2.1, §10 "상태 조회" 행. */
 class IdentityVerificationStatusApiIntegrationTest extends IdentityVerificationApiIntegrationTestBase {
 
     private void recordVerifiedAt(Instant verifiedAt) {

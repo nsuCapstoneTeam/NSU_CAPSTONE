@@ -1,6 +1,6 @@
 package com.nsu.capstone.verification.identity;
 
-/** PortOne 재조회 결과를 계약 07 §4.2 표대로 나눈다. 본문은 200일 때만 넘어온다. */
+/** PortOne 재조회 결과를 계약 08 §4.2 표대로 나눈다. 본문은 200일 때만 넘어온다. */
 record PortOneResultClassifier(ChannelPolicy channelPolicy) {
 
     ProviderOutcome classify(int httpStatus, PortOneResponse body) {

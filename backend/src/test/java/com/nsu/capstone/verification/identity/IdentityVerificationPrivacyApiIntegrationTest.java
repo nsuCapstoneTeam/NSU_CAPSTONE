@@ -15,7 +15,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
- * 계약 07 §10 "고유 문자열" 행의 API 쪽. 실제 PortOne 어댑터가 로컬 서버(127.0.0.1)와 통신하고, 응답의 개인정보와 오류 본문이 API 응답, 로그(모든 레벨), 두 테이블,
+ * 계약 08 §10 "고유 문자열" 행의 API 쪽. 실제 PortOne 어댑터가 로컬 서버(127.0.0.1)와 통신하고, 응답의 개인정보와 오류 본문이 API 응답, 로그(모든 레벨), 두 테이블,
  * Redis 어디에도 없어야 한다.
  */
 class IdentityVerificationPrivacyApiIntegrationTest extends IdentityVerificationHttpTestBase {

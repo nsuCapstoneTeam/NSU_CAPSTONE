@@ -14,7 +14,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
- * 계약 07 §9, §10 "Redis를 멈추면" 행. 한도 저장소가 Redis 장애 오류를 던지는 상황에서 시작과 완료가 응답으로 바꾸는 모양을 본다. 저장소가 실제 Redis 장애에서 그 오류를 던지는 것은
+ * 계약 08 §9, §10 "Redis를 멈추면" 행. 한도 저장소가 Redis 장애 오류를 던지는 상황에서 시작과 완료가 응답으로 바꾸는 모양을 본다. 저장소가 실제 Redis 장애에서 그 오류를 던지는 것은
  * {@link IdentityVerificationRequestLimitFailureTest}가 본다.
  */
 class IdentityVerificationRequestLimitUnavailableApiIntegrationTest extends IdentityVerificationApiIntegrationTestBase {

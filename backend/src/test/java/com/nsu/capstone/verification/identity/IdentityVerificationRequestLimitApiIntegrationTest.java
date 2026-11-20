@@ -8,7 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.ResultActions;
 
-/** 계약 07 §9, §10 "11번째 요청" 행. */
+/** 계약 08 §9, §10 "11번째 요청" 행. */
 class IdentityVerificationRequestLimitApiIntegrationTest extends IdentityVerificationApiIntegrationTestBase {
 
     private long attemptCount() {
