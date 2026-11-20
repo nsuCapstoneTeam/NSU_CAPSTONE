@@ -20,9 +20,8 @@ import com.nsu.capstone.identity.verification.port.EmailSender;
 import com.nsu.capstone.identity.verification.port.SmsSender;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
-import java.net.InetAddress;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -33,7 +32,6 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -45,6 +43,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -122,7 +121,7 @@ class LogPrivacySignupSendIntegrationTest {
 
         try (FakeProvider provider = FakeProvider.start(failure);
                 LogCapture capture = LogCapture.start(environment)) {
-            RestClient client = client(provider.baseUrl());
+            RestClient client = client(provider.baseUrl(), failure);
             doAnswer(call -> {
                         new ResendEmailSender(client, "from@example.com")
                                 .sendVerificationCode(call.getArgument(0), call.getArgument(1), call.getArgument(2));
@@ -158,6 +157,10 @@ class LogPrivacySignupSendIntegrationTest {
             if (failure.reachesServer()) {
                 assertThat(provider.requests()).as("제공자가 받은 요청 수").isEqualTo(1);
                 assertThat(provider.lastRequestBody()).contains(OTP);
+                // 의도한 수신자가 발송 경로를 거쳐 제공자에게 갔다. 이게 없으면 엉뚱한 수신자로 보내도 로그 부재만 보고 통과한다
+                assertThat(provider.lastRequestBody())
+                        .as("제공자가 받은 수신자(채널: %s)", channel)
+                        .contains(channel.equals("email") ? recipientEmail : recipientPhone);
             }
             assertThat(status).as("발송 실패 유형별 응답 상태").isEqualTo(failure.expectedStatus());
             // 양성 대조 2: 이 요청이 남긴 줄이 있다. 캡처가 헛돌지 않는다.
@@ -192,11 +195,8 @@ class LogPrivacySignupSendIntegrationTest {
                         .as("값이 든 줄 수(값 종류: %s)", describe(secret, recipientEmail, recipientPhone))
                         .isZero();
             }
-            Pattern code = Pattern.compile("(?<!\\d)" + OTP + "(?!\\d)");
-            assertThat(capture.lines().stream()
-                            .filter(line -> code.matcher(line).find()))
-                    .as("인증 코드가 든 줄")
-                    .isEmpty();
+            // 요청 ID(UUID)에 이어진 숫자는 세지 않는 도우미로 찾는다
+            assertThat(capture.linesContainingNumber(OTP)).as("인증 코드가 든 줄").isEmpty();
         }
     }
 
@@ -228,15 +228,28 @@ class LogPrivacySignupSendIntegrationTest {
         return secret.startsWith("sentinel-api") ? "API 비밀" : secret.equals(BODY_MARKER) ? "제공자 응답 본문" : "인증 헤더";
     }
 
-    private static RestClient client(String baseUrl) {
-        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(Duration.ofMillis(500)).build());
-        factory.setReadTimeout(Duration.ofSeconds(1));
+    private static RestClient client(String baseUrl, ProviderFailure failure) {
         return RestClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + API_KEY)
-                .requestFactory(factory)
+                .requestFactory(requestFactory(failure))
                 .build();
+    }
+
+    /**
+     * 연결 거부는 포트를 잡았다 놓는 방식이면 그 사이 다른 프로세스가 같은 포트를 열 수 있다. 요청 팩터리가 ConnectException을 바로 던져
+     * 포트 경합 없이 같은 실패 경로(ResourceAccessException)를 만든다. 나머지 실패는 실제 루프백 서버로 지나간다.
+     */
+    private static ClientHttpRequestFactory requestFactory(ProviderFailure failure) {
+        if (failure == ProviderFailure.CONNECTION_REFUSED) {
+            return (uri, method) -> {
+                throw new ConnectException("Connection refused");
+            };
+        }
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(
+                HttpClient.newBuilder().connectTimeout(Duration.ofMillis(500)).build());
+        factory.setReadTimeout(Duration.ofSeconds(1));
+        return factory;
     }
 
     /** 제공자가 실패하는 다섯 가지 모양. 기대 상태는 #219가 정한 지금 동작이다. */
@@ -278,10 +291,8 @@ class LogPrivacySignupSendIntegrationTest {
 
         static FakeProvider start(ProviderFailure failure) throws IOException {
             if (failure == ProviderFailure.CONNECTION_REFUSED) {
-                // 포트를 잡았다가 바로 놓아, 아무도 듣지 않는 포트(연결 거절)를 얻는다
-                try (ServerSocket reserved = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
-                    return new FakeProvider(null, "http://127.0.0.1:" + reserved.getLocalPort());
-                }
+                // 서버 없이 시작한다. 연결 거부는 요청 팩터리가 만든다(requestFactory)
+                return new FakeProvider(null, "http://provider.invalid");
             }
             HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             FakeProvider provider = new FakeProvider(
