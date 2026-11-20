@@ -81,7 +81,7 @@ final class LogSafetyChecker {
 
     private static final Set<String> RESPONSE_BODY_METHODS = Set.of("getResponseBodyAsString", "getResponseBodyAs");
 
-    /** 선언을 못 찾을 때(필드, 다른 파일) 예외로 보는 관례 이름 */
+    /** 타입을 모를 때(선언을 못 찾음, 람다 매개변수, var) 예외로 보는 관례 이름 */
     private static final Set<String> EXCEPTION_NAMES =
             Set.of("e", "ex", "exc", "exception", "cause", "throwable", "err", "error", "t");
 
@@ -574,8 +574,9 @@ final class LogSafetyChecker {
         }
 
         private static boolean isExceptionNamed(String type, String name) {
-            if (type != null && (type.endsWith("Exception") || type.endsWith("Error") || type.equals("Throwable"))) {
-                return true;
+            boolean typeKnown = type != null && !type.isEmpty() && !type.equals("var");
+            if (typeKnown) {
+                return type.endsWith("Exception") || type.endsWith("Error") || type.equals("Throwable");
             }
             return EXCEPTION_NAMES.contains(name);
         }

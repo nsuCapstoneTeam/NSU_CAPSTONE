@@ -541,4 +541,20 @@ class LogSafetyCheckerTest {
                         }
                         """)).isEmpty();
     }
+
+    /** 타입이 확인된 변수는 이름이 e여도 선언 타입을 따른다. 타입을 모르는 람다 매개변수와 var만 이름 관례로 본다(#32). */
+    @Test
+    void 타입이_확인된_비예외_변수는_이름이_e여도_S6이_아니다() {
+        assertThat(checkClassBody("""
+                        void run(String e, String channel) { log.warn("값 {} {}", e, channel); }
+                        """)).isEmpty();
+        assertThat(checkClassBody("""
+                        void run(List<String> items, String channel) {
+                            items.forEach(e -> log.warn("값 {} {}", e, channel));
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        void run(String channel) { var e = lookup(); log.warn("값 {} {}", e, channel); }
+                        """)).extracting("rule").containsExactly("S6");
+    }
 }
