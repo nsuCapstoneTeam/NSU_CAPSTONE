@@ -72,6 +72,10 @@ tasks.named('test') {
 	inputs.file('.env.example')
 		.withPathSensitivity(PathSensitivity.RELATIVE)
 		.withPropertyName('envExample')
+	// CI 워크플로 테스트가 ci.yml 원문을 읽는다. 이 파일만 바뀌어도 test가 다시 실행된다.
+	inputs.file('../.github/workflows/ci.yml')
+		.withPathSensitivity(PathSensitivity.RELATIVE)
+		.withPropertyName('ciWorkflow')
 }
 
 spotless {
