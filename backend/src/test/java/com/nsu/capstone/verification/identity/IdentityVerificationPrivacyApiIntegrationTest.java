@@ -4,11 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.data.redis.connection.DataType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -22,6 +25,9 @@ class IdentityVerificationPrivacyApiIntegrationTest extends IdentityVerification
 
     private static final String MARKER = "PII-MARKER-api-5b7e1f";
     private static final FakePortOneServer PORTONE = startPortOne();
+
+    @Autowired
+    Environment environment;
 
     private static FakePortOneServer startPortOne() {
         try {
@@ -71,9 +77,13 @@ class IdentityVerificationPrivacyApiIntegrationTest extends IdentityVerification
 
         MvcResult result;
         String logged;
-        try (LogCapture logs = new LogCapture()) {
+        List<String> deployedLines;
+        try (LogCapture logs = new LogCapture();
+                com.nsu.capstone.global.logging.LogCapture deployed =
+                        com.nsu.capstone.global.logging.LogCapture.start(environment)) {
             result = complete(artist, id).andReturn();
             logged = logs.everything();
+            deployedLines = List.copyOf(deployed.lines());
         }
 
         assertThat(PORTONE.requests()).hasSize(requestsBefore + 1);
@@ -83,6 +93,8 @@ class IdentityVerificationPrivacyApiIntegrationTest extends IdentityVerification
         assertThat(result.getResponse().getHeaderNames())
                 .noneMatch(name -> result.getResponse().getHeader(name).contains(MARKER));
         assertThat(logged).doesNotContain(MARKER);
+        // NSU-146 방식: 배포 설정 인코더가 만든 출력 바이트(한 줄 JSON)에도 가짜 실명·생년월일·CI·DI가 없다
+        assertThat(deployedLines).noneMatch(line -> line.contains(MARKER));
         assertThat(tableText("identity_verifications")).doesNotContain(MARKER);
         assertThat(tableText("identity_verification_attempts")).doesNotContain(MARKER);
         assertThat(redisText()).doesNotContain(MARKER);
