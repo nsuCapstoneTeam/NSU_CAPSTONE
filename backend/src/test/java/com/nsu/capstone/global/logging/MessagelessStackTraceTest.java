@@ -27,8 +27,15 @@ class MessagelessStackTraceTest {
 
     @AfterEach
     void stopCapture() {
-        capture.close();
-        app.close();
+        try {
+            if (capture != null) {
+                capture.close();
+            }
+        } finally {
+            if (app != null) {
+                app.close();
+            }
+        }
     }
 
     @Test
@@ -82,7 +89,7 @@ class MessagelessStackTraceTest {
                 .get("stack_trace")
                 .asString();
         // 제한이 실제로 걸렸는지 확인한다. 걸리지 않았다면 이 테스트는 순서를 증명하지 못한다
-        assertThat(stackTrace.length()).as("stack_trace 길이").isBetween(8000, 8300);
+        assertThat(stackTrace.length()).as("stack_trace 길이").isBetween(8000, 8192);
         assertThat(stackTrace).contains("java.lang.IllegalArgumentException");
     }
 
