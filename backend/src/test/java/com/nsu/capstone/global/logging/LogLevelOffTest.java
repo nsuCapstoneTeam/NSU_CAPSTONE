@@ -25,7 +25,8 @@ class LogLevelOffTest {
     @ParameterizedTest(name = "{0}")
     @ValueSource(strings = {ERROR_LOGGER, WARN_LOGGER})
     void 커밋한_설정만으로_OFF다(String logger) throws Exception {
-        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "light");
+        // 배포 모드에서는 리스너가 OFF로 되돌리므로 설정이 OFF를 주는지 알 수 없다. 로컬 모드로 리스너의 보정 없이 설정만 본다
+        ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of("LOG_LOCAL_MODE", "true", "LOG_FORMAT", ""), "light");
 
         assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isZero();
         assertThat(result.output()).contains("LEVEL " + logger + "=OFF");
