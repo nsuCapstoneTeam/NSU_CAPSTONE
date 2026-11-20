@@ -24,23 +24,28 @@ class LogLevelFloorBeforeBeansTest {
 
     private Map<String, Level> levelsBefore;
 
+    private Thread.UncaughtExceptionHandler defaultHandlerBefore;
+
     @BeforeEach
-    void snapshotLevels() {
+    void snapshotGlobalState() {
         LEVEL_WHEN_BEAN_CREATED.set(null);
         levelsBefore = LoggerLevels.snapshot();
+        defaultHandlerBefore = Thread.getDefaultUncaughtExceptionHandler();
     }
 
+    /** 앱이 띄우며 바꾼 JVM 전체 기본 예외 처리기를 되돌려 다른 테스트에 번지지 않게 한다. */
     @AfterEach
-    void restoreLevels() {
+    void restoreGlobalState() {
         LoggerLevels.restore(levelsBefore);
+        Thread.setDefaultUncaughtExceptionHandler(defaultHandlerBefore);
     }
 
     @Test
     void 빈을_만드는_시점에_이미_하한이_적용되어_있다() {
+        // 명령행 인자는 설정 파일보다 우선하는 입력이라 배포에서 실제로 레벨을 덮어쓰는 길이다
         try (ConfigurableApplicationContext ignored = new SpringApplicationBuilder(LevelProbeConfig.class)
                 .web(WebApplicationType.NONE)
-                .properties("logging.level.org.hibernate.orm.jdbc.extract=TRACE", "debug=true")
-                .run()) {
+                .run("--logging.level.org.hibernate.orm.jdbc.extract=TRACE", "--debug=true")) {
             assertThat(LEVEL_WHEN_BEAN_CREATED.get()).as("빈을 만들 때 기록한 실효 레벨").isNotNull();
             assertThat(LEVEL_WHEN_BEAN_CREATED.get().toInt())
                     .as("빈을 만들 때 org.hibernate.orm.jdbc.extract 실효 레벨")
