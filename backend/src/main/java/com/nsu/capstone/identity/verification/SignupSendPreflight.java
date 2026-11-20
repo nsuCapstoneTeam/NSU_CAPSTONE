@@ -2,6 +2,7 @@ package com.nsu.capstone.identity.verification;
 
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
+import com.nsu.capstone.global.logging.RequestIdExecutors;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
 import com.nsu.capstone.identity.verification.config.SignupSendRedisProperties;
 import java.util.concurrent.*;
@@ -15,14 +16,15 @@ public class SignupSendPreflight implements AutoCloseable {
     private final VerificationChallengeStore challenges;
     private final SignupSendRedisProperties properties;
     private final Runnable cleanup;
-    private final ExecutorService executor = new ThreadPoolExecutor(
+    // 요청 스레드의 MDC(요청 ID)를 가상 스레드 작업으로 옮기는 래퍼 안에서 만든다(NSU-146). 큐 상한·거절 정책·스레드 종류는 그대로다.
+    private final ExecutorService executor = RequestIdExecutors.wrap(new ThreadPoolExecutor(
             0,
             32,
             30,
             TimeUnit.SECONDS,
             new SynchronousQueue<>(),
             Thread.ofVirtual().name("signup-send-redis-", 0).factory(),
-            new ThreadPoolExecutor.AbortPolicy());
+            new ThreadPoolExecutor.AbortPolicy()));
 
     public SignupSendPreflight(
             SignupSessionStore sessions,
@@ -92,7 +94,19 @@ public class SignupSendPreflight implements AutoCloseable {
                 try {
                     challenges.cancel(id, channel, generation, recipient, true);
                 } catch (RuntimeException failure) {
-                    log.warn("가입 인증 미발송 예약 보상 실패. 채널: {}", channel);
+                    // Redis 클라이언트 timeout 같은 데이터 접근 오류는 재개된 뒤 보상이 적용될 수 있어 실패로 단정하지 않는다.
+                    // 그 밖의 예외는 결정적일 수 있어 재개를 기다리라고 말하지 않는다. 둘 다 원인 타입을 남긴다.
+                    if (failure instanceof org.springframework.dao.DataAccessException) {
+                        log.warn(
+                                "가입 인증 미발송 예약 보상 결과를 확인하지 못했습니다. Redis가 재개되면 적용될 수 있습니다. 채널: {}, 원인 타입: {}",
+                                channel,
+                                failure.getClass().getName());
+                    } else {
+                        log.warn(
+                                "가입 인증 미발송 예약 보상 중 예기치 않은 예외가 났습니다. 보상이 적용되지 않았을 수 있습니다. 채널: {}, 원인 타입: {}",
+                                channel,
+                                failure.getClass().getName());
+                    }
                 }
             });
         } catch (RejectedExecutionException failure) {

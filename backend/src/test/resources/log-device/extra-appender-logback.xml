@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 출력 장치 자기 검사 테스트용: 사용자가 logging.config로 평문 어펜더를 붙인 설정 -->
+<configuration>
+    <appender name="PLAIN" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d %-5level %logger - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <root level="INFO">
+        <appender-ref ref="PLAIN"/>
+    </root>
+</configuration>

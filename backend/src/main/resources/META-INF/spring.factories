@@ -1,0 +1,3 @@
+org.springframework.context.ApplicationListener=\
+  com.nsu.capstone.global.logging.LogSafetyListener,\
+  com.nsu.capstone.global.logging.LogDeviceReadyListener
