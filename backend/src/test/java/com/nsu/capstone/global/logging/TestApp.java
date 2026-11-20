@@ -25,6 +25,8 @@ final class TestApp {
                         // 시스템 속성과 환경 변수 소스를 더하지 않는다
                     }
                 })
+                // Boot는 작업 디렉터리의 ./config/application.properties도 읽는다. 개발자의 파일 설정이 섞이지 않게 클래스패스로 고정한다
+                .properties("spring.config.location=classpath:/application.properties")
                 .properties(properties)
                 .run();
     }
