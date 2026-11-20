@@ -7,12 +7,16 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * ADR logging/00 Decision 7-3: 로거를 거치지 않고 헤더, 요청 원문, TLS 평문을 stdout·stderr에 찍는 JVM 디버그 옵션은 레벨로 막을 수 없다.
  * 로컬 모드가 아니면 앱을 시작하지 않는다.
  */
 class JvmDebugOptionTest {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     @ParameterizedTest
     @ValueSource(
@@ -35,7 +39,23 @@ class JvmDebugOptionTest {
                 List.of(), Map.of("JAVA_TOOL_OPTIONS", "-Djdk.internal.httpclient.hpack.debug=err"), "light");
 
         assertThat(result.exitCode()).as("종료 코드").isNotZero();
-        assertThat(result.output()).contains("jdk.internal.httpclient.hpack.debug");
+        // JVM이 직접 찍는 "Picked up JAVA_TOOL_OPTIONS: ..." 줄에도 옵션 이름이 있다. 거부는 LogSafetyListener의 ERROR JSON 줄로 확인한다
+        assertThat(listenerLines(result)).anySatisfy(json -> {
+            assertThat(json.get("level").asString()).isEqualTo("ERROR");
+            assertThat(json.get("message").asString())
+                    .contains("JVM 디버그 옵션이 있어 시작하지 않는다")
+                    .contains("jdk.internal.httpclient.hpack.debug");
+        });
+    }
+
+    private static List<JsonNode> listenerLines(ForkedJvm.Result result) {
+        return result.logLines().stream()
+                .filter(line -> line.startsWith("{"))
+                .map(JSON::readTree)
+                .filter(json -> LogSafetyListener.class
+                        .getName()
+                        .equals(json.path("logger_name").asString()))
+                .toList();
     }
 
     @Test
