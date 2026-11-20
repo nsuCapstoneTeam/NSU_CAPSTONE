@@ -41,7 +41,7 @@ class LogStartupPrivacyTest {
         env.put("LOG_LOCAL_MODE", "true");
         env.put("LOG_FORMAT", "");
 
-        ForkedJvm.Result result = ForkedJvm.run(List.of(), env, appArguments());
+        ForkedJvm.Result result = ForkedJvm.run(jvmArguments(), env, appArguments());
 
         assertThat(result.exitCode())
                 .as("종료 코드. 출력 끝: %s", tail(result.output()))
@@ -51,7 +51,7 @@ class LogStartupPrivacyTest {
 
     @Test
     void 배포_설정에서는_루트_TRACE로_시작해도_출력_전체에_비밀키가_없다() throws Exception {
-        ForkedJvm.Result result = ForkedJvm.run(List.of(), appEnvironment(), appArguments());
+        ForkedJvm.Result result = ForkedJvm.run(jvmArguments(), appEnvironment(), appArguments());
 
         assertThat(result.exitCode())
                 .as("종료 코드. 출력 끝: %s", tail(result.output()))
@@ -65,7 +65,7 @@ class LogStartupPrivacyTest {
      */
     @Test
     void 배포_설정으로_띄우면_JSON이_아닌_줄이_stdout_stderr에_없다() throws Exception {
-        ForkedJvm.Result result = ForkedJvm.run(List.of(), appEnvironment(), appArguments());
+        ForkedJvm.Result result = ForkedJvm.run(jvmArguments(), appEnvironment(), appArguments());
 
         assertThat(result.exitCode())
                 .as("종료 코드. 출력 끝: %s", tail(result.output()))
@@ -85,7 +85,7 @@ class LogStartupPrivacyTest {
         env.put("SPRING_DATASOURCE_URL", "jdbc:postgresql://127.0.0.1:1/unreachable");
         env.put("SPRING_FLYWAY_URL", "jdbc:postgresql://127.0.0.1:1/unreachable");
 
-        ForkedJvm.Result result = ForkedJvm.run(List.of(), env, appArguments());
+        ForkedJvm.Result result = ForkedJvm.run(jvmArguments(), env, appArguments());
 
         assertThat(result.exitCode())
                 .as("종료 코드. 출력 끝: %s", tail(result.output()))
@@ -93,9 +93,13 @@ class LogStartupPrivacyTest {
         assertThat(result.output()).contains(ForkedMain.STARTED);
     }
 
+    /** ADR Decision 7-3의 시나리오 그대로 가짜 비밀키를 JVM 시스템 속성으로 준다. Hibernate가 설정 전체를 찍는 길이 이 속성을 포함한다. */
+    private static List<String> jvmArguments() {
+        return List.of("-Dauth.jwt.access-token.secret=" + FAKE_JWT_SECRET);
+    }
+
     private static Map<String, String> appEnvironment() {
         Map<String, String> env = new HashMap<>();
-        env.put("JWT_ACCESS_TOKEN_SECRET", FAKE_JWT_SECRET);
         env.put("SIGNUP_VERIFICATION_HMAC_SECRET", "test-only-signup-verification-hmac-secret");
         // #219가 필수 약관 ID 형식을 바꿨다. TestcontainersConfiguration의 값과 같게 둔다
         env.put("SIGNUP_REQUIRED_TERMS", "service:v1,privacy:v1");
