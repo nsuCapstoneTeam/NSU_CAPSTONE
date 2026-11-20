@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.nsu.capstone.TestcontainersConfiguration;
 import java.io.IOException;
+import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -45,6 +46,42 @@ class IdentitySeedJarIntegrationTest extends IdentityVerificationIntegrationTest
         assertThat(new NameCipher(NAME_KEY).decrypt(ciphertext, artist.getId())).isEqualTo(IdentityName.of(SEED_NAME));
     }
 
+    /**
+     * 서버가 아직 올리지 않은 마이그레이션이 있어도 시드는 Flyway를 돌리지 않는다. V11 이력 한 줄을 잠시 지워 "밀린 마이그레이션"을 만든다. Flyway가 켜져 있으면
+     * 검증이나 적용 로그가 나오고, 꺼져 있으면 아무 일도 하지 않는다.
+     */
+    @Test
+    void 시드_jar는_밀린_마이그레이션이_있어도_Flyway를_돌리지_않는다() throws Exception {
+        jdbcTemplate.execute(
+                "CREATE TABLE flyway_history_backup AS SELECT * FROM flyway_schema_history WHERE version = '11'");
+        jdbcTemplate.update("DELETE FROM flyway_schema_history WHERE version = '11'");
+        try {
+            int migrationsBefore = migrationCount();
+
+            SeedRun run = runSeed(artist.getEmail(), SEED_NAME, Map.of());
+
+            assertThat(run.exitCode()).as(run.output()).isZero();
+            assertThat(run.output()).doesNotContain("Migrating schema").doesNotContain("Successfully validated");
+            assertThat(migrationCount()).isEqualTo(migrationsBefore);
+        } finally {
+            jdbcTemplate.update("INSERT INTO flyway_schema_history SELECT * FROM flyway_history_backup");
+            jdbcTemplate.execute("DROP TABLE flyway_history_backup");
+        }
+    }
+
+    @Test
+    void 환경에_SERVER_PORT가_있어도_시드_jar는_HTTP_포트를_열지_않는다() throws Exception {
+        int port;
+        try (ServerSocket free = new ServerSocket(0)) {
+            port = free.getLocalPort();
+        }
+
+        SeedRun run = runSeed(artist.getEmail(), SEED_NAME, Map.of("SERVER_PORT", String.valueOf(port)));
+
+        assertThat(run.exitCode()).as(run.output()).isZero();
+        assertThat(run.output()).contains("HTTP 포트를 열지 않았다");
+    }
+
     @Test
     void 이름이_없으면_기록을_만들지_않고_실패로_끝난다() throws Exception {
         SeedRun run = runSeed(artist.getEmail(), "");
@@ -59,6 +96,11 @@ class IdentitySeedJarIntegrationTest extends IdentityVerificationIntegrationTest
     }
 
     private SeedRun runSeed(String email, String name) throws IOException, InterruptedException {
+        return runSeed(email, name, Map.of());
+    }
+
+    private SeedRun runSeed(String email, String name, Map<String, String> extraEnvironment)
+            throws IOException, InterruptedException {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         ProcessBuilder builder = new ProcessBuilder(java, "-jar", System.getProperty("seed.jar.path"));
         Map<String, String> env = builder.environment();
@@ -83,6 +125,7 @@ class IdentitySeedJarIntegrationTest extends IdentityVerificationIntegrationTest
         env.put("PORTONE_TEST_CHANNEL_PG_MERCHANT_ID", "AO6R1");
         env.put("SEED_IDENTITY_EMAIL", email);
         env.put("SEED_IDENTITY_NAME", name);
+        env.putAll(extraEnvironment);
         builder.redirectErrorStream(true);
         Process process = builder.start();
         try {

@@ -3,7 +3,6 @@ package com.nsu.capstone.verification.identity;
 import com.nsu.capstone.NsuCapstoneApplication;
 import com.nsu.capstone.global.exception.BusinessException;
 import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +44,6 @@ public final class IdentitySeed {
         }
 
         SpringApplication application = new SpringApplication(NsuCapstoneApplication.class);
-        application.setDefaultProperties(Map.of("server.port", "-1", "spring.flyway.enabled", "false"));
         MockIdentityVerificationProvider mock = MockIdentityVerificationProvider.alwaysVerifiedAs(name);
         application.addInitializers(context -> ((GenericApplicationContext) context)
                 .registerBean(
@@ -53,7 +51,10 @@ public final class IdentitySeed {
                         IdentityVerificationProvider.class,
                         () -> mock,
                         definition -> definition.setPrimary(true)));
-        try (ConfigurableApplicationContext context = application.run()) {
+        // 명령행 인수는 환경 변수(SERVER_PORT)와 application.properties의 spring.flyway.enabled보다 우선한다.
+        // setDefaultProperties는 우선순위가 가장 낮아 이 둘에 밀린다.
+        try (ConfigurableApplicationContext context =
+                application.run("--server.port=-1", "--spring.flyway.enabled=false")) {
             return seed(context, email.strip().toLowerCase(Locale.ROOT));
         }
     }
