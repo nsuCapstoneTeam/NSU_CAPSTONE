@@ -357,6 +357,7 @@ architect가 구조가 다른 후보 두 개를 만들고 채점 기준(AC 증�
 - 로컬에서 평문을 보려면 `.env`에 `LOG_LOCAL_MODE=true`와 `LOG_FORMAT=` 두 줄이 필요하다. 로컬 모드를 켜면 보호 장치가 꺼진다는 WARN이 시작할 때 한 줄 나온다.
 - Tomcat이 클라이언트 오류로 분류하는 예외(잘못된 쿼리 인코딩 등)는 필터가 남기지 않는다. 배포에서는 Tomcat의 DEBUG 줄도 하한에 막혀, 완료 줄만 남는다(REQUEST 디스패치의 400과, 익명이면 `/error` 디스패치의 401).
 - `GlobalExceptionHandler`와 #219의 두 실행기(강석윤 님 파일)를 이 PR에서 고친다. PR 설명에 고친 곳을 적어 알린다.
+- 정적 검사(S1~S6)는 이름·형태 기반 보조 장치라 우회 형태가 남는다. PR #231 리뷰가 회차마다 같은 종류의 우회 형태와 테스트 위생 지적을 냈고, 4차 지적 10건(정적 import 비동기 제출·MDC 변경, record 문자열 연결, 괄호로 감싼 예외 연결, 테스트 위생)은 후속 NSU-162에서 고친다. 금지 값의 보장은 개인정보 테스트와 출력 장치 자기 검사다.
 - 응답을 이미 보낸 뒤 컨트롤러에서 예외가 나면, 필터 ERROR가 같은 요청 ID로 두 줄 남는다. 하나는 그 예외이고, 다른 하나는 이어지는 `/error` 디스패치가 이미 쓰인 응답에 다시 쓰려다 난 `IllegalStateException`이다. 서로 다른 예외라 둘 다 남긴다(Decision 6). 실제 Tomcat 테스트가 이 동작을 기록한다.
 - SQL 오류의 본 메시지(제약 이름, SQLState 설명)는 로그 문장에 남지 않는다(Hibernate 로거 OFF, 7-3). 제약 위반은 `GlobalExceptionHandler` ERROR의 예외 클래스와 스택 위치로 좁힌다.
 - Spring 표준 예외 중 서버 오류로 처리되는 것(`HttpMessageNotWritableException`, `ConversionNotSupportedException`, `MissingPathVariableException`의 500, `AsyncRequestTimeoutException`의 503)은 지금처럼 예외 로그가 없고 완료 줄(`-> 500`)만 남는다. 5xx면 `handleExceptionInternal`에서 ERROR와 스택을 남길지는 ERROR 경보의 뜻이 바뀌는 결정이라 후속 이슈 NSU-156으로 둔다.
