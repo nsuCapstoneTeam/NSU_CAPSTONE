@@ -192,17 +192,18 @@ Mock 본인확인은 HTTP로 만들 수 없다. 시연 서버 안에서 시드 j
 ```bash
 ./gradlew seedJar
 # build/libs/nsu-capstone-0.0.1-SNAPSHOT-seed.jar (서버 jar와 같은 빌드에서 나온다)
-read -rs -p '이메일: ' SEED_IDENTITY_EMAIL; echo; read -rs -p '이름: ' SEED_IDENTITY_NAME; echo
-export SEED_IDENTITY_EMAIL SEED_IDENTITY_NAME
 java -jar build/libs/nsu-capstone-0.0.1-SNAPSHOT-seed.jar
-unset SEED_IDENTITY_EMAIL SEED_IDENTITY_NAME
+# 이메일: (입력)
+# 이름: (입력해도 화면에 보이지 않는다)
 ```
 
-- 서버와 같은 환경 변수(DB 접속 정보, 위 표의 값)를 주고 실행한다. 이메일과 이름은 프로세스 목록에 남지 않도록 인수가 아니라 환경 변수로만 받는다.
-- 실제 이름은 명령줄에 값으로 적지 않는다(셸 기록에 평문으로 남는다). 위처럼 `read -rs`로 읽는다. 컨테이너로 돌리면 `docker run --rm -e SEED_IDENTITY_EMAIL -e SEED_IDENTITY_NAME …`처럼 변수 이름만 넘겨 컨테이너 설정에 값이 남지 않게 하고, 끝나면 컨테이너가 지워지게 한다.
+- 서버와 같은 환경 변수(DB 접속 정보, 위 표의 값)를 주고 실행한다.
+- 이메일과 이름은 표준입력으로만 받는다. 인수와 환경 변수로는 받지 않는다. 인수는 프로세스 목록에, 환경 변수는 프로세스 환경(`/proc/<pid>/environ`)과 컨테이너 설정에 값이 남기 때문이다.
+- 터미널에서 실행해 프롬프트에 직접 입력한다. 이름을 명령줄이나 파일에 적어 흘려보내지 않는다(셸 기록이나 파일에 실명이 남는다).
+- 컨테이너로 돌리면 `docker run -it --rm …`처럼 터미널을 붙여 같은 프롬프트에 입력한다. 이메일·이름을 `-e`나 `--env-file`로 넘기지 않는다. Docker가 값을 컨테이너 설정에 `이름=값`으로 저장한다.
 - Flyway를 끄고 HTTP 포트와 actuator 관리 포트를 열지 않는다(`server.port=-1`, `management.server.port=-1`). 모두 명령행 인수로 고정해서 `SERVER_PORT`·`MANAGEMENT_SERVER_PORT` 같은 환경 변수나 설정 파일이 있어도 바뀌지 않는다. 스키마는 같은 버전의 서버가 이미 올려 둔 DB여야 한다.
 - 기록은 HTTP와 같은 시작→완료 서비스 경로를 Mock 제공자로 지나 만든다. 이름은 암호화해 `MOCK` 기록에만 저장한다.
-- 종료 코드: `0` 성공, `2` 환경 변수 `SEED_IDENTITY_EMAIL`·`SEED_IDENTITY_NAME`이 없거나 이름 형식이 틀림, `3` 대상 ARTIST를 찾을 수 없거나 기록을 만들지 못함(이미 본인확인을 마친 계정, 요청 제한 등), `4` 주 웹서버나 actuator 관리 서버가 HTTP 포트를 열어 중단(포트를 막지 못했을 때를 알아채는 점검이다).
+- 종료 코드: `0` 이번 시도로 `MOCK` 기록을 만듦, `2` 표준입력에서 이메일과 이름 두 줄을 받지 못했거나 이메일이 비었거나 이름 형식이 틀림, `3` 대상 ARTIST를 찾을 수 없거나 기록을 만들지 못함(이미 본인확인을 마친 계정, 요청 제한, 시드가 도는 사이 같은 계정의 다른 본인확인이 먼저 확정됨 등), `4` 주 웹서버나 actuator 관리 서버가 HTTP 포트를 열어 중단(포트를 막지 못했을 때를 알아채는 점검이다).
 - 이름의 주인인 팀원에게 "실명을 암호화해 시연 DB에 초기화 날짜까지 저장"하는 동의를 받고(NSU-129) 초기화 때 기록과 이름 키를 폐기한다.
 
 ## 운영 환경 데이터베이스 설정
@@ -298,7 +299,7 @@ python3 scripts/reset_signup_limits.py --kind total-phone --window-start 2026-11
 python3 scripts/reset_signup_limits.py --kind destination --window-start 2026-11-10T00:00:00+09:00 --channel email --recipient
 ```
 
-한도 종류는 `destination`, `attempt`, `ip`, `ip-email`, `total-phone`, `total-email`, `session`, `oauth`, `login`, `login-failure`, `identity-verification`이다. `attempt`·`login-failure`는 `--recipient --ip`를 함께 지정하거나 모두 생략한다. `login-failure`는 이메일이다. `identity-verification`(실명 본인확인의 시작·완료 합계, 시간 창은 정각)은 IP가 아니라 계정마다 세므로 `--account <하이픈 있는 계정 UUID>`로 계정을 지정하고, 생략하면 그 창의 전체 계정이다. 받는 곳·확인 시도·SMS 전체의 하루 창은 Asia/Seoul 자정, 이메일 전체 하루 창은 09:00, 시간 창은 정각을 지정한다. 시간대가 없는 입력은 거절한다. 수신처/IP 옵션을 생략하면 그 종류·창의 전체 대상이다.
+한도 종류는 `destination`, `attempt`, `ip`, `ip-email`, `total-phone`, `total-email`, `session`, `oauth`, `login`, `login-failure`, `identity-verification`이다. `attempt`·`login-failure`는 `--recipient --ip`를 함께 지정하거나 모두 생략한다. `login-failure`는 이메일이다. `identity-verification`(실명 본인확인의 시작·완료 합계, 시간 창은 정각)은 IP가 아니라 계정마다 세므로 `--account <하이픈 있는 계정 UUID>`로 계정을 지정하고, 생략하면 그 창의 전체 계정이다. `--account`를 다른 종류(`total-phone`·`total-email` 포함)에 붙이면 스크립트가 거절한다. 받는 곳·확인 시도·SMS 전체의 하루 창은 Asia/Seoul 자정, 이메일 전체 하루 창은 09:00, 시간 창은 정각을 지정한다. 시간대가 없는 입력은 거절한다. 수신처/IP 옵션을 생략하면 그 종류·창의 전체 대상이다.
 
 실제 초기화 절차:
 

@@ -112,7 +112,7 @@ ARTIST가 마이페이지에서 실명 본인확인을 받고, 자기 본인확�
 | HTTP | `code` | 언제 | 화면이 할 일 |
 |---|---|---|---|
 | 400 | `INVALID_IDENTITY_VERIFICATION_ID` | 경로 값이 소문자 16진수 32자가 아님 | 새로 시작 |
-| 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음·만료 | 화면의 공통 인증 처리를 따른다. 토큰 재발급 계약(NSU-74, PR #244)이 머지되면 재발급을 한 번 시도하고 같은 요청을 다시 보내며, 재발급도 실패하면 로그인. 그 전에는 로그인 |
+| 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음·만료 | 화면의 공통 인증 처리를 따른다. 재발급(`POST /api/v1/auth/refresh`, [계약 07](./07_auth_tokens.md) §4·§7)을 한 번 시도하고 성공하면 같은 요청을 다시 보낸다. 재발급도 실패하면 로그인 |
 | 403 | `ACCESS_DENIED` | ARTIST가 아님, 계정이 `ACTIVE`가 아님 | 안내만 |
 | 404 | `IDENTITY_VERIFICATION_ATTEMPT_NOT_FOUND` | 시도가 없거나 다른 회원의 것 | 새로 시작 |
 | 409 | `IDENTITY_ALREADY_VERIFIED` | 본인확인을 마친 계정이 시작함 | 완료 상태를 보여 줌 |
