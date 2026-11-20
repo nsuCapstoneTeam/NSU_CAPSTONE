@@ -7,6 +7,7 @@ import ch.qos.logback.core.AppenderBase;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.LoggerFactory;
@@ -22,6 +23,10 @@ public final class LogCapture implements AutoCloseable {
     private static final Pattern LOGGER_NAME = Pattern.compile("\"logger_name\":\"([^\"]*)\"");
 
     private final List<String> lines = new CopyOnWriteArrayList<>();
+
+    /** 처음 인코딩에 실패한 원인. Logback은 appender의 예외를 삼키므로 직접 저장했다가 던진다. */
+    private final AtomicReference<RuntimeException> encodingFailure = new AtomicReference<>();
+
     private final Logger root;
     private final StructuredLogEncoder encoder;
     private final AppenderBase<ILoggingEvent> appender;
@@ -44,7 +49,11 @@ public final class LogCapture implements AutoCloseable {
         appender = new AppenderBase<>() {
             @Override
             protected void append(ILoggingEvent event) {
-                lines.add(new String(encoder.encode(event), StandardCharsets.UTF_8));
+                try {
+                    lines.add(new String(encoder.encode(event), StandardCharsets.UTF_8));
+                } catch (RuntimeException e) {
+                    encodingFailure.compareAndSet(null, e);
+                }
             }
         };
         appender.setContext(context);
@@ -58,11 +67,13 @@ public final class LogCapture implements AutoCloseable {
     }
 
     public List<String> lines() {
+        throwIfEncodingFailed();
         return lines;
     }
 
     /** value가 들어 있는 줄의 로거 이름. 값 자체는 실패 메시지에 담지 않는다. */
     List<String> loggersContaining(String value) {
+        throwIfEncodingFailed();
         return lines.stream()
                 .filter(line -> line.contains(value))
                 .map(line -> {
@@ -72,10 +83,22 @@ public final class LogCapture implements AutoCloseable {
                 .toList();
     }
 
+    /** 인코딩에 실패한 이벤트는 줄에서 빠진다. "이 값이 든 줄이 없다"는 검사가 빈 캡처로 통과하지 않도록 실패를 던진다. */
+    private void throwIfEncodingFailed() {
+        RuntimeException failure = encodingFailure.get();
+        if (failure != null) {
+            throw new IllegalStateException("로그 이벤트를 인코딩하지 못해 캡처가 불완전하다", failure);
+        }
+    }
+
     @Override
     public void close() {
-        root.detachAppender(appender);
-        appender.stop();
-        encoder.stop();
+        try {
+            root.detachAppender(appender);
+            appender.stop();
+            encoder.stop();
+        } finally {
+            throwIfEncodingFailed();
+        }
     }
 }
