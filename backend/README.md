@@ -109,7 +109,7 @@ V8 적용 뒤에는 앱만 구버전으로 되돌려도 DB의 이메일 정규�
 
 `JWT_ACCESS_TOKEN_SECRET`에는 Base64로 인코딩한 256-bit 이상의 임의 비밀값을 입력하고 저장소에 커밋하지 않는다.
 `JWT_ACCESS_TOKEN_TTL`의 기본값은 `PT30M`이며 ISO-8601 Duration 형식으로 재정의할 수 있다.
-`JWT_REFRESH_TOKEN_TTL`의 기본값은 `P7D`(7일)이며 같은 형식으로 재정의한다. 로그인부터 센 절대 만료라 재발급해도 늘지 않는다. 0 이하면 기동에 실패한다. Refresh Token은 Redis에 digest로만 저장한다([토큰 API](../docs/api/07_auth_tokens.md)).
+`JWT_REFRESH_TOKEN_TTL`의 기본값은 `P7D`(7일)이며 같은 형식으로 재정의한다. 로그인부터 센 절대 만료라 재발급해도 늘지 않는다. Access Token 만료보다 짧으면 기동에 실패한다. 단위 없는 숫자는 밀리초로 읽힌다(`7`은 7ms). Refresh Token은 Redis에 digest로만 저장한다([토큰 API](../docs/api/07_auth_tokens.md)).
 
 OAuth 로그인은 기본적으로 비활성화되어 있다. 먼저 `OAUTH_ENABLED=true`로 전체 OAuth 기능을 켠 뒤 사용할 Provider의 `GOOGLE_OAUTH_ENABLED`, `KAKAO_OAUTH_ENABLED`, `NAVER_OAUTH_ENABLED`만 `true`로 설정한다. 활성화된 Provider만 client credential과 Provider URI를 검증하고 `ClientRegistration`을 생성하므로, 비활성 Provider 설정은 비어 있어도 된다. 활성 Provider의 필수 설정이나 고정된 frontend 결과 redirect URL이 누락되면 애플리케이션 기동에 실패한다. 실제 client secret은 저장소에 커밋하지 않는다.
 
