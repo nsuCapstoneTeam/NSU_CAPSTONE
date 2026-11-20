@@ -33,6 +33,57 @@ class LogSafetyCheckerTest {
         assertThat(violations.get(0).message()).contains("email");
     }
 
+    /**
+     * NSU-105 실명 본인확인이 다루는 새 개인정보(실명, CI, DI, 성별)와 PortOne 응답에서 이 정보를 담는 이름이다. verifiedCustomer·requestedCustomer는
+     * 이름·생년월일·CI·DI를 담은 응답 부분이고, pgRawResponse는 제공자 원문 응답이다. 실제 변수·필드 이름에 맞춰 골랐다. name·response처럼 넓은 단어는 넣지 않고
+     * realName·fullName·identityName·rawResponse처럼 이어진 두 단어로 잡는다.
+     */
+    @Test
+    void 본인확인의_개인정보_이름도_S2_위반이다() {
+        for (String argument : List.of(
+                "ci",
+                "di",
+                "memberCi",
+                "userDi",
+                "verifiedCustomer",
+                "requestedCustomer",
+                "customer.name()",
+                "gender",
+                "realName",
+                "fullName",
+                "identityName",
+                "pgRawResponse",
+                "rawResponse")) {
+            assertThat(check("log.info(\"본인확인 {}\", " + argument + ");"))
+                    .as(argument)
+                    .extracting("rule")
+                    .containsExactly("S2");
+        }
+    }
+
+    @Test
+    void 본인확인_모듈의_안전한_이름은_새_단어에도_통과한다() {
+        for (String argument : List.of(
+                "identityVerificationId",
+                "attemptId",
+                "provider",
+                "ciphertext",
+                "nameCipher",
+                "nameCiphertext",
+                "digest",
+                "diagnostic",
+                "reason",
+                "source",
+                "status",
+                "storeId",
+                "channelKey",
+                "response.status()")) {
+            assertThat(check("log.info(\"본인확인 {}\", " + argument + ");"))
+                    .as(argument)
+                    .isEmpty();
+        }
+    }
+
     @Test
     void 민감한_이름의_메서드_호출과_필드도_위반이다() {
         assertThat(check("log.warn(\"로그인 {}\", user.getEmail());"))

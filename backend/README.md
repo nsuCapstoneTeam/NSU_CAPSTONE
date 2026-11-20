@@ -50,6 +50,7 @@ REDIS_COMMAND_TIMEOUT=1s
 REDIS_CONNECT_TIMEOUT=1s
 
 SIGNUP_VERIFICATION_HMAC_SECRET=
+APP_ENVIRONMENT=DEMO
 SIGNUP_REQUIRED_TERMS=
 
 JWT_ACCESS_TOKEN_SECRET=
@@ -91,13 +92,22 @@ RESEND_FROM_EMAIL=
 
 AUDD_ENABLED=false
 AUDD_API_TOKEN=
+
+IDENTITY_VERIFICATION_PROVIDER=
+PORTONE_API_SECRET=
+PORTONE_STORE_ID=
+PORTONE_CHANNEL_KEY=
+PORTONE_TEST_CHANNEL_PG_PROVIDER=
+PORTONE_TEST_CHANNEL_PG_MERCHANT_ID=
+IDENTITY_NAME_ENCRYPTION_KEY=
 ```
 
 `.env`는 Docker Compose(PostgreSQL·Redis 컨테이너)만 읽고 Spring Boot 애플리케이션은 읽지 않는다. 애플리케이션이 쓰는 값(`POSTGRES_*`·`REDIS_PORT`처럼 컨테이너와 같아야 하는 값, `REDIS_COMMAND_TIMEOUT`, `JWT_ACCESS_TOKEN_SECRET` 등)은 셸에서 export하거나 IntelliJ Run Configuration 환경변수로 넘긴다. `.env`에만 적으면 각 설정의 기본값이 적용되고, 비밀값처럼 필수인 값은 기동에 실패한다.
 
 `POSTGRES_PASSWORD`에는 팀원별로 사용할 로컬 비밀번호를 직접 입력한다.
 `SIGNUP_VERIFICATION_HMAC_SECRET`에는 충분히 긴 임의의 비밀값을 입력하고 저장소에 커밋하지 않는다.
-`SIGNUP_REQUIRED_TERMS`는 `약관ID:버전`을 쉼표로 구분해 입력한다. 기본 환경은 `service`·`privacy` 2종이 필요하다(예시: `service:v1,privacy:v1`). `SPRING_PROFILES_ACTIVE=demo`로 `demo` Spring 프로필을 명시적으로 켜면 `demo-notice`·`overseas-transfer`도 필수다(예시: `service:v1,privacy:v1,demo-notice:v1,overseas-transfer:v1`). 활성 환경의 필수 ID가 빠지거나 중복·알 수 없는 ID가 있으면 기동에 실패한다. 버전 기본값은 없으며, 예시 버전 대신 실제 배포할 약관 버전을 넣고 화면과 맞춘다.
+`APP_ENVIRONMENT`는 서버 환경을 정하는 값이고 `DEMO`만 쓸 수 있다. 기본값이 없어 비었거나 다른 값이면 기동에 실패한다(실패 출력에 그 값을 적지 않는다).
+`SIGNUP_REQUIRED_TERMS`는 `약관ID:버전`을 쉼표로 구분해 입력한다. 로컬을 포함한 모든 서버에서 `service`·`privacy`·`demo-notice`·`overseas-transfer` 4종이 필수다(예시: `service:v1,privacy:v1,demo-notice:v1,overseas-transfer:v1`). 필수 ID가 빠지거나 중복·알 수 없는 ID가 있으면 기동에 실패한다. 버전 기본값은 없으며, 예시 버전 대신 실제 배포할 약관 버전을 넣고 화면과 맞춘다. 예전의 `SPRING_PROFILES_ACTIVE=demo` 안내는 없어졌다. 환경은 `APP_ENVIRONMENT` 하나로 정한다. 다만 시연 서버 배포 설정에는 `SPRING_PROFILES_ACTIVE=demo`를 계속 둔다. NSU-105 이전 버전으로 앱만 되돌릴 때 그 버전은 이 프로필이 있어야 약관 4종 설정으로 뜬다. 지금 버전은 이 프로필을 읽지 않는다.
 
 세 가입 세션 생성 API는 `agreements`를 필수로 받고 약관 PUT은 제공하지 않는다. 인증 코드 발송 전에도 동의 기록을 확인하며, 최종 가입은 회원과 가입 시 동의 기록을 한 트랜잭션으로 저장한다. 이메일은 앞뒤 공백 제거·소문자화하고 전화번호는 숫자 정규형만 받는다. 상세 계약은 [가입 약관·한도](../docs/api/signup-terms-and-send-limits.md)를 따른다.
 
@@ -155,6 +165,46 @@ PostgreSQL 볼륨을 생성한 후 사용자, 비밀번호 또는 데이터베�
 - YouTube를 켰는데 필수 값이 비었거나, 연결용 클라이언트와 로그인 클라이언트(`GOOGLE_CLIENT_ID`)의 프로젝트 번호(클라이언트 ID 앞 숫자)가 같으면 앱이 뜨지 않는다. 같은 프로젝트면 연결 때 하는 토큰 폐기가 로그인 동의까지 지운다(ADR `external_links/00` 14번).
 - YouTube ID 확인 작업이 하루 한 번 돈다(한국 시간 04:30). 마지막 성공이 3일을 넘었거나 가장 오래된 확인이 20일을 넘으면 `ERROR` 로그가 남는다. 이 로그를 알림으로 잇는 일은 운영에서 한다.
 - 신고 처리 절차는 [`docs/runbook/external_account_takedown.md`](../docs/runbook/external_account_takedown.md)에 있다.
+
+## 실명 본인확인 설정 (NSU-105)
+
+ARTIST가 마이페이지에서 받는 실명 본인확인(PortOne V2 + NHN KCP 테스트 채널)의 설정이다. 시연 서버의 본인확인은 모두 테스트 본인확인이다. 비밀값과 채널 값은 기본값이 없고 환경 변수로만 넣는다. 저장소에 값을 두지 않는다. 계약은 [실명 본인확인 API](../docs/api/08_identity_verification.md)다.
+
+| 환경 변수 | 뜻과 허용 값 |
+|---|---|
+| `APP_ENVIRONMENT` | 서버 환경. `DEMO`만 쓸 수 있고 기본값이 없다. 가입 약관 4종 필수도 이 값 하나로 정해진다 |
+| `IDENTITY_VERIFICATION_PROVIDER` | 본인확인 제공자. `PORTONE_TEST`만 쓸 수 있다. Mock은 설정 값이 아니라 시드 jar와 자동 테스트가 코드로만 쓴다 |
+| `PORTONE_API_SECRET` | PortOne V2 API Secret. 서버가 결과를 다시 조회할 때만 쓰고 응답·로그에 내보내지 않는다 |
+| `PORTONE_STORE_ID` | PortOne 상점 ID. 시도 시작 응답으로 브라우저에 공개되는 값이다 |
+| `PORTONE_CHANNEL_KEY` | 본인인증 채널 키. 시도 시작 응답으로 공개되는 값이고, PortOne 응답의 채널과 대조한다 |
+| `PORTONE_TEST_CHANNEL_PG_PROVIDER`, `PORTONE_TEST_CHANNEL_PG_MERCHANT_ID` | PortOne 응답의 `pgProvider`·`pgMerchantId`와 대조하는 테스트 채널 값. 대소문자까지 같아야 하고, 다르면 성공한 인증도 그 시도는 `REJECTED`가 된다. `pgProvider`는 콘솔 화면의 표시 이름이 아니라 PortOne API의 PG사 값(대문자 enum, 예: `KCP_V2`)이다. 처음 설정할 때는 실제 KCP 테스트 창으로 한 번 본인확인해 응답 값과 맞는지 확인한다 |
+| `IDENTITY_NAME_ENCRYPTION_KEY` | Mock 본인확인의 이름을 암호화하는 AES-256-GCM 키. 무작위 32바이트의 Base64다 |
+
+- 위 값이 비었거나, 환경 변수가 정해지지 않아 `${...}` 자리표시자 그대로이거나, 허용 값이 아니거나(제공자·환경), 이름 키가 Base64 32바이트가 아니면 앱이 뜨지 않는다. 실패 출력에는 속성 이름만 있고 그 값은 없다.
+- 시간당 요청 한도(시작과 완료 합계, 기본 10회)와 시도 유효 시간(기본 15분)은 속성 `identity-verification.request-limit-per-hour`·`identity-verification.attempt-lifetime`으로 바꾼다. 한도 카운터는 Redis에 있고 Redis를 쓸 수 없으면 `503 RATE_LIMIT_UNAVAILABLE`이다. 한 계정의 카운터는 아래 "가입 한도 카운터 관리"의 `identity-verification` 종류로 지운다.
+- PortOne 비밀값과 채널 설정이 틀려도 앱은 뜬다(기동이 PortOne에 기대지 않게 하려는 결정이다). 배포 직후 임의의 32자 ID로 PortOne 단건 조회를 한 번 해서 `404`면 비밀값이 맞고 `401`·`403`이면 틀린 것이다. 실행 중의 같은 오류는 `ERROR` 로그로 남는다.
+- 로그와 예외에는 시도 ID와 이유(사람을 가리키지 않는 값)만 남는다. 이름·생년월일·CI·DI와 PortOne 응답 원문은 읽지도 남기지도 않는다.
+
+### Mock 본인확인 시드 jar
+
+Mock 본인확인은 HTTP로 만들 수 없다. 시연 서버 안에서 시드 jar를 돌려 지정한 ARTIST 한 명에게만 만든다. 서버 jar에는 Mock 제공자와 시드 진입점이 들어가지 않는다.
+
+```bash
+./gradlew seedJar
+# build/libs/nsu-capstone-0.0.1-SNAPSHOT-seed.jar (서버 jar와 같은 빌드에서 나온다)
+java -jar build/libs/nsu-capstone-0.0.1-SNAPSHOT-seed.jar
+# 이메일: (입력)
+# 이름: (입력해도 화면에 보이지 않는다)
+```
+
+- 서버와 같은 환경 변수(DB 접속 정보, 위 표의 값)를 주고 실행한다.
+- 이메일과 이름은 표준입력으로만 받는다. 인수와 환경 변수로는 받지 않는다. 인수는 프로세스 목록에, 환경 변수는 프로세스 환경(`/proc/<pid>/environ`)과 컨테이너 설정에 값이 남기 때문이다.
+- 터미널에서 실행해 프롬프트에 직접 입력한다. 이름을 명령줄이나 파일에 적어 흘려보내지 않는다(셸 기록이나 파일에 실명이 남는다).
+- 컨테이너로 돌리면 `docker run -it --rm …`처럼 터미널을 붙여 같은 프롬프트에 입력한다. 이메일·이름을 `-e`나 `--env-file`로 넘기지 않는다. Docker가 값을 컨테이너 설정에 `이름=값`으로 저장한다.
+- Flyway를 끄고 HTTP 포트와 actuator 관리 포트를 열지 않는다(`server.port=-1`, `management.server.port=-1`). 모두 명령행 인수로 고정해서 `SERVER_PORT`·`MANAGEMENT_SERVER_PORT` 같은 환경 변수나 설정 파일이 있어도 바뀌지 않는다. 스키마는 같은 버전의 서버가 이미 올려 둔 DB여야 한다.
+- 기록은 HTTP와 같은 시작→완료 서비스 경로를 Mock 제공자로 지나 만든다. 이름은 암호화해 `MOCK` 기록에만 저장한다.
+- 종료 코드: `0` 이번 시도로 `MOCK` 기록을 만듦, `2` 표준입력에서 이메일과 이름 두 줄을 받지 못했거나 이메일이 비었거나 이름 형식이 틀림, `3` 대상 ARTIST를 찾을 수 없거나 기록을 만들지 못함(이미 본인확인을 마친 계정, 요청 제한, 시드가 도는 사이 같은 계정의 다른 본인확인이 먼저 확정됨 등), `4` 주 웹서버나 actuator 관리 서버가 HTTP 포트를 열어 중단(포트를 막지 못했을 때를 알아채는 점검이다).
+- 이름의 주인인 팀원에게 "실명을 암호화해 시연 DB에 초기화 날짜까지 저장"하는 동의를 받고(NSU-129) 초기화 때 기록과 이름 키를 폐기한다.
 
 ## 운영 환경 데이터베이스 설정
 
@@ -249,7 +299,7 @@ python3 scripts/reset_signup_limits.py --kind total-phone --window-start 2026-11
 python3 scripts/reset_signup_limits.py --kind destination --window-start 2026-11-10T00:00:00+09:00 --channel email --recipient
 ```
 
-한도 종류는 `destination`, `attempt`, `ip`, `ip-email`, `total-phone`, `total-email`, `session`, `oauth`, `login`, `login-failure`다. `attempt`·`login-failure`는 `--recipient --ip`를 함께 지정하거나 모두 생략한다. `login-failure`는 이메일이다. 받는 곳·확인 시도·SMS 전체의 하루 창은 Asia/Seoul 자정, 이메일 전체 하루 창은 09:00, 시간 창은 정각을 지정한다. 시간대가 없는 입력은 거절한다. 수신처/IP 옵션을 생략하면 그 종류·창의 전체 대상이다.
+한도 종류는 `destination`, `attempt`, `ip`, `ip-email`, `total-phone`, `total-email`, `session`, `oauth`, `login`, `login-failure`, `identity-verification`이다. `attempt`·`login-failure`는 `--recipient --ip`를 함께 지정하거나 모두 생략한다. `login-failure`는 이메일이다. `identity-verification`(실명 본인확인의 시작·완료 합계, 시간 창은 정각)은 IP가 아니라 계정마다 세므로 `--account <하이픈 있는 계정 UUID>`로 계정을 지정하고, 생략하면 그 창의 전체 계정이다. `--account`를 다른 종류(`total-phone`·`total-email` 포함)에 붙이면 스크립트가 거절한다. 받는 곳·확인 시도·SMS 전체의 하루 창은 Asia/Seoul 자정, 이메일 전체 하루 창은 09:00, 시간 창은 정각을 지정한다. 시간대가 없는 입력은 거절한다. 수신처/IP 옵션을 생략하면 그 종류·창의 전체 대상이다.
 
 실제 초기화 절차:
 

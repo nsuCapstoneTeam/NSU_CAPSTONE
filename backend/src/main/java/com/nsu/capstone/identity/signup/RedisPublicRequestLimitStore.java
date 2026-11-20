@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -46,20 +47,25 @@ public class RedisPublicRequestLimitStore {
     }
 
     public void signup(String ip) {
-        reserve("session", ip, properties.signupHourly());
+        reserve("session", digests.clientIpDigest(ip), properties.signupHourly());
     }
 
     public void oauth(String ip) {
-        reserve("oauth", ip, properties.oauthHourly());
+        reserve("oauth", digests.clientIpDigest(ip), properties.oauthHourly());
     }
 
-    private void reserve(String kind, String ip, int limit) {
+    /** 실명 본인확인 시작·완료를 합쳐 계정마다 센다. 계정 ID는 사람을 직접 가리키지 않아 digest 없이 UUID 원문을 키로 쓴다. */
+    public void identityVerification(UUID accountId, int hourlyLimit) {
+        reserve("identity-verification", accountId.toString(), hourlyLimit);
+    }
+
+    private void reserve(String kind, String keyPart, int limit) {
         Window window = window();
         try {
             if (!Long.valueOf(1)
                     .equals(redis.execute(
                             RESERVE,
-                            List.of(key(kind, window, digests.clientIpDigest(ip))),
+                            List.of(key(kind, window, keyPart)),
                             Long.toString(window.ttlMillis()),
                             Integer.toString(limit)))) limited(window);
         } catch (DataAccessException exception) {

@@ -55,7 +55,7 @@ class ArtistSignupControllerTest {
                         .content("""
                     {
                       "email": "artist@example.com",
-                      "phone": "01012345678","agreements":[{"id":"service","version":"v1"},{"id":"privacy","version":"v1"}]
+                      "phone": "01012345678","agreements":[{"id":"service","version":"v1"},{"id":"privacy","version":"v1"},{"id":"demo-notice","version":"v1"},{"id":"overseas-transfer","version":"v1"}]
                     }
                     """))
                 .andExpect(status().isCreated())

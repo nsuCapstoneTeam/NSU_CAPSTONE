@@ -14,8 +14,13 @@ import org.mockito.Mockito;
 public final class SignupTestTerms {
     private SignupTestTerms() {}
 
+    /** 모든 서버에서 필수인 약관 4종(app.environment = DEMO). TestcontainersConfiguration의 required-terms와 같다. */
     public static List<TermVersion> agreements() {
-        return List.of(new TermVersion("service", "v1"), new TermVersion("privacy", "v1"));
+        return List.of(
+                new TermVersion("service", "v1"),
+                new TermVersion("privacy", "v1"),
+                new TermVersion("demo-notice", "v1"),
+                new TermVersion("overseas-transfer", "v1"));
     }
 
     public static SignupTermsConsent consent() {
