@@ -18,6 +18,8 @@ import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.QueryTimeoutException;
 
 /**
  * 실명 본인확인의 시작·완료·상태 조회. 판정 순서는 계약 08 §3을 따른다(역할·경로 형식은 컨트롤러 단계가 먼저 본다).
@@ -103,8 +105,19 @@ class IdentityVerificationService {
     private IdentityStatus confirm(
             UUID userId, IdentityVerificationId id, Instant arrivedAt, ProviderOutcome.Verified verified) {
         byte[] nameCiphertext = verified.name() == null ? null : nameCipher.encrypt(verified.name(), userId);
-        IdentityStatus status = repository
-                .confirm(id, userId, arrivedAt, clock.instant(), verified.source(), nameCiphertext)
+        Optional<StoredVerification> confirmed;
+        try {
+            confirmed = repository.confirm(id, userId, arrivedAt, clock.instant(), verified.source(), nameCiphertext);
+        } catch (CannotAcquireLockException | QueryTimeoutException timeout) {
+            // 다른 트랜잭션이 시도 행을 쥐고 있어 잠금 대기·문장 시간 상한(3초)을 넘겼다. 시도는 PENDING이고 기록은 없다(롤백).
+            // 같은 ID로 다시 완료하면 된다. 예외 메시지에는 SQL이 들어 있어 이유(예외 종류)만 남긴다.
+            log.warn(
+                    "본인확인 확정 저장이 시간 안에 끝나지 않았다. 시도: {}, 이유: {}",
+                    id.external(),
+                    timeout.getClass().getSimpleName());
+            throw failure(IDENTITY_VERIFICATION_UNAVAILABLE);
+        }
+        IdentityStatus status = confirmed
                 .map(stored -> IdentityStatus.verifiedAt(stored.verifiedAt()))
                 .orElseThrow(() -> lostRace(id));
         log.info("본인확인을 완료했다. 시도: {}, 출처: {}", id.external(), verified.source());

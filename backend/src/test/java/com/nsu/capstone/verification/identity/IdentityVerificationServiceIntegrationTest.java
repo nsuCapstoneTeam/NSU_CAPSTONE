@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -34,7 +35,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.AdditionalAnswers;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -337,6 +342,59 @@ class IdentityVerificationServiceIntegrationTest extends IdentityVerificationInt
 
         assertThat(attemptCount()).isEqualTo(1);
         assertThat(provider.totalLookups()).isZero();
+    }
+
+    static Stream<DataAccessException> storageTimeouts() {
+        return Stream.of(
+                new CannotAcquireLockException("lock timeout"), new QueryTimeoutException("statement timeout"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("storageTimeouts")
+    void 확정_저장이_잠금_대기나_문장_시간_상한에서_실패하면_UNAVAILABLE이고_시도는_열려_있다(DataAccessException timeout) {
+        IdentityVerificationRepository failingRepository =
+                mock(IdentityVerificationRepository.class, AdditionalAnswers.delegatesTo(repository));
+        doThrow(timeout).when(failingRepository).confirm(any(), any(), any(), any(), any(), any());
+        IdentityVerificationService withFailingRepository = new IdentityVerificationService(
+                failingRepository,
+                provider,
+                limits,
+                new NameCipher(NAME_KEY),
+                clock,
+                uuidV7Generator,
+                new IdentityVerificationSettings(STORE_ID, CHANNEL_KEY, Duration.ofMinutes(15), 10));
+        IdentityVerificationId id = start();
+        provider.script(id, new ProviderOutcome.Verified(IdentitySource.SANDBOX, null));
+
+        assertThatThrownBy(() -> withFailingRepository.complete(artist.getId(), id))
+                .isInstanceOfSatisfying(
+                        IdentityVerificationException.class,
+                        exception -> assertThat(exception.getReason())
+                                .isEqualTo(IdentityVerificationReason.IDENTITY_VERIFICATION_UNAVAILABLE));
+
+        assertThat(repository.findAttempt(id).orElseThrow().status()).isEqualTo(AttemptStatus.PENDING);
+        assertThat(repository.findVerification(artist.getId())).isEmpty();
+    }
+
+    @Test
+    void 시간_상한이_아닌_저장_오류는_그대로_밖으로_나간다() {
+        IdentityVerificationRepository failingRepository =
+                mock(IdentityVerificationRepository.class, AdditionalAnswers.delegatesTo(repository));
+        DataIntegrityViolationException integrity = new DataIntegrityViolationException("constraint");
+        doThrow(integrity).when(failingRepository).confirm(any(), any(), any(), any(), any(), any());
+        IdentityVerificationService withFailingRepository = new IdentityVerificationService(
+                failingRepository,
+                provider,
+                limits,
+                new NameCipher(NAME_KEY),
+                clock,
+                uuidV7Generator,
+                new IdentityVerificationSettings(STORE_ID, CHANNEL_KEY, Duration.ofMinutes(15), 10));
+        IdentityVerificationId id = start();
+        provider.script(id, new ProviderOutcome.Verified(IdentitySource.SANDBOX, null));
+
+        assertThatThrownBy(() -> withFailingRepository.complete(artist.getId(), id))
+                .isSameAs(integrity);
     }
 
     @Test
