@@ -3,10 +3,15 @@ package com.nsu.capstone.global.codestyle;
 import com.sun.source.tree.AnnotationTree;
 import com.sun.source.tree.AssignmentTree;
 import com.sun.source.tree.BinaryTree;
+import com.sun.source.tree.BlockTree;
+import com.sun.source.tree.CatchTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.EnhancedForLoopTree;
 import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.ForLoopTree;
 import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.source.tree.LiteralTree;
 import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.MethodInvocationTree;
@@ -32,6 +37,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
@@ -257,6 +263,41 @@ final class LogSafetyChecker {
             scopes.push(new HashMap<>());
             try {
                 return super.visitMethod(node, unused);
+            } finally {
+                scopes.pop();
+            }
+        }
+
+        @Override
+        public Void visitBlock(BlockTree node, Void unused) {
+            return inScope(() -> super.visitBlock(node, unused));
+        }
+
+        @Override
+        public Void visitCatch(CatchTree node, Void unused) {
+            return inScope(() -> super.visitCatch(node, unused));
+        }
+
+        @Override
+        public Void visitForLoop(ForLoopTree node, Void unused) {
+            return inScope(() -> super.visitForLoop(node, unused));
+        }
+
+        @Override
+        public Void visitEnhancedForLoop(EnhancedForLoopTree node, Void unused) {
+            return inScope(() -> super.visitEnhancedForLoop(node, unused));
+        }
+
+        @Override
+        public Void visitLambdaExpression(LambdaExpressionTree node, Void unused) {
+            return inScope(() -> super.visitLambdaExpression(node, unused));
+        }
+
+        /** 블록·catch·for·람다 안에서 선언한 변수가 그 밖으로 새지 않게 한 겹을 열고 닫는다. */
+        private Void inScope(Supplier<Void> scan) {
+            scopes.push(new HashMap<>());
+            try {
+                return scan.get();
             } finally {
                 scopes.pop();
             }

@@ -621,4 +621,37 @@ class LogSafetyCheckerTest {
                         }
                         """)).isEmpty();
     }
+
+    /** 블록·catch·for·람다 안에서 선언한 변수는 그 밖에서 같은 이름의 필드 선언을 가리지 않는다(#40). */
+    @Test
+    void 블록_안에서_선언한_변수는_바깥의_같은_이름_필드를_가리지_않는다() {
+        assertThat(checkClassBody("""
+                        private final String failure = "x";
+                        void run(String channel) {
+                            try { work(); } catch (Exception failure) { log.error("실패", failure); }
+                            log.warn("값 {} {}", failure, channel);
+                        }
+                        """)).isEmpty();
+        assertThat(checkClassBody("""
+                        private final Exception failure = null;
+                        void run(List<String> items, String channel) {
+                            for (String failure : items) { log.info("{}", failure); }
+                            log.warn("값 {} {}", failure, channel);
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        private final Exception failure = null;
+                        void run(String channel) {
+                            { String failure = "x"; log.info("{}", failure); }
+                            log.warn("값 {} {}", failure, channel);
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        private final Exception failure = null;
+                        void run(List<String> items, String channel) {
+                            items.forEach(failure -> log.info("{}", failure));
+                            log.warn("값 {} {}", failure, channel);
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+    }
 }
