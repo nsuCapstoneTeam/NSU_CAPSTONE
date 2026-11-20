@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.repository.UserRepository;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -133,6 +134,19 @@ class SharedRedisTimeoutIntegrationTest {
                 .andExpect(jsonPath("$.refreshTokenExpiresIn").doesNotExist()));
         // Password hashing runs after the limit check falls through, so allow it on top of the timeout.
         assertNearCommandTimeout("login", millis, UPPER_BOUND_MILLIS + 300);
+    }
+
+    @Test
+    void refreshAndLogoutFailWithInternalErrorWhileRedisIsStalled() throws Exception {
+        // 재발급·로그아웃은 fail-open이 없다(API 07 §6). 토큰을 확인하거나 지울 수 없으면 500이다
+        for (String path : List.of("/api/v1/auth/refresh", "/api/v1/auth/logout")) {
+            long millis = whilePaused(() -> mvc.perform(post(path)
+                            .contentType("application/json")
+                            .content("{\"refreshToken\":\"" + UUID.randomUUID() + "\"}"))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR")));
+            assertNearCommandTimeout(path, millis, UPPER_BOUND_MILLIS);
+        }
     }
 
     private long whilePaused(Request request) throws Exception {

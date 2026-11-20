@@ -40,6 +40,24 @@ class JwtRefreshTokenPropertiesTest {
     }
 
     @Test
+    void rejectsTtlShorterThanAccessTokenTtl() {
+        // 단위 없는 숫자는 밀리초다. 7일을 뜻한 "7"이 7ms로 기동하지 않게 한다
+        contextRunner
+                .withPropertyValues("auth.jwt.refresh-token.ttl=7")
+                .run(context -> assertThat(context).hasFailed());
+        contextRunner
+                .withPropertyValues("auth.jwt.refresh-token.ttl=PT10M")
+                .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    void acceptsTtlEqualToAccessTokenTtl() {
+        contextRunner
+                .withPropertyValues("auth.jwt.refresh-token.ttl=PT30M")
+                .run(context -> assertThat(context).hasNotFailed());
+    }
+
+    @Test
     void acceptsPositiveTtlDuringConfiguration() {
         contextRunner.withPropertyValues("auth.jwt.refresh-token.ttl=P7D").run(context -> {
             assertThat(context).hasNotFailed();

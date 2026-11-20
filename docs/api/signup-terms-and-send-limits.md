@@ -154,6 +154,8 @@
 
 인증 없이 부를 수 있고 요청마다 Redis에 키를 만드는 경로가 셋 있다. 가입 세션 생성은 TTL 30분 해시를, OAuth 시작(`GET /api/v1/auth/oauth/authorization/{provider}`)은 TTL 5분 인가 요청 키를 만든다(`auth.oauth.authorization-request-ttl`). OAuth 콜백은 실패해도 TTL 1분 결과 키를 만든다(`RedisOAuthResultStore.saveError`). 제한이 없으면 반복 요청으로 Redis 메모리를 채울 수 있다. 메모리가 차면 가입·OAuth 상태 저장이 함께 실패한다.
 
+로그인 성공도 7일 동안 남는 Refresh Token 키를 하나씩 만든다(NSU-74). 이 경로는 로그인 한도(§1.5)만 걸리고 사용자별 상한이 없다. 예산 계산과 수용 결정은 [API 07 §2](./07_auth_tokens.md#2-redis-키-설계)에 있다.
+
 | 대상 | 단위 | 기본값 | 창 |
 |---|---|---|---|
 | §1.1의 세 세션 생성 API를 합쳐서 | IPv4 주소 하나, IPv6 /64 대역 하나 | 1시간 30회 | Asia/Seoul 정각부터 [시작, 끝) |

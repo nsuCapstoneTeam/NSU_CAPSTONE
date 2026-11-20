@@ -214,19 +214,37 @@ class TokenRefreshLogoutIntegrationTest {
     }
 
     @Test
-    void invalidBearerHeaderIsRejectedBeforeRefresh() throws Exception {
+    void bearerHeaderIsIgnoredOnTokenEndpoints() throws Exception {
+        // 공통 인터셉터가 만료되거나 잘못된 Access Token을 붙여 보내도 본문의 Refresh Token으로 처리한다
         User user = activeArtist("bearer@example.com");
         String refreshToken =
                 tokenIssuer.issue(user.getId(), user.getRole()).refreshToken().value();
 
-        mockMvc.perform(post("/api/v1/auth/refresh")
+        MvcResult refreshed = mockMvc.perform(post("/api/v1/auth/refresh")
                         .header("Authorization", "Bearer not-a-jwt")
                         .contentType(APPLICATION_JSON)
                         .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+                .andExpect(status().isOk())
+                .andReturn();
+        String next = JsonPath.read(refreshed.getResponse().getContentAsString(), "$.refreshToken");
 
-        refresh(refreshToken).andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .header("Authorization", "Bearer not-a-jwt")
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + next + "\"}"))
+                .andExpect(status().isNoContent());
+        assertFalse(redisTemplate.hasKey(storedKey(next)));
+    }
+
+    @Test
+    void tooLongTokenIsValidationError() throws Exception {
+        for (String path : List.of("/api/v1/auth/refresh", "/api/v1/auth/logout")) {
+            mockMvc.perform(post(path)
+                            .contentType(APPLICATION_JSON)
+                            .content("{\"refreshToken\":\"" + "a".repeat(257) + "\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        }
     }
 
     @Test

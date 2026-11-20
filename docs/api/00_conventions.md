@@ -129,7 +129,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 - 응답은 `global/exception`의 `ErrorCode`·`ErrorResponse`·`GlobalExceptionHandler`가 만든다(ADR-007). 새 `code`는 `ErrorCode`에 추가한다.
 - 경로 값 형식 오류를 `INVALID_{대상}`으로 내려면, 컨트롤러가 값을 문자열로 받아 직접 검사하고 `BusinessException`을 던진다. 경로 변수를 `UUID` 타입으로 받으면 변환 실패가 Spring MVC 표준 400(`ProblemDetail`)이 된다.
 - `401`·`403`은 Spring Security 필터 체인에서 만들어지므로 `JsonAuthenticationEntryPoint`·`JsonAccessDeniedHandler`가 같은 형식을 낸다.
-- 공개 경로(로그인, 토큰 재발급·로그아웃, 가입, OAuth, API 문서)를 뺀 경로에서 토큰 없는 요청은 HTTP 메서드와 관계없이 `401`이다. 서버는 Bearer 토큰으로만 인증하므로 CSRF 보호를 쓰지 않는다([ADR authentication/00](../adr/authentication/00_csrf_protection_for_bearer_api.md)).
+- 공개 경로(로그인, 토큰 재발급·로그아웃, 가입, OAuth, 외부 계정 연결의 Google 콜백 `GET /api/v1/external-accounts/oauth/callback/youtube`, API 문서)를 뺀 경로에서 토큰 없는 요청은 HTTP 메서드와 관계없이 `401`이다. 서버는 Bearer 토큰으로만 인증하므로 CSRF 보호를 쓰지 않는다([ADR authentication/00](../adr/authentication/00_csrf_protection_for_bearer_api.md)).
 
 ## 9. 아직 정하지 않은 규칙
 
@@ -177,7 +177,7 @@ API를 새로 만들거나 바꿀 때 아래를 지킨다.
 
 지금 쓰는 태그 이름: 로그인, OAuth, 아티스트 가입, EVENT_PARTNER 가입, 행사, 지역, EVENT_PARTNER 프로필, Trust Profile, 외부 계정
 
-- 계약을 바꾸는 PR은 md 에러 표와 `@ApiResponse`를 함께 고친다. 둘이 같은지 검사하는 테스트는 없으므로 PR 리뷰에서 확인한다.
+- 계약을 바꾸는 PR은 md 에러 표와 `@ApiResponse`를 함께 고친다. 둘이 같은지 검사하는 테스트는 일부 API에만 있다(`OpenApiDocsIntegrationTest`의 `documentsErrorResponsesFromContract`, `documentsTokenResponsesFromContract`). 나머지는 PR 리뷰에서 확인한다.
 - 2026-10-20 기준 identity API(가입·로그인·OAuth)는 `@ApiResponse`가 없다. 병합 뒤 identity 담당자에게 handoff로 넘긴다. 나중에 만든 토큰 재발급·로그아웃(NSU-74)에는 달았다.
 
 ### 10.2 프론트 공지

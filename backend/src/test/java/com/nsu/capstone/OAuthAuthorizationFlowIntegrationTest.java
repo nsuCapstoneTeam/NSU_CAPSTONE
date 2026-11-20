@@ -425,6 +425,9 @@ class OAuthAuthorizationFlowIntegrationTest {
         exchange(laterCode, later.bindingCookie())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.type", equalTo("SIGNUP_REQUIRED")))
+                // 가입 전이라 토큰을 주지 않는다(API 07 §3)
+                .andExpect(jsonPath("$.accessToken").doesNotExist())
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
                 .andExpect(header().doesNotExist("Set-Cookie"));
     }
 

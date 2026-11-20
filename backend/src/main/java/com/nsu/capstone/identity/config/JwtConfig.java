@@ -9,6 +9,7 @@ import java.util.Base64;
 import java.util.UUID;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -48,6 +49,17 @@ public class JwtConfig {
             throw new IllegalStateException("JWT access token secret must be at least 256 bits");
         }
         return new SecretKeySpec(decodedSecret, "HmacSHA256");
+    }
+
+    // Refresh Token이 Access Token보다 먼저 끝나면 재발급이 쓸모없다. 단위 없는 숫자(밀리초)로 잘못 준 값도 여기서 막는다
+    @Bean
+    InitializingBean jwtRefreshTokenTtlValidation(
+            JwtAccessTokenProperties accessToken, JwtRefreshTokenProperties refreshToken) {
+        return () -> {
+            if (refreshToken.ttl().compareTo(accessToken.ttl()) < 0) {
+                throw new IllegalStateException("JWT refresh token TTL must not be shorter than access token TTL");
+            }
+        };
     }
 
     @Bean

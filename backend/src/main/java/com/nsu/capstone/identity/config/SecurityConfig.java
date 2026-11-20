@@ -15,6 +15,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.savedrequest.NullRequestCache;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
@@ -29,7 +31,8 @@ public class SecurityConfig {
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/login");
 
     // Access Token이 만료된 뒤에도 부르는 경로라 공개한다. 본문의 Refresh Token이 자격 증명이다.
-    // 기본 LogoutFilter가 아니라 인가를 거치는 컨트롤러로 만든다(ADR authentication/00 Decision 4)
+    // 기본 LogoutFilter가 아니라 인증 필터 뒤의 컨트롤러로 만든다(ADR authentication/00 Decision 4).
+    // Authorization 헤더는 읽지 않는다. 만료된 Bearer가 붙어 401이 나면 로그아웃이 토큰을 지우지 못한다(07 §4·§5)
     private static final RequestMatcher TOKEN_ENDPOINTS = new OrRequestMatcher(
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/refresh"),
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/logout"));
@@ -114,6 +117,7 @@ public class SecurityConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 .oauth2ResourceServer(resourceServer -> resourceServer
+                        .bearerTokenResolver(tokenEndpointIgnoringResolver())
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler)
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
@@ -124,6 +128,11 @@ public class SecurityConfig {
         }
 
         return http.build();
+    }
+
+    private static BearerTokenResolver tokenEndpointIgnoringResolver() {
+        BearerTokenResolver defaultResolver = new DefaultBearerTokenResolver();
+        return request -> TOKEN_ENDPOINTS.matches(request) ? null : defaultResolver.resolve(request);
     }
 
     @Bean
