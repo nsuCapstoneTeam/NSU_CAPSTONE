@@ -5,6 +5,7 @@
 - 관련: NSU-105(본인확인), [00 MVP 시연 본인확인](./00_mvp_sandbox_identity_verification.md), 계약 [08 실명 본인확인 API](../../api/08_identity_verification.md), [01 Trust Profile §4.3·§7](../../api/01_trust_profile.md#7-내부-일괄-조회-계약), [04 곡 API §2.2·§3.2](../../api/04_music.md), [가입 약관·발송 한도 §1.6](../../api/signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때), PR #219(NSU-123, 요청 제한 기반), NSU-89(곡 업로드·등록 정보), NSU-127(PRIVATE 열람), NSU-128(댓글), NSU-129(시연 준비)
 - 요구사항: SSOT `AUTH-009`(실명 본인확인은 가입 후 Trust/Verification 책임), `TRUST-142`(v1.18 초안 ③, 팀 확인 전), Linear NSU-105 "작업 범위" 1~9와 AC
   - 시연 서버가 `SANDBOX` 결과의 이름·생년월일·CI를 저장하지 않는 것은 승인본 `AUTH-009`(법적 이름·생년월일·고유 식별값을 식별할 수 있어야 함)와 다르다. 이 차이는 v1.18 초안 ④(팀 확인 전)에 기댄다([ADR 00](./00_mvp_sandbox_identity_verification.md) "곡 업로드"). 운영 단계는 승인본 `AUTH-009`를 그대로 지킨다
+  - `MOCK` 기록에 동의한 팀원의 실명을 암호화해 두는 것("이름", "팀원 실명 동의")은 ④의 단서로 SSOT v1.23 초안(2026-11-20, 팀 확인 전)에 넣었다. 외부 가입자의 실명은 남지 않는다
 - 설계 리뷰 회차, 사람 결정, 범위 밖: 아래 "리뷰 이력과 결정 출처" 절
 
 ---
