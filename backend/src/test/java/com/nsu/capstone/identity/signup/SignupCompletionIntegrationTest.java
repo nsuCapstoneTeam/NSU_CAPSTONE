@@ -106,6 +106,15 @@ class SignupCompletionIntegrationTest {
     }
 
     @Test
+    void oauthClaimRejectsConsentThatDiffersFromTheCallbackSession() {
+        String id = preparedOAuth();
+        SignupSessionFixtures.markAllVerified(redis, id);
+        redis.opsForHash().put(SignupRedisKeys.session(id), "agreedAt", "2000-01-01T00:00:00Z");
+
+        assertRejected(ErrorCode.REQUIRED_TERMS_AGREEMENT_REQUIRED, () -> states.claim(id, "owner", UserRole.ARTIST));
+    }
+
+    @Test
     void preparationReportsTypedValidationFailures() {
         String id = "prepare-" + UUID.randomUUID();
         oauthSessions.save(

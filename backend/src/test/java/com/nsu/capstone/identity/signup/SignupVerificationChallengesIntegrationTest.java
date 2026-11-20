@@ -61,6 +61,9 @@ class SignupVerificationChallengesIntegrationTest {
     @Autowired
     StringRedisTemplate redis;
 
+    @Autowired
+    OtpDigestService digests;
+
     @MockitoSpyBean
     SignupSessionStore sessions;
 
@@ -188,6 +191,8 @@ class SignupVerificationChallengesIntegrationTest {
                 () -> challenges.issue(session.signupSessionId(), UserRole.ARTIST, VerificationChannel.EMAIL, ip));
 
         verify(alerts).providerFailure(VerificationChannel.EMAIL);
+        assertEquals("0", destinationCounter(session));
+        assertEquals("1", ipCounter(ip));
         assertError(
                 ErrorCode.VERIFICATION_CODE_EXPIRED,
                 () -> challenges.confirm(
@@ -237,6 +242,8 @@ class SignupVerificationChallengesIntegrationTest {
         });
 
         verify(alerts, never()).providerFailure(any());
+        assertEquals("0", destinationCounter(session));
+        assertEquals("0", ipCounter(ip));
         assertFalse(events.isEmpty());
         assertSafe(events, session, code.getValue());
         assertError(
@@ -336,6 +343,21 @@ class SignupVerificationChallengesIntegrationTest {
 
     private boolean hasChallenge(SignupSession session, VerificationChannel channel) {
         return Boolean.TRUE.equals(redis.hasKey(SignupRedisKeys.challenge(session.signupSessionId(), channel)));
+    }
+
+    private String destinationCounter(SignupSession session) {
+        return counter("destination", digests.rateLimitDestinationDigest(VerificationChannel.EMAIL, session.email()));
+    }
+
+    private String ipCounter(String ip) {
+        return counter("ip", digests.clientIpDigest(ip));
+    }
+
+    /** Reads the single counter of this kind and digest, whatever window the test clock falls in. */
+    private String counter(String kind, String digest) {
+        var keys = List.copyOf(redis.keys(SignupRateLimitKeys.PREFIX + kind + ":*:" + digest));
+        assertEquals(1, keys.size(), kind);
+        return redis.opsForValue().get(keys.getFirst());
     }
 
     private static List<ILoggingEvent> captureLogs(Supplier<Void> action) {

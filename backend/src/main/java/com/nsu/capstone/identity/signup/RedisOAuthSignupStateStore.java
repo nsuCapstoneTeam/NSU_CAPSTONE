@@ -111,7 +111,7 @@ class RedisOAuthSignupStateStore implements OAuthSignupStateStore {
     private final StringRedisTemplate redis;
     private final OAuthProperties properties;
 
-    public RedisOAuthSignupStateStore(StringRedisTemplate redis, OAuthProperties properties) {
+    RedisOAuthSignupStateStore(StringRedisTemplate redis, OAuthProperties properties) {
         this.redis = redis;
         this.properties = properties;
     }
