@@ -82,6 +82,20 @@ class IdentitySeedJarIntegrationTest extends IdentityVerificationIntegrationTest
         assertThat(run.output()).contains("HTTP 포트를 열지 않았다");
     }
 
+    /** actuator의 관리 서버도 HTTP 포트를 연다. 환경 변수로 관리 포트를 줘도 시드는 열지 않는다. */
+    @Test
+    void 환경에_MANAGEMENT_SERVER_PORT가_있어도_시드_jar는_관리_포트를_열지_않는다() throws Exception {
+        int port;
+        try (ServerSocket free = new ServerSocket(0)) {
+            port = free.getLocalPort();
+        }
+
+        SeedRun run = runSeed(artist.getEmail(), SEED_NAME, Map.of("MANAGEMENT_SERVER_PORT", String.valueOf(port)));
+
+        assertThat(run.exitCode()).as(run.output()).isZero();
+        assertThat(run.output()).doesNotContain("started on port " + port);
+    }
+
     @Test
     void 이름이_없으면_기록을_만들지_않고_실패로_끝난다() throws Exception {
         SeedRun run = runSeed(artist.getEmail(), "");

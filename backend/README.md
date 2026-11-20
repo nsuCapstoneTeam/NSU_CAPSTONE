@@ -200,7 +200,7 @@ unset SEED_IDENTITY_EMAIL SEED_IDENTITY_NAME
 - 실제 이름은 명령줄에 값으로 적지 않는다(셸 기록에 평문으로 남는다). 위처럼 `read -rs`로 읽는다. 컨테이너로 돌리면 `docker run --rm -e SEED_IDENTITY_EMAIL -e SEED_IDENTITY_NAME …`처럼 변수 이름만 넘겨 컨테이너 설정에 값이 남지 않게 하고, 끝나면 컨테이너가 지워지게 한다.
 - Flyway를 끄고 HTTP 포트와 actuator 관리 포트를 열지 않는다(`server.port=-1`, `management.server.port=-1`). 모두 명령행 인수로 고정해서 `SERVER_PORT`·`MANAGEMENT_SERVER_PORT` 같은 환경 변수나 설정 파일이 있어도 바뀌지 않는다. 스키마는 같은 버전의 서버가 이미 올려 둔 DB여야 한다.
 - 기록은 HTTP와 같은 시작→완료 서비스 경로를 Mock 제공자로 지나 만든다. 이름은 암호화해 `MOCK` 기록에만 저장한다.
-- 종료 코드: `0` 성공, `2` 환경 변수 `SEED_IDENTITY_EMAIL`·`SEED_IDENTITY_NAME`이 없거나 이름 형식이 틀림, `3` 대상 ARTIST를 찾을 수 없거나 기록을 만들지 못함(이미 본인확인을 마친 계정, 요청 제한 등), `4` HTTP 포트가 열려 있어 중단.
+- 종료 코드: `0` 성공, `2` 환경 변수 `SEED_IDENTITY_EMAIL`·`SEED_IDENTITY_NAME`이 없거나 이름 형식이 틀림, `3` 대상 ARTIST를 찾을 수 없거나 기록을 만들지 못함(이미 본인확인을 마친 계정, 요청 제한 등), `4` 주 웹서버나 actuator 관리 서버가 HTTP 포트를 열어 중단(포트를 막지 못했을 때를 알아채는 점검이다).
 - 이름의 주인인 팀원에게 "실명을 암호화해 시연 DB에 초기화 날짜까지 저장"하는 동의를 받고(NSU-129) 초기화 때 기록과 이름 키를 폐기한다.
 
 ## 운영 환경 데이터베이스 설정

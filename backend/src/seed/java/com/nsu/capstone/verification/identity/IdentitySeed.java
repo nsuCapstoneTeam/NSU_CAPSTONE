@@ -2,12 +2,15 @@ package com.nsu.capstone.verification.identity;
 
 import com.nsu.capstone.NsuCapstoneApplication;
 import com.nsu.capstone.global.exception.BusinessException;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.web.server.context.WebServerApplicationContext;
+import org.springframework.boot.web.server.context.WebServerInitializedEvent;
+import org.springframework.context.ApplicationListener;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -51,22 +54,28 @@ public final class IdentitySeed {
                         IdentityVerificationProvider.class,
                         () -> mock,
                         definition -> definition.setPrimary(true)));
-        // 명령행 인수는 환경 변수(SERVER_PORT)와 application.properties의 spring.flyway.enabled보다 우선한다.
-        // setDefaultProperties는 우선순위가 가장 낮아 이 둘에 밀린다.
+        // 주 웹서버와 actuator 관리 서버가 실제로 연 포트. 둘 다 -1로 막지만, 막지 못했을 때 알아채려고 이벤트로 모은다.
+        List<Integer> openedPorts = new CopyOnWriteArrayList<>();
+        application.addListeners((ApplicationListener<WebServerInitializedEvent>) event -> {
+            int port = event.getWebServer().getPort();
+            if (port > 0) {
+                openedPorts.add(port);
+            }
+        });
+        // 명령행 인수는 환경 변수(SERVER_PORT, MANAGEMENT_SERVER_PORT)와 application.properties의 spring.flyway.enabled보다
+        // 우선한다. setDefaultProperties는 우선순위가 가장 낮아 이들에 밀린다.
         try (ConfigurableApplicationContext context =
-                application.run("--server.port=-1", "--spring.flyway.enabled=false")) {
-            return seed(context, email.strip().toLowerCase(Locale.ROOT));
+                application.run("--server.port=-1", "--management.server.port=-1", "--spring.flyway.enabled=false")) {
+            return seed(context, email.strip().toLowerCase(Locale.ROOT), openedPorts);
         }
     }
 
-    private static int seed(ConfigurableApplicationContext context, String email) {
-        if (context instanceof WebServerApplicationContext web
-                && web.getWebServer() != null
-                && web.getWebServer().getPort() > 0) {
-            log.error("HTTP 포트가 열려 있다. 시드는 포트를 열지 않아야 한다");
+    private static int seed(ConfigurableApplicationContext context, String email, List<Integer> openedPorts) {
+        if (!openedPorts.isEmpty()) {
+            log.error("HTTP 포트가 열려 있다. 시드는 주 서버와 관리 서버 어느 포트도 열지 않아야 한다");
             return 4;
         }
-        log.info("HTTP 포트를 열지 않았다(server.port=-1)");
+        log.info("HTTP 포트를 열지 않았다(server.port=-1, management.server.port=-1)");
 
         UUID userId = context.getBean(JdbcClient.class)
                 .sql("SELECT id FROM users WHERE email = :email AND role = 'ARTIST'")
