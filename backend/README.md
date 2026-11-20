@@ -179,7 +179,7 @@ ARTIST가 마이페이지에서 받는 실명 본인확인(PortOne V2 + NHN KCP 
 | `IDENTITY_NAME_ENCRYPTION_KEY` | Mock 본인확인의 이름을 암호화하는 AES-256-GCM 키. 무작위 32바이트의 Base64다 |
 
 - 위 값이 비었거나, 환경 변수가 정해지지 않아 `${...}` 자리표시자 그대로이거나, 허용 값이 아니거나(제공자·환경), 이름 키가 Base64 32바이트가 아니면 앱이 뜨지 않는다. 실패 출력에는 속성 이름만 있고 그 값은 없다.
-- 시간당 요청 한도(시작과 완료 합계, 기본 10회)와 시도 유효 시간(기본 15분)은 속성 `identity-verification.request-limit-per-hour`·`identity-verification.attempt-lifetime`으로 바꾼다. 한도 카운터는 Redis에 있고 Redis를 쓸 수 없으면 `503 RATE_LIMIT_UNAVAILABLE`이다. 한 계정의 카운터는 위 "가입 한도 카운터 관리"의 `identity-verification` 종류로 지운다.
+- 시간당 요청 한도(시작과 완료 합계, 기본 10회)와 시도 유효 시간(기본 15분)은 속성 `identity-verification.request-limit-per-hour`·`identity-verification.attempt-lifetime`으로 바꾼다. 한도 카운터는 Redis에 있고 Redis를 쓸 수 없으면 `503 RATE_LIMIT_UNAVAILABLE`이다. 한 계정의 카운터는 아래 "가입 한도 카운터 관리"의 `identity-verification` 종류로 지운다.
 - PortOne 비밀값과 채널 설정이 틀려도 앱은 뜬다(기동이 PortOne에 기대지 않게 하려는 결정이다). 배포 직후 임의의 32자 ID로 PortOne 단건 조회를 한 번 해서 `404`면 비밀값이 맞고 `401`·`403`이면 틀린 것이다. 실행 중의 같은 오류는 `ERROR` 로그로 남는다.
 - 로그와 예외에는 시도 ID와 이유(사람을 가리키지 않는 값)만 남는다. 이름·생년월일·CI·DI와 PortOne 응답 원문은 읽지도 남기지도 않는다.
 

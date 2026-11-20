@@ -4,13 +4,14 @@
 - 결정일: **2026-11-17** (NSU-105 설계 세션)
 - 관련: NSU-105(본인확인), [00 MVP 시연 본인확인](./00_mvp_sandbox_identity_verification.md), 계약 [08 실명 본인확인 API](../../api/08_identity_verification.md), [01 Trust Profile §4.3·§7](../../api/01_trust_profile.md#7-내부-일괄-조회-계약), [04 곡 API §2.2·§3.2](../../api/04_music.md), [가입 약관·발송 한도 §1.6](../../api/signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때), PR #219(NSU-123, 요청 제한 기반), NSU-89(곡 업로드·등록 정보), NSU-127(PRIVATE 열람), NSU-128(댓글), NSU-129(시연 준비)
 - 요구사항: SSOT `AUTH-009`(실명 본인확인은 가입 후 Trust/Verification 책임), `TRUST-142`(v1.18 초안 ③, 팀 확인 전), Linear NSU-105 "작업 범위" 1~9와 AC
+  - 시연 서버가 `SANDBOX` 결과의 이름·생년월일·CI를 저장하지 않는 것은 승인본 `AUTH-009`(법적 이름·생년월일·고유 식별값을 식별할 수 있어야 함)와 다르다. 이 차이는 v1.18 초안 ④(팀 확인 전)에 기댄다([ADR 00](./00_mvp_sandbox_identity_verification.md) "곡 업로드"). 운영 단계는 승인본 `AUTH-009`를 그대로 지킨다
 - 설계 리뷰 회차, 사람 결정, 범위 밖: 아래 "리뷰 이력과 결정 출처" 절
 
 ---
 
 ## Decision
 
-**인증 시도를 PostgreSQL 테이블의 상태 기계로 두고, 완료를 "호출자의 것이고 `PENDING`이고 만료 전인 행만 바꾸는" 조건부 UPDATE와 회원당 하나인 본인확인 기록 INSERT로 확정한다.** PortOne 재조회는 트랜잭션 밖에서 한다. 다른 모듈은 `trust.identityverification` 패키지의 `IdentityVerifications` 하나로만 본인확인을 읽는다.
+**인증 시도를 PostgreSQL 테이블의 상태 기계로 두고, 완료를 "호출자의 것이고 `PENDING`이고 만료 전인 행만 바꾸는" 조건부 UPDATE와 회원당 하나인 본인확인 기록 INSERT로 확정한다.** PortOne 재조회는 트랜잭션 밖에서 한다. 다른 모듈은 `verification.identity` 패키지의 `IdentityVerifications` 하나로만 본인확인을 읽는다.
 
 ADR 00이 정한 것(제공자, 출처 판정, `SANDBOX` 저장 항목, 요청 제한 수치, 시연 공개 쓰기 예외, Trust Profile `IDENTITY`)은 다시 정하지 않는다. 이 ADR은 그것을 어떤 저장 모델과 모듈 경계로 구현하는지 정한다.
 
@@ -35,7 +36,7 @@ ADR 00이 정한 것(제공자, 출처 판정, `SANDBOX` 저장 항목, 요청 �
 | 팀원 실명 동의 | `MOCK` 기록의 이름은 등록부 대조에 쓸 팀원의 실명이다. 그 팀원에게 "등록곡 사용"(ADR 00)에 더해 "실명을 암호화해 시연 DB에 초기화 날짜까지 저장"하는 데 동의를 다시 받는다(2026-11-17 사용자 결정). 동의받기는 NSU-129가 한다 |
 | 이름 암호화 키 | 시연 서버를 AWS에 올리면 `IDENTITY_NAME_ENCRYPTION_KEY`를 포함한 비밀 값은 AWS Systems Manager Parameter Store 표준 등급(SecureString, AWS 관리 키, 무료)에 모은다. 그 전의 로컬 개발은 각자 환경 변수(IntelliJ 실행 설정 등)로 둔다. 어느 쪽이든 저장소·문서·Slack·로그에 적지 않는다. 초기화 runbook(NSU-129)에 이 키 삭제를 넣는다. 키를 지우면 백업에 남은 암호문도 읽을 수 없다. 시연 서버의 최종 위치는 NSU-129에서 확정한다(AWS 전제). 2026-11-17 사용자 결정(강석윤 님 의견 반영: AWS 도입 전에는 각자, 도입 뒤에는 모아서 관리) |
 | 환경 | `app.environment` 하나가 환경 값의 유일한 출처다(값은 `DEMO` 하나, 기본값 없음). 공개 쓰기 필터(NSU-158)도 이 값을 읽는다. PR #219가 머지되면 같은 PR에서 `ConfiguredRequiredTermsPolicy`(강석윤 님 파일)가 Spring 프로필 `demo` 대신 이 값을 읽게 고친다(2026-11-17 지휘 세션 확정: 최종 사용자 경험 차이가 없어 권장안). 서버는 `DEMO`에서만 뜨므로(ADR 00) 로컬 개발을 포함한 모든 서버에서 시연 약관 4개가 필수가 되고, #219의 "기본 환경 2종"은 없어진다. 함께 바뀌는 #219 쪽 파일: 계약 `signup-terms-and-send-limits.md` §1.1(기본 환경 문장)·§3(약관 테스트 기준 두 행), `backend/README.md` 약관 설명, `TestcontainersConfiguration`, `SignupTestTerms`, `DemoSignupTermsIntegrationTest`. `DEMO`가 아닌 약관 집합은 운영 단계 ADR이 운영 환경을 정할 때 다시 둔다 |
-| 요청 제한 | PR #219의 `RedisPublicRequestLimitStore`를 다시 쓴다. 비공개 `reserve`가 미리 만든 키 조각을 받게 바꾸고, 계정 단위 공개 메서드 하나를 더한다(kind `identity-verification`, 계정 UUID 원문). #219 머지 뒤 NSU-105 PR에서 그 파일의 기존 스타일대로 고친다(2026-11-17 확정: 사용자 경험 차이가 없어 권장안을 택함). 시작·완료 서비스가 역할·형식 검사 다음에 부른다. 보안 필터로 두지 않는다 |
+| 요청 제한 | PR #219의 `RedisPublicRequestLimitStore`를 다시 쓴다. 비공개 `reserve`가 미리 만든 키 조각을 받게 바꾸고, 계정 단위 공개 메서드 하나를 더한다(kind `identity-verification`, 계정 UUID 원문). NSU-105 PR에서 그 파일의 기존 스타일대로 고쳤다(2026-11-17 확정: 사용자 경험 차이가 없어 권장안을 택함). 시작·완료 서비스가 역할·형식 검사 다음에 부른다. 보안 필터로 두지 않는다 |
 | 화면 | NSU-105는 백엔드만 한다. 화면(마이페이지 버튼, 창을 열기 전 안내, 데스크톱 팝업·모바일 redirect, 결과 안내)은 NSU-149로 이성범 님이 만든다(2026-11-17 사용자 결정). 화면이 부를 API 순서와 흐름은 계약 08 §6에 적는다 |
 | 구현 순서 | PR #219와 NSU-37 PR #232는 2026-11-18 머지됐다. 구현은 두 단계다(2026-11-18 지휘 세션 요청). **1단계(끝남):** NSU-37과 파일이 겹치지 않는 부분. 마이그레이션과 저장, 순수 판정, 채널 정책, PortOne 어댑터, Mock 제공자와 시드 jar, 이름 암호화, 시작·완료 서비스, 요청 제한, 내부 계약 `IdentityVerifications`, 설정·시작 검사, 약관 정책 변경이다. 이 단계의 서비스는 모듈 예외와 사유 enum(이름은 계약 08 §4의 code)을 던진다. 설정 파일은 모듈 설정 클래스가 `@PropertySource`로 읽고 `application.properties`는 고치지 않는다(NSU-37과 같은 방식). **2단계(#232 머지 뒤, 2026-11-18 시작):** NSU-37이 마지막에 고치는 공유 파일과 그 포트에 기대는 부분. `ErrorCode`와 예외 매핑, 컨트롤러·`SecurityConfig`, OpenAPI 테스트, `IDENTITY` source와 Trust Profile 시험, `lombok-style-files.txt`, `backend/README.md`다. 마이그레이션은 V11이다(#219가 V8·V9, NSU-37이 V10이고 V10은 #232로 main에 들어갔다) |
 
@@ -43,7 +44,7 @@ ADR 00이 정한 것(제공자, 출처 판정, `SANDBOX` 저장 항목, 요청 �
 
 ```sql
 -- V11__create_identity_verification_tables.sql (#219가 V8·V9, NSU-37이 V10을 쓴다. 2026-11-17 지휘 세션 배정)
--- 실명 본인확인 시도와 기록 (API 06, ADR identity_verification/00·01, NSU-105)
+-- 실명 본인확인 시도와 기록 (API 08, ADR identity_verification/00·01, NSU-105)
 -- users를 참조하는 FK는 users에 SHARE ROW EXCLUSIVE 잠금을 잡는다.
 -- 가입을 오래 막지 않도록 잠금 대기를 3초로 둔다(V7과 같은 이유).
 SET LOCAL lock_timeout = '3s';
@@ -142,7 +143,7 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 | 00 §10.1 태그 추가는 NSU-146 머지 뒤 NSU-105 PR에서 | 지휘 세션, 2026-11-17 |
 | 마이그레이션 번호 V11(#219 V8·V9, NSU-37 V10) | 지휘 세션, 2026-11-17 |
 | 구현을 NSU-37과 겹치지 않는 1단계와 NSU-37 머지 뒤 2단계로 나눔 | 지휘 세션 요청, 2026-11-18(#219 머지 뒤, NSU-146·NSU-37이 쓴 방식) |
-| 계약 번호 07(NSU-37이 `06_external_accounts.md`) | 지휘 세션, 2026-11-17 |
+| 계약 번호 08(NSU-37이 `06_external_accounts.md`, 07은 NSU-74 `07_auth_tokens.md`가 써서 2026-11-20 설계 세션이 07에서 옮김) | 지휘 세션, 2026-11-17 |
 | Trust Profile 포트·합치는 reader·`IDENTITY` enum·시험 고정값 정리는 NSU-37, NSU-105는 `IDENTITY` source만 | 지휘 세션, 2026-11-17(NSU-37과 겹침 조정) |
 | 모듈을 `verification.identity`로(ADR 06 §19 패키지 경계) | 설계 세션, 2026-11-17(기존 ADR을 따름) |
 | 제공자, 출처 판정, `SANDBOX` 저장 항목, 요청 제한 수치, 시연 공개 쓰기 예외, Trust Profile `IDENTITY` | ADR 00(머지됨), 다시 정하지 않는다 |
@@ -157,6 +158,7 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 | 2 | Codex | [Medium] 요청 제한과 "동시 완료 20건 모두 200" 보장이 모순 | 보장을 요청 제한 통과 요청으로 한정, 동시성 시험을 높인 한도와 기본 한도로 나눔 |
 | 3 | Claude(Codex 한도로 대체) | [Medium] #219 계약·README·테스트가 바뀌는 목록에 없음, [Medium] 시드가 웹 없는 컨텍스트로 뜨지 않고 대안이 없음, [Low] 설정 오류 감지, [Low] §3 판정 순서와 §5 재전송 보장 모순 | Decision "환경"에 바뀌는 #219 파일과 확인 절차, 시드를 `server.port=-1`·Flyway 끔·같은 빌드로 하고 비교표·대안 추가, 로그 등급·배포 확인·reset kind, §3 순서 일반화 |
 | 4 | Codex | [High] 롤백 계획이 두 테이블을 지워 본인확인 기록과 NSU-89 근거를 잃음 | 기본 롤백은 앱 버전만, 테이블·FK·데이터는 그대로. 테이블 삭제는 승인된 전체 초기화뿐(저장 모델 "되돌리기") |
+| 5 | Codex | 지적 없음(approve, 2026-11-17) | - |
 
 - 2·3회차에 같은 종류의 지적(§3 판정 순서와 §5·§10 보장의 정합)이 이어졌다. 사례를 하나씩 고치지 않고 **일반화했다**: 계약 08 §5 첫 항목에 "§3의 판정 순서가 모든 보장보다 앞선다"는 경계를 한 번 적고, 남은 조합은 계약 08 §10의 판정 순서 조합 시험으로 넘겼다.
 
@@ -354,10 +356,10 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 - 회원 탈퇴 기능이 생기면 두 테이블의 행을 먼저 지워야 한다(FK에 `ON DELETE`가 없다, V7 관례).
 - 기본값 없는 새 설정: `APP_ENVIRONMENT`, `IDENTITY_VERIFICATION_PROVIDER`, `PORTONE_API_SECRET`, `PORTONE_STORE_ID`, `PORTONE_CHANNEL_KEY`, `PORTONE_TEST_CHANNEL_PG_PROVIDER`, `PORTONE_TEST_CHANNEL_PG_MERCHANT_ID`, `IDENTITY_NAME_ENCRYPTION_KEY`. 시연 서버 배포 설정(NSU-129)에 넣는다.
 - AC "PortOne 테스트 채널로 본인확인 창을 띄우고, 서버 재조회로 결과를 저장한다"는 화면이 있어야 끝난다. 그래서 둘로 나눈다(2026-11-18 Linear NSU-105 작업 범위 10번과 NSU-149에 반영). NSU-105는 커밋하지 않는 로컬 확인 페이지로 KCP 테스트 창을 한 번 띄워, 서버 재조회와 `SANDBOX` 저장까지 실제 PortOne으로 확인한다(구현 0단계와 마지막 확인). NSU-149는 마이페이지에서 창을 띄우고 완료 API로 본인확인을 마치는 것(데스크톱·모바일)을 확인한다.
-- NSU-129에 넘길 일: 팀원 실명 저장 동의 다시 받기, 이름 암호화 키를 시연 서버 secret 저장소에 두기, 초기화 runbook에 키 폐기 넣기, 시연 서버 안에서 시드 jar 돌리기, 새 설정 값(아래)을 시연 서버 배포 설정에 넣기.
+- NSU-129에 넘길 일: 팀원 실명 저장 동의 다시 받기, 이름 암호화 키를 시연 서버 secret 저장소에 두기, 초기화 runbook에 키 폐기 넣기, 시연 서버 안에서 시드 jar 돌리기, 새 설정 값(위 "기본값 없는 새 설정")을 시연 서버 배포 설정에 넣기.
 - `backend/build.gradle`에 `seed` 소스 세트와 시드 jar 작업이 생긴다. `test`가 `seed` 출력을 쓴다. 시드 jar는 서버 jar와 같은 빌드에서 나온다.
 - PortOne 비밀 값·채널 설정 오류는 서버 기동으로 잡지 않는다(기동이 PortOne에 기대지 않게 한다). NSU-129 배포 체크리스트에 두 가지를 넣는다. 첫째, 배포 직후 임의의 32자 ID로 PortOne 단건 조회를 한 번 해서 `404`면 비밀 값이 맞고 `401`·`403`이면 틀렸다. 둘째, 배포 뒤 리허설에서 KCP 테스트 본인확인 한 건으로 `pgProvider`·`pgMerchantId`·채널 키를 확인한다. 실행 중의 같은 오류는 `ERROR` 로그로 남는다.
-- PR #219의 `backend/scripts/reset_signup_limits.py` `KINDS`에 `identity-verification`을 더한다. 설정을 고친 뒤 운영자가 한 계정의 요청 제한을 풀 수 있게 하기 위해서다(#219 머지 뒤, 그 파일 스타일대로).
+- PR #219의 `backend/scripts/reset_signup_limits.py` `KINDS`에 `identity-verification`을 더했다. 설정을 고친 뒤 운영자가 한 계정의 요청 제한을 풀 수 있게 하기 위해서다(그 파일 스타일대로).
 
 ## Reused
 

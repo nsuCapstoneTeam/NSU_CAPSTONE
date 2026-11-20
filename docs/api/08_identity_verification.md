@@ -3,13 +3,13 @@
 ARTIST가 마이페이지에서 실명 본인확인을 받고, 자기 본인확인 상태를 보는 API다. 시연 서버에서는 PortOne V2 + NHN KCP 테스트 채널로 테스트 본인확인을 한다.
 
 - 구현 이슈: NSU-105
-- 요구사항: SSOT `AUTH-009`(실명 본인확인은 가입 후 Trust/Verification 책임, 가입·로그인 조건이 아님), `TRUST-142`(v1.18 초안 ③, 팀 확인 전)
+- 요구사항: SSOT `AUTH-009`(실명 본인확인은 가입 후 Trust/Verification 책임, 가입·로그인 조건이 아님), `TRUST-142`(v1.18 초안 ③, 팀 확인 전). 시연 서버가 `SANDBOX` 결과의 이름·생년월일·CI를 저장하지 않는 것(§8)은 승인본 `AUTH-009`와 달라 v1.18 초안 ④(팀 확인 전)에 기댄다(ADR 00 "곡 업로드")
 - 결정 기록: [identity_verification/00 MVP 시연 본인확인](../adr/identity_verification/00_mvp_sandbox_identity_verification.md), [identity_verification/01 인증 시도와 본인확인 기록](../adr/identity_verification/01_identity_verification_attempt_and_record.md)
 - 관련 계약: [01 Trust Profile](./01_trust_profile.md) §4.3 `IDENTITY`·§7, [04 곡 API](./04_music.md) §2.2 검사 2-1·§3.2 검사 6·6-1, [가입 약관·발송 한도](./signup-terms-and-send-limits.md) §1.6
 - 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105). 이 문서의 "실명 본인확인"은 용어집의 실명 본인확인이고, 시연 서버에서는 모두 테스트 본인확인이다. PortOne 문서는 같은 일을 "본인인증"이라 부른다
 - 공통 규칙: [00_conventions.md](./00_conventions.md). 에러 형식과 공통 `code`는 [ADR-007](../adr/ADR-007-spring-backend-global-exception-handling.md)을 따른다
 
-> 상태: 2026-11-17 NSU-105 설계 세션에서 정했다(설계 리뷰 5회차 approve로 확정). NSU-105는 백엔드만 하고, 화면(§6)은 NSU-149(이성범 님)가 만든다.
+> 상태: 2026-11-17 NSU-105 설계 세션에서 정했다(설계 리뷰 5회차 approve, ADR 01 "설계 리뷰 회차"). NSU-105는 백엔드만 하고, 화면(§6)은 NSU-149(이성범 님)가 만든다.
 
 ---
 
@@ -317,6 +317,6 @@ Content-Type: application/json
 |---|---|
 | [00 공통 규칙](./00_conventions.md) §10.1 | 태그 목록에 "실명 본인확인". 00은 지금 NSU-146이 고치고 있어, NSU-146 PR이 머지된 뒤 이 브랜치를 main에 맞추고 NSU-105 PR에서 한 줄 더한다 |
 | [00 공통 규칙](./00_conventions.md) §6 | 고치지 않는다. `identityVerificationId`의 32자 표기는 이 문서 §1에 예외와 이유를 적었다 |
-| [가입 약관·발송 한도](./signup-terms-and-send-limits.md) §1.1·§3(PR #219 판) | "기본 환경은 2종, `demo` 프로필은 4종" 문장과 그 테스트 기준 두 행. 환경 값을 `app.environment`(`DEMO`만) 하나로 모으므로 모든 서버에서 4종이 필수다(ADR 01 "환경"). #219 머지 뒤 NSU-105 PR에서 고친다 |
-| `backend/README.md`(PR #219 판) | `SIGNUP_REQUIRED_TERMS` 설명과 `SPRING_PROFILES_ACTIVE=demo` 안내를 4종 필수로. 새 설정(`APP_ENVIRONMENT` 등) 설명 |
-| SSOT·용어집 | 새 용어 "인증 시도"·"본인확인 기록"을 용어집에 더한다(Linear, 지휘 세션) |
+| [가입 약관·발송 한도](./signup-terms-and-send-limits.md) §1.1·§3(PR #219 판) | "기본 환경은 2종, `demo` 프로필은 4종" 문장과 그 테스트 기준 두 행. 환경 값을 `app.environment`(`DEMO`만) 하나로 모으므로 모든 서버에서 4종이 필수다(ADR 01 "환경"). NSU-105 PR에서 고쳤다 |
+| `backend/README.md`(PR #219 판) | `SIGNUP_REQUIRED_TERMS` 설명과 `SPRING_PROFILES_ACTIVE=demo` 안내를 4종 필수로 고치고, 새 설정(`APP_ENVIRONMENT` 등) 설명을 더했다(NSU-105 PR) |
+| SSOT·용어집 | 새 용어 "인증 시도"·"본인확인 기록"을 용어집에 더했다(Linear, 2026-11-17) |
