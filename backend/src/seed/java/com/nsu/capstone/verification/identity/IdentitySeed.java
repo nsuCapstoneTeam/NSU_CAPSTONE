@@ -136,15 +136,33 @@ public final class IdentitySeed {
             return 3;
         }
 
-        IdentityVerificationService service = context.getBean(IdentityVerificationService.class);
+        return createMock(
+                context.getBean(IdentityVerificationService.class),
+                context.getBean(IdentityVerificationRepository.class),
+                userId);
+    }
+
+    /**
+     * HTTP와 같은 시작→완료 서비스 경로로 MOCK 기록을 만든다. 완료는 기록이 이미 있으면 출처를 보지 않고 성공을 돌려주므로(시작과 완료 사이에 같은 계정의 다른 본인확인이
+     * 먼저 확정된 경우), 저장된 기록이 이번 시도로 만든 MOCK일 때만 성공(0)으로 끝낸다.
+     */
+    static int createMock(IdentityVerificationService service, IdentityVerificationRepository repository, UUID userId) {
+        IdentityVerificationId attemptId;
         try {
-            StartedAttempt started = service.start(userId);
-            service.complete(userId, IdentityVerificationId.parse(started.identityVerificationId()));
+            attemptId = IdentityVerificationId.parse(service.start(userId).identityVerificationId());
+            service.complete(userId, attemptId);
         } catch (IdentityVerificationException failure) {
             log.error("Mock 본인확인을 만들지 못했다. 이유: {}", failure.getReason());
             return 3;
         } catch (BusinessException limited) {
             log.error("Mock 본인확인을 만들지 못했다. 오류 코드: {}", limited.getErrorCode());
+            return 3;
+        }
+        StoredVerification stored = repository.findVerification(userId).orElse(null);
+        if (stored == null
+                || stored.source() != IdentitySource.MOCK
+                || !stored.attemptId().equals(attemptId)) {
+            log.error("다른 본인확인이 먼저 확정돼 Mock 기록을 만들지 못했다. 저장된 출처: {}", stored == null ? "없음" : stored.source());
             return 3;
         }
         log.info("Mock 본인확인을 만들었다. 출처: {}", IdentitySource.MOCK);
