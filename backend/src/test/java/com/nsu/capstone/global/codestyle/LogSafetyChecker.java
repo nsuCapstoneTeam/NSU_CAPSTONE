@@ -429,11 +429,23 @@ final class LogSafetyChecker {
             }
             ExpressionTree receiver = select.getExpression();
             if (receiver instanceof IdentifierTree identifier) {
-                String name = identifier.getName().toString().toLowerCase(Locale.ROOT);
-                return name.equals("log") || name.equals("logger") || name.endsWith("log") || name.endsWith("logger");
+                return isLoggerName(identifier.getName().toString());
+            }
+            if (receiver instanceof MemberSelectTree field && isThis(field.getExpression())) {
+                return isLoggerName(field.getIdentifier().toString());
             }
             return receiver instanceof MethodInvocationTree invocation
                     && invocation.getMethodSelect().toString().endsWith("getLogger");
+        }
+
+        private static boolean isLoggerName(String variableName) {
+            String name = variableName.toLowerCase(Locale.ROOT);
+            return name.endsWith("log") || name.endsWith("logger");
+        }
+
+        private static boolean isThis(ExpressionTree expression) {
+            return expression instanceof IdentifierTree identifier
+                    && identifier.getName().contentEquals("this");
         }
 
         private static boolean isExceptionType(String typeName) {

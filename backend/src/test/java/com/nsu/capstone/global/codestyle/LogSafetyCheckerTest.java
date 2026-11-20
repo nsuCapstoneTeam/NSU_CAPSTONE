@@ -491,4 +491,14 @@ class LogSafetyCheckerTest {
         assertThat(check("String masked = email.substring(0, 2);")).isEmpty();
         assertThat(check("service.sendTo(email);")).isEmpty();
     }
+
+    /** 필드로 받은 로거를 this로 한정해 불러도 로그 호출이다(CodeRabbit PR #231 1차 넘친 지적 #29). */
+    @Test
+    void this_log와_this_logger로_부르는_로그도_검사한다() {
+        assertThat(check("this.log.info(\"가입 {}\", email);")).extracting("rule").containsExactly("S2");
+        assertThat(check("this.logger.warn(\"가입 {}\", email);"))
+                .extracting("rule")
+                .containsExactly("S2");
+        assertThat(check("this.cache.info(\"가입 {}\", email);")).isEmpty();
+    }
 }
