@@ -112,7 +112,7 @@ ARTIST가 마이페이지에서 실명 본인확인을 받고, 자기 본인확�
 | HTTP | `code` | 언제 | 화면이 할 일 |
 |---|---|---|---|
 | 400 | `INVALID_IDENTITY_VERIFICATION_ID` | 경로 값이 소문자 16진수 32자가 아님 | 새로 시작 |
-| 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음·만료 | 로그인 |
+| 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음·만료 | 화면의 공통 인증 처리를 따른다. 토큰 재발급 계약(NSU-74, PR #244)이 머지되면 재발급을 한 번 시도하고 같은 요청을 다시 보내며, 재발급도 실패하면 로그인. 그 전에는 로그인 |
 | 403 | `ACCESS_DENIED` | ARTIST가 아님, 계정이 `ACTIVE`가 아님 | 안내만 |
 | 404 | `IDENTITY_VERIFICATION_ATTEMPT_NOT_FOUND` | 시도가 없거나 다른 회원의 것 | 새로 시작 |
 | 409 | `IDENTITY_ALREADY_VERIFIED` | 본인확인을 마친 계정이 시작함 | 완료 상태를 보여 줌 |
@@ -181,7 +181,7 @@ ARTIST가 마이페이지에서 실명 본인확인을 받고, 자기 본인확�
 | 결과 | `200`이면 완료 표시. 오류는 §4.1의 "화면이 할 일" | 같다 |
 
 - `redirectUrl`은 프론트 경로다(예: `/me/identity-verification/return`). 서버는 그 값을 정하거나 검사하지 않는다. 쿼리의 `identityVerificationId`를 믿지 않아도 된다. 서버가 소유자·상태·PortOne 결과를 모두 다시 본다.
-- redirect로 돌아오면 페이지가 다시 로드된다. 로그인 상태를 되살리는 것은 화면의 일이다.
+- redirect로 돌아오면 페이지가 다시 로드된다. 로그인 상태를 되살리는 것은 화면의 일이다. 창을 여는 동안 Access Token이 만료될 수 있으므로(시도는 15분), 완료 요청의 `401`은 §4.1의 공통 인증 처리를 따른다. 시도는 만료 전이면 `PENDING`으로 남아 있어 같은 ID로 다시 완료할 수 있다.
 - 화면에 "인증된 아티스트"라고 쓰지 않는다(용어집). "실명 본인확인"으로 쓴다.
 
 ## 7. 내부 계약
@@ -260,6 +260,7 @@ public final class IdentityName { /* Unicode NFC, 앞뒤 공백 제거, 1~50자,
 | PortOne `READY`·`404` → `409 NOT_COMPLETED`, `FAILED` → `422`, `400`·`401`·`403`·`429`·`5xx`·연결 실패·읽기 시간 초과·깨진 JSON·모르는 `status` → `503 IDENTITY_VERIFICATION_UNAVAILABLE`이고 시도는 열려 있다 | §4.2 |
 | 읽기 시간 초과는 설정한 timeout과 여유 안에 응답한다 | §4.2 |
 | `verifiedCustomer`·`requestedCustomer`·`pgRawResponse`·오류 본문에 고유 문자열을 넣은 응답(받는 TEST, `LIVE`, 채널 값 다름, `FAILED`, `404`·`401`·`500`, 깨진 JSON) 뒤에 그 문자열이 로그(모든 레벨)·예외 메시지와 원인·API 응답·두 테이블·Redis 어디에도 없다 | ADR 00 "테스트 본인확인 결과", Linear AC |
+| (NSU-146 정적 로그 검사가 main에 들어온 뒤) 실명·CI·DI 등 이 이슈의 개인정보 이름을 로그 인자로 넘기는 코드는 검사가 거절하고, 가짜 실명·CI 값이 로그에 없다 | NSU-146 ADR logging/00, ADR 01 Consequences |
 | `SANDBOX` 기록에 이름이 없고, DB가 `SANDBOX` + 이름, 이름 없는 `MOCK`, 같은 회원의 두 번째 기록, 남의 시도를 가리키는 기록을 거절한다 | §8, ADR 01 |
 | 한 계정의 시작·완료를 합친 11번째 요청은 `429`와 `Retry-After`이고, 시도가 생기지 않고 PortOne을 부르지 않는다 | §9, Linear AC |
 | Redis를 멈추면 시작·완료가 `503 RATE_LIMIT_UNAVAILABLE`(`Retry-After` 없음)이고 PortOne을 부르지 않는다 | §9 |
