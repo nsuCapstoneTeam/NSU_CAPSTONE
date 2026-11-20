@@ -639,10 +639,14 @@ final class LogSafetyChecker {
             if (ALL_CAPS.matcher(name).matches()) {
                 return; // 상수 이름
             }
-            for (String word : Arrays.stream(WORD_BOUNDARY.split(name))
+            List<String> words = Arrays.stream(WORD_BOUNDARY.split(name))
                     .map(part -> part.toLowerCase(Locale.ROOT))
-                    .toList()) {
-                if (SENSITIVE_WORDS.contains(word)) {
+                    .toList();
+            for (int i = 0; i < words.size(); i++) {
+                // apiKey·api_key는 api와 key로 쪼개지므로 이어진 두 단어를 붙인 것(apikey)도 본다
+                boolean pairSensitive =
+                        i + 1 < words.size() && SENSITIVE_WORDS.contains(words.get(i) + words.get(i + 1));
+                if (SENSITIVE_WORDS.contains(words.get(i)) || pairSensitive) {
                     report(at, "S2", "로그·예외 인자에 민감한 이름 '" + name + "'을 넘기지 않는다");
                     return;
                 }

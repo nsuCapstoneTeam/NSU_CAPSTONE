@@ -572,4 +572,16 @@ class LogSafetyCheckerTest {
         assertThat(check("future.completeAsync(() -> 1);")).extracting("rule").containsExactly("S5");
         assertThat(check("future.completeAsync(() -> 1, executor);")).isEmpty();
     }
+
+    /** apiKey·api_key는 단어로 쪼개면 api와 key라서 apikey 한 단어만 보면 놓친다(#34). */
+    @Test
+    void apiKey와_api_key도_S2_위반이다() {
+        assertThat(check("log.info(\"키 {}\", apiKey);")).extracting("rule").containsExactly("S2");
+        assertThat(check("log.info(\"키 {}\", api_key);")).extracting("rule").containsExactly("S2");
+        assertThat(check("log.info(\"키 {}\", client.getApiKey());"))
+                .extracting("rule")
+                .containsExactly("S2");
+        assertThat(check("log.info(\"키 {}\", apiVersion);")).isEmpty();
+        assertThat(check("log.info(\"키 {}\", keyId);")).isEmpty();
+    }
 }
