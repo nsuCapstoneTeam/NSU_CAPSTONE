@@ -40,6 +40,9 @@ class IdentityVerificationRepository {
             rs.getBytes("mock_name_ciphertext"),
             instant(rs, "verified_at"));
 
+    /** 확정 트랜잭션의 문장당 잠금 대기·실행 시간 상한. PortOne 연결 대기(3초)와 맞췄다. */
+    private static final String DB_TIME_LIMIT = "3s";
+
     private final JdbcClient jdbc;
     private final UuidV7Generator uuidV7Generator;
 
@@ -81,6 +84,7 @@ class IdentityVerificationRepository {
             Instant now,
             IdentitySource source,
             byte[] mockNameCiphertext) {
+        limitStatementTime();
         int closed = jdbc.sql("""
                         UPDATE identity_verification_attempts
                         SET status = 'VERIFIED', closed_at = :now
@@ -107,6 +111,17 @@ class IdentityVerificationRepository {
                     .update();
         }
         return findVerification(userId);
+    }
+
+    /**
+     * 이 트랜잭션의 SQL 문장마다 잠금 대기와 실행 시간의 상한을 둔다(트랜잭션이 끝나면 풀린다). 다른 트랜잭션이 시도 행을 쥐고 놓지 않아도 요청 스레드와 DB 연결을 끝없이
+     * 붙잡지 않게 하려는 것이다. SET LOCAL은 바인드 변수를 받지 못해 set_config(..., is_local = true)를 쓴다(EventRegistrationService와 같다).
+     */
+    private void limitStatementTime() {
+        jdbc.sql("select set_config('lock_timeout', :limit, true), set_config('statement_timeout', :limit, true)")
+                .param("limit", DB_TIME_LIMIT)
+                .query()
+                .singleRow();
     }
 
     /** 아직 PENDING인 시도만 닫는다. 동시에 다른 요청이 먼저 확정했으면 아무것도 바꾸지 않는다. */

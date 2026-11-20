@@ -1,14 +1,23 @@
 package com.nsu.capstone.verification.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class IdentityVerificationRepositoryIntegrationTest extends IdentityVerificationIntegrationTestBase {
 
@@ -17,6 +26,9 @@ class IdentityVerificationRepositoryIntegrationTest extends IdentityVerification
 
     @Autowired
     IdentityVerificationRepository repository;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
 
     @Test
     void 시작한_시도를_저장하고_다시_읽는다() {
@@ -187,6 +199,48 @@ class IdentityVerificationRepositoryIntegrationTest extends IdentityVerification
             assertThat(verification.source()).isEqualTo(IdentitySource.MOCK);
             assertThat(verification.mockNameCiphertext()).isEqualTo(ciphertext);
         });
+    }
+
+    /**
+     * 다른 트랜잭션이 시도 행을 쥐고 놓지 않으면 확정이 요청 스레드와 DB 연결을 끝없이 붙잡는다. 잠금 대기 상한을 넘기면 실패하고 시도도 기록도 바꾸지 않아야
+     * 한다(backend-verify F-3).
+     */
+    @Test
+    void 다른_트랜잭션이_시도_행을_쥐고_있으면_확정은_잠금_대기_상한에서_실패하고_아무것도_바꾸지_않는다() throws Exception {
+        IdentityVerificationId id = insertPendingAttempt();
+        CountDownLatch holding = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService holder = Executors.newSingleThreadExecutor();
+        try {
+            holder.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                jdbcTemplate.queryForObject(
+                        "SELECT 1 FROM identity_verification_attempts WHERE id = ? FOR UPDATE",
+                        Integer.class,
+                        id.value());
+                holding.countDown();
+                try {
+                    release.await(12, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            assertThat(holding.await(5, TimeUnit.SECONDS)).isTrue();
+
+            long startedAt = System.nanoTime();
+            assertThatThrownBy(() -> repository.confirm(
+                            id, artist.getId(), EXPIRES_AT.minusSeconds(1), EXPIRES_AT, IdentitySource.SANDBOX, null))
+                    .isInstanceOf(DataAccessException.class);
+            Duration waited = Duration.ofNanos(System.nanoTime() - startedAt);
+
+            assertThat(waited).isLessThan(Duration.ofSeconds(8));
+        } finally {
+            release.countDown();
+            holder.shutdown();
+            assertThat(holder.awaitTermination(20, TimeUnit.SECONDS)).isTrue();
+        }
+        assertThat(repository.findAttempt(id))
+                .hasValueSatisfying(attempt -> assertThat(attempt.status()).isEqualTo(AttemptStatus.PENDING));
+        assertThat(repository.findVerification(artist.getId())).isEmpty();
     }
 
     private IdentityVerificationId insertPendingAttempt() {
