@@ -2,7 +2,7 @@
 
 Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서는 이 문서의 규칙을 따르고, 예외가 있으면 해당 문서에 이유와 함께 적는다.
 
-> 상태: Trust Profile API(NSU-70) 설계에서 처음 정했다. §1 경로와 버전, §7 인증과 호출 주체는 이 문서가 들어간 PR #127의 리뷰에서 다른 Spring 담당자(Seokyun Kang)가 확인했다(2026-10-12). §8 에러 형식은 먼저 구현된 ADR-007과 달라 ADR-007에 맞췄다(2026-10-14 결정). §10 API 문서화와 프론트 전달은 NSU-102 설계에서 정했고 PR 리뷰에서 확정한다(2026-10-20).
+> 상태: Trust Profile API(NSU-70) 설계에서 처음 정했다. §1 경로와 버전, §7 인증과 호출 주체는 이 문서가 들어간 PR #127의 리뷰에서 다른 Spring 담당자(Seokyun Kang)가 확인했다(2026-10-12). §8 에러 형식은 먼저 구현된 ADR-007과 달라 ADR-007에 맞췄다(2026-10-14 결정). §10 API 문서화와 프론트 전달은 NSU-102 설계에서 정했고 PR 리뷰에서 확정한다(2026-10-20). §11 요청 ID는 NSU-146 설계에서 정했고 PR 리뷰에서 확정한다(2026-11-11).
 
 ---
 
@@ -110,9 +110,9 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 
 | HTTP | `code` | 상황 |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | 요청 본문·파라미터 검증 실패 (ADR-007) |
+| 400 | `VALIDATION_ERROR` | 요청 본문·파라미터 검증 실패 (ADR-007). MVC가 요청 인자로 읽는 헤더(예: `Idempotency-Key`)에 허용하지 않는 문자(제어 문자 등)가 있어 서버가 읽기를 거절한 경우도 같다. `Authorization`처럼 보안 처리에서 먼저 읽는 헤더는 보안 처리가 거절하므로 다른 상태(예: `401`)가 될 수 있다([ADR logging/00](../adr/logging/00_structured_logs_and_request_id.md) Decision 7) |
 | 400 | `INVALID_{대상}` | 경로 값의 형식 오류 (예: `INVALID_ARTIST_ID`) |
-| 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음, 만료, 서명 오류 |
+| 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음, 만료, 서명 오류. 지금은 앱까지 도달한 요청 중 토큰 없이 보낸 요청이 주소·메서드·쿼리 형식 오류로 거절돼도 401이 나간다(서버 오류 응답 경로가 인증을 요구하는 지금 동작, [ADR logging/00](../adr/logging/00_structured_logs_and_request_id.md) Decision 6. NSU-147에서 다룬다). Tomcat이 앱에 넘기기 전에 거절하는 요청(예: 인코딩하지 않은 `\|`가 든 쿼리)은 Tomcat의 `400`이고 `X-Request-Id`도 없다(§11) |
 | 401 | `REFRESH_TOKEN_INVALID` | 재발급에 쓴 Refresh Token이 없거나, 만료·사용·로그아웃됐거나, 사용자가 `ACTIVE`가 아님. 다시 로그인한다([07 §4](./07_auth_tokens.md#4-재발급)) |
 | 403 | `ACCESS_DENIED` | 인증은 됐지만 호출 주체에게 허용되지 않은 요청 |
 | 403 | `DEMO_WRITE_NOT_ALLOWED` | 시연 서버(`DEMO`)에서 허용 목록 밖 계정이 상태를 바꾸는 요청(`POST`·`PUT`·`PATCH`·`DELETE`)을 보냄. 인증(`401`) 바로 다음, 역할·본문 검사를 포함한 다른 모든 판정보다 먼저 검사한다. 본문을 읽기 전에 서버·프록시가 거절하는 요청 크기 초과(`413`, 04 §2.2)는 예외다. 가입·로그인·로그아웃·토큰 재발급·실명 본인확인·검색창 즉시 추천·회원 탈퇴는 제외한다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)) |
@@ -175,7 +175,7 @@ API를 새로 만들거나 바꿀 때 아래를 지킨다.
 )
 ```
 
-지금 쓰는 태그 이름: 로그인, OAuth, 아티스트 가입, EVENT_PARTNER 가입, 행사, 지역, EVENT_PARTNER 프로필, Trust Profile
+지금 쓰는 태그 이름: 로그인, OAuth, 아티스트 가입, EVENT_PARTNER 가입, 행사, 지역, EVENT_PARTNER 프로필, Trust Profile, 외부 계정
 
 - 계약을 바꾸는 PR은 md 에러 표와 `@ApiResponse`를 함께 고친다. 둘이 같은지 검사하는 테스트는 없으므로 PR 리뷰에서 확인한다.
 - 2026-10-20 기준 identity API(가입·로그인·OAuth)는 `@ApiResponse`가 없다. 병합 뒤 identity 담당자에게 handoff로 넘긴다. 나중에 만든 토큰 재발급·로그아웃(NSU-74)에는 달았다.
@@ -186,3 +186,18 @@ API를 구현하거나 바꾼 PR이 병합되면 Slack `#dev`에서 프론트 �
 
 - Scalar 링크와 볼 곳(태그·API 이름)
 - "바뀐 이유"가 적힌 `docs/api` 절의 링크
+
+## 11. 요청 ID (`X-Request-Id`)
+
+서버는 요청마다 요청 ID를 만들어 응답의 `X-Request-Id` 헤더로 돌려준다. 결정 근거는 [ADR logging/00](../adr/logging/00_structured_logs_and_request_id.md)에 있다(NSU-146).
+
+- Spring 서버가 처리한 응답에는 성공, 오류(`{code, message}`와 Spring 표준 `ProblemDetail`), 리다이렉트(`302`)를 가리지 않고 있다.
+- 서버에 닿기 전에 끝난 응답에는 없다. 예: Tomcat이 앱에 넘기기 전에 거절한 요청, 서버가 꺼져 nginx가 직접 만든 `502`. 클라이언트는 헤더가 없을 수 있다고 보고 처리한다.
+- 값은 요청마다 다른 문자열이다. 지금은 UUID(§6의 소문자 하이픈 표기)지만 클라이언트는 형식에 기대지 않고 그대로 다룬다.
+- 요청에 `X-Request-Id`나 `traceparent` 헤더를 보내도 서버는 쓰지 않고 새로 만든다.
+- 에러 본문(§8)에는 넣지 않는다. 본문은 `{code, message}` 그대로다.
+- 같은 값이 서버 로그의 `requestId` 필드에 남는다. 문의를 받으면 이 값으로 그 요청의 로그를 찾는다.
+- 화면에 "문의 코드"로 보여 줄지와 사용자가 알릴 곳은 정하지 않았다. 문의 창구를 설계할 때 정한다.
+- 화면과 API가 같은 출처라(로컬 Vite 프록시, 배포 nginx) `fetch` 응답에서 `response.headers.get('X-Request-Id')`로 읽을 수 있다. 다른 출처에서 부르게 되면 `Access-Control-Expose-Headers: X-Request-Id`를 함께 설정한다.
+- 브라우저가 페이지 이동으로 받은 응답(OAuth `302` 등)의 헤더는 화면 코드가 읽을 수 없다. 개발자도구에서만 보인다.
+- 서버가 AI 서버를 부를 때도 같은 값을 `X-Request-Id`로 보낸다(Linear 서버 협의 017). AI client를 만드는 NSU-63부터 적용한다.

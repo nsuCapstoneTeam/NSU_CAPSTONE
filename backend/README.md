@@ -260,6 +260,20 @@ python3 scripts/reset_signup_limits.py --kind destination --window-start 2026-11
 
 대상 키는 `SCAN`으로 찾고 선택한 카운터는 `UNLINK`로 삭제한다. 미발송 예약을 복구할 때는 서버와 같은 Lua 스크립트로 해당 예약의 대기 challenge와 인덱스도 정리한다. 가입 세션·활성 challenge·쿨다운·알림 전송 상태는 보존한다. Redis 인증이 필요하면 `REDISCLI_AUTH`를 실행 환경으로 주입한다. 실제 운영 초기화는 사람이 별도로 실행한다.
 
+## 로그
+
+- 로그는 SLF4J로 남긴다. 파일 주인의 스타일(`@Slf4j` 또는 `LoggerFactory`)을 따른다. 배포 형식은 한 줄 JSON이고, 시각과 요청 ID(`requestId`)는 자동으로 붙는다.
+- 요청 하나의 로그는 `requestId`로 찾는다. 응답 헤더 `X-Request-Id`와 같은 값이다.
+- 이메일·전화번호·토큰·인증번호·비밀키와 DTO·record 통째는 로그와 예외 메시지에 넣지 않는다. 예외 메시지와 응답 본문도 로그 문장에 넣지 않고, 예외는 마지막 인자로 넘긴다. CI의 `backend-lint` job(`LogSafetyChecker` 정적 검사)과 `backend-log-safety` job(`LogPrivacy*` 등 `global.logging` 테스트)이 막는다.
+- 다른 스레드로 일을 넘기는 코드는 `RequestIdExecutors.wrap(...)` 안에서 만든다. 그래야 그 스레드의 로그에도 요청 ID가 붙는다.
+- MDC에 다른 키를 넣을 때는 `try (var ignored = MDC.putCloseable("eventId", id)) { … }`를 쓴다. `MDC.clear()`는 쓰지 않는다.
+- 로컬에서 평문으로 보려면 `.env`에서 `.env.example`의 주석 두 줄(`LOG_LOCAL_MODE=true`, `LOG_FORMAT=`)을 푼다. 로컬 모드는 로그 보호 장치(낮은 레벨 하한, JVM 디버그 옵션 검사, 메시지 없는 예외 출력)를 끄고 시작할 때 WARN 한 줄을 남긴다. 배포 환경에는 두지 않는다. `LOG_FORMAT=`만 켜면 앱이 시작하지 않는다. 앱은 `.env`를 직접 읽지 않으므로 다른 `.env` 값처럼 실행 환경 변수로 넘긴다(예: `set -a; source .env; set +a; ./gradlew bootRun`, IntelliJ는 실행 구성의 환경 변수).
+- 로컬 모드가 아니면(배포와 테스트) 다음이 늘 동작한다.
+  - `com.nsu.capstone` 밖 로거를 INFO보다 낮게(Tomcat 원문 로거와 `jdk.httpclient.HttpClient`는 WARN보다 낮게) 설정하면, 시작할 때 하한으로 올리고 ERROR 한 줄을 남긴다. `com.nsu.capstone`는 DEBUG로 열 수 있다.
+  - JVM 디버그 옵션(`jdk.internal.httpclient.*`, `jdk.httpclient.HttpClient.log`, `javax.net.debug`)이 있거나, 로그 출력 설정(`logging.structured.*`, `logging.file.*`, `logging.config`, `logback*.xml`)을 바꾸면 앱이 시작하지 않는다.
+  - 예외는 클래스 이름과 스택 프레임만 출력하고 메시지는 출력하지 않는다. 원인 예외부터 출력한다.
+- 비밀(JWT 키, API 키, client secret)은 환경 변수로 넣고 `JAVA_TOOL_OPTIONS`와 명령행 `-D`에는 넣지 않는다. JVM이 시작할 때 `JAVA_TOOL_OPTIONS` 값을 평문으로 출력하고, 앱이 이를 막을 수 없다.
+
 ## Spring Boot 실행
 
 ### IntelliJ 실행
