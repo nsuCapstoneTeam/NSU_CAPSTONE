@@ -16,6 +16,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -108,6 +109,10 @@ class LogLevelFloorTest {
         try (LogCapture capture = LogCapture.start(environment)) {
             userRepository.saveAndFlush(User.createArtist(ids.generate(), Sentinel.EMAIL, "hash", "01011112222"));
             assertThat(userRepository.findByEmail(Sentinel.EMAIL)).isPresent();
+
+            // 캡처가 이벤트를 받고 있었는지 먼저 확인한다. 아무것도 못 잡았다면 아래 부재 확인이 빈 캡처로 통과한다
+            LoggerFactory.getLogger("log-level-floor-test").warn("대조 이벤트");
+            assertThat(capture.lines()).as("대조 이벤트가 든 줄").anyMatch(line -> line.contains("대조 이벤트"));
 
             assertThat(capture.loggersContaining(Sentinel.EMAIL))
                     .as("가짜 이메일이 든 줄의 로거")
