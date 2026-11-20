@@ -13,6 +13,9 @@ import java.util.regex.Pattern;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.logging.logback.StructuredLogEncoder;
 import org.springframework.core.env.Environment;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * 로그 이벤트를 배포 설정의 Boot 인코더로 인코딩한 바이트(한 줄 JSON)로 모은다.
@@ -21,6 +24,8 @@ import org.springframework.core.env.Environment;
 public final class LogCapture implements AutoCloseable {
 
     private static final Pattern LOGGER_NAME = Pattern.compile("\"logger_name\":\"([^\"]*)\"");
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final List<String> lines = new CopyOnWriteArrayList<>();
 
@@ -69,6 +74,28 @@ public final class LogCapture implements AutoCloseable {
     public List<String> lines() {
         throwIfEncodingFailed();
         return lines;
+    }
+
+    /** number가 한 덩어리 숫자로 든 줄. 요청 ID(UUID)에 우연히 이어진 숫자는 세지 않는다. */
+    List<String> linesContainingNumber(String number) {
+        throwIfEncodingFailed();
+        Pattern digits = Pattern.compile("(?<!\\d)" + Pattern.quote(number) + "(?!\\d)");
+        return lines.stream()
+                .filter(line -> digits.matcher(withoutRequestId(line)).find())
+                .toList();
+    }
+
+    /** 줄을 JSON으로 읽어 requestId 값을 뺀 문자열. JSON이 아닌 줄(로컬 평문)은 원문 그대로다. */
+    private static String withoutRequestId(String line) {
+        try {
+            if (JSON.readTree(line) instanceof ObjectNode json) {
+                json.remove("requestId");
+                return JSON.writeValueAsString(json);
+            }
+        } catch (JacksonException e) {
+            // JSON이 아닌 줄은 아래에서 원문 그대로 돌려준다
+        }
+        return line;
     }
 
     /** value가 들어 있는 줄의 로거 이름. 값 자체는 실패 메시지에 담지 않는다. */

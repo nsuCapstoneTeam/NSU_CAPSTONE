@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.boot.logging.structured.StructuredLogFormatter;
 import org.springframework.mock.env.MockEnvironment;
 
@@ -44,6 +45,31 @@ class LogCaptureTest {
             LoggerFactory.getLogger("log-capture-test").warn("정상 줄");
 
             assertThat(capture.lines()).anyMatch(line -> line.contains("정상 줄"));
+        }
+    }
+
+    /**
+     * 인증 코드 같은 숫자는 요청 ID(UUID)의 16진수 그룹에 우연히 이어질 수 있다(`739104abcdef`). 줄을 JSON으로 읽어 requestId를 빼고 찾아야
+     * 코드를 기록하지 않아도 테스트가 실패하는 일이 없다.
+     */
+    @Test
+    void 숫자_검색은_요청_ID에_이어진_숫자를_세지_않고_다른_필드의_숫자는_센다() {
+        MockEnvironment environment =
+                new MockEnvironment().withProperty("logging.structured.format.console", "logstash");
+        try (LogCapture capture = LogCapture.start(environment)) {
+            org.slf4j.Logger logger = LoggerFactory.getLogger("log-capture-test");
+            MDC.put("requestId", "0190a1b2-739104abcdef-7000");
+            try {
+                logger.warn("요청 ID에만 든 숫자");
+            } finally {
+                MDC.remove("requestId");
+            }
+            logger.warn("코드 739104 노출");
+            logger.warn("붙은 숫자 17391045");
+
+            assertThat(capture.linesContainingNumber("739104"))
+                    .singleElement()
+                    .satisfies(line -> assertThat(line).contains("코드 739104 노출"));
         }
     }
 
