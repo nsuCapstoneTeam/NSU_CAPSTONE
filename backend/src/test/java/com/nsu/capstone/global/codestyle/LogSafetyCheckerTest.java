@@ -594,4 +594,14 @@ class LogSafetyCheckerTest {
                 .containsExactly("S1");
         assertThat(check("delegate.printStackTrace(throwable, out);")).isEmpty();
     }
+
+    /** org.slf4j.MDC.clear()처럼 정규화된 이름으로 불러도 S4다(#37). */
+    @Test
+    void 정규화된_이름의_MDC도_S4_위반이다() {
+        assertThat(check("org.slf4j.MDC.clear();")).extracting("rule").containsExactly("S4");
+        assertThat(check("org.slf4j.MDC.put(\"requestId\", id);"))
+                .extracting("rule")
+                .containsExactly("S4");
+        assertThat(check("org.slf4j.MDC.put(\"eventId\", id);")).isEmpty();
+    }
 }

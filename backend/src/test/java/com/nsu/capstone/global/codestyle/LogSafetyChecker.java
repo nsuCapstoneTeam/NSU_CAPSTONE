@@ -354,8 +354,7 @@ final class LogSafetyChecker {
         /** S4: 요청 ID의 MDC 키는 global.logging이 주인이다. 다른 곳이 MDC를 통째로 지우거나 갈아 끼우면 요청 ID가 사라진다. */
         private void checkMdcUse(MethodInvocationTree node) {
             if (!(node.getMethodSelect() instanceof MemberSelectTree select)
-                    || !(select.getExpression() instanceof IdentifierTree owner)
-                    || !owner.getName().contentEquals("MDC")) {
+                    || !lastSegment(select.getExpression().toString()).equals("MDC")) {
                 return;
             }
             String method = select.getIdentifier().toString();
