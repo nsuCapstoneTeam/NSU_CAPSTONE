@@ -2,7 +2,7 @@
 
 - 상태: **Proposed** (설계 리뷰와 PR 리뷰에서 확정)
 - 결정일: **2026-11-17** (NSU-105 설계 세션)
-- 관련: NSU-105(본인확인), [00 MVP 시연 본인확인](./00_mvp_sandbox_identity_verification.md), 계약 [07 실명 본인확인 API](../../api/07_identity_verification.md), [01 Trust Profile §4.3·§7](../../api/01_trust_profile.md#7-내부-일괄-조회-계약), [04 곡 API §2.2·§3.2](../../api/04_music.md), [가입 약관·발송 한도 §1.6](../../api/signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때), PR #219(NSU-123, 요청 제한 기반), NSU-89(곡 업로드·등록 정보), NSU-127(PRIVATE 열람), NSU-128(댓글), NSU-129(시연 준비)
+- 관련: NSU-105(본인확인), [00 MVP 시연 본인확인](./00_mvp_sandbox_identity_verification.md), 계약 [08 실명 본인확인 API](../../api/08_identity_verification.md), [01 Trust Profile §4.3·§7](../../api/01_trust_profile.md#7-내부-일괄-조회-계약), [04 곡 API §2.2·§3.2](../../api/04_music.md), [가입 약관·발송 한도 §1.6](../../api/signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때), PR #219(NSU-123, 요청 제한 기반), NSU-89(곡 업로드·등록 정보), NSU-127(PRIVATE 열람), NSU-128(댓글), NSU-129(시연 준비)
 - 요구사항: SSOT `AUTH-009`(실명 본인확인은 가입 후 Trust/Verification 책임), `TRUST-142`(v1.18 초안 ③, 팀 확인 전), Linear NSU-105 "작업 범위" 1~9와 AC
 - 설계 리뷰 회차, 사람 결정, 범위 밖: 아래 "리뷰 이력과 결정 출처" 절
 
@@ -23,7 +23,7 @@ ADR 00이 정한 것(제공자, 출처 판정, `SANDBOX` 저장 항목, 요청 �
 | 이름 | `MOCK`만 이름을 갖는다(`CHECK`). 이름은 AES-256-GCM으로 암호화하고 연관 데이터(AAD)는 `user_id`다(Linear 작업 범위 8). `SANDBOX` 행에는 이름 칼럼을 채울 수 없다 |
 | 저장하지 않는 것 | `SANDBOX`의 이름·생년월일·성별·휴대폰 번호·통신사·외국인 여부·CI·DI, `verifiedCustomer`, `requestedCustomer`, `pgRawResponse`, `pgTxId`, 재조회 응답 원문, PortOne의 시각·실패 메시지, 응답 `channel` 값(판정 결과 `source`만 남긴다), 요청 IP. CI·DI 칼럼은 없다. "CI 암호화 방식"은 실명을 저장하게 될 운영 단계 ADR에서 정한다 |
 | PortOne 경계 | `RestClient.exchange()`로 부른다. `200`이 아니면 본문을 읽지 않는다. `200` 본문은 `status`(문자열)와 `channel.{type, pgProvider, pgMerchantId, key}`만 담은 record로 읽는다. 개인정보 필드는 Java 값이 되지 않는다. 모든 예외를 결과 값으로 바꾸고 메시지·원인을 버린다. 로그에는 시도 ID, 결과 이유 enum, 예외 클래스 이름과 첫 스택 프레임만 남긴다. 서버 설정 오류로 보이는 결과(PortOne `401`·`403`, 거절 이유 `PG_PROVIDER_MISMATCH`·`PG_MERCHANT_ID_MISMATCH`·`CHANNEL_KEY_MISMATCH`)는 `ERROR`, `LIVE`·`channel` 없음·`5xx`·시간 초과는 `WARN`이다 |
-| PortOne timeout | 연결 3초, 읽기 5초. 서버는 자동으로 다시 부르지 않는다. 장애면 시도는 `PENDING`으로 남고 화면이 같은 ID로 완료를 다시 부른다 |
+| PortOne timeout | 연결 3초, 읽기 5초. 앱 코드는 다시 부르지 않는다(JDK `HttpClient`가 응답 전에 끊긴 연결에서 `GET`을 한 번 더 보내는 것은 예외, 아래 "PortOne을 자동으로 다시 부르지 않는다"). 장애면 시도는 `PENDING`으로 남고 화면이 같은 ID로 완료를 다시 부른다 |
 | 화면이 쓰는 PortOne 값 | `storeId`·`channelKey`는 시작 응답으로 준다. 서버가 응답 `channel.key`와 대조하는 설정과 같은 값이다. 프론트 빌드 설정에 따로 두지 않는다 |
 | 모듈 | `com.nsu.capstone.verification.identity` 평평한 패키지 하나. Verification 도메인은 최상위 `verification/`이다(ADR [artist_trust_architecture/06](../artist_trust_architecture/06_database_and_implementation_roadmap.md) §19). NSU-37의 `verification.externalaccount`와 같은 자리다. public은 `IdentityVerifications`, `RegistryMatchIdentity`, `IdentityName`, `IdentitySource`, `IdentityVerificationRef` 다섯뿐이고 나머지는 package-private다 |
 | 다른 모듈의 입구 | `IdentityVerifications`(구현 하나인 public 클래스). `verifiedArtistsAmong(ids)`: `ACTIVE` ARTIST이고 기록이 있는 ID 집합, SQL 한 번. `isVerifiedArtist(id)`는 `verifiedArtistsAmong(Set.of(id))`로 구현한다. `registryMatchIdentity(id)`: NSU-89 등록부 대조용으로 `NotVerified` / `NameUnavailable(ref)` / `Named(name, ref)` |
@@ -36,8 +36,8 @@ ADR 00이 정한 것(제공자, 출처 판정, `SANDBOX` 저장 항목, 요청 �
 | 이름 암호화 키 | 시연 서버를 AWS에 올리면 `IDENTITY_NAME_ENCRYPTION_KEY`를 포함한 비밀 값은 AWS Systems Manager Parameter Store 표준 등급(SecureString, AWS 관리 키, 무료)에 모은다. 그 전의 로컬 개발은 각자 환경 변수(IntelliJ 실행 설정 등)로 둔다. 어느 쪽이든 저장소·문서·Slack·로그에 적지 않는다. 초기화 runbook(NSU-129)에 이 키 삭제를 넣는다. 키를 지우면 백업에 남은 암호문도 읽을 수 없다. 시연 서버의 최종 위치는 NSU-129에서 확정한다(AWS 전제). 2026-11-17 사용자 결정(강석윤 님 의견 반영: AWS 도입 전에는 각자, 도입 뒤에는 모아서 관리) |
 | 환경 | `app.environment` 하나가 환경 값의 유일한 출처다(값은 `DEMO` 하나, 기본값 없음). 공개 쓰기 필터(NSU-158)도 이 값을 읽는다. PR #219가 머지되면 같은 PR에서 `ConfiguredRequiredTermsPolicy`(강석윤 님 파일)가 Spring 프로필 `demo` 대신 이 값을 읽게 고친다(2026-11-17 지휘 세션 확정: 최종 사용자 경험 차이가 없어 권장안). 서버는 `DEMO`에서만 뜨므로(ADR 00) 로컬 개발을 포함한 모든 서버에서 시연 약관 4개가 필수가 되고, #219의 "기본 환경 2종"은 없어진다. 함께 바뀌는 #219 쪽 파일: 계약 `signup-terms-and-send-limits.md` §1.1(기본 환경 문장)·§3(약관 테스트 기준 두 행), `backend/README.md` 약관 설명, `TestcontainersConfiguration`, `SignupTestTerms`, `DemoSignupTermsIntegrationTest`. `DEMO`가 아닌 약관 집합은 운영 단계 ADR이 운영 환경을 정할 때 다시 둔다 |
 | 요청 제한 | PR #219의 `RedisPublicRequestLimitStore`를 다시 쓴다. 비공개 `reserve`가 미리 만든 키 조각을 받게 바꾸고, 계정 단위 공개 메서드 하나를 더한다(kind `identity-verification`, 계정 UUID 원문). #219 머지 뒤 NSU-105 PR에서 그 파일의 기존 스타일대로 고친다(2026-11-17 확정: 사용자 경험 차이가 없어 권장안을 택함). 시작·완료 서비스가 역할·형식 검사 다음에 부른다. 보안 필터로 두지 않는다 |
-| 화면 | NSU-105는 백엔드만 한다. 화면(마이페이지 버튼, 창을 열기 전 안내, 데스크톱 팝업·모바일 redirect, 결과 안내)은 NSU-149로 이성범 님이 만든다(2026-11-17 사용자 결정). 화면이 부를 API 순서와 흐름은 계약 07 §6에 적는다 |
-| 구현 순서 | PR #219와 NSU-37 PR #232는 2026-11-18 머지됐다. 구현은 두 단계다(2026-11-18 지휘 세션 요청). **1단계(끝남):** NSU-37과 파일이 겹치지 않는 부분. 마이그레이션과 저장, 순수 판정, 채널 정책, PortOne 어댑터, Mock 제공자와 시드 jar, 이름 암호화, 시작·완료 서비스, 요청 제한, 내부 계약 `IdentityVerifications`, 설정·시작 검사, 약관 정책 변경이다. 이 단계의 서비스는 모듈 예외와 사유 enum(이름은 계약 07 §4의 code)을 던진다. 설정 파일은 모듈 설정 클래스가 `@PropertySource`로 읽고 `application.properties`는 고치지 않는다(NSU-37과 같은 방식). **2단계(#232 머지 뒤, 2026-11-18 시작):** NSU-37이 마지막에 고치는 공유 파일과 그 포트에 기대는 부분. `ErrorCode`와 예외 매핑, 컨트롤러·`SecurityConfig`, OpenAPI 테스트, `IDENTITY` source와 Trust Profile 시험, `lombok-style-files.txt`, `backend/README.md`다. 마이그레이션은 V11이다(#219가 V8·V9, NSU-37이 V10이고 V10은 #232로 main에 들어갔다) |
+| 화면 | NSU-105는 백엔드만 한다. 화면(마이페이지 버튼, 창을 열기 전 안내, 데스크톱 팝업·모바일 redirect, 결과 안내)은 NSU-149로 이성범 님이 만든다(2026-11-17 사용자 결정). 화면이 부를 API 순서와 흐름은 계약 08 §6에 적는다 |
+| 구현 순서 | PR #219와 NSU-37 PR #232는 2026-11-18 머지됐다. 구현은 두 단계다(2026-11-18 지휘 세션 요청). **1단계(끝남):** NSU-37과 파일이 겹치지 않는 부분. 마이그레이션과 저장, 순수 판정, 채널 정책, PortOne 어댑터, Mock 제공자와 시드 jar, 이름 암호화, 시작·완료 서비스, 요청 제한, 내부 계약 `IdentityVerifications`, 설정·시작 검사, 약관 정책 변경이다. 이 단계의 서비스는 모듈 예외와 사유 enum(이름은 계약 08 §4의 code)을 던진다. 설정 파일은 모듈 설정 클래스가 `@PropertySource`로 읽고 `application.properties`는 고치지 않는다(NSU-37과 같은 방식). **2단계(#232 머지 뒤, 2026-11-18 시작):** NSU-37이 마지막에 고치는 공유 파일과 그 포트에 기대는 부분. `ErrorCode`와 예외 매핑, 컨트롤러·`SecurityConfig`, OpenAPI 테스트, `IDENTITY` source와 Trust Profile 시험, `lombok-style-files.txt`, `backend/README.md`다. 마이그레이션은 V11이다(#219가 V8·V9, NSU-37이 V10이고 V10은 #232로 main에 들어갔다) |
 
 ### 저장 모델
 
@@ -153,18 +153,18 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 
 | 회차 | 리뷰어 | 지적 | 바꾼 것 |
 |---|---|---|---|
-| 1 | Codex | [High] KCP V2 `identityVerificationId`는 영문·숫자 40자 이하인데 하이픈 UUID를 넘김 | 밖으로 내보내는 시도 ID를 소문자 16진수 32자 한 가지로(Decision "인증 시도", 계약 07 §1) |
+| 1 | Codex | [High] KCP V2 `identityVerificationId`는 영문·숫자 40자 이하인데 하이픈 UUID를 넘김 | 밖으로 내보내는 시도 ID를 소문자 16진수 32자 한 가지로(Decision "인증 시도", 계약 08 §1) |
 | 2 | Codex | [Medium] 요청 제한과 "동시 완료 20건 모두 200" 보장이 모순 | 보장을 요청 제한 통과 요청으로 한정, 동시성 시험을 높인 한도와 기본 한도로 나눔 |
 | 3 | Claude(Codex 한도로 대체) | [Medium] #219 계약·README·테스트가 바뀌는 목록에 없음, [Medium] 시드가 웹 없는 컨텍스트로 뜨지 않고 대안이 없음, [Low] 설정 오류 감지, [Low] §3 판정 순서와 §5 재전송 보장 모순 | Decision "환경"에 바뀌는 #219 파일과 확인 절차, 시드를 `server.port=-1`·Flyway 끔·같은 빌드로 하고 비교표·대안 추가, 로그 등급·배포 확인·reset kind, §3 순서 일반화 |
 | 4 | Codex | [High] 롤백 계획이 두 테이블을 지워 본인확인 기록과 NSU-89 근거를 잃음 | 기본 롤백은 앱 버전만, 테이블·FK·데이터는 그대로. 테이블 삭제는 승인된 전체 초기화뿐(저장 모델 "되돌리기") |
 
-- 2·3회차에 같은 종류의 지적(§3 판정 순서와 §5·§10 보장의 정합)이 이어졌다. 사례를 하나씩 고치지 않고 **일반화했다**: 계약 07 §5 첫 항목에 "§3의 판정 순서가 모든 보장보다 앞선다"는 경계를 한 번 적고, 남은 조합은 계약 07 §10의 판정 순서 조합 시험으로 넘겼다.
+- 2·3회차에 같은 종류의 지적(§3 판정 순서와 §5·§10 보장의 정합)이 이어졌다. 사례를 하나씩 고치지 않고 **일반화했다**: 계약 08 §5 첫 항목에 "§3의 판정 순서가 모든 보장보다 앞선다"는 경계를 한 번 적고, 남은 조합은 계약 08 §10의 판정 순서 조합 시험으로 넘겼다.
 
 ### "어디에도 없다" 꼴 조건의 장치와 시험
 
 | 조건 | 지키는 장치(하나) | 확인하는 시험 |
 |---|---|---|
-| 개인정보(실명·생년월일·CI·DI·`pgRawResponse` 등)가 로그·예외·DB·API 응답 어디에도 없다 | PortOne 응답을 읽는 record가 `status`와 `channel` 네 값만 갖고, 어댑터가 `200`이 아닌 본문을 읽지 않으며 모든 예외를 메시지·원인 없는 결과 값으로 바꾼다. 개인정보는 Java 값이 되지 않는다 | record 필드 구조 시험, 응답 종류별 고유 문자열 시험(계약 07 §10) |
+| 개인정보(실명·생년월일·CI·DI·`pgRawResponse` 등)가 로그·예외·DB·API 응답 어디에도 없다 | PortOne 응답을 읽는 record가 `status`와 `channel` 네 값만 갖고, 어댑터가 `200`이 아닌 본문을 읽지 않으며 모든 예외를 메시지·원인 없는 결과 값으로 바꾼다. 개인정보는 Java 값이 되지 않는다 | record 필드 구조 시험, 응답 종류별 고유 문자열 시험(계약 08 §10) |
 | Mock 본인확인을 HTTP로 고를 수 없다 | Mock 제공자가 `seed` 소스 세트에만 있어 서버 jar에 없다 | `bootJar` 항목 검사, 매핑 목록 검사 |
 | 남의 시도로 기록이 생기지 않는다 | 복합 FK `(attempt_id, user_id)` | DB 직접 삽입 거절 시험 |
 | `SANDBOX` 기록에 이름이 없다 | `CHECK` 제약 | DB 직접 삽입 거절 시험 |
@@ -246,7 +246,7 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 
 - 시도 ID는 하나의 UUID이고 표기만 둘이다(DB `uuid` 칼럼은 하이픈 표기, 밖은 32자 표기). 로그에는 32자 표기로 남긴다(2026-11-18 설계 세션). 화면 오류 보고·API·PortOne 콘솔에 보이는 값과 같아 그대로 찾을 수 있기 때문이다. DB에서는 PostgreSQL `uuid`가 하이픈 없는 32자 입력도 받으므로 `WHERE id = '<32자>'::uuid`로 변환 없이 찾는다. 하이픈 표기로 남기면 PortOne 콘솔과 화면 보고에서 온 값을 사람이 바꿔서 찾아야 한다. 이 값은 서버가 만든 무작위 값이라 개인정보가 아니며, NSU-146 로그 규칙의 허용 목록(내부 UUID)에 들어간다.
 
-- 00 §6(UUID는 하이픈 표기)의 예외다. 계약 07 §1에 이유를 적고 00은 고치지 않는다.
+- 00 §6(UUID는 하이픈 표기)의 예외다. 계약 08 §1에 이유를 적고 00은 고치지 않는다.
 
 ### 모듈은 `verification.identity`의 평평한 패키지 하나다
 
@@ -315,6 +315,8 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 
 ### PortOne을 자동으로 다시 부르지 않는다
 
+앱 코드는 재시도하지 않는다. 다만 JDK `HttpClient`는 응답을 받기 전에 끊긴 연결에서 `GET`을 한 번 더 보낸다(NSU-105 `backend-verify` 프로브로 확인, 2026-11-18). 조회는 멱등이라 결과는 바뀌지 않는다. 아래 비교의 "자동 재시도"는 앱 코드가 시간 초과·오류 응답 뒤 다시 부르는 정책을 뜻한다.
+
 | 관점 | 자동 재시도 없음 (채택) | 서버가 2회 더 부름 |
 |---|---|---|
 | 정확성 | 차이 없음(조회는 멱등) | 차이 없음 |
@@ -343,7 +345,7 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 
 - NSU-105 PR이 바꾸는 다른 모듈의 파일: `identity/config/SecurityConfig`(ARTIST 매처), `global/exception/ErrorCode`(새 code 8개, #219의 한 줄 형식), `global/config`(환경 값), `TestcontainersConfiguration`(설정 값), `OpenApiDocsIntegrationTest`(경로 수·태그), #219 머지 뒤 `RedisPublicRequestLimitStore`와 `ConfiguredRequiredTermsPolicy`.
 - 포트, 합치는 reader, `VerificationType.IDENTITY` 첫 상수, `EmptyVerificationReader` 삭제, `lombok-style-files.txt` 정리, 기존 Trust Profile 테스트 세 개(`showsEachVerifiedItemOnceInContractOrder`, `verificationsDoNotChangeReliabilityEvidenceOrRiskSignals`, `example62HistoryGivesExample62Response`)와 §6.2 기대 JSON 정리는 NSU-37 몫이다(2026-11-17 지휘 세션 결정). NSU-105는 그것이 main에 들어온 뒤 `IDENTITY` source를 더한다(NSU-105는 #219 뒤라 순서가 맞는다). 01 §7은 NSU-105가 고치지 않는다.
-- 새 오류 code 8개(계약 07 §4): `INVALID_IDENTITY_VERIFICATION_ID`, `IDENTITY_VERIFICATION_ATTEMPT_NOT_FOUND`, `IDENTITY_ALREADY_VERIFIED`, `IDENTITY_VERIFICATION_ATTEMPT_EXPIRED`, `IDENTITY_VERIFICATION_NOT_COMPLETED`, `IDENTITY_VERIFICATION_FAILED`, `IDENTITY_VERIFICATION_REJECTED`, `IDENTITY_VERIFICATION_UNAVAILABLE`. `IDENTITY_VERIFICATION_REQUIRED`·`IDENTITY_NAME_UNAVAILABLE`은 NSU-89가 더한다.
+- 새 오류 code 8개(계약 08 §4): `INVALID_IDENTITY_VERIFICATION_ID`, `IDENTITY_VERIFICATION_ATTEMPT_NOT_FOUND`, `IDENTITY_ALREADY_VERIFIED`, `IDENTITY_VERIFICATION_ATTEMPT_EXPIRED`, `IDENTITY_VERIFICATION_NOT_COMPLETED`, `IDENTITY_VERIFICATION_FAILED`, `IDENTITY_VERIFICATION_REJECTED`, `IDENTITY_VERIFICATION_UNAVAILABLE`. `IDENTITY_VERIFICATION_REQUIRED`·`IDENTITY_NAME_UNAVAILABLE`은 NSU-89가 더한다.
 - 새 OpenAPI 태그 "실명 본인확인"이 생긴다. 00 §10.1의 태그 목록은 지금 NSU-146이 고치는 공유 파일이다. NSU-146 PR이 머지된 뒤 이 브랜치를 main에 맞추고 NSU-105 PR에서 한 줄 더한다(2026-11-17 지휘 세션 결정).
 - 구현 0단계는 NHN KCP 테스트 채널로 32자 ID 하나를 시작부터 창, 서버 재조회까지 실제로 확인한다. 응답 필드 경로와 `channel` 네 값도 이때 확인한다.
 - 시도 행이 쌓인다. 시연 DB는 최종 평가 다음 날 통째로 지우므로 정리 작업을 두지 않는다(`// shortcut: 만료 시도 정리 없음, 운영 단계 ADR에서 보관 기간과 정리 작업을 정할 때`).
@@ -411,7 +413,7 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 
 ## 테스트 기준
 
-계약 07 §10이 전체 목록이다. 이 ADR의 결정을 지키는 핵심은 다음이다.
+계약 08 §10이 전체 목록이다. 이 ADR의 결정을 지키는 핵심은 다음이다.
 
 | 확인 | 기대 결과 |
 |---|---|
@@ -429,7 +431,7 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 | 컨텍스트의 제공자 빈 | PortOne 구현 하나 |
 | 서버 `bootJar`의 항목 | `seed` 소스 세트의 클래스(Mock 제공자, 시드 진입점)가 없음(빌드 결과를 열어 보는 검사) |
 | 같은 빌드의 시드 jar를 마이그레이션된 DB에 `server.port=-1`로 실행 | `MOCK` 기록이 생기고, Flyway 이력이 바뀌지 않고, 열린 HTTP 포트가 없음 |
-| 판정 순서 조합 표(계약 07 §10) | 응답이 §3에서 가장 앞에 걸리는 순서의 응답과 같고, 그 뒤 순서의 일(시도·기록 변경, PortOne 호출)이 일어나지 않음 |
+| 판정 순서 조합 표(계약 08 §10) | 응답이 §3에서 가장 앞에 걸리는 순서의 응답과 같고, 그 뒤 순서의 일(시도·기록 변경, PortOne 호출)이 일어나지 않음 |
 | PortOne `401`·`403` | `503 IDENTITY_VERIFICATION_UNAVAILABLE`, `ERROR` 로그에 시도 ID와 이유만 |
 | `app.environment`·제공자·PortOne 값·이름 키가 없음, 빈 값, `${…:}` 자리표시자, `MOCK`, `DEMO`가 아닌 값 | 서버가 시작하지 않고 실패 출력에 그 값이 없음 |
 | `IDENTITY` source(NSU-37의 `VerificationSource` 구현) | 기록이 있는 아티스트에게 `(IDENTITY, null)` 하나, 아티스트 수와 관계없이 쿼리 1번, 빈 입력은 빈 Map. 합치기 규칙의 시험은 NSU-37 몫 |
