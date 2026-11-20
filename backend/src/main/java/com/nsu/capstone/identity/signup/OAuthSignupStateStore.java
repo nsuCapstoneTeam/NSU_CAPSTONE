@@ -1,8 +1,7 @@
-package com.nsu.capstone.identity.oauth;
+package com.nsu.capstone.identity.signup;
 
 import com.nsu.capstone.identity.domain.OAuthProvider;
 import com.nsu.capstone.identity.domain.UserRole;
-import com.nsu.capstone.identity.signup.SignupTermsConsent;
 
 /** Server-only binding and finalization operations, shared by role-specific signup flows. */
 public interface OAuthSignupStateStore {

@@ -1,4 +1,4 @@
-package com.nsu.capstone;
+package com.nsu.capstone.identity.signup;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -6,7 +6,8 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import com.nsu.capstone.identity.signup.*;
+import com.nsu.capstone.SignupTestTerms;
+import com.nsu.capstone.TestcontainersConfiguration;
 import com.nsu.capstone.identity.verification.*;
 import com.nsu.capstone.identity.verification.port.*;
 import java.util.UUID;
@@ -215,22 +216,16 @@ class SignupSendRedisFailureIntegrationTest {
             }
             var otp = mock(OtpCodeGenerator.class);
             when(otp.generate()).thenReturn("123456");
-            var service = new com.nsu.capstone.identity.application.SignupVerificationService(
-                    sessions,
-                    store,
-                    otp,
-                    digests,
-                    email,
-                    sms,
-                    mock(com.nsu.capstone.identity.verification.adult.AdultEvidenceVerifier.class),
-                    properties,
-                    java.time.Clock.systemUTC(),
-                    alerts,
-                    local);
+            var service = new SignupVerificationChallenges(
+                    sessions, store, otp, digests, email, sms, properties, java.time.Clock.systemUTC(), alerts, local);
             long started = System.nanoTime();
             var failure = assertThrows(
                     com.nsu.capstone.global.exception.BusinessException.class,
-                    () -> service.sendEmailCode(id, com.nsu.capstone.identity.domain.UserRole.ARTIST, "192.0.2.150"));
+                    () -> service.issue(
+                            id,
+                            com.nsu.capstone.identity.domain.UserRole.ARTIST,
+                            VerificationChannel.EMAIL,
+                            "192.0.2.150"));
             assertEquals(
                     com.nsu.capstone.global.exception.ErrorCode.VERIFICATION_DELIVERY_FAILED, failure.getErrorCode());
             assertTrue(java.time.Duration.ofNanos(System.nanoTime() - started).toMillis() < 1000);

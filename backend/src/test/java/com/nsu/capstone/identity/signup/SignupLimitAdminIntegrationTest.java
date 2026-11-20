@@ -1,15 +1,9 @@
-package com.nsu.capstone;
+package com.nsu.capstone.identity.signup;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.nsu.capstone.identity.signup.SignupRateLimitKeys;
-import com.nsu.capstone.identity.signup.SignupRedisKeys;
-import com.nsu.capstone.identity.signup.SignupSession;
-import com.nsu.capstone.identity.signup.SignupSessionStore;
-import com.nsu.capstone.identity.signup.SignupVerificationProperties;
-import com.nsu.capstone.identity.verification.ChallengeIssueResult;
-import com.nsu.capstone.identity.verification.OtpDigestService;
-import com.nsu.capstone.identity.verification.VerificationChallengeStore;
+import com.nsu.capstone.SignupTestTerms;
+import com.nsu.capstone.TestcontainersConfiguration;
 import com.nsu.capstone.identity.verification.VerificationChannel;
 import java.nio.charset.StandardCharsets;
 import java.time.*;

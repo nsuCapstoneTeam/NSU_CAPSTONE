@@ -23,14 +23,11 @@ import com.nsu.capstone.identity.signup.SignupMethod;
 import com.nsu.capstone.identity.signup.SignupSession;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
 import java.time.Clock;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -67,7 +64,6 @@ class ArtistSignupServiceTest {
                 signupSessionStore,
                 passwordEncoder,
                 userIdGenerator,
-                new SignupRequiredConditionsValidator(),
                 SignupTestTerms.policy(),
                 Clock.systemUTC(),
                 new SignupPersistenceService(userRepository, Mockito.mock(UserTermsAgreementRepository.class)),
@@ -94,7 +90,7 @@ class ArtistSignupServiceTest {
 
     @Test
     void signsUpArtistAndDeletesSignupSession() {
-        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(verifiedArtistSession()));
+        when(signupSessionStore.completeLocal(SESSION_ID, UserRole.ARTIST)).thenReturn(verifiedArtistSession());
         when(userRepository.existsByEmail(EMAIL)).thenReturn(false);
         when(userIdGenerator.generate()).thenReturn(USER_ID);
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -118,7 +114,7 @@ class ArtistSignupServiceTest {
 
     @Test
     void rejectsDuplicatedEmailWithoutCreatingUserOrDeletingSession() {
-        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(verifiedArtistSession()));
+        when(signupSessionStore.completeLocal(SESSION_ID, UserRole.ARTIST)).thenReturn(verifiedArtistSession());
         when(userRepository.existsByEmail(EMAIL)).thenReturn(true);
 
         BusinessException exception =
@@ -131,7 +127,8 @@ class ArtistSignupServiceTest {
 
     @Test
     void rejectsMissingOrExpiredSignupSessionWithoutCreatingUser() {
-        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.empty());
+        when(signupSessionStore.completeLocal(SESSION_ID, UserRole.ARTIST))
+                .thenThrow(new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID));
 
         BusinessException exception =
                 assertThrows(BusinessException.class, () -> artistSignupService.signup(SESSION_ID, PASSWORD));
@@ -141,9 +138,18 @@ class ArtistSignupServiceTest {
     }
 
     @ParameterizedTest
-    @MethodSource("invalidRequiredConditions")
-    void rejectsUnmetRequiredConditionWithoutCreatingUser(SignupSession signupSession, ErrorCode expectedErrorCode) {
-        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(signupSession));
+    @EnumSource(
+            value = ErrorCode.class,
+            names = {
+                "SIGNUP_SESSION_INVALID",
+                "EMAIL_VERIFICATION_REQUIRED",
+                "PHONE_VERIFICATION_REQUIRED",
+                "REQUIRED_TERMS_AGREEMENT_REQUIRED",
+                "ADULT_CONFIRMATION_REQUIRED"
+            })
+    void rejectsUnmetRequiredConditionWithoutCreatingUser(ErrorCode expectedErrorCode) {
+        when(signupSessionStore.completeLocal(SESSION_ID, UserRole.ARTIST))
+                .thenThrow(new BusinessException(expectedErrorCode));
 
         BusinessException exception =
                 assertThrows(BusinessException.class, () -> artistSignupService.signup(SESSION_ID, PASSWORD));
@@ -151,17 +157,6 @@ class ArtistSignupServiceTest {
         assertEquals(expectedErrorCode, exception.getErrorCode());
         verify(userRepository, never()).saveAndFlush(any());
         verify(signupSessionStore, never()).deleteById(any());
-    }
-
-    private static Stream<Arguments> invalidRequiredConditions() {
-        return Stream.of(
-                Arguments.of(session(false, true, true, true, UserRole.ARTIST), ErrorCode.EMAIL_VERIFICATION_REQUIRED),
-                Arguments.of(session(true, false, true, true, UserRole.ARTIST), ErrorCode.PHONE_VERIFICATION_REQUIRED),
-                Arguments.of(
-                        session(true, true, false, true, UserRole.ARTIST), ErrorCode.REQUIRED_TERMS_AGREEMENT_REQUIRED),
-                Arguments.of(session(true, true, true, false, UserRole.ARTIST), ErrorCode.ADULT_CONFIRMATION_REQUIRED),
-                Arguments.of(
-                        session(true, true, true, true, UserRole.EVENT_PARTNER), ErrorCode.SIGNUP_SESSION_INVALID));
     }
 
     private SignupSession verifiedArtistSession() {

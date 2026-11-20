@@ -1,10 +1,11 @@
-package com.nsu.capstone.identity.verification;
+package com.nsu.capstone.identity.signup;
 
 import com.nsu.capstone.identity.domain.UserRole;
+import com.nsu.capstone.identity.verification.VerificationChannel;
 import java.time.Instant;
 import java.util.Optional;
 
-public interface VerificationChallengeStore {
+interface VerificationChallengeStore {
 
     ChallengeIssueResult issue(
             String signupSessionId,

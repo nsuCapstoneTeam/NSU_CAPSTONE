@@ -1,7 +1,8 @@
-package com.nsu.capstone.identity.verification.config;
+package com.nsu.capstone.identity.signup;
 
-import com.nsu.capstone.identity.signup.*;
-import com.nsu.capstone.identity.verification.*;
+import com.nsu.capstone.identity.verification.VerificationAlertService;
+import com.nsu.capstone.identity.verification.config.SignupSendRedisProperties;
+import com.nsu.capstone.identity.verification.config.VerificationTimingProperties;
 import io.lettuce.core.ClientOptions;
 import io.lettuce.core.SocketOptions;
 import io.lettuce.core.TimeoutOptions;
@@ -14,7 +15,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(SignupSendRedisProperties.class)
-public class SignupSendRedisConfig {
+class SignupSendRedisConfig {
     @Bean(destroyMethod = "close")
     SignupSendPreflight signupSendPreflight(
             LettuceConnectionFactory sharedFactory,
