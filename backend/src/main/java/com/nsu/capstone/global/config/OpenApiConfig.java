@@ -23,6 +23,8 @@ public class OpenApiConfig {
 
         잘못된 JSON처럼 Spring MVC가 직접 처리하는 `400`은 `code`가 없는 `ProblemDetail`이다.
 
+        서버가 처리한 모든 응답에 `X-Request-Id` 헤더가 있다. 문의할 때 이 값을 알려 주면 서버 로그의 requestId로 그 요청의 로그를 찾는다.
+
         필드 규칙, null 조건, 결정 근거는 GitHub `docs/api`의 계약 문서에 있다.
         """;
 
@@ -30,11 +32,14 @@ public class OpenApiConfig {
     @Bean
     OpenAPI openApi() {
         return new OpenAPI()
-            .info(new Info().title("NSU_CAPSTONE API").version("v1").description(DESCRIPTION))
-            .components(new Components().addSecuritySchemes(BEARER_AUTH, new SecurityScheme()
-                .type(SecurityScheme.Type.HTTP)
-                .scheme("bearer")
-                .bearerFormat("JWT")))
-            .addSecurityItem(new SecurityRequirement().addList(BEARER_AUTH));
+                .info(new Info().title("NSU_CAPSTONE API").version("v1").description(DESCRIPTION))
+                .components(new Components()
+                        .addSecuritySchemes(
+                                BEARER_AUTH,
+                                new SecurityScheme()
+                                        .type(SecurityScheme.Type.HTTP)
+                                        .scheme("bearer")
+                                        .bearerFormat("JWT")))
+                .addSecurityItem(new SecurityRequirement().addList(BEARER_AUTH));
     }
 }

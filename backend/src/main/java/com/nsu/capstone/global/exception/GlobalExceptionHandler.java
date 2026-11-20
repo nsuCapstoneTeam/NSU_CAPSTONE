@@ -6,9 +6,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.web.firewall.RequestRejectedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
@@ -35,9 +37,35 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(errorCode.getHttpStatus()).body(ErrorResponse.from(errorCode));
     }
 
+    /**
+     * 응답을 이미 보낸 뒤 Spring 표준 예외가 나면 부모의 기본 구현은 "Response already committed. Ignoring: " + ex를 WARN으로 남긴다. 예외 문자열에
+     * 메시지(요청 입력이 섞인다)가 들어가 메시지 없는 출력기를 거치지 않으므로, 예외 클래스 이름만 남기고 null을 돌려준다.
+     */
+    @Override
+    protected ResponseEntity<Object> handleExceptionInternal(
+            Exception exception, Object body, HttpHeaders headers, HttpStatusCode statusCode, WebRequest request) {
+        if (request instanceof ServletWebRequest servletWebRequest
+                && servletWebRequest.getResponse() != null
+                && servletWebRequest.getResponse().isCommitted()) {
+            log.warn("응답을 이미 보낸 뒤 처리하지 못한 예외를 무시한다: {}", exception.getClass().getName());
+            return null;
+        }
+        return super.handleExceptionInternal(exception, body, headers, statusCode, request);
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException exception) {
         ErrorCode errorCode = ErrorCode.ACCESS_DENIED;
+        return ResponseEntity.status(errorCode.getHttpStatus()).body(ErrorResponse.from(errorCode));
+    }
+
+    /**
+     * Spring Security 방화벽은 헤더 값을 읽는 순간 검사한다. MVC가 @RequestHeader(예: Idempotency-Key)를 읽다가 제어 문자를 만나면 헤더 원문이 든
+     * 이 예외가 MVC 안에서 난다. 메시지와 원인 예외를 로그에 남기지 않고 400으로 답한다(요청 처리 결과는 완료 줄이 남긴다).
+     */
+    @ExceptionHandler(RequestRejectedException.class)
+    public ResponseEntity<ErrorResponse> handleRequestRejected(RequestRejectedException exception) {
+        ErrorCode errorCode = ErrorCode.VALIDATION_ERROR;
         return ResponseEntity.status(errorCode.getHttpStatus()).body(ErrorResponse.from(errorCode));
     }
 
