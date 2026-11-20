@@ -286,7 +286,7 @@ final class LogSafetyChecker {
             if (!s1Allowed
                     && node.getMethodSelect() instanceof MemberSelectTree select
                     && select.getIdentifier().contentEquals("printStackTrace")
-                    && node.getArguments().isEmpty()) {
+                    && node.getArguments().size() <= 1) {
                 report(node, "S1", "printStackTrace()를 쓰지 않는다. Logback을 거치지 않아 JSON이 아니다");
             }
             if (!s4Allowed) {

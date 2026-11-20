@@ -584,4 +584,14 @@ class LogSafetyCheckerTest {
         assertThat(check("log.info(\"키 {}\", apiVersion);")).isEmpty();
         assertThat(check("log.info(\"키 {}\", keyId);")).isEmpty();
     }
+
+    /** printStackTrace(PrintStream|PrintWriter)도 Logback을 거치지 않는다. 인자 둘인 우리 출력기 위임은 대상이 아니다(#36). */
+    @Test
+    void 출력_대상을_넘기는_printStackTrace도_S1_위반이다() {
+        assertThat(check("failure.printStackTrace(writer);")).extracting("rule").containsExactly("S1");
+        assertThat(check("failure.printStackTrace(new PrintWriter(sink));"))
+                .extracting("rule")
+                .containsExactly("S1");
+        assertThat(check("delegate.printStackTrace(throwable, out);")).isEmpty();
+    }
 }
