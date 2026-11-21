@@ -43,7 +43,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
             "logging.level.org.apache.tomcat.util.http.parser.Cookie=INFO",
             "logging.level.org.apache.coyote.http11.Http11Processor=TRACE",
             "logging.level.jdk.httpclient.HttpClient=INFO",
-            "logging.level.com.nsu.capstone=DEBUG"
+            "logging.level.com.nsu.capstone=DEBUG",
+            // 개발자 셸이 LOG_LOCAL_MODE=true와 LOG_FORMAT=을 내보내도 배포 설정으로 본다
+            "nsu.logging.local-mode=false",
+            "logging.structured.format.console=logstash"
         })
 @Import(TestcontainersConfiguration.class)
 class LogLevelFloorTest {
