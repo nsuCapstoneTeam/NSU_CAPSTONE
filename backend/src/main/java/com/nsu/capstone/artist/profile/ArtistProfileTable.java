@@ -5,6 +5,9 @@ import com.nsu.capstone.event.domain.ArtistType;
 import com.nsu.capstone.event.domain.Genre;
 import java.sql.Array;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -54,10 +57,45 @@ class ArtistProfileTable {
                 .map(Map.Entry::getValue);
     }
 
+    /** 첫 저장이 동시에 와도 PK 충돌 없이 나중에 실행된 문장의 값이 남도록 한 문장으로 쓴다(09 §5). */
+    SavedArtistProfile upsert(UUID artistId, ArtistProfileDraft draft, List<String> regionCodes, Instant now) {
+        FeeRange fee = draft.fee();
+        return jdbc.sql("""
+                        INSERT INTO artist_profiles
+                            (user_id, name, bio, artist_types, genres, region_codes, fee_min, fee_max, updated_at)
+                        VALUES (:userId, :name, :bio, :artistTypes, :genres, :regionCodes, :feeMin, :feeMax, :updatedAt)
+                        ON CONFLICT (user_id) DO UPDATE SET
+                            name = EXCLUDED.name,
+                            bio = EXCLUDED.bio,
+                            artist_types = EXCLUDED.artist_types,
+                            genres = EXCLUDED.genres,
+                            region_codes = EXCLUDED.region_codes,
+                            fee_min = EXCLUDED.fee_min,
+                            fee_max = EXCLUDED.fee_max,
+                            updated_at = EXCLUDED.updated_at
+                        RETURNING """ + " " + COLUMNS)
+                .param("userId", artistId)
+                .param("name", draft.name())
+                .param("bio", draft.bio())
+                .param("artistTypes", names(draft.artistTypes()))
+                .param("genres", names(draft.genres()))
+                .param("regionCodes", regionCodes.toArray(String[]::new))
+                .param("feeMin", fee == null ? null : fee.min())
+                .param("feeMax", fee == null ? null : fee.max())
+                .param("updatedAt", OffsetDateTime.ofInstant(now, ZoneOffset.UTC))
+                .query(MAPPER)
+                .single()
+                .getValue();
+    }
+
     void delete(UUID artistId) {
         jdbc.sql("DELETE FROM artist_profiles WHERE user_id = :userId")
                 .param("userId", artistId)
                 .update();
+    }
+
+    private static String[] names(Set<? extends Enum<?>> values) {
+        return values.stream().map(Enum::name).toArray(String[]::new);
     }
 
     private static SavedArtistProfile toProfile(java.sql.ResultSet rs) throws SQLException {
