@@ -355,7 +355,7 @@ DB가 관여하는 경우(upsert, `CHECK`, 동시 요청, 배열, 조회 횟수)
 | [05 EVENT_PARTNER 프로필 API](./05_event_partner_profile.md) §1·§5·§6·§8 | 아티스트 프로필 제안 문장을 이 문서 링크로. 개편 마이그레이션이 부르는 함수를 `check_profile_regions()`로, 테스트 이름을 `ProfileRegionMigrationIntegrationTest`로. 이 PR에서 고친다 |
 | [ADR event_management/01](../adr/event_management/01_region_code_standard.md) | 저장된 코드 이전 대상에 아티스트 프로필의 공연 가능 지역 배열을 더하고, 점검 함수·테스트 이름을 바꾼다. 이 PR에서 고친다 |
 | [ADR event_partner_profile/00](../adr/event_partner_profile/00_event_partner_profile_api.md), [ADR recommendation_eligibility/00](../adr/recommendation_eligibility/00_eligibility_rules.md) | NSU-119를 가리키는 문장에 이 ADR 링크를 단다. 결정은 바꾸지 않는다. 이 PR에서 고친다 |
-| [00 공통 규칙 §10.1](./00_conventions.md) | 태그 목록에 `아티스트 프로필`을 더한다. 여러 세션이 함께 쓰는 파일이라 지휘 세션에 요청한다 |
-| [02 추천 응답](./02_recommendation_trust_and_new_artist.md) §4.2 | "빼는 곡" 표에 "곡 아티스트의 프로필이 없다(삭제함)" 행을 더한다. 다른 세션이 고치는 파일이라 지휘 세션에 요청한다 |
-| [03 행사 API](./03_events.md) §3.3·§7 | §7의 아티스트 프로필 문장을 이 문서(§2)와 Eligibility ADR 링크로 바꾸고, §3.3에 "값을 더할 때는 `artist_profiles`의 `CHECK`도 같은 마이그레이션에서 고친다"를 더한다. 다른 세션이 고치는 파일이라 지휘 세션에 요청한다 |
+| [00 공통 규칙 §10.1](./00_conventions.md) | 태그 목록에 `아티스트 프로필`을 더한다. 여러 세션이 함께 쓰는 파일이라 이 PR이 머지 직전(Flyway 번호를 맞출 때)에 다른 PR과의 겹침을 확인하고 고친다 |
+| [02 추천 응답](./02_recommendation_trust_and_new_artist.md) §4.2 | "빼는 곡" 표에 "곡 아티스트의 프로필이 없다(삭제함)" 행을 더한다. 다른 세션이 고치는 파일이라 그 세션(design-nsu-121)이 고친다 |
+| [03 행사 API](./03_events.md) §3.3·§7 | §7의 아티스트 프로필 문장을 이 문서(§2)와 Eligibility ADR 링크로 바꾸고, §3.3에 "값을 더할 때는 `artist_profiles`의 `CHECK`도 같은 마이그레이션에서 고친다"를 더한다. 다른 세션이 고치는 파일이라 그 세션(design-nsu-121)이 고친다 |
 | 개인정보처리방침, 탈퇴 기능 | 수집 항목에 아티스트 활동명·소개·출연료를 더하고, 탈퇴할 때 아티스트 프로필을 파기한다. 후속 이슈(실사용자에게 열기 전 완료) |
