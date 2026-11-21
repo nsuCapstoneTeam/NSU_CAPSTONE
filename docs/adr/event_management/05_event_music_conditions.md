@@ -328,6 +328,7 @@ public record EventResponse(/* … */ List<Genre> genres, Mood mood, Tempo tempo
 - V13은 데이터를 고친다(어기는 장르 행). 뜻이 같은 정리라 롤백 대상에서 뺀다. 그 행의 지문은 장르 토큰이 바뀔 수 있지만 저장된 지문이 없어 영향이 없다.
 - 머지 순서는 V11(PR #245) → V12(NSU-119) → V13이다. 순서가 바뀌면 나중에 머지되는 PR이 머지 직전에 자기 파일 번호와 그 번호를 적은 문서·테스트를 바꾼다. NSU-119 문서는 지금 V12를 적고 있다.
 - 생성된 OpenAPI 스키마(`/v3/api-docs`, OpenAPI 3.1)에서 `mood`·`tempo`·`vocal`·`artistType`은 요청(`EventRequest`)과 응답(`EventResponse`) 모두 enum 값과 `null`을 허용한다. 스키마로 응답을 검증하는 클라이언트가 NSU-121 전 행사의 `null` 응답을 거절하지 않게 하기 위해서다. `artistType`은 지금 `null`을 표시하지 않는 같은 결함이라 함께 고친다. 응답 키를 `required`로 표시하는 것은 다른 응답 필드와 같이 하지 않는다(00 §3의 "키를 생략하지 않는다"는 md가 정한다).
+  - 구현: `@Schema(types = {"string", "null"})`만으로는 `enum` 목록에 `null`이 들어가지 않는다(springdoc, OpenAPI 3.1). `nullable = true`는 3.1에서 효과가 없다. 그래서 `OpenApiConfig.nullableEnumCustomizer`가 `types`에 `"null"`이 있는 enum 속성에만 `enum`에 `null`을 더한다. 새 nullable enum 필드도 `types`만 달면 된다.
 - 문자열을 enum으로 바꾸는 private 파서(`EventRequest.enumValue` 등)는 그대로 둔다. `MusicChoice.parse`와 합치는 일은 recommendation_search_input/00이 적은 별도 LOW 작업 후보다.
 - 지휘 세션이 할 외부 쓰기
   - SSOT `EVT-042`: "행사에서 필수인지는 NSU-121이 정한다"(v1.20 초안)를 "행사에서 선택 항목이며, 고르지 않으면 검색 문구에서 빠진다"로 바꾼다. v1.20을 고치지 않고 새 minor 초안 리비전으로 올려 변경 이력에 행을 더한다(0.4절).
