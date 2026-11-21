@@ -42,10 +42,15 @@ class LogLevelFloorBeforeBeansTest {
 
     @Test
     void 빈을_만드는_시점에_이미_하한이_적용되어_있다() {
-        // 명령행 인자는 설정 파일보다 우선하는 입력이라 배포에서 실제로 레벨을 덮어쓰는 길이다
+        // 명령행 인자는 설정 파일보다 우선하는 입력이라 배포에서 실제로 레벨을 덮어쓰는 길이다.
+        // 로컬 모드와 출력 형식은 배포 값으로 고정한다. 개발자 셸이 LOG_LOCAL_MODE=true와 LOG_FORMAT=을 내보내도 하한을 본다
         try (ConfigurableApplicationContext ignored = new SpringApplicationBuilder(LevelProbeConfig.class)
                 .web(WebApplicationType.NONE)
-                .run("--logging.level.org.hibernate.orm.jdbc.extract=TRACE", "--debug=true")) {
+                .run(
+                        "--logging.level.org.hibernate.orm.jdbc.extract=TRACE",
+                        "--debug=true",
+                        "--nsu.logging.local-mode=false",
+                        "--logging.structured.format.console=logstash")) {
             assertThat(LEVEL_WHEN_BEAN_CREATED.get()).as("빈을 만들 때 기록한 실효 레벨").isNotNull();
             assertThat(LEVEL_WHEN_BEAN_CREATED.get().toInt())
                     .as("빈을 만들 때 org.hibernate.orm.jdbc.extract 실효 레벨")

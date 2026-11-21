@@ -6,15 +6,21 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.convert.ApplicationConversionService;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.convert.ConversionException;
 import org.springframework.core.env.Environment;
+import org.springframework.util.PropertyPlaceholderHelper;
 
 /** ADR logging/00 Decision 7: 커밋한 설정 파일이 정한 값. OS 환경 변수 없이(배포와 같은 설정) 읽는다. */
 class LoggingConfigTest {
@@ -111,24 +117,66 @@ class LoggingConfigTest {
         }
     }
 
+    /** Spring과 같이 ${키:기본값}을 읽는다. 키는 같은 파일에서만 찾는다. */
+    private static final PropertyPlaceholderHelper REFERENCES =
+            new PropertyPlaceholderHelper("${", "}", ":", null, true);
+
     /** Properties가 읽는 모든 표기(`:`·공백 구분, 줄 이음, 앞뒤 공백)에서 금지된 설정을 찾는다. 줄 단위 정규식은 이 표기들을 놓친다. */
     static List<String> forbiddenSettings(String propertiesText) throws IOException {
         Properties properties = new Properties();
         properties.load(new StringReader(propertiesText));
         return properties.stringPropertyNames().stream()
-                .filter(key -> isForbidden(key.strip().toLowerCase(Locale.ROOT), properties.getProperty(key)))
-                .map(key -> key.strip() + "=" + properties.getProperty(key).strip())
+                .filter(key ->
+                        isForbidden(key.strip().toLowerCase(Locale.ROOT), properties.getProperty(key), properties))
+                .map(key -> key.strip() + "=" + properties.getProperty(key))
                 .sorted()
                 .toList();
     }
 
-    private static boolean isForbidden(String key, String value) {
+    /**
+     * 같은 파일의 참조는 푼 값으로 판정한다. 파일 밖 값(환경 변수 등)에 기대는 참조는 기본값과 상관없이 금지다. 배포 환경이 그 값을 켤 수 있다.
+     */
+    private static boolean isForbidden(String key, String rawValue, Properties properties) {
+        List<String> asked = new ArrayList<>();
+        Set<String> missing = new HashSet<>();
+        String value = REFERENCES.replacePlaceholders(rawValue, name -> {
+            asked.add(name);
+            String found = properties.getProperty(name);
+            if (found == null) {
+                missing.add(name);
+            }
+            return found;
+        });
+        // 해석기는 ${키:기본값}의 "키:기본값" 전체를 먼저 묻고, 없으면 키만 다시 묻는다. 뒤이어 앞부분(키)을 물었으면 그 전체는 조회한 키가 아니다.
+        // 중첩 참조가 만든 LOG:DETAILS처럼 앞부분을 다시 묻지 않은 이름은 실제로 조회한 키다
+        boolean outsideReference = missing.stream()
+                .anyMatch(name -> !name.contains(":") || !asked.contains(name.substring(0, name.indexOf(':'))));
+        boolean loggingSwitch = key.startsWith("logging.level.")
+                || key.equals("debug")
+                || key.equals("trace")
+                || key.contains("accesslog.enabled")
+                || key.contains("log-request-details");
+        return loggingSwitch && (outsideReference || isForbiddenValue(key, value));
+    }
+
+    private static boolean isForbiddenValue(String key, String value) {
         String setting = value.strip().toLowerCase(Locale.ROOT);
         boolean verboseLevel = key.startsWith("logging.level.") && (setting.equals("debug") || setting.equals("trace"));
-        boolean debugSwitch = (key.equals("debug") || key.equals("trace")) && setting.equals("true");
+        // Boot는 값이 정확히 false가 아니면 켜진 것으로 본다(LoggingApplicationListener.isSet). 값 뒤의 공백도 남기므로 원문을 비교한다
+        boolean debugSwitch = (key.equals("debug") || key.equals("trace")) && !value.equals("false");
         boolean requestLogging =
-                (key.contains("accesslog.enabled") || key.contains("log-request-details")) && setting.equals("true");
+                (key.contains("accesslog.enabled") || key.contains("log-request-details")) && bindsToTrue(setting);
         return verboseLevel || debugSwitch || requestLogging;
+    }
+
+    /** Spring이 설정 값을 Boolean으로 바꾸는 규칙을 그대로 쓴다(true·on·yes·1). Boolean으로 읽지 못하는 값은 켜진 것이 아니다. */
+    private static boolean bindsToTrue(String setting) {
+        try {
+            return Boolean.TRUE.equals(
+                    ApplicationConversionService.getSharedInstance().convert(setting, Boolean.class));
+        } catch (ConversionException e) {
+            return false;
+        }
     }
 
     @Test
@@ -151,6 +199,92 @@ class LoggingConfigTest {
                         "server.tomcat.accesslog.enabled=true",
                         "spring.mvc.log-request-details=true",
                         "debug=true");
+    }
+
+    /** Spring은 on·yes·1도 true로 바인딩한다. 문자열 true만 보면 accesslog.enabled=on이 통과한다(NSU-162). */
+    @Test
+    void 요청_로깅_설정은_Spring이_true로_읽는_값이면_모두_금지다() throws IOException {
+        String text = """
+                server.tomcat.accesslog.enabled=on
+                spring.mvc.log-request-details=YES
+                spring.codec.log-request-details=1
+                """;
+
+        assertThat(forbiddenSettings(text))
+                .containsExactlyInAnyOrder(
+                        "server.tomcat.accesslog.enabled=on",
+                        "spring.mvc.log-request-details=YES",
+                        "spring.codec.log-request-details=1");
+    }
+
+    @Test
+    void 요청_로깅_설정은_Spring이_false로_읽는_값이면_허용한다() throws IOException {
+        String text = """
+                server.tomcat.accesslog.enabled=off
+                spring.mvc.log-request-details=no
+                spring.codec.log-request-details=0
+                """;
+
+        assertThat(forbiddenSettings(text)).isEmpty();
+    }
+
+    /**
+     * Boot는 debug·trace 값이 정확히 false가 아니면 켜진 것으로 본다(LoggingApplicationListener.isSet). on, 빈 값, False도 켜진다.
+     */
+    @Test
+    void debug와_trace_스위치는_정확히_false가_아니면_금지다() throws IOException {
+        assertThat(forbiddenSettings("debug=on\ntrace=\n")).containsExactlyInAnyOrder("debug=on", "trace=");
+        assertThat(forbiddenSettings("debug=False\n")).containsExactly("debug=False");
+        assertThat(forbiddenSettings("debug=false\ntrace=false\n")).isEmpty();
+    }
+
+    /** Boot의 속성 로더는 값 뒤의 공백을 남기고 isSet은 원문을 비교한다. "false " 는 false가 아니라서 켜진다(PR #249 리뷰). */
+    @Test
+    void debug와_trace_스위치는_false_뒤에_공백이나_줄바꿈이_붙어도_금지다() throws IOException {
+        assertThat(forbiddenSettings("debug=false \n")).containsExactly("debug=false ");
+        assertThat(forbiddenSettings("trace=false\\n\n")).containsExactly("trace=false\n");
+        assertThat(forbiddenSettings("debug =  false\n")).isEmpty();
+    }
+
+    /** Boot는 debug 값을 Environment에서 읽어 같은 설정의 참조(${..})를 푼 뒤 판정한다. 푼 값으로 판정한다(PR #249 리뷰). */
+    @Test
+    void 같은_파일의_참조를_푼_값으로_판정한다() throws IOException {
+        assertThat(forbiddenSettings("app.logging.verbose=false\ndebug=${app.logging.verbose}\n"))
+                .isEmpty();
+        assertThat(forbiddenSettings("app.logging.verbose=on\ntrace=${app.logging.verbose}\n"))
+                .containsExactly("trace=${app.logging.verbose}");
+        // 파일 밖 값(환경 변수)에 기대는 참조는 배포에서 켜질 수 있어 금지로 둔다
+        assertThat(forbiddenSettings("debug=${LOG_DEBUG:false}\n")).containsExactly("debug=${LOG_DEBUG:false}");
+    }
+
+    /**
+     * 기본값(:)이 붙은 참조도 같은 파일에 키가 있으면 그 값으로 판정한다. 파일 밖 값에 기대는 참조는 로그 설정 키 모두에서 기본값과 상관없이 금지다(PR #249
+     * 리뷰).
+     */
+    @Test
+    void 기본값이_붙은_참조는_같은_파일의_값으로_판정하고_파일_밖_참조는_금지다() throws IOException {
+        assertThat(forbiddenSettings("app.logging.verbose=false\ndebug=${app.logging.verbose:true}\n"))
+                .isEmpty();
+        assertThat(forbiddenSettings("app.verbose=yes\nserver.tomcat.accesslog.enabled=${app.verbose:false}\n"
+                        + "spring.mvc.log-request-details=${LOG_DETAILS:on}\n"
+                        + "spring.codec.log-request-details=${LOG_DETAILS:false}\n"
+                        + "logging.level.root=${LOG_LEVEL:DEBUG}\n"
+                        + "logging.level.com.nsu.capstone=${LOG_LEVEL:INFO}\n"))
+                .containsExactlyInAnyOrder(
+                        "server.tomcat.accesslog.enabled=${app.verbose:false}",
+                        "spring.mvc.log-request-details=${LOG_DETAILS:on}",
+                        "spring.codec.log-request-details=${LOG_DETAILS:false}",
+                        "logging.level.root=${LOG_LEVEL:DEBUG}",
+                        "logging.level.com.nsu.capstone=${LOG_LEVEL:INFO}");
+        assertThat(forbiddenSettings("app.level=INFO\nlogging.level.root=${app.level:DEBUG}\n"))
+                .isEmpty();
+    }
+
+    /** 중첩 참조가 만든 키(LOG:DETAILS)는 콜론이 있어도 실제로 조회하는 키다. 파일에 없으면 파일 밖 참조다(PR #249 리뷰). */
+    @Test
+    void 중첩_참조가_만든_콜론_있는_키도_파일_밖_참조다() throws IOException {
+        assertThat(forbiddenSettings("app.key=LOG:DETAILS\nspring.mvc.log-request-details=${${app.key}:false}\n"))
+                .containsExactly("spring.mvc.log-request-details=${${app.key}:false}");
     }
 
     @Test

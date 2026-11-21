@@ -39,7 +39,7 @@ class CiWorkflowTest {
         return Map.of();
     }
 
-    /** jobs.backend-log-safety의 steps 중 하나가 run으로 global.logging 테스트를 돌린다. */
+    /** jobs.backend-log-safety의 steps 중 하나의 run이 global.logging 테스트를 돌리는 명령 하나뿐이다. */
     static boolean jobRunsCommand(String workflowYaml) {
         if (!(job(workflowYaml).get("steps") instanceof List<?> steps)) {
             return false;
@@ -47,7 +47,7 @@ class CiWorkflowTest {
         return steps.stream()
                 .filter(Map.class::isInstance)
                 .map(step -> ((Map<?, ?>) step).get("run"))
-                .anyMatch(run -> run instanceof String script && script.contains(COMMAND));
+                .anyMatch(run -> run instanceof String script && script.strip().equals(COMMAND));
     }
 
     /** jobs.backend-log-safety의 timeout-minutes가 1 이상 상한 이하의 숫자다. */
@@ -91,6 +91,31 @@ class CiWorkflowTest {
                 """;
 
         assertThat(jobRunsCommand(workflow)).isFalse();
+    }
+
+    /** 명령 문자열이 run 안에 들어 있기만 하면 통과하던 틈이다. 출력하거나 주석으로 두면 테스트는 돌지 않는다(NSU-162). */
+    @Test
+    void 명령을_출력하거나_주석으로만_둔_step은_통과하지_못한다() {
+        String template = """
+                jobs:
+                  backend-log-safety:
+                    timeout-minutes: 20
+                    steps:
+                      - run: %s
+                """;
+
+        assertThat(jobRunsCommand(
+                        template.formatted("echo \"./gradlew test --tests 'com.nsu.capstone.global.logging.*'\"")))
+                .isFalse();
+        assertThat(jobRunsCommand(template.formatted("""
+                        |
+                                  # ./gradlew test --tests 'com.nsu.capstone.global.logging.*'
+                                  ./gradlew spotlessCheck
+                        """))).isFalse();
+        // 실패를 삼키는 꼬리가 붙어도 job은 성공으로 끝난다
+        assertThat(jobRunsCommand(
+                        template.formatted("./gradlew test --tests 'com.nsu.capstone.global.logging.*' || true")))
+                .isFalse();
     }
 
     @Test
