@@ -3,7 +3,7 @@
 - 상태: **Proposed** (PR 리뷰에서 확정)
 - 결정일: **2026-11-22** (NSU-119 설계 세션, 김동엽). 설계 후보 두 개를 교차 심판(Codex)으로 고르고 합성했다(아래 "Synthesis decision")
 - 관련: [09 아티스트 프로필 API](../../api/09_artist_profile.md), [00 공통 규칙 §1·§3·§6·§8](../../api/00_conventions.md), [01 Trust Profile API §3](../../api/01_trust_profile.md), [03 행사 API §3.1·§3.3·§7](../../api/03_events.md), [05 EVENT_PARTNER 프로필 API](../../api/05_event_partner_profile.md), [ADR event_partner_profile/00](../event_partner_profile/00_event_partner_profile_api.md), [ADR recommendation_eligibility/00](../recommendation_eligibility/00_eligibility_rules.md), [ADR event_management/01 지역 코드 표준](../event_management/01_region_code_standard.md)
-- 요구사항: SSOT v1.17.1(최종 승인) `ART-027`·`ART-028`·`EVT-041`·`AUTH-160`·`AI-MATCH-051`·`SEC-120`·`STORAGE-101`·`MVP-125`
+- 요구사항: SSOT v1.17.1(최종 승인) `ART-027`·`ART-028`·`EVT-041`·`EVT-044`·`AUTH-160`·`AI-MATCH-051`·`SEC-120`·`STORAGE-101`·`DM-060`·`MVP-125`
 - 이슈: NSU-119(GitHub #175). 뒤 이슈: NSU-120(일정), NSU-127(PRIVATE 행사 열람), NSU-63(추천 조합), NSU-79(공개 범위), NSU-130(사진)
 
 ---
@@ -17,7 +17,7 @@ ARTIST가 자기 프로필을 저장·조회·삭제하고, EVENT_PARTNER가 아
 3. **분류 값**: 공연 형태와 장르는 행사와 같은 enum(`ArtistType`, `Genre`, 03 §3.3)이다. 지역은 `regions` 목록(03 §7)의 시·도 2자리 또는 시·군·구 5자리 코드이며, EVENT_PARTNER 프로필과 같은 정규화(05 §2)를 쓴다.
 4. **저장**: 새 테이블 `artist_profiles`(V12). `user_id`가 PK이면서 `users.id` FK다. FK에 `ON DELETE`를 두지 않는다. 목록은 배열 컬럼과 `CHECK`로 저장한다.
 5. **생성·수정·삭제**: EVENT_PARTNER 프로필과 같다. 첫 `PUT`이 행을 만들고, `PUT`은 전체 교체이며 `INSERT … ON CONFLICT (user_id) DO UPDATE` 한 문장이다. `DELETE`는 `204`이고 행이 없어도 `204`다. 행이 없으면 조회는 `200`과 빈 값이다. 동시 수정은 나중 저장이 이긴다.
-6. **쓰기의 계정 상태**: `PUT`·`DELETE`는 호출자가 `ACTIVE` ARTIST인지 DB로 확인한다. 아니면 `403 ACCESS_DENIED`다. 확인은 본문 검증보다 먼저다. 본인 조회와 열람은 상태를 보지 않는 기존 규칙(`ArtistReadAccess`)을 따른다.
+6. **쓰기의 계정 상태**: `PUT`은 호출자가 `ACTIVE` ARTIST인지 DB로 확인한다. 아니면 `403 ACCESS_DENIED`다. 확인은 본문 검증보다 먼저다. `DELETE`는 계정 상태를 보지 않는다(개인정보 삭제 요구, 아래 "쓰기의 계정 상태"). 본인 조회와 열람은 호출자의 계정 상태를 보지 않는 기존 규칙(`ArtistReadAccess`)을 따른다. 열람 대상은 `ACTIVE` ARTIST여야 한다(09 §4.2).
 7. **열람 범위**: EVENT_PARTNER는 `ACTIVE` ARTIST의 프로필 전체(출연료 포함)를 본다. 다른 ARTIST는 `403`, 비로그인은 `401`이다. 응답은 본인 조회와 같은 DTO 하나다.
 8. **모듈**: `com.nsu.capstone.artist.profile` 하나의 패키지(하위 패키지 없음). 다른 모듈에 여는 것은 일괄 조회 `ArtistProfiles.findByArtistIds(Collection<UUID>)`와 값 타입 `SavedArtistProfile`뿐이다. 쓰기와 단건 조회는 package-private이다.
 9. **저장 기술**: Spring `JdbcClient`. 일괄 조회는 입력 크기와 관계없이 `= ANY(CAST(:ids AS uuid[]))` 한 문장이다.
@@ -27,7 +27,7 @@ ARTIST가 자기 프로필을 저장·조회·삭제하고, EVENT_PARTNER가 아
 
 ## Context
 
-SSOT `ART-027`은 Artist Profile의 항목(활동명, 소개, 장르, 공연 형태, 공연 가능 지역, 출연료)과 관리 주체("`ACTIVE` ARTIST", v1.17부터 실명 본인확인 불필요)를 정한다. `ART-028`은 출연료를 범위로 받고 EVENT_PARTNER에게만 공개한다고 정한다. `EVT-041`은 EVENT_PARTNER가 Artist Profile을 열람하고 출연료 범위를 확인한다고 정한다. `AUTH-160`은 ArtistProfile을 Auth/User와 다른 도메인으로 두고 `users.id`로 잇게 한다.
+SSOT `ART-027`은 Artist Profile의 항목 19개와 관리 주체("`ACTIVE` ARTIST", v1.17부터 실명 본인확인 불필요)를 정한다. 이 이슈는 그중 활동명, 자기소개, 장르, 공연 형태, 공연 가능지역, 출연료 범위를 받는다(이슈 범위). 나머지 항목이 어디로 가는지는 Excluded에 적었다. `ART-028`은 출연료를 범위로 받고 EVENT_PARTNER에게만 공개한다고 정한다. `EVT-041`은 EVENT_PARTNER가 Artist Profile을 열람하고 출연료 범위를 확인한다고 정한다. `AUTH-160`은 ArtistProfile을 Auth/User와 다른 도메인으로 두고 `users.id`로 잇게 한다.
 
 추천 Eligibility(ADR `recommendation_eligibility/00`)는 공연 가능 지역, 출연료 최소, 공연 형태로 곡을 거른다. 지금은 프로필을 읽는 구현이 빈 구현(`EmptyArtistProfileReader`)이라 모든 곡이 `PROFILE_MISSING`으로 빠진다. 그 ADR은 "테이블과 API는 하위 이슈 NSU-119(프로필)·NSU-120(일정)이 만든다"고 적고, 저장할 값의 전제(기본값 없음, 출연료 `CHECK`, 지역 개편 규칙, 조회 횟수 테스트)를 정했다. 이 ADR은 그 전제를 따른다.
 
@@ -122,20 +122,23 @@ Eligibility ADR은 JPA를 권했고, `JdbcClient`로 만들면 DataSource 수준
 
 ### 쓰기의 계정 상태
 
-| 관점 | 채택: 쓰기에서 `ACTIVE` ARTIST 확인 | EVENT_PARTNER 프로필처럼 받아들인 위험으로 둠 |
+| 관점 | 채택: `PUT`에서 `ACTIVE` ARTIST 확인(`DELETE`는 확인 안 함) | 받아들인 위험으로 둠(EVENT_PARTNER 프로필) | `PUT`·`DELETE` 모두 확인 |
 |---|---|---|
-| 정확성 | SSOT `ART-027`의 관리 주체("`ACTIVE` ARTIST")와 맞다 | `ART-027`과 어긋난다 |
-| 보안 | 정지·탈퇴한 아티스트가 만료 전 토큰(최대 30분)으로 추천 판정 입력(지역·출연료·공연 형태)과 EVENT_PARTNER에게 보이는 소개를 바꾸지 못한다 | 바꿀 수 있다 |
-| 성능(응답 시간, 외부 호출 대기, 스레드·연결 점유, 재시도 비용) | 쓰기마다 `users` PK 조회 1문장이 는다. 외부 호출과 재시도는 없다 | 없음 |
-| 메모리 | 차이 없음 | 차이 없음 |
-| 확장성 | 곡 업로드(04 §2.2 검사 2)가 같은 규칙을 `ArtistWriteAccess`로 재사용할 수 있다 | 아티스트 쓰기 API마다 판단이 갈린다 |
-| 운영 부담 | 차이 없음 | 차이 없음 |
-| 사용자 경험 | 정지·탈퇴 처리된 계정은 저장·삭제가 `403`이다 | 정지 중에도 저장·삭제가 된다 |
-| 구현량 | 클래스 1개와 테스트 | 없음 |
+| 정확성 | SSOT `ART-027`의 관리 주체("`ACTIVE` ARTIST")와 맞다. 삭제는 관리 권한이 아니라 정보주체의 권리로 본다 | `ART-027`과 어긋난다 | `ART-027`을 삭제까지 넓혀 읽는다 |
+| 보안 | 정지·탈퇴한 아티스트가 만료 전 토큰(최대 30분)으로 추천 판정 입력(지역·출연료·공연 형태)과 EVENT_PARTNER에게 보이는 소개를 바꾸지 못한다. 삭제는 자기 정보를 줄이기만 하므로 막을 이유가 없다 | 바꿀 수 있다 | 채택안과 같다 |
+| 개인정보 | 정지된 사용자도 자기 프로필을 지울 수 있다(개인정보보호법 §36) | 지울 수 있다 | 정지된 사용자의 삭제 요구를 API로 받을 수 없어 운영자가 처리해야 한다 |
+| 성능(응답 시간, 외부 호출 대기, 스레드·연결 점유, 재시도 비용) | `PUT`마다 `users` PK 조회 1문장이 는다. 외부 호출과 재시도는 없다 | 없음 | `PUT`·`DELETE`마다 1문장 |
+| 메모리 | 차이 없음 | 차이 없음 | 차이 없음 |
+| 확장성 | 곡 업로드(04 §2.2 검사 2)가 같은 규칙을 `ArtistWriteAccess`로 재사용할 수 있다 | 아티스트 쓰기 API마다 판단이 갈린다 | 채택안과 같다 |
+| 운영 부담 | 차이 없음 | 차이 없음 | 정지 계정의 삭제 요청을 수동 처리 |
+| 사용자 경험 | 정지·탈퇴 처리된 계정은 저장이 `403`이고 삭제는 된다 | 정지 중에도 저장·삭제가 된다 | 저장·삭제 모두 `403` |
+| 구현량 | 클래스 1개와 테스트 | 없음 | 채택안과 같다 |
 
 선례는 둘로 갈린다. EVENT_PARTNER 프로필(05 §4)은 계정 상태를 받아들인 위험으로 두었다. 곡 업로드(04 §2.2 검사 2)는 `ACTIVE`가 아니면 `403 ACCESS_DENIED`다. 결정 우선순위(Slack Human Decision > SSOT > GitHub docs)에서 SSOT가 05보다 앞서므로 `ART-027`을 따른다. 코드에 재사용할 검사가 없어(곡 업로드 미구현) `identity.application.ArtistWriteAccess`를 새로 둔다. `ArtistReadAccess`와 같은 패키지의 짝이다.
 
-확인 순서는 04 §2.2와 같다. 역할 → 계정 상태 → 본문 검증이다. 그래서 `ArtistProfiles.save`는 검증 전 요청을 받아 계정 상태를 먼저 확인한 뒤 본문을 검증한다.
+삭제를 막지 않는 것은 설계 선택이다. `ART-027`은 관리 주체만 정하고 정지 계정의 삭제를 따로 정하지 않았다. 설계 리뷰(architect 합성)는 처음에 `PUT`·`DELETE` 모두 확인하기로 했으나, 정지된 사용자의 삭제 요구를 막게 되어 삭제는 빼었다. 사람 확인을 받는다(설계 확정 보고).
+
+확인 순서는 04 §2.2와 같다. 역할 → 계정 상태 → 본문 검증이다. 그래서 `ArtistProfiles.save`는 검증 전 요청을 받아 계정 상태를 먼저 확인한 뒤 본문을 검증한다. 그 앞에 `401`과 시연 서버의 `403 DEMO_WRITE_NOT_ALLOWED`(00 §8, NSU-158 미구현)가 있다. JSON 문법·타입 오류는 본문을 읽는 단계에서 나므로 계정 상태 검사보다 먼저 나올 수 있다(09 §4.1).
 
 ### 다른 사용자 조회를 이 이슈에 넣는 것
 
@@ -143,7 +146,7 @@ Eligibility ADR은 JPA를 권했고, `JdbcClient`로 만들면 DataSource 수준
 |---|---|---|
 | 정확성 | `EVT-041`(EVENT_PARTNER의 Artist Profile 열람, 출연료 확인)을 채운다 | 열람할 길이 없다 |
 | 보안 | 출연료 공개 범위(`ART-028`, EVENT_PARTNER에게만)를 기존 접근 규칙 `ArtistReadAccess`가 지킨다. 다른 ARTIST `403`, 비로그인 `401` | 공개가 없어 해당 없음 |
-| 성능(응답 시간, 외부 호출 대기, 스레드·연결 점유, 재시도 비용) | 요청마다 문장 2개(대상 상태, 프로필). 외부 호출과 재시도는 없다 | 없음 |
+| 성능(응답 시간, 외부 호출 대기, 스레드·연결 점유, 재시도 비용) | EVENT_PARTNER 요청은 문장 2개(대상 상태, 프로필), 본인 요청은 1개다. 외부 호출과 재시도는 없다 | 없음 |
 | 메모리 | 차이 없음 | 차이 없음 |
 | 확장성 | 공개 범위를 넓힐 때(NSU-79) 응답을 만드는 곳 한 곳에서 출연료를 가린다 | 그때 처음부터 설계 |
 | 운영 부담 | 낮음 | 낮음 |
@@ -193,7 +196,7 @@ Eligibility ADR은 JPA를 권했고, `JdbcClient`로 만들면 DataSource 수준
 | 공연 가능 지역 | 요청 0~20개 | 16개 시·도를 모두 담고 남는다. 정규화 뒤 개수는 요청보다 늘지 않는다 |
 | 출연료 | 0~1,000,000,000원 | 행사 예산 상한(03 §3.6)과 같다 |
 
-활동명 말고는 모두 선택이다. 덜 채운 프로필은 저장되지만 추천에서 `PROFILE_INCOMPLETE`로 빠질 수 있다(09 §3). 화면은 이 점을 안내한다.
+활동명 말고는 값을 비워 둘 수 있다(소개·출연료는 `null`, 목록은 `[]`). 다만 세 목록 키는 요청에 있어야 한다(09 §2). 덜 채운 프로필은 저장되지만 추천에서 `PROFILE_INCOMPLETE`로 빠질 수 있다(09 §3). 화면은 이 점을 안내한다.
 
 ## 설계 상세
 
@@ -254,7 +257,8 @@ public ArtistProfileResponse get(@PathVariable String artistId, @AuthenticationP
 뒤 이슈의 호출 예시:
 
 ```java
-// NSU-127: PRIVATE 행사 열람 판정(행사 행을 잠근 트랜잭션 안)
+// NSU-127: PRIVATE 행사 열람 판정(행사 행을 잠근 트랜잭션 안). 출연료 부분만 보인 예시다.
+// 장르·지역·일정 등 나머지 조건(EVT-044)과 판정식은 NSU-127이 정한다
 SavedArtistProfile viewer = artistProfiles.findByArtistIds(List.of(viewerId)).get(viewerId);
 if (viewer == null || viewer.fee() == null) {
     return false;
@@ -293,8 +297,8 @@ public class ArtistProfiles {
         return table.upsert(artistId, draft, regionCodes, clock.instant());
     }
 
+    /** 계정 상태를 보지 않는다(정보주체의 삭제 요구). */
     void delete(UUID artistId) {
-        writeAccess.require(artistId);
         table.delete(artistId);
     }
 }
@@ -343,7 +347,7 @@ public record SavedArtistProfile(
 | `EmptyArtistProfileReader.java` | 지운다 |
 | `SecurityConfig.java` | `/api/v1/me/artist-profile`에 `.hasRole("ARTIST")` URL 규칙 한 개 |
 | `lombok-style-files.txt` | 새 파일과 옮긴 `RegionNormalizer`를 더하고, 지운 파일과 옛 경로를 뺀다 |
-| 테스트 | `EligibilityFilterIntegrationTest`(조회 횟수), `EventPartnerProfileApiIntegrationTest`(WARN 기대값 한 줄), `OpenApiDocsIntegrationTest`(연산 수 17 → 21, 태그 분기), `EventIntegrationTestBase.setUp`(프로필 행을 사용자보다 먼저 지움), 지역 개편 테스트 이동(아래) |
+| 테스트 | `EligibilityFilterIntegrationTest`(조회 횟수), `EventPartnerProfileApiIntegrationTest`(WARN 기대값 한 줄), `OpenApiDocsIntegrationTest`(연산 수 기존 + 4, main 기준 17 → 21. 나중에 머지하는 PR이 숫자를 맞춘다. 태그 분기), `EventIntegrationTestBase.setUp`(프로필 행을 사용자보다 먼저 지움), 지역 개편 테스트 이동(아래) |
 
 `ErrorCode`는 바꾸지 않는다. 새 `code`가 없다.
 
@@ -371,17 +375,29 @@ CREATE TABLE artist_profiles (
     CONSTRAINT ck_artist_profiles_fee_max CHECK (fee_max <= 1000000000),
     CONSTRAINT ck_artist_profiles_artist_types CHECK (
         COALESCE(array_ndims(artist_types), 1) = 1
+        AND COALESCE(array_lower(artist_types, 1), 1) = 1
         AND cardinality(artist_types) <= 4
+        -- 중복 없음(CHECK에는 하위 쿼리를 쓸 수 없어 짝마다 비교한다)
+        AND (cardinality(artist_types) < 2 OR artist_types[1] <> artist_types[2])
+        AND (cardinality(artist_types) < 3 OR (artist_types[1] <> artist_types[3]
+                                               AND artist_types[2] <> artist_types[3]))
+        AND (cardinality(artist_types) < 4 OR (artist_types[1] <> artist_types[4]
+                                               AND artist_types[2] <> artist_types[4]
+                                               AND artist_types[3] <> artist_types[4]))
         AND artist_types <@ ARRAY['SOLO', 'DUO_GROUP', 'BAND', 'DJ']::VARCHAR(32)[]
     ),
     CONSTRAINT ck_artist_profiles_genres CHECK (
         COALESCE(array_ndims(genres), 1) = 1
+        AND COALESCE(array_lower(genres, 1), 1) = 1
         AND cardinality(genres) <= 3
+        AND (cardinality(genres) < 2 OR genres[1] <> genres[2])
+        AND (cardinality(genres) < 3 OR (genres[1] <> genres[3] AND genres[2] <> genres[3]))
         AND genres <@ ARRAY['POP', 'BALLAD', 'ROCK', 'HIPHOP', 'RNB_SOUL', 'JAZZ',
                             'ELECTRONIC', 'ACOUSTIC', 'CLASSICAL', 'TROT']::VARCHAR(32)[]
     ),
     CONSTRAINT ck_artist_profiles_region_codes CHECK (
         COALESCE(array_ndims(region_codes), 1) = 1
+        AND COALESCE(array_lower(region_codes, 1), 1) = 1
         AND cardinality(region_codes) <= 20
         AND array_position(region_codes, NULL) IS NULL
         AND array_to_string(region_codes, ',') ~ '^(([0-9]{2}|[0-9]{5})(,([0-9]{2}|[0-9]{5}))*)?$'
@@ -411,16 +427,18 @@ $$;
 ## Consequences
 
 - **V12**는 새 표와 함수 둘만 더한다. 기존 표의 정의는 바꾸지 않는다. FK를 만드는 동안 `users`에 `SHARE ROW EXCLUSIVE` 락이 걸리고, 3초 안에 얻지 못하면 마이그레이션이 실패한다. 그러면 배포를 다시 시도한다.
-- **마이그레이션 번호**: V11은 NSU-105가 쓴다. V11이 먼저 머지되어야 한다. 이 PR이 먼저 머지되면 뒤에 오는 V11이 적용되지 않은 낮은 버전이 되어 Flyway 검증이 실패한다(`outOfOrder` 설정 없음).
+- **마이그레이션 번호**: 설계 시점의 번호는 V12다(V11은 NSU-105, V13은 NSU-121이 쓴다). 적용된 버전보다 낮은 버전이 뒤에 오면 Flyway 검증이 실패한다(`outOfOrder` 설정 없음). 그래서 나중에 머지되는 PR이 머지 직전에 자기 마이그레이션 번호와 그 번호를 적은 문서·테스트를 바꾼다. 이 문서와 09의 "V12"도 그때 함께 바꾼다.
 - **롤백**(F6): 1차는 앱만 이전 버전으로 되돌린다. Flyway 기본 설정(`ignoreMigrationPatterns=*:future`)이라 이전 앱은 V12가 적용된 DB로도 뜬다. 이전 앱은 이 표를 읽지 않고 빈 구현으로 돌아가므로 추천은 이 PR 전처럼 `PROFILE_MISSING`으로 빈다. 저장된 프로필은 표에 남는다. 표까지 없애야 할 때만 데이터를 백업한 뒤 함수 둘과 표를 지우는 forward 마이그레이션을 쓴다. 그러면 저장된 프로필이 사라진다. 이 절차를 PR 설명에도 적는다.
 - **행정구역 개편**: ADR event_management/01의 "목록 변경과 저장된 코드 이전을 마이그레이션 하나로"를 이 배열에도 적용한다. 코드를 옮긴 뒤 05 §2의 정규화를 다시 적용하고, 결과가 20개 이하여야 한다. 개편 마이그레이션은 끝에서 `check_profile_regions()`를 부른다.
-  - 기존 테스트 `EventPartnerProfileRegionMigrationIntegrationTest`를 `event/region/ProfileRegionMigrationIntegrationTest`로 옮긴다. 기준 버전은 두 표가 모두 있는 V12다. V12 뒤의 버전마다 두 표를 그 시점의 정규형 지역 조합으로 다시 넣고 한 버전을 적용한 뒤 묶음 함수를 부른다.
+  - 기존 테스트 `EventPartnerProfileRegionMigrationIntegrationTest`를 `event/region/ProfileRegionMigrationIntegrationTest`로 옮긴다. 기준 버전은 두 표가 모두 있는 V12다. V12 뒤의 버전마다 두 표를 그 시점의 정규형 지역 조합으로 다시 넣고 한 버전을 적용한 뒤 묶음 함수를 부른다. 테스트가 점검 함수를 직접 부르므로, 개편 마이그레이션이 함수 호출 자체를 빠뜨린 것은 잡지 못한다(05 §5와 같은 한계).
   - 기존 실패 픽스처 4개는 두 표 모두에서 실패해야 한다. EVENT_PARTNER 표만 옮기고 아티스트 표를 빠뜨린 픽스처(`move-partner-but-not-artist`)를 더한다.
   - `information_schema.columns`에서 배열 컬럼 `region_codes`를 가진 표가 모두 묶음 함수 정의(`pg_get_functiondef`)에 나오는지 확인한다.
-  - V8~V11은 V7 기준의 기존 테스트로 이미 확인했거나(V8~V10) 그 PR에서 확인한다(V11).
+  - V8~V11은 V7 기준의 기존 테스트로 이미 확인했거나(V8~V10) 그 PR에서 확인한다(V11). V11을 쓰는 NSU-105 PR은 이 PR이 머지되기 전에 옛 `EventPartnerProfileRegionMigrationIntegrationTest`(V7 기준)를 돌린다. 이 PR이 머지되면 V12보다 앞선 버전은 어떤 테스트도 다시 돌리지 않는다. 마이그레이션 번호가 바뀌면(아래 "마이그레이션 번호") 기준 버전도 함께 바꾼다.
   - **받아들인 위험**: `PUT`이 지역을 검증한 뒤 저장하기 전에 개편 마이그레이션이 커밋되면 사라진 코드가 저장될 수 있다. EVENT_PARTNER 프로필과 같은 위험이며 같은 결정(개편 배포는 앱을 멈추고 한다, 2026-11-05)을 따른다.
 - **쓰기의 계정 상태**: 확인과 저장은 다른 문장이다. 확인 직후 정지가 커밋되면 그 저장은 통과한다. 잠금으로 막지 않는다. 그 창은 한 요청 길이이고, 정지된 아티스트는 Eligibility에서 계정 상태로 빠지기 때문이다.
-- **정지·탈퇴한 아티스트의 삭제**: `DELETE`도 `ACTIVE`만 할 수 있다(`ART-027`). 그래서 정지된 사용자의 삭제 요구(개인정보보호법 §36)는 이 API로 받을 수 없고 운영자가 처리한다. 탈퇴한 사용자는 로그인할 수 없으므로 탈퇴 처리가 대신 지워야 한다. 두 경로는 후속 이슈(탈퇴 시 파기)에서 정한다.
+- **정지·탈퇴한 아티스트의 삭제**: `DELETE`는 계정 상태를 보지 않으므로 정지된 아티스트도 만료 전 토큰이나 다시 로그인할 수 있는 동안 지울 수 있다. 로그인할 수 없는 사용자(탈퇴, 로그인 차단된 정지)는 스스로 지울 수 없으므로 탈퇴 처리나 운영자가 대신 지워야 한다. 그 경로는 후속 이슈(탈퇴 시 파기)에서 정한다.
+- **시연 서버 배포**: 시연 서버의 쓰기 필터(NSU-158)가 끝나기 전에는 이 쓰기 API를 외부에서 접속할 수 있는 시연 서버에 배포하지 않는다. 외부 가입자가 활동명·소개를 쓸 수 있기 때문이다(04 §2.2, 06 §1과 같은 제약).
+- **열람 호출자의 계정 상태**(받아들인 위험): 열람은 `ArtistReadAccess`대로 호출자(EVENT_PARTNER)의 계정 상태를 보지 않는다. 정지·탈퇴한 EVENT_PARTNER가 만료 전 토큰(최대 30분)으로 출연료를 읽을 수 있다. Trust Profile·외부 계정 열람(01, 06)과 같고, 토큰 발급 뒤 상태 반영은 Auth/User 도메인(00 §7)이 정한다.
 - **동시 수정**: 버전 비교 없이 나중 저장이 이긴다. 경합에서 남을 수 있는 값은 같은 본인이 `PUT` 한 번으로 직접 저장할 수 있는 값과 같으므로 권한 상승이 생기지 않는다. 일괄 조회는 커밋된 한 값만 본다(필드가 섞이지 않는다).
 - **`updatedAt`**: 앱 `Clock`으로 정한다. EVENT_PARTNER 프로필과 같은 받아들인 위험(인스턴스가 여럿이면 시계 어긋남)이다.
 - **NSU-120(일정)**: 형제 패키지 `artist.schedule`에 같은 모양(공개 일괄 조회 하나)으로 둔다. `EmptyArtistScheduleReader`는 그 이슈가 지운다.
@@ -428,7 +446,7 @@ $$;
 - **NSU-63(추천 조합)**(F5): 활동명 조회에서 키가 없으면 그 곡을 뺀다. Eligibility를 통과했다고 행이 있다고 가정하지 않는다. 사이에 `DELETE`가 커밋될 수 있다.
 - **NSU-79(공개 범위)**: 다른 ARTIST나 비로그인에게 열 때는 응답을 만드는 곳에서 출연료 값을 `null`로 가린다.
 - **로그와 개인정보**: 활동명과 소개는 개인정보다. 로그·예외 메시지에 넣지 않는다. 형식은 맞지만 목록에 없는 지역 코드만 WARN으로 남긴다(사용자 정보 없음). 처리방침의 수집 항목 반영과 탈퇴 시 파기는 후속 이슈로 만든다(NSU-133·134는 EVENT_PARTNER 범위다). 두 이슈 모두 실사용자에게 열기 전에 끝낸다.
-- **V7의 같은 허점**(F2): `event_partner_profiles`의 지역 `CHECK`도 NULL 원소를 거절하지 않는다. 새 마이그레이션으로 `CHECK`를 바꾸는 후속 이슈로 넘긴다.
+- **V7의 같은 허점**(F2): `event_partner_profiles`의 지역 `CHECK`도 NULL 원소와 하한이 1이 아닌 배열(`'[0:1]={11,26}'`)을 거절하지 않는다. 이 표는 하한·중복도 막는다(NSU-121이 `events.genres`에서 찾은 허점과 같다). 새 마이그레이션으로 `CHECK`를 바꾸는 후속 이슈로 넘긴다.
 - **화면과 서버를 함께 배포한다**. 필드를 더하면 그 필드를 모르는 이전 화면의 저장이 새 필드를 지울 수 있다.
 - **실행으로 확인할 것**(구현 첫 단계):
   1. `String[]` → `uuid[]` 바인딩과 배열 읽기가 실제 PostgreSQL에서 되는지
@@ -439,13 +457,17 @@ $$;
 
 | 뺀 것 | 이유 | 이어서 할 곳 |
 |---|---|---|
-| 프로필 사진 | 백엔드에 객체 저장소 의존성이 없다(`STORAGE-101`). 추천 응답의 `profileImageUrl`과 함께 정한다 | NSU-130 |
-| 연락처 칸, 채널 주소 | 연락처는 DM으로 주고받는다(`SEC-120` 최소 수집). 외부 채널은 외부 계정 연결(06, NSU-37)이 맡는다 | 없음 |
+| 프로필 사진 | `STORAGE-101`은 이미지를 DB가 아니라 Object Storage에 두게 한다. 백엔드에는 아직 그 저장소가 없다. 추천 응답의 `profileImageUrl`과 함께 정한다 | NSU-130 |
+| 연락처 칸, 채널 주소 | `DM-060`이 DM에서 연락처 공유를 허용하므로 프로필에 구조화해 모으지 않는다(`SEC-120` 최소 수집, EVENT_PARTNER 프로필과 같은 근거). 외부 채널은 외부 계정 연결(06, NSU-37)이 맡는다 | 없음 |
+| `ART-027`의 공연 가능 일정 | 일정은 따로 저장한다(`ART-029`) | NSU-120 |
+| `ART-027`의 Verified Works, 외부 Portfolio | 곡(04)과 외부 계정(06)이 맡는다 | 04, NSU-37 |
+| `ART-027`의 리뷰, 공연 완료 횟수, 평균 응답시간 | 아티스트가 입력하는 값이 아니라 다른 기능(리뷰, 예약, DM)이 만드는 값이다 | 그 기능의 이슈 |
+| `ART-027`의 Sub Genre, 활동지역, 공연 경력, 공연시간, 필요한 장비, 제공 가능한 장비 | NSU-119 범위(공연 가능 지역·출연료·공연 형태·장르)가 아니다. 추천 판정에 쓰지 않는다. 활동지역은 공연 가능지역과 다른 항목이다 | 담당 이슈 없음(결정 필요). 더할 때는 `PUT` 전체 교체라 화면과 서버를 함께 배포한다 |
 | 다른 ARTIST·비로그인에게 공개 | `ART-028`이 출연료를 EVENT_PARTNER에게만 연다. 공개 범위는 따로 정한다 | NSU-79 |
 | 지역·장르로 아티스트 찾기, GIN 인덱스 | 아티스트 검색(`SEARCH-048`)이 아직 없다 | 검색 이슈 |
 | 버전 비교(낙관적 잠금) | 위 Consequences "동시 수정" | 필드가 접근 제어에 쓰이면 |
 | 출연료 반쪽 입력 | 위 "출연료 필드 모양" | 없음 |
-| 저장된 추천 다시 보기에서 삭제한 프로필의 표시 | 다시 보기 화면의 정책이다 | NSU-63·86 |
+| 저장된 추천 다시 보기에서 삭제한 프로필의 표시 | 정책은 정했다. 그 곡을 뺀다(`artist.name`을 null로 바꾸면 02의 응답 계약이 흔들린다). 02 §4.2 "빼는 곡" 표에 행을 더하는 일은 02를 고치는 세션이 한다 | 02 문서(지휘 세션 경유), 구현은 NSU-63·86 |
 
 ## Reused
 
