@@ -883,4 +883,16 @@ class LogSafetyCheckerTest {
                 .extracting(LogSafetyChecker.Violation::rule)
                 .containsExactly("S4");
     }
+
+    /** 와일드카드 MDC.*는 MDC가 가진 정적 메서드만 가져온다. of(..)는 Map.*의 Map.of다(PR #249 리뷰). */
+    @Test
+    void 와일드카드_MDC는_MDC에_없는_메서드_이름을_가져오지_않는다() {
+        assertThat(checkWithImport(
+                        "import static org.slf4j.MDC.*;\nimport static java.util.Map.*;", "of(\"requestId\", id);"))
+                .isEmpty();
+        assertThat(checkWithImport(
+                        "import static org.slf4j.MDC.*;\nimport static java.util.Map.*;", "remove(\"requestId\");"))
+                .extracting(LogSafetyChecker.Violation::rule)
+                .containsExactly("S4");
+    }
 }

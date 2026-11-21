@@ -27,6 +27,7 @@ import com.sun.source.util.TreeScanner;
 import com.sun.source.util.Trees;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -435,10 +436,24 @@ final class LogSafetyChecker {
             if (staticImports.contains(owner + "." + member)) {
                 return true;
             }
-            // 이름을 하나씩 가져온 다른 소유자의 정적 import는 와일드카드의 같은 이름을 가린다. 시그니처는 모르므로 이름으로만 본다
+            // 이름을 하나씩 가져온 다른 소유자의 정적 import는 와일드카드의 같은 이름을 가린다. 그 import가 메서드인지 필드인지,
+            // 시그니처가 무엇인지는 구문만으로 모르므로 이름으로만 본다
             boolean shadowedBySingleImport =
                     staticImports.stream().anyMatch(imported -> imported.endsWith("." + member));
-            return !shadowedBySingleImport && staticImports.contains(owner + ".*");
+            return !shadowedBySingleImport
+                    && staticImports.contains(owner + ".*")
+                    && declaresStaticMethod(owner, member);
+        }
+
+        /** 와일드카드는 소유자가 가진 이름만 가져온다. owner는 org.slf4j.MDC처럼 테스트 클래스패스에 있는 클래스다. */
+        private static boolean declaresStaticMethod(String owner, String member) {
+            try {
+                return Arrays.stream(Class.forName(owner).getMethods())
+                        .anyMatch(
+                                method -> method.getName().equals(member) && Modifier.isStatic(method.getModifiers()));
+            } catch (ClassNotFoundException e) {
+                throw new IllegalStateException("검사 대상 소유자 클래스가 클래스패스에 없다: " + owner, e);
+            }
         }
 
         /** java.util.concurrent.Executors처럼 정규화된 이름이면 마지막 조각을, 호출 체인이면 그대로 돌려준다. */
