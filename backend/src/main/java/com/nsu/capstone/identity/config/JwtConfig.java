@@ -2,12 +2,14 @@ package com.nsu.capstone.identity.config;
 
 import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.security.JwtAccessTokenProperties;
+import com.nsu.capstone.identity.security.JwtRefreshTokenProperties;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.UUID;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,7 +26,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(JwtAccessTokenProperties.class)
+@EnableConfigurationProperties({JwtAccessTokenProperties.class, JwtRefreshTokenProperties.class})
 public class JwtConfig {
 
     private static final int MINIMUM_HS256_KEY_BYTES = 32;
@@ -49,29 +51,36 @@ public class JwtConfig {
         return new SecretKeySpec(decodedSecret, "HmacSHA256");
     }
 
+    // Refresh Token이 Access Token보다 먼저 끝나면 재발급이 쓸모없다. 단위 없는 숫자(밀리초)로 잘못 준 값도 여기서 막는다
+    @Bean
+    InitializingBean jwtRefreshTokenTtlValidation(
+            JwtAccessTokenProperties accessToken, JwtRefreshTokenProperties refreshToken) {
+        return () -> {
+            if (refreshToken.ttl().compareTo(accessToken.ttl()) < 0) {
+                throw new IllegalStateException("JWT refresh token TTL must not be shorter than access token TTL");
+            }
+        };
+    }
+
     @Bean
     JwtEncoder jwtEncoder(SecretKey jwtAccessTokenSecretKey) {
         return NimbusJwtEncoder.withSecretKey(jwtAccessTokenSecretKey)
-            .algorithm(MacAlgorithm.HS256)
-            .build();
+                .algorithm(MacAlgorithm.HS256)
+                .build();
     }
 
     @Bean
     JwtDecoder jwtDecoder(SecretKey jwtAccessTokenSecretKey, Clock clock) {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder
-            .withSecretKey(jwtAccessTokenSecretKey)
-            .macAlgorithm(MacAlgorithm.HS256)
-            .build();
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(jwtAccessTokenSecretKey)
+                .macAlgorithm(MacAlgorithm.HS256)
+                .build();
 
         JwtTimestampValidator timestampValidator = new JwtTimestampValidator(Duration.ZERO);
         timestampValidator.setAllowEmptyExpiryClaim(false);
         timestampValidator.setClock(clock);
 
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-            timestampValidator,
-            subjectValidator(),
-            roleValidator()
-        ));
+        decoder.setJwtValidator(
+                new DelegatingOAuth2TokenValidator<>(timestampValidator, subjectValidator(), roleValidator()));
         return decoder;
     }
 

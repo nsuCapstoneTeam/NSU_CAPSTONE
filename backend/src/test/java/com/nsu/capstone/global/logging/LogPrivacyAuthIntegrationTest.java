@@ -6,6 +6,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import ch.qos.logback.classic.Level;
+import com.jayway.jsonpath.JsonPath;
 import com.nsu.capstone.SignupTestTerms;
 import com.nsu.capstone.TestcontainersConfiguration;
 import com.nsu.capstone.identity.domain.User;
@@ -186,6 +187,58 @@ class LogPrivacyAuthIntegrationTest {
                     .isEmpty();
             assertThat(capture.linesContainingNumber(CODE)).as("맞는 인증 코드가 든 줄").isEmpty();
         }
+    }
+
+    @Test
+    void 토큰을_재발급하고_로그아웃해도_출력_바이트에_토큰이_없다() throws Exception {
+        int n = SEQUENCE.incrementAndGet();
+        String address = "sentinel-refresh-" + n + "-6e2a@example.com";
+        User saved = users.saveAndFlush(User.createArtist(
+                uuids.generate(), address, passwordEncoder.encode(PASSWORD), String.format("0107700%04d", n)));
+
+        try (LogCapture capture = LogCapture.start(environment)) {
+            String loginBody = loginResponse(address, PASSWORD);
+            String first = JsonPath.read(loginBody, "$.refreshToken");
+            String firstAccess = JsonPath.read(loginBody, "$.accessToken");
+
+            String refreshBody = tokenCall("/api/v1/auth/refresh", first, 200);
+            String second = JsonPath.read(refreshBody, "$.refreshToken");
+            String secondAccess = JsonPath.read(refreshBody, "$.accessToken");
+            tokenCall("/api/v1/auth/refresh", first, 401);
+            tokenCall("/api/v1/auth/logout", second, 204);
+
+            // 2xx 완료 줄은 DEBUG라 하한 아래로 남지 않는다. 이미 쓴 토큰의 401 완료 줄만 한 번 남는다
+            assertCompleted(capture, "/api/v1/auth/refresh", 401, 1);
+            assertNoneContain(capture, "로그인 Refresh Token", first);
+            assertNoneContain(capture, "재발급 Refresh Token", second);
+            assertNoneContain(capture, "로그인 Access Token", firstAccess);
+            assertNoneContain(capture, "재발급 Access Token", secondAccess);
+            assertNoneContain(capture, "비밀번호", PASSWORD);
+        } finally {
+            users.delete(saved);
+        }
+    }
+
+    private String loginResponse(String address, String password) throws Exception {
+        return mvc.perform(post("/api/v1/auth/login")
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"email\":\"" + address + "\",\"password\":\"" + password + "\"}")
+                        .with(request -> {
+                            request.setRemoteAddr("192.0.2." + (SEQUENCE.incrementAndGet() % 250 + 1));
+                            return request;
+                        }))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+    }
+
+    private String tokenCall(String path, String refreshToken, int expectedStatus) throws Exception {
+        var response = mvc.perform(
+                        post(path).contentType(APPLICATION_JSON).content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                .andReturn()
+                .getResponse();
+        assertThat(response.getStatus()).as("%s 응답", path).isEqualTo(expectedStatus);
+        return response.getContentAsString();
     }
 
     private int login(String address, String password) throws Exception {

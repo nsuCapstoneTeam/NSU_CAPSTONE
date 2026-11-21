@@ -154,6 +154,8 @@
 
 인증 없이 부를 수 있고 요청마다 Redis에 키를 만드는 경로가 셋 있다. 가입 세션 생성은 TTL 30분 해시를, OAuth 시작(`GET /api/v1/auth/oauth/authorization/{provider}`)은 TTL 5분 인가 요청 키를 만든다(`auth.oauth.authorization-request-ttl`). OAuth 콜백은 실패해도 TTL 1분 결과 키를 만든다(`RedisOAuthResultStore.saveError`). 제한이 없으면 반복 요청으로 Redis 메모리를 채울 수 있다. 메모리가 차면 가입·OAuth 상태 저장이 함께 실패한다.
 
+로그인 성공도 7일 동안 남는 Refresh Token 키를 하나씩 만든다(NSU-74). 이 경로는 로그인 한도(§1.5)만 걸리고 사용자별 상한이 없다. 예산 계산과 수용 결정은 [API 07 §2](./07_auth_tokens.md#2-redis-키-설계)에 있다.
+
 | 대상 | 단위 | 기본값 | 창 |
 |---|---|---|---|
 | §1.1의 세 세션 생성 API를 합쳐서 | IPv4 주소 하나, IPv6 /64 대역 하나 | 1시간 30회 | Asia/Seoul 정각부터 [시작, 끝) |
@@ -188,7 +190,7 @@
 | 가입 인증 코드 확인 | 막는다(fail-closed). 오답 한도를 안전하게 검사·기록할 수 없으면 정답도 성공 처리하지 않는다 | `503 RATE_LIMIT_UNAVAILABLE`, `Retry-After` 없음 | OOM·중단·명령 실패 동안 무제한 추측을 허용하지 않음 |
 | 가입 세션 생성·OAuth 시작·콜백(§1.4) | 막는다 | 세션 생성은 `503 RATE_LIMIT_UNAVAILABLE`, OAuth는 `error=RATE_LIMIT_UNAVAILABLE`로 리다이렉트 | 세션·인가 요청 자체가 Redis에 있어 어차피 만들 수 없다 |
 | 본인확인 시작·완료(ADR 본인확인 요청 제한) | 막는다. PortOne을 부르지 않는다 | `503 RATE_LIMIT_UNAVAILABLE` | PortOne 재조회 남용을 막는다 |
-| 로그인(§1.5) | 한도 검사 없이 비밀번호를 확인한다(fail-open). `WARN` 로그 | 평소와 같다 | Redis가 멈춘 동안에도 팀이 로그인할 수 있게 한다. 그동안은 비밀번호 추측과 bcrypt 남용을 막지 못한다 |
+| 로그인(§1.5) | 한도 검사 없이 비밀번호를 확인한다(fail-open). `WARN` 로그 | 평소와 같다. 단 Refresh Token은 Redis에 저장하므로 주지 않는다([07 §3](./07_auth_tokens.md#3-토큰을-주는-응답)) | Redis가 멈춘 동안에도 팀이 로그인할 수 있게 한다. 그동안은 비밀번호 추측과 bcrypt 남용을 막지 못한다 |
 
 - 가입 인증 발송 전 세션 조회·미발송 예약 복구·새 예약·발송 시작은 하나의 전체 800ms 기한을 공유한다. 한 번의 발급에서 처리할 복구 건수는 제한하며, 남은 복구 대상 때문에 발급을 끝낼 수 없으면 같은 발송 실패 응답을 반환한다. 전용 연결의 연결 200ms·명령 250ms는 로컬·같은 배포망에서 검증할 초기값이며 각 호출은 명령 한도와 전체 기한의 남은 시간 중 짧은 시간까지만 기다린다. Redis 장애 시 발송 API는 1초 안에 `503 VERIFICATION_DELIVERY_FAILED`를 반환하고 제공자 호출은 0건이어야 한다. 기한을 넘긴 응답 경로에서는 `cancel()`이나 쿨다운 조회를 기다리지 않는다. 제공자 미호출을 아는 경로에서는 보상을 시도하되 제출 거절·재시도 실패·프로세스 종료까지 환불을 보장하지 않는다. 늦은 Redis 명령·응답은 제공자 호출을 시작하지 않는다. START 전 예약은 기존 미발송 복구에 맡기고, START 반영 후 결과 미기록이면 불확실한 차감과 결과 미정 제한을 보수적으로 유지한다. 발송 전용 연결은 공유 Redis 연결의 timeout 설정을 따르지 않는다.
 - 다른 카운터 명령의 timeout 기준은 1초다. 이 명령들은 공유 Redis 연결을 쓰며, NSU-101에서 그 연결의 명령 timeout `REDIS_COMMAND_TIMEOUT`과 연결 timeout `REDIS_CONNECT_TIMEOUT`을 기본 1초로 정했다. 명령 timeout이 0 이하·1초 초과이거나 연결 timeout이 1ms 미만이거나 두 값 중 하나가 비어 있으면 기동에 실패한다. Lettuce 기본값(명령 60초, 연결 10초)이면 Redis가 멈춘 동안 요청 스레드를 그만큼 붙잡는다. Redis를 멈춘 상태에서 세션 생성·OAuth 시작·로그인이 설정한 timeout 근처에서 끝나는지는 `SharedRedisTimeoutIntegrationTest`로 검증한다.

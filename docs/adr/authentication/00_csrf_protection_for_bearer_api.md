@@ -14,8 +14,8 @@
 2. **OAuth 인가 시작 필터를 GET 전용으로 제한한다.** 기본 resolver를 감싸 GET이 아니면 `null`을 돌려주는 `GetOnlyAuthorizationRequestResolver`를 `authorizationEndpoint`에 단다.
 3. **OAuth 콜백 필터를 GET 전용으로 제한한다.** `OAuth2LoginAuthenticationFilter`의 인증 요청 매처를 `withObjectPostProcessor`로 `GET <콜백 경로>`로 바꾼다.
 4. **기본 logout을 끈다.** `logout(AbstractHttpConfigurer::disable)`. 지금 이 서버는 `/logout`을 쓰지 않는다. 그런데 Spring은 `LogoutFilter`를 기본으로 등록하고, CSRF가 꺼지면 `/logout`의 GET·POST·PUT·DELETE를 인가 검사 전에 `302 /login?logout`으로 끝낸다.
-   - 로그아웃·토큰 재발급(NSU-74 등)을 만들 때는 인가를 거치는 컨트롤러로 만든다. `LogoutConfigurer`를 다시 켜면 CSRF가 꺼진 상태에서 매처가 모든 메서드를 받고, `LogoutFilter`가 Bearer 인증·인가보다 먼저 돈다. 꼭 써야 하면 POST 전용 매처를 둔다.
-5. 결과: 공개 경로를 뺀 모든 경로에서 토큰 없는 쓰기 요청(POST·PUT·PATCH·DELETE)은 `401 AUTHENTICATION_REQUIRED`다. 공개 경로(로그인, 가입, OAuth GET 두 개, `POST /api/v1/auth/oauth/result`, API 문서 GET)의 동작은 바뀌지 않는다. 단 OAuth 두 경로의 `HEAD`·`OPTIONS`는 지금 OAuth 흐름을 타지만, 변경 뒤에는 `401`이다(브라우저 흐름은 GET만 쓰므로 영향 없음).
+   - 로그아웃·토큰 재발급(NSU-74 등)을 만들 때는 `LogoutFilter`가 아니라 인증 필터 뒤에서 도는 컨트롤러로 만든다. 경로를 `permitAll`로 공개해도 이 조건은 지켜진다(NSU-74가 이렇게 만들었다, [API 07](../../api/07_auth_tokens.md)). `LogoutConfigurer`를 다시 켜면 CSRF가 꺼진 상태에서 매처가 모든 메서드를 받고, `LogoutFilter`가 Bearer 인증·인가보다 먼저 돈다. 꼭 써야 하면 POST 전용 매처를 둔다.
+5. 결과: 공개 경로를 뺀 모든 경로에서 토큰 없는 쓰기 요청(POST·PUT·PATCH·DELETE)은 `401 AUTHENTICATION_REQUIRED`다. 공개 경로(로그인, 가입, OAuth GET 두 개, `POST /api/v1/auth/oauth/result`, API 문서 GET)의 동작은 바뀌지 않는다. 이후 NSU-74가 `POST /api/v1/auth/refresh`·`POST /api/v1/auth/logout`을 공개 경로에 더했다. 본문의 Refresh Token이 자격 증명이고 쿠키를 읽지 않는다. 단 OAuth 두 경로의 `HEAD`·`OPTIONS`는 지금 OAuth 흐름을 타지만, 변경 뒤에는 `401`이다(브라우저 흐름은 GET만 쓰므로 영향 없음).
 6. **다시 판단할 조건**: 다음 중 하나라도 도입하면 CSRF 보호와 이 결정을 다시 검토한다. 이 조건을 `SecurityConfig` 주석에도 적는다.
    - 쿠키로 인증하는 경로(Refresh Token 쿠키 등), 쿠키 세션, 폼 로그인, HTTP Basic
    - 인가 검사보다 먼저 쓰기 요청에 응답하는 필터(요청 제한, 시연 쓰기 차단 등. PR #205가 계획한다). 이런 필터가 경로만 보고 응답하면 토큰 없는 쓰기 요청이 `401`이 아닌 응답을 받는다
@@ -63,7 +63,7 @@ login CSRF의 피해는 "공격자 계정으로 로그인"에 그치지 않는�
 
 그래서 이 ADR로 `SEC-118` "CSRF 방어"가 모두 충족된다고 보지 않는다. login CSRF를 막으려면 OAuth 흐름을 시작 브라우저만 가진 비밀값에 묶어야 한다([RFC 9700 §4.7.1](https://www.rfc-editor.org/rfc/rfc9700.html#section-4.7.1)). 예를 들어 프런트가 OAuth를 시작할 때 만든 난수의 해시를 인가 요청과 함께 저장하고, 결과 교환(`POST /api/v1/auth/oauth/result`) 때 그 난수를 내게 하는 방식이 있다. 이 결합은 콜백과 결과 교환, 외부 계정 연결 흐름을 모두 덮어야 한다. OAuth 흐름과 프런트를 함께 바꾸는 설계라서 별도 이슈로 정한다(담당과 방식은 결정 필요). 프런트 OAuth는 아직 구현 전이라(`auth-api.js`의 `OAUTH_NOT_READY`) 지금 고치는 비용이 가장 적다.
 
-`AUTH-156`의 Refresh Token은 Redis에 저장한다고만 정했고, 클라이언트에 전달하는 방식은 정하지 않았다. Refresh Token을 쿠키로 주기로 하면 브라우저가 자격 증명을 자동으로 보내게 되므로 Decision 6에 따라 CSRF 보호를 다시 판단한다.
+`AUTH-156`의 Refresh Token은 Redis에 저장한다고만 정했고, 클라이언트에 전달하는 방식은 정하지 않았다. 2026-11-19 NSU-74에서 JSON 본문으로 주고받기로 정했다([API 07](../../api/07_auth_tokens.md)). 쿠키가 아니므로 Decision 6의 재검토 조건에 해당하지 않는다. 나중에 Refresh Token을 쿠키로 바꾸면 브라우저가 자격 증명을 자동으로 보내게 되므로 Decision 6에 따라 CSRF 보호를 다시 판단한다.
 
 ### CSRF만 끄면 OAuth 경로 동작이 바뀐다
 

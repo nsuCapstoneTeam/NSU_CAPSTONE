@@ -42,17 +42,26 @@ class LoginControllerTest {
     @Test
     void returnsAccessTokenAndDatabaseUserInformation() throws Exception {
         when(loginService.login("artist@example.com", "password", "127.0.0.1"))
-                .thenReturn(
-                        new LoginResponse("access-token", "Bearer", 1800, USER_ID, UserRole.ARTIST, UserStatus.ACTIVE));
+                .thenReturn(new LoginResponse(
+                        "access-token",
+                        "Bearer",
+                        1800,
+                        "refresh-token",
+                        604800L,
+                        USER_ID,
+                        UserRole.ARTIST,
+                        UserStatus.ACTIVE));
 
         mockMvc.perform(post("/api/v1/auth/login").contentType(APPLICATION_JSON).content("""
                     {"email":"artist@example.com","password":"password"}
                     """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.*", hasSize(6)))
+                .andExpect(jsonPath("$.*", hasSize(8)))
                 .andExpect(jsonPath("$.accessToken").value("access-token"))
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.expiresIn").value(1800))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-token"))
+                .andExpect(jsonPath("$.refreshTokenExpiresIn").value(604800))
                 .andExpect(jsonPath("$.userId").value(USER_ID.toString()))
                 .andExpect(jsonPath("$.role").value("ARTIST"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"));

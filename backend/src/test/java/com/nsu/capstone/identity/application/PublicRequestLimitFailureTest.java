@@ -48,7 +48,7 @@ class PublicRequestLimitFailureTest {
         var limits = mock(RedisPublicRequestLimitStore.class);
         when(limits.login("user@example.com", "127.0.0.1"))
                 .thenThrow(new BusinessException(ErrorCode.TOO_MANY_REQUESTS, 10L));
-        var service = new LoginService(manager, mock(JwtAccessTokenService.class), limits);
+        var service = new LoginService(manager, mock(AuthTokenIssuer.class), limits);
         assertEquals(
                 ErrorCode.TOO_MANY_REQUESTS,
                 assertThrows(BusinessException.class, () -> service.login("USER@EXAMPLE.COM", "password", "127.0.0.1"))
