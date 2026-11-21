@@ -17,6 +17,7 @@ import org.springframework.boot.convert.ApplicationConversionService;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.convert.ConversionException;
 import org.springframework.core.env.Environment;
+import org.springframework.util.PropertyPlaceholderHelper;
 
 /** ADR logging/00 Decision 7: 커밋한 설정 파일이 정한 값. OS 환경 변수 없이(배포와 같은 설정) 읽는다. */
 class LoggingConfigTest {
@@ -113,12 +114,20 @@ class LoggingConfigTest {
         }
     }
 
+    /**
+     * 같은 파일의 키를 가리키는 참조(${..})만 푼다. 기본값 구분자를 쓰지 않아 ${ENV:false}처럼 파일 밖 값에 기대는 참조는 그대로 남고, false가 아니므로
+     * 금지로 본다(배포 환경이 그 값을 켤 수 있다).
+     */
+    private static final PropertyPlaceholderHelper SAME_FILE_REFERENCES = new PropertyPlaceholderHelper("${", "}");
+
     /** Properties가 읽는 모든 표기(`:`·공백 구분, 줄 이음, 앞뒤 공백)에서 금지된 설정을 찾는다. 줄 단위 정규식은 이 표기들을 놓친다. */
     static List<String> forbiddenSettings(String propertiesText) throws IOException {
         Properties properties = new Properties();
         properties.load(new StringReader(propertiesText));
         return properties.stringPropertyNames().stream()
-                .filter(key -> isForbidden(key.strip().toLowerCase(Locale.ROOT), properties.getProperty(key)))
+                .filter(key -> isForbidden(
+                        key.strip().toLowerCase(Locale.ROOT),
+                        SAME_FILE_REFERENCES.replacePlaceholders(properties.getProperty(key), properties)))
                 .map(key -> key.strip() + "=" + properties.getProperty(key))
                 .sorted()
                 .toList();
@@ -209,6 +218,17 @@ class LoggingConfigTest {
         assertThat(forbiddenSettings("debug=false \n")).containsExactly("debug=false ");
         assertThat(forbiddenSettings("trace=false\\n\n")).containsExactly("trace=false\n");
         assertThat(forbiddenSettings("debug =  false\n")).isEmpty();
+    }
+
+    /** Boot는 debug 값을 Environment에서 읽어 같은 설정의 참조(${..})를 푼 뒤 판정한다. 푼 값으로 판정한다(PR #249 리뷰). */
+    @Test
+    void 같은_파일의_참조를_푼_값으로_판정한다() throws IOException {
+        assertThat(forbiddenSettings("app.logging.verbose=false\ndebug=${app.logging.verbose}\n"))
+                .isEmpty();
+        assertThat(forbiddenSettings("app.logging.verbose=on\ntrace=${app.logging.verbose}\n"))
+                .containsExactly("trace=${app.logging.verbose}");
+        // 파일 밖 값(환경 변수)에 기대는 참조는 배포에서 켜질 수 있어 금지로 둔다
+        assertThat(forbiddenSettings("debug=${LOG_DEBUG:false}\n")).containsExactly("debug=${LOG_DEBUG:false}");
     }
 
     @Test
