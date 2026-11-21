@@ -14,8 +14,9 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 테스트가 EventContent를 만드는 유일한 곳이다. 컴포넌트를 더하면(NSU-121) 여기 한 곳에서만 컴파일이 깨져
- * 값을 정한다. 기본값은 03 행사 API §10.1의 예시다.
+ * 테스트가 EventContent를 만드는 유일한 곳이다. 컴포넌트를 더하면 여기 한 곳에서만 컴파일이 깨져 값을 정한다.
+ * 기본값은 03 행사 API §10.1의 예시다. 다만 음악 조건 세 축(mood·tempo·vocal)은 NSU-121 전 본문과 해시가
+ * 같도록 기본값이 null(고르지 않음)이다(ADR event_management/05).
  */
 public final class EventContentFixtures {
 
