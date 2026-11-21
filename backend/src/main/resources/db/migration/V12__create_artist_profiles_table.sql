@@ -110,3 +110,29 @@ BEGIN
     PERFORM check_artist_profile_regions();
 END;
 $$;
+
+-- 탈퇴하면 프로필을 즉시 지운다(09 §5, ADR artist_profile/00 결정 13).
+-- 표는 트리거가 걸린 users와 같은 스키마(이 마이그레이션이 함께 만든다)에서 찾는다.
+-- 탈퇴를 실행한 세션의 search_path나 같은 이름의 임시 표에 기대지 않도록 함수의 search_path를 고정한다.
+CREATE FUNCTION delete_artist_profile_on_withdrawal() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+    -- REPEATABLE READ 이상에서는 PUT이 users 행 잠금을 기다린 뒤에도 옛 스냅샷을 봐서, PUT이 방금 커밋한 행을
+    -- 이 DELETE가 보지 못해 남길 수 있다. 그런 탈퇴는 롤백한다(NSU-167의 탈퇴 트랜잭션은 READ COMMITTED여야 한다).
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION '탈퇴 처리는 READ COMMITTED 트랜잭션에서 해야 한다: %',
+            current_setting('transaction_isolation');
+    END IF;
+    EXECUTE format('DELETE FROM %I.artist_profiles WHERE user_id = $1', TG_TABLE_SCHEMA)
+        USING NEW.id;
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER trg_users_withdrawal_delete_artist_profile
+    AFTER UPDATE OF status ON users
+    FOR EACH ROW
+    WHEN (NEW.status = 'WITHDRAWN')
+    EXECUTE FUNCTION delete_artist_profile_on_withdrawal();
