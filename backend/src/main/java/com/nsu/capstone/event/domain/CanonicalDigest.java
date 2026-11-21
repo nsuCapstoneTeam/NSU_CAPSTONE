@@ -59,6 +59,13 @@ final class CanonicalDigest {
             : value.stream().sorted().map(Enum::name).reduce("", (a, b) -> a + "," + b));
     }
 
+    CanonicalDigest tagged(String tag, Enum<?> value) {
+        if (value == null) {
+            return this;
+        }
+        return text(tag).text(value.name());
+    }
+
     /** 정규 문자열 UTF-8 바이트의 SHA-256을 소문자 hex 64자로 돌려준다. */
     String hex() {
         try {

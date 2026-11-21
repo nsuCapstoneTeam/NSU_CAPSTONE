@@ -71,6 +71,22 @@ class CanonicalDigestTest {
     }
 
     @Test
+    @DisplayName("이름표 구역: 값이 있으면 <길이>:<이름표>;<길이>:<값>; 을 쓴다")
+    void taggedWritesTheTagThenTheValue() {
+        assertThat(digest().tagged("mood", Mood.ENERGETIC).canonical()).isEqualTo("4:mood;9:ENERGETIC;");
+        assertThat(digest().text("a").tagged("mood", Mood.CALM).tagged("vocal", Vocal.WITH_VOCALS).canonical())
+            .isEqualTo("1:a;4:mood;4:CALM;5:vocal;11:WITH_VOCALS;");
+    }
+
+    @Test
+    @DisplayName("이름표 구역: 값이 null이면 이름표도 값도 쓰지 않는다")
+    void taggedWritesNothingForNull() {
+        assertThat(digest().text("a").tagged("mood", null).canonical()).isEqualTo("1:a;");
+        assertThat(digest().text("a").tagged("mood", null).tagged("tempo", Tempo.FAST).canonical())
+            .isEqualTo("1:a;5:tempo;4:FAST;");
+    }
+
+    @Test
     @DisplayName("hex는 정규 문자열 UTF-8 바이트의 SHA-256 소문자 64자다")
     void hexIsLowercaseSha256OfUtf8Canonical() throws Exception {
         assertThat(digest().text("").hex())
