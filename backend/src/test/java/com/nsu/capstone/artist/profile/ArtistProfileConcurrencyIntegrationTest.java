@@ -32,7 +32,7 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -277,7 +277,9 @@ class ArtistProfileConcurrencyIntegrationTest extends ArtistProfileIntegrationTe
 
     @Test
     void 잠금_대기_초과가_아닌_DB_오류는_503으로_바꾸지_않고_500으로_남긴다() throws Exception {
-        doThrow(new DataAccessResourceFailureException("연결 끊김")).when(table).upsert(any(), any(), any(), any());
+        doThrow(new UncategorizedSQLException("저장", "INSERT INTO artist_profiles", new SQLException("교착", "40P01")))
+                .when(table)
+                .upsert(any(), any(), any(), any());
 
         putProfile(artist, validProfile())
                 .andExpect(status().isInternalServerError())
