@@ -728,4 +728,50 @@ class LogSafetyCheckerTest {
                         void run(String request, int count) { log.warn("요청 " + request + " " + (count + 1)); }
                         """)).isEmpty();
     }
+
+    private static List<LogSafetyChecker.Violation> checkWithImport(String importLine, String body) {
+        String source = """
+                package com.nsu.capstone.identity.application;
+
+                %s
+
+                class Sample {
+                    void run(String id) {
+                %s
+                    }
+                }
+                """.formatted(importLine, body.indent(8));
+        return LogSafetyChecker.check(PATH, source);
+    }
+
+    /** CompletableFuture.runAsync·supplyAsync를 정적 import해 소유자 없이 불러도 공용 풀로 넘어간다(NSU-162). */
+    @Test
+    void 정적_import로_부른_실행기_없는_비동기_제출도_S5_위반이다() {
+        assertThat(checkWithImport(
+                        "import static java.util.concurrent.CompletableFuture.runAsync;", "runAsync(() -> work());"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(checkWithImport(
+                        "import static java.util.concurrent.CompletableFuture.supplyAsync;",
+                        "var future = supplyAsync(() -> 1);"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(checkWithImport(
+                        "import static java.util.concurrent.CompletableFuture.*;", "runAsync(() -> work());"))
+                .extracting("rule")
+                .containsExactly("S5");
+    }
+
+    @Test
+    void 정적_import로_불러도_실행기를_넘기면_통과하고_CompletableFuture가_아닌_같은_이름의_메서드는_대상이_아니다() {
+        assertThat(checkWithImport(
+                        "import static java.util.concurrent.CompletableFuture.runAsync;",
+                        "runAsync(() -> work(), executor);"))
+                .isEmpty();
+        assertThat(checkWithImport("import java.util.List;", "runAsync(() -> work());"))
+                .isEmpty();
+        assertThat(checkWithImport(
+                        "import static com.nsu.capstone.identity.support.Tasks.runAsync;", "runAsync(() -> work());"))
+                .isEmpty();
+    }
 }

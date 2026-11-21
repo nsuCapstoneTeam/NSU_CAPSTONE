@@ -11,6 +11,7 @@ import com.sun.source.tree.EnhancedForLoopTree;
 import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.ForLoopTree;
 import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.ImportTree;
 import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.source.tree.LiteralTree;
 import com.sun.source.tree.MemberSelectTree;
@@ -213,6 +214,9 @@ final class LogSafetyChecker {
         /** 이 파일에서 선언한 record 이름. 다른 파일의 record는 접미사로 추정한다. */
         private final Set<String> localRecords = new HashSet<>();
 
+        /** 정적 import한 이름. "소유자의 단순 이름.멤버"로 담고, 와일드카드는 "소유자.*"다. */
+        private final Set<String> staticImports = new HashSet<>();
+
         /** S1을 적용하지 않는 파일(시뮬레이터 CLI) */
         private final boolean s1Allowed;
 
@@ -234,6 +238,11 @@ final class LogSafetyChecker {
             this.positions = positions;
             this.violations = violations;
             this.localRecords.addAll(knownRecords);
+            for (ImportTree imported : unit.getImports()) {
+                if (imported.isStatic() && imported.getQualifiedIdentifier() instanceof MemberSelectTree member) {
+                    staticImports.add(lastSegment(member.getExpression().toString()) + "." + member.getIdentifier());
+                }
+            }
         }
 
         @Override
@@ -375,6 +384,9 @@ final class LogSafetyChecker {
                 String name = bare.getName().toString();
                 if (EXECUTOR_FACTORY_METHODS.contains(name) || THREAD_HANDOFF_METHODS.contains(name)) {
                     report(node, "S5", name + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
+                } else if (isStaticImportOf("CompletableFuture", name) && isAsyncWithoutExecutor(name, node)) {
+                    // *Async는 흔한 이름이라 이름만으로 잡지 않고 정적 import의 소유자를 확인한다
+                    report(node, "S5", name + "()에 실행기를 넘긴다. 실행기가 없으면 공용 풀로 넘어가 요청 ID가 끊긴다");
                 }
                 return;
             }
@@ -391,10 +403,19 @@ final class LogSafetyChecker {
                 report(node, "S5", "Executors." + method + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
             } else if (owner.equals("Thread") && THREAD_HANDOFF_METHODS.contains(method)) {
                 report(node, "S5", "Thread." + method + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
-            } else if (ASYNC_WITHOUT_EXECUTOR_ARITY.getOrDefault(method, -1)
-                    == node.getArguments().size()) {
+            } else if (isAsyncWithoutExecutor(method, node)) {
                 report(node, "S5", method + "()에 실행기를 넘긴다. 실행기가 없으면 공용 풀로 넘어가 요청 ID가 끊긴다");
             }
+        }
+
+        private static boolean isAsyncWithoutExecutor(String method, MethodInvocationTree node) {
+            return ASYNC_WITHOUT_EXECUTOR_ARITY.getOrDefault(method, -1)
+                    == node.getArguments().size();
+        }
+
+        /** member를 owner에서 정적 import했는지(import static ..owner.member 또는 ..owner.*). */
+        private boolean isStaticImportOf(String owner, String member) {
+            return staticImports.contains(owner + "." + member) || staticImports.contains(owner + ".*");
         }
 
         /** java.util.concurrent.Executors처럼 정규화된 이름이면 마지막 조각을, 호출 체인이면 그대로 돌려준다. */
