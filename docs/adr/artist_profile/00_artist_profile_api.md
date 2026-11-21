@@ -313,7 +313,7 @@ public record SavedArtistProfile(
 }
 ```
 
-- `ArtistProfileRequest`(package-private record): 문자열은 받은 그대로, 목록은 `List<String>`, 출연료는 `BigDecimal`로 받는다. `toDraft()`가 09 §2의 규칙을 검사한다. 문자열은 `UserText.required`·`UserText.optional`, 정수는 `longValueExact`(행사 요청 `EventRequest`와 같은 방식)로 검사한다.
+- `ArtistProfileRequest`(package-private record): 문자열은 받은 그대로, 목록은 `List<String>`, 출연료는 `BigDecimal`로 받되 JSON 숫자 토큰과 `null`만 받는다(빈 문자열·문자열은 바인딩 단계에서 `400`. Jackson 기본 변환은 `""`를 `null`로 읽어 저장된 출연료를 지운다. 설계 리뷰 지적). 장치는 이 두 필드 전용 deserializer나 이 DTO의 coercion 설정 중 구현이 고르고, 09 §9의 출연료 테스트가 확인한다. `toDraft()`가 09 §2의 규칙을 검사한다. 문자열은 `UserText.required`·`UserText.optional`, 정수는 `longValueExact`(행사 요청 `EventRequest`와 같은 방식)로 검사한다.
 - `ArtistProfileDraft`(package-private record): 검증한 값. 지역은 정규화 전이다.
 - `ArtistProfileResponse`(package-private record): `of(SavedArtistProfile 또는 null)`. `null`이면 빈 값(09 §3)이다. `updatedAt`은 `Asia/Seoul` 시각 문자열(00 §4)이다.
 - `ArtistProfileTable`(package-private `@Repository`, `JdbcClient`): `findAll(Collection<UUID>)`는 `WHERE user_id = ANY(CAST(:ids AS uuid[]))`(ID는 `String[]`로 바인딩), `upsert(...)`는 `INSERT … ON CONFLICT (user_id) DO UPDATE … RETURNING`, `delete(UUID)`. 배열 값을 enum으로 못 바꾸면 스키마 불일치이므로 예외를 그대로 던진다.
@@ -432,13 +432,19 @@ $$;
 - **행정구역 개편**: ADR event_management/01의 "목록 변경과 저장된 코드 이전을 마이그레이션 하나로"를 이 배열에도 적용한다. 코드를 옮긴 뒤 05 §2의 정규화를 다시 적용하고, 결과가 20개 이하여야 한다. 개편 마이그레이션은 끝에서 `check_profile_regions()`를 부른다.
   - 기존 테스트 `EventPartnerProfileRegionMigrationIntegrationTest`를 `event/region/ProfileRegionMigrationIntegrationTest`로 옮긴다. 기준 버전은 두 표가 모두 있는 V12다. V12 뒤의 버전마다 두 표를 그 시점의 정규형 지역 조합으로 다시 넣고 한 버전을 적용한 뒤 묶음 함수를 부른다. 테스트가 점검 함수를 직접 부르므로, 개편 마이그레이션이 함수 호출 자체를 빠뜨린 것은 잡지 못한다(05 §5와 같은 한계).
   - 기존 실패 픽스처 4개는 두 표 모두에서 실패해야 한다. EVENT_PARTNER 표만 옮기고 아티스트 표를 빠뜨린 픽스처(`move-partner-but-not-artist`)를 더한다.
-  - `information_schema.columns`에서 배열 컬럼 `region_codes`를 가진 표가 모두 묶음 함수 정의(`pg_get_functiondef`)에 나오는지 확인한다.
+  - 코드 보존 검사(설계 리뷰 지적): 점검 함수는 남은 코드의 존재와 정규형만 보므로 이전 SQL이 원소를 떨어뜨려도(예: `[]`) 통과한다. 그래서 테스트는 버전을 적용한 뒤 시드한 같은 `user_id`의 배열을 기대값과 비교한다.
+    - 개편 뒤에도 `regions`에 남은 시드 코드는 배열에 그대로 있거나 그 시·도 코드로 덮여 있어야 한다.
+    - 비어 있지 않던 배열은 비지 않아야 한다.
+    - 사라진 코드는 그 개편 PR이 테스트 픽스처에 더한 대응표(옛 코드 → 새 코드 목록, event_management/01이 개편 때 정하는 것)로 기대 배열을 계산해 같은지 본다. 대응표 없이 사라진 코드가 있으면 실패한다.
+    - 실패 픽스처에 "바뀐 원소만 떨어뜨린 이전"을 더한다.
+  - 표별 연결 검사(설계 리뷰 지적): `information_schema.columns`에서 배열 컬럼 `region_codes`를 가진 표를 찾는다. 표마다 다른 표는 정상으로 둔 채 그 표에만 형식은 맞고 목록에 없는 코드(`99999`)를 넣고 묶음 함수가 실패하는지 본다. 함수 이름이나 정의 문자열에 기대지 않는다. 새로 찾은 표에 넣을 최소 행 픽스처가 테스트에 없으면 실패하므로, 지역 배열을 가진 표를 더하는 PR이 픽스처와 점검 함수를 함께 더한다.
   - V8~V11은 V7 기준의 기존 테스트로 이미 확인했거나(V8~V10) 그 PR에서 확인한다(V11). V11을 쓰는 NSU-105 PR은 이 PR이 머지되기 전에 옛 `EventPartnerProfileRegionMigrationIntegrationTest`(V7 기준)를 돌린다. 이 PR이 머지되면 V12보다 앞선 버전은 어떤 테스트도 다시 돌리지 않는다. 마이그레이션 번호가 바뀌면(아래 "마이그레이션 번호") 기준 버전도 함께 바꾼다.
   - **받아들인 위험**: `PUT`이 지역을 검증한 뒤 저장하기 전에 개편 마이그레이션이 커밋되면 사라진 코드가 저장될 수 있다. EVENT_PARTNER 프로필과 같은 위험이며 같은 결정(개편 배포는 앱을 멈추고 한다, 2026-11-05)을 따른다.
 - **쓰기의 계정 상태**: 확인과 저장은 다른 문장이다. 확인 직후 정지가 커밋되면 그 저장은 통과한다. 잠금으로 막지 않는다. 그 창은 한 요청 길이이고, 정지된 아티스트는 Eligibility에서 계정 상태로 빠지기 때문이다.
 - **정지·탈퇴한 아티스트의 삭제**: `DELETE`는 계정 상태를 보지 않으므로 정지된 아티스트도 만료 전 토큰이나 다시 로그인할 수 있는 동안 지울 수 있다. 로그인할 수 없는 사용자(탈퇴, 로그인 차단된 정지)는 스스로 지울 수 없으므로 탈퇴 처리나 운영자가 대신 지워야 한다. 그 경로는 후속 이슈(탈퇴 시 파기)에서 정한다.
 - **시연 서버 배포**: 시연 서버의 쓰기 필터(NSU-158)가 끝나기 전에는 이 쓰기 API를 외부에서 접속할 수 있는 시연 서버에 배포하지 않는다. 외부 가입자가 활동명·소개를 쓸 수 있기 때문이다(04 §2.2, 06 §1과 같은 제약).
 - **열람 호출자의 계정 상태**(받아들인 위험): 열람은 `ArtistReadAccess`대로 호출자(EVENT_PARTNER)의 계정 상태를 보지 않는다. 정지·탈퇴한 EVENT_PARTNER가 만료 전 토큰(최대 30분)으로 출연료를 읽을 수 있다. Trust Profile·외부 계정 열람(01, 06)과 같고, 토큰 발급 뒤 상태 반영은 Auth/User 도메인(00 §7)이 정한다.
+- **`PUT`과 `DELETE`의 겹침**(설계 리뷰 지적): 첫 `PUT`의 INSERT가 커밋되기 전에 실행된 `DELETE`는 그 행을 보지 못해 0행으로 끝나고 `204`다. 그 뒤 `PUT`이 커밋되면 프로필이 남는다. 결과는 커밋 순서(`PUT`이 나중)와 같으므로 계약(09 §5)에 그대로 적고, 화면이 진행 중인 저장을 기다린 뒤 삭제하게 한다. `users` 행을 잠가 직렬화하는 안은 쓰지 않는다. 같은 본인이 두 요청을 동시에 보낸 경우에만 생기고, 남는 값은 본인이 방금 보낸 값이며, 모든 쓰기가 `users` 행 잠금(로그인·상태 변경과 경합)을 더 잡게 되기 때문이다. 두 연결 테스트가 이 결과를 고정한다.
 - **동시 수정**: 버전 비교 없이 나중 저장이 이긴다. 경합에서 남을 수 있는 값은 같은 본인이 `PUT` 한 번으로 직접 저장할 수 있는 값과 같으므로 권한 상승이 생기지 않는다. 일괄 조회는 커밋된 한 값만 본다(필드가 섞이지 않는다).
 - **`updatedAt`**: 앱 `Clock`으로 정한다. EVENT_PARTNER 프로필과 같은 받아들인 위험(인스턴스가 여럿이면 시계 어긋남)이다.
 - **NSU-120(일정)**: 형제 패키지 `artist.schedule`에 같은 모양(공개 일괄 조회 하나)으로 둔다. `EmptyArtistScheduleReader`는 그 이슈가 지운다.
