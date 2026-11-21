@@ -17,13 +17,14 @@ ARTIST가 자기 프로필을 저장·조회·삭제하고, EVENT_PARTNER가 아
 3. **분류 값**: 공연 형태와 장르는 행사와 같은 enum(`ArtistType`, `Genre`, 03 §3.3)이다. 지역은 `regions` 목록(03 §7)의 시·도 2자리 또는 시·군·구 5자리 코드이며, EVENT_PARTNER 프로필과 같은 정규화(05 §2)를 쓴다.
 4. **저장**: 새 테이블 `artist_profiles`(V12). `user_id`가 PK이면서 `users.id` FK다. FK에 `ON DELETE`를 두지 않는다. 목록은 배열 컬럼과 `CHECK`로 저장한다.
 5. **생성·수정·삭제**: EVENT_PARTNER 프로필과 같다. 첫 `PUT`이 행을 만들고, `PUT`은 전체 교체이며 `INSERT … ON CONFLICT (user_id) DO UPDATE` 한 문장이다. `DELETE`는 `204`이고 행이 없어도 `204`다. 행이 없으면 조회는 `200`과 빈 값이다. 동시 수정은 나중 저장이 이긴다.
-6. **쓰기의 계정 상태**: `PUT`은 호출자가 `ACTIVE` ARTIST인지 DB로 확인한다. 아니면 `403 ACCESS_DENIED`다. 확인은 본문 검증보다 먼저다. `DELETE`는 계정 상태를 보지 않는다(개인정보 삭제 요구, 아래 "쓰기의 계정 상태"). 본인 조회와 열람은 호출자의 계정 상태를 보지 않는 기존 규칙(`ArtistReadAccess`)을 따른다. 열람 대상은 `ACTIVE` ARTIST여야 한다(09 §4.2).
+6. **쓰기의 계정 상태**: `PUT`은 호출자가 `ACTIVE` ARTIST인지 DB로 확인한다. 아니면 `403 ACCESS_DENIED`다. 확인은 본문 검증보다 먼저다. 확인은 저장과 같은 트랜잭션에서 `users` 행을 `FOR SHARE`로 잠그며 한다(결정 13). `DELETE`는 계정 상태를 보지 않는다(개인정보 삭제 요구, 아래 "쓰기의 계정 상태"). 본인 조회와 열람은 호출자의 계정 상태를 보지 않는 기존 규칙(`ArtistReadAccess`)을 따른다. 열람 대상은 `ACTIVE` ARTIST여야 한다(09 §4.2).
 7. **열람 범위**: EVENT_PARTNER는 `ACTIVE` ARTIST의 프로필 전체(출연료 포함)를 본다. 다른 ARTIST는 `403`, 비로그인은 `401`이다. 응답은 본인 조회와 같은 DTO 하나다.
 8. **모듈**: `com.nsu.capstone.artist.profile` 하나의 패키지(하위 패키지 없음). 다른 모듈에 여는 것은 일괄 조회 `ArtistProfiles.findByArtistIds(Collection<UUID>)`와 값 타입 `SavedArtistProfile`뿐이다. 쓰기와 단건 조회는 package-private이다.
 9. **저장 기술**: Spring `JdbcClient`. 일괄 조회는 입력 크기와 관계없이 `= ANY(CAST(:ids AS uuid[]))` 한 문장이다.
 10. **Eligibility 연결**: `EmptyArtistProfileReader`를 지우고 `eligibility.infrastructure.SavedArtistProfileReader`가 `ArtistProfiles`를 읽는다. 출연료를 입력하지 않았으면 `feeMin = null`로 넘긴다(기본값으로 채우지 않는다).
 11. **지역 개편 점검**: 아티스트 표의 점검 함수 `check_artist_profile_regions()`와, EVENT_PARTNER 표의 함수와 함께 부르는 묶음 함수 `check_profile_regions()`를 V12에서 만든다. 개편 마이그레이션은 끝에서 묶음 함수를 부른다. 지역 개편 테스트는 두 표를 함께 검사한다.
-12. **기존 코드 재사용**: 지역 정규화(`RegionNormalizer`)를 `event.region`으로, 문자열 정리 규칙을 `global.text.UserText`로, 아티스트 ID 형식 검사(`parseArtistId`)를 `ArtistReadAccess`로 옮겨 EVENT_PARTNER 프로필·Trust Profile·외부 계정과 함께 쓴다.
+12. **기존 코드 재사용**: 지역 정규화(`RegionNormalizer`)를 `event.region`으로, 문자열 정리 규칙을 `global.text.UserText`로, 아티스트 ID 형식 검사(`parseArtistId`)를 `ArtistReadAccess`로 옮겨 EVENT_PARTNER 프로필·Trust Profile·외부 계정과 함께 쓴다
+13. **탈퇴 시 파기**(2026-11-22 사용자 결정): `users.status`가 `WITHDRAWN`으로 바뀌는 UPDATE의 같은 트랜잭션에서 DB 트리거가 그 사용자의 `artist_profiles` 행을 즉시 지운다. 트리거와 함수는 V12가 만든다. 탈퇴 기능(탈퇴 API, 상태 변경, 토큰 무효화, 다른 표 파기, 재가입)은 NSU-167(담당 강석윤)이 만들고, 그 이슈가 상태를 `WITHDRAWN`으로 바꾸면 이 트리거가 프로필을 지운다. 로그인할 수 없는 정지 계정의 삭제 요구는 운영자 runbook(SQL 한 줄)으로 처리한다..
 
 ## Context
 
@@ -111,8 +112,8 @@ Eligibility ADR은 JPA를 권했고, `JdbcClient`로 만들면 DataSource 수준
 
 | 관점 | 채택: `ON DELETE` 없음 | `ON DELETE CASCADE` |
 |---|---|---|
-| 정확성 | 사용자 행을 지우려면 프로필을 먼저 지워야 한다. 파기 순서를 탈퇴 설계가 정한다 | 사용자 행을 지우면 프로필이 함께 지워진다 |
-| 보안·개인정보 | 파기 정책(NSU-167)이 정해지기 전에 숨은 삭제 경로를 만들지 않는다 | 정책이 정해지기 전에 모든 하드 삭제에 프로필 삭제를 묶는다 |
+| 정확성 | 사용자 행을 지우려면 프로필을 먼저 지워야 한다. 탈퇴는 사용자 행을 지우지 않고 상태를 바꾸므로, 탈퇴 파기는 FK가 아니라 상태 트리거(결정 13)가 한다 | 사용자 행을 지우면 프로필이 함께 지워진다. 상태만 바꾸는 탈퇴에서는 지워지지 않는다 |
+| 보안·개인정보 | 사용자 행 하드 삭제(운영 경로 없음)에 숨은 삭제 경로를 만들지 않는다 | 모든 하드 삭제에 프로필 삭제를 묶는다 |
 | 성능(응답 시간, 외부 호출 대기, 스레드·연결 점유, 재시도 비용) | 차이 없음. 지금 사용자 행을 지우는 운영 경로가 없다 | 차이 없음 |
 | 메모리 | 차이 없음 | 차이 없음 |
 | 확장성 | 다른 `users` FK(V3·V5·V7·V9·V10)와 같은 규칙 | 이 표만 규칙이 다르다 |
@@ -139,6 +140,40 @@ Eligibility ADR은 JPA를 권했고, `JdbcClient`로 만들면 DataSource 수준
 삭제를 막지 않는 것은 설계 선택이다. `ART-027`은 관리 주체만 정하고 정지 계정의 삭제를 따로 정하지 않았다. 설계 리뷰(architect 합성)는 처음에 `PUT`·`DELETE` 모두 확인하기로 했으나, 정지된 사용자의 삭제 요구를 막게 되어 삭제는 빼었다. 2026-11-22 사용자가 이 안(삭제 허용)으로 확정했다(지휘 세션 경유).
 
 확인 순서는 04 §2.2와 같다. 역할 → 계정 상태 → 본문 검증이다. 그래서 `ArtistProfiles.save`는 검증 전 요청을 받아 계정 상태를 먼저 확인한 뒤 본문을 검증한다. 그 앞에 `401`과 시연 서버의 `403 DEMO_WRITE_NOT_ALLOWED`(00 §8, NSU-158 미구현)가 있다. JSON 문법·타입 오류는 본문을 읽는 단계에서 나므로 계정 상태 검사보다 먼저 나올 수 있다(09 §4.1).
+
+### 탈퇴 시 파기
+
+탈퇴 기능(NSU-167)은 `users` 행을 지우지 않고 `status`를 `WITHDRAWN`으로 바꾼다(V2의 `ck_users_status`, `UserStatus`). 로그인은 `ACTIVE`만 된다. 그래서 탈퇴한 아티스트는 `DELETE`를 부를 수 없고, 서버가 대신 지워야 한다. 2026-11-22 사용자가 A(트리거)와 즉시 삭제로 정했다(지휘 세션 경유).
+
+| 관점 | 채택 A: `users` 상태 UPDATE에 DB 트리거 | B: NSU-167이 부르는 앱 메서드(`ArtistProfiles.eraseOnWithdrawal`) |
+|---|---|---|
+| 정확성 | 상태를 바꾸는 모든 경로(탈퇴 API, 운영자 SQL)가 같은 트랜잭션에서 지운다. 상태 변경과 파기가 함께 커밋되거나 함께 롤백된다 | 메서드를 부른 경로만 지운다. 운영자 SQL이나 새 경로가 부르기를 빠뜨리면 남는다 |
+| 보안·개인정보 | 파기를 빠뜨릴 길이 없다(개인정보보호법 §21 지체 없는 파기) | 빠뜨린 경로는 테스트가 따로 잡아야 한다 |
+| 성능(응답 시간, 외부 호출 대기, 스레드·연결 점유, 재시도 비용) | 탈퇴 UPDATE마다 PK 삭제 1문장. 외부 호출과 재시도는 없다 | 같다(앱에서 1문장) |
+| 메모리 | 차이 없음 | 차이 없음 |
+| 확장성 | 다른 표(NSU-134의 EVENT_PARTNER 프로필 등)도 같은 방식으로 트리거를 더할 수 있다 | 탈퇴 서비스가 표마다 메서드를 알아야 한다 |
+| 운영 부담 | 동작이 SQL에 있어 앱 코드만 읽으면 보이지 않는다. ADR과 09 §5에 적고 테스트로 고정한다 | 앱 코드에서 보인다 |
+| 사용자 경험 | 차이 없음(탈퇴하면 프로필이 사라진다) | 차이 없음 |
+| 구현량 | 함수와 트리거 하나, 통합 테스트 | 메서드 하나, NSU-167과 호출 약속 |
+
+파기 시점은 즉시다. 보관 기간을 두면 보관용 표나 배치가 필요하고, 수집 목적(매칭)이 탈퇴로 끝나기 때문이다. 탈퇴를 운영자가 되돌려도 프로필은 돌아오지 않는다. 백업에 남은 사본의 보관 기간은 처리방침(NSU-165)이 정한다.
+
+**탈퇴와 저장의 겹침**: `PUT`의 계정 상태 확인과 저장은 다른 문장이다. 확인 직후 탈퇴가 커밋되면, 트리거가 지운 뒤에 `PUT`의 INSERT가 들어가 탈퇴한 사용자의 프로필이 남는다. FK 검사가 잡는 `FOR KEY SHARE`는 `status` UPDATE(`FOR NO KEY UPDATE`)와 충돌하지 않아 막아 주지 않는다.
+
+| 관점 | 채택: `PUT` 트랜잭션에서 `users` 행을 `FOR SHARE`로 잠그며 확인 | 받아들인 위험으로 둠 | `FOR UPDATE`로 잠금 |
+|---|---|---|---|
+| 정확성 | 탈퇴 UPDATE와 `PUT`이 줄을 선다. 탈퇴가 먼저면 `PUT`의 확인이 커밋된 새 상태를 다시 읽어 `403`, `PUT`이 먼저면 트리거가 커밋된 행을 지운다 | 탈퇴한 사용자의 프로필이 남을 수 있다 | 채택안과 같다 |
+| 보안·개인정보 | 파기 누락이 없다 | 파기 누락. 운영자가 찾아 지워야 한다 | 채택안과 같다 |
+| 성능(응답 시간, 외부 호출 대기, 스레드·연결 점유, 재시도 비용) | `PUT`끼리는 막지 않는다(공유 잠금). 같은 사용자의 `status` 등 `users` 행 UPDATE만 `PUT` 한 트랜잭션(수 ms)을 기다린다. 외부 호출·재시도 없음 | 잠금 없음 | 같은 본인의 `PUT`끼리도 줄을 선다 |
+| 메모리 | 차이 없음 | 차이 없음 | 차이 없음 |
+| 확장성 | 곡 업로드(04 §2.2)가 `ArtistWriteAccess`를 쓰면 같은 보장을 얻는다 | 쓰기 API마다 같은 틈이 생긴다 | 채택안과 같다 |
+| 운영 부담 | 없음 | 남은 행을 찾는 점검이 필요하다 | 없음 |
+| 사용자 경험 | 차이 없음 | 차이 없음 | 차이 없음 |
+| 구현량 | `ArtistWriteAccess`의 조회에 `FOR SHARE`, 트랜잭션 필수(`MANDATORY`), 두 연결 테스트 | 없음 | 채택안과 같다 |
+
+잠금 순서는 두 경로 모두 `users` → `artist_profiles`이므로 교착이 생기지 않는다. 사용자의 `DELETE`는 `users`를 잠그지 않고 `artist_profiles` 행만 잠근다.
+
+트리거 안의 `DELETE`는 `READ COMMITTED`에서 문장마다 새 스냅숏을 써서, 탈퇴 UPDATE가 기다리는 동안 커밋된 `PUT`의 행을 본다. 탈퇴 트랜잭션이 `REPEATABLE READ` 이상이면 트랜잭션 시작 때의 스냅숏을 써서 그 행을 놓친다. 그래서 트리거 함수는 격리 수준이 `read committed`가 아니면 예외를 던져 탈퇴를 롤백한다. 조용히 남기기보다 탈퇴를 실패시키는 편이 고치기 쉽다.
 
 ### 다른 사용자 조회를 이 이슈에 넣는 것
 
@@ -289,7 +324,8 @@ public class ArtistProfiles {
 
     Optional<SavedArtistProfile> find(UUID artistId) { … }
 
-    /** 계정 상태(403) → 본문 검증(400) → 지역 정규화 → upsert 한 문장. */
+    /** 한 트랜잭션: 계정 상태(403, users 행 FOR SHARE) → 본문 검증(400) → 지역 정규화 → upsert 한 문장. */
+    @Transactional
     SavedArtistProfile save(UUID artistId, ArtistProfileRequest request) {
         writeAccess.require(artistId);
         ArtistProfileDraft draft = request.toDraft();
@@ -317,7 +353,7 @@ public record SavedArtistProfile(
 - `ArtistProfileDraft`(package-private record): 검증한 값. 지역은 정규화 전이다.
 - `ArtistProfileResponse`(package-private record): `of(SavedArtistProfile 또는 null)`. `null`이면 빈 값(09 §3)이다. `updatedAt`은 `Asia/Seoul` 시각 문자열(00 §4)이다.
 - `ArtistProfileTable`(package-private `@Repository`, `JdbcClient`): `findAll(Collection<UUID>)`는 `WHERE user_id = ANY(CAST(:ids AS uuid[]))`(ID는 `String[]`로 바인딩), `upsert(...)`는 `INSERT … ON CONFLICT (user_id) DO UPDATE … RETURNING`, `delete(UUID)`. 배열 값을 enum으로 못 바꾸면 스키마 불일치이므로 예외를 그대로 던진다.
-- `ArtistWriteAccess`(`identity.application`, public `@Component`): `require(UUID artistId)`. `users`에서 역할이 ARTIST이고 상태가 `ACTIVE`인지 보고, 아니면 `BusinessException(ACCESS_DENIED)`.
+- `ArtistWriteAccess`(`identity.application`, public `@Component`): `require(UUID artistId)`. `SELECT 1 FROM users WHERE id = ? AND role = 'ARTIST' AND status = 'ACTIVE' FOR SHARE`로 보고, 행이 없으면 `BusinessException(ACCESS_DENIED)`. `@Transactional(propagation = MANDATORY)`라 호출자 트랜잭션 밖에서 부르면 예외다(잠금이 저장 커밋까지 이어져야 하므로). 잠긴 행이 탈퇴로 바뀌어 커밋되면 PostgreSQL이 새 행으로 조건을 다시 보므로 0행이 된다.
 - 위 세 record가 package-private이라 Jackson·springdoc가 읽지 못하면 요청·응답 DTO 둘만 public으로 올린다. 쓰기 메서드는 그대로 package-private이다.
 
 ### 모듈 지도
@@ -334,7 +370,7 @@ public record SavedArtistProfile(
 | `B/identity/application/ArtistWriteAccess.java` | 쓰기의 `ACTIVE` ARTIST 확인 |
 | `B/recommendation/eligibility/infrastructure/SavedArtistProfileReader.java` | Eligibility 어댑터 |
 | `B/global/text/UserText.java` | 문자열 정리·검증 규칙(05 §2) |
-| `R/db/migration/V12__create_artist_profiles_table.sql` | 표, `CHECK`, 점검 함수 둘 |
+| `R/db/migration/V12__create_artist_profiles_table.sql` | 표, `CHECK`, 점검 함수 둘, 탈퇴 파기 함수와 트리거 |
 
 고치거나 옮기는 기존 파일:
 
@@ -424,9 +460,34 @@ END;
 $$;
 ```
 
+- 탈퇴 파기 트리거(결정 13):
+
+```sql
+CREATE FUNCTION delete_artist_profile_on_withdrawal() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION '탈퇴 처리는 READ COMMITTED 트랜잭션에서 해야 한다: %',
+            current_setting('transaction_isolation');
+    END IF;
+    DELETE FROM artist_profiles WHERE user_id = NEW.id;
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER trg_users_withdrawal_delete_artist_profile
+    AFTER UPDATE OF status ON users
+    FOR EACH ROW
+    WHEN (NEW.status = 'WITHDRAWN')
+    EXECUTE FUNCTION delete_artist_profile_on_withdrawal();
+```
+
+- 조건은 새 상태만 본다. 이미 `WITHDRAWN`인 행을 다시 `WITHDRAWN`으로 써도 지울 행이 없어 0행이다. 역할은 보지 않는다(ARTIST가 아니면 행이 없다).
+- `UPDATE OF status`는 `SET`에 `status`가 있는 UPDATE에만 걸린다. 상태를 바꾸는 UPDATE는 반드시 `status`를 `SET`한다.
+
 ## Consequences
 
-- **V12**는 새 표와 함수 둘만 더한다. 기존 표의 정의는 바꾸지 않는다. FK를 만드는 동안 `users`에 `SHARE ROW EXCLUSIVE` 락이 걸리고, 3초 안에 얻지 못하면 마이그레이션이 실패한다. 그러면 배포를 다시 시도한다.
+- **V12**는 새 표, 점검 함수 둘, 탈퇴 파기 함수와 `users`의 트리거 하나를 더한다. 기존 표의 열·제약은 바꾸지 않는다. FK와 트리거를 만드는 동안 `users`에 `SHARE ROW EXCLUSIVE` 락이 걸리고, 3초 안에 얻지 못하면 마이그레이션이 실패한다. 그러면 배포를 다시 시도한다.
 - **마이그레이션 번호**: 설계 시점의 번호는 V12다(V11은 NSU-105, V13은 NSU-121이 쓴다). 적용된 버전보다 낮은 버전이 뒤에 오면 Flyway 검증이 실패한다(`outOfOrder` 설정 없음). 그래서 나중에 머지되는 PR이 머지 직전에 자기 마이그레이션 번호와 그 번호를 적은 문서·테스트를 바꾼다. 이 문서와 09의 "V12"도 그때 함께 바꾼다.
 - **롤백**(F6): 1차는 앱만 이전 버전으로 되돌린다. Flyway 기본 설정(`ignoreMigrationPatterns=*:future`)이라 이전 앱은 V12가 적용된 DB로도 뜬다. 이전 앱은 이 표를 읽지 않고 빈 구현으로 돌아가므로 추천은 이 PR 전처럼 `PROFILE_MISSING`으로 빈다. 저장된 프로필은 표에 남는다. 표까지 없애야 할 때만 데이터를 백업한 뒤 함수 둘과 표를 지우는 forward 마이그레이션을 쓴다. 그러면 저장된 프로필이 사라진다. 이 절차를 PR 설명에도 적는다.
 - **행정구역 개편**: ADR event_management/01의 "목록 변경과 저장된 코드 이전을 마이그레이션 하나로"를 이 배열에도 적용한다. 코드를 옮긴 뒤 05 §2의 정규화를 다시 적용하고, 결과가 20개 이하여야 한다. 개편 마이그레이션은 끝에서 `check_profile_regions()`를 부른다.
@@ -440,18 +501,20 @@ $$;
   - 표별 연결 검사(설계 리뷰 지적): `information_schema.columns`에서 배열 컬럼 `region_codes`를 가진 표를 찾는다. 표마다 다른 표는 정상으로 둔 채 그 표에만 형식은 맞고 목록에 없는 코드(`99999`)를 넣고 묶음 함수가 실패하는지 본다. 함수 이름이나 정의 문자열에 기대지 않는다. 새로 찾은 표에 넣을 최소 행 픽스처가 테스트에 없으면 실패하므로, 지역 배열을 가진 표를 더하는 PR이 픽스처와 점검 함수를 함께 더한다.
   - V8~V11은 V7 기준의 기존 테스트로 이미 확인했거나(V8~V10) 그 PR에서 확인한다(V11). V11을 쓰는 NSU-105 PR은 이 PR이 머지되기 전에 옛 `EventPartnerProfileRegionMigrationIntegrationTest`(V7 기준)를 돌린다. 이 PR이 머지되면 V12보다 앞선 버전은 어떤 테스트도 다시 돌리지 않는다. 마이그레이션 번호가 바뀌면(아래 "마이그레이션 번호") 기준 버전도 함께 바꾼다.
   - **받아들인 위험**: `PUT`이 지역을 검증한 뒤 저장하기 전에 개편 마이그레이션이 커밋되면 사라진 코드가 저장될 수 있다. EVENT_PARTNER 프로필과 같은 위험이며 같은 결정(개편 배포는 앱을 멈추고 한다, 2026-11-05)을 따른다.
-- **쓰기의 계정 상태**: 확인과 저장은 다른 문장이다. 확인 직후 정지가 커밋되면 그 저장은 통과한다. 잠금으로 막지 않는다. 그 창은 한 요청 길이이고, 정지된 아티스트는 Eligibility에서 계정 상태로 빠지기 때문이다.
-- **정지·탈퇴한 아티스트의 삭제**: `DELETE`는 계정 상태를 보지 않으므로 정지된 아티스트도 만료 전 토큰이나 다시 로그인할 수 있는 동안 지울 수 있다. 로그인할 수 없는 사용자(탈퇴, 로그인 차단된 정지)는 스스로 지울 수 없으므로 탈퇴 처리나 운영자가 대신 지워야 한다. 탈퇴 기능과 탈퇴할 때의 프로필 파기는 NSU-167이 맡는다.
+- **쓰기의 계정 상태**: 확인이 `users` 행을 `FOR SHARE`로 잠그므로(Rationale "탈퇴 시 파기") 확인 직후의 정지·탈퇴는 `PUT`이 커밋될 때까지 기다린다. 정지는 그 뒤에 커밋되어 저장은 통과한 채로 남고, 정지된 아티스트는 Eligibility에서 계정 상태로 빠진다. 탈퇴는 트리거가 그 저장을 지운다.
+- **정지·탈퇴한 아티스트의 삭제**: `DELETE`는 계정 상태를 보지 않으므로 정지된 아티스트도 만료 전 토큰으로 지울 수 있다. 탈퇴하면 트리거가 즉시 지운다(결정 13). 탈퇴 기능은 NSU-167이 만들고, 그 이슈가 상태를 `WITHDRAWN`으로 바꾸면 이 트리거가 프로필을 지운다. 탈퇴 트랜잭션은 `READ COMMITTED`(기본값)여야 한다.
+- **운영자 runbook(정지 계정의 삭제 요구)**: 로그인할 수 없는 정지 계정이 삭제를 요구하면 본인 확인 뒤 운영자가 `DELETE FROM artist_profiles WHERE user_id = '<사용자 UUID>';` 한 줄을 실행하고, 지운 행 수(0 또는 1)와 처리 일시를 기록한다. 탈퇴 요구라면 상태를 `WITHDRAWN`으로 바꾸는 것(NSU-167)으로 트리거가 대신 지운다.
+- **NSU-134(EVENT_PARTNER 프로필 파기)**: 같은 방식(상태 트리거)을 쓸 수 있다.
 - **시연 서버 배포**: 시연 서버의 쓰기 필터(NSU-158)가 끝나기 전에는 이 쓰기 API를 외부에서 접속할 수 있는 시연 서버에 배포하지 않는다. 외부 가입자가 활동명·소개를 쓸 수 있기 때문이다(04 §2.2, 06 §1과 같은 제약).
 - **열람 호출자의 계정 상태**(받아들인 위험): 열람은 `ArtistReadAccess`대로 호출자(EVENT_PARTNER)의 계정 상태를 보지 않는다. 정지·탈퇴한 EVENT_PARTNER가 만료 전 토큰(최대 30분)으로 출연료를 읽을 수 있다. Trust Profile·외부 계정 열람(01, 06)과 같고, 토큰 발급 뒤 상태 반영은 Auth/User 도메인(00 §7)이 정한다.
-- **`PUT`과 `DELETE`의 겹침**(설계 리뷰 지적): 첫 `PUT`의 INSERT가 커밋되기 전에 실행된 `DELETE`는 그 행을 보지 못해 0행으로 끝나고 `204`다. 그 뒤 `PUT`이 커밋되면 프로필이 남는다. `DELETE`가 나중에 커밋돼도 같다. 그래서 계약(09 §5)은 커밋 순서를 약속하지 않고 "저장 성공 응답을 받은 뒤 보낸 `DELETE`는 그 저장을 지운다"만 보장하며, 화면이 진행 중인 저장을 기다린 뒤 삭제하게 한다. `users` 행을 잠가 직렬화하는 안은 쓰지 않는다. 같은 본인이 두 요청을 동시에 보낸 경우에만 생기고, 남는 값은 본인이 방금 보낸 값이며, 모든 쓰기가 `users` 행 잠금(로그인·상태 변경과 경합)을 더 잡게 되기 때문이다. 두 연결 테스트가 이 결과를 고정한다.
+- **`PUT`과 `DELETE`의 겹침**(설계 리뷰 지적): 첫 `PUT`의 INSERT가 커밋되기 전에 실행된 `DELETE`는 그 행을 보지 못해 0행으로 끝나고 `204`다. 그 뒤 `PUT`이 커밋되면 프로필이 남는다. `DELETE`가 나중에 커밋돼도 같다. 그래서 계약(09 §5)은 커밋 순서를 약속하지 않고 "저장 성공 응답을 받은 뒤 보낸 `DELETE`는 그 저장을 지운다"만 보장하며, 화면이 진행 중인 저장을 기다린 뒤 삭제하게 한다. `PUT`의 `FOR SHARE`(결정 13)는 공유 잠금이라 이 겹침을 풀지 않는다. `DELETE`까지 `users` 행을 배타 잠금으로 잡아 직렬화하는 안은 쓰지 않는다. 같은 본인이 두 요청을 동시에 보낸 경우에만 생기고, 남는 값은 본인이 방금 보낸 값이며, 같은 본인의 쓰기와 상태 변경이 모두 줄을 서게 되기 때문이다. 두 연결 테스트가 이 결과를 고정한다.
 - **동시 수정**: 버전 비교 없이 나중 저장이 이긴다. 경합에서 남을 수 있는 값은 같은 본인이 `PUT` 한 번으로 직접 저장할 수 있는 값과 같으므로 권한 상승이 생기지 않는다. 일괄 조회는 커밋된 한 값만 본다(필드가 섞이지 않는다).
 - **`updatedAt`**: 앱 `Clock`으로 정한다. EVENT_PARTNER 프로필과 같은 받아들인 위험(인스턴스가 여럿이면 시계 어긋남)이다.
 - **NSU-120(일정)**: 형제 패키지 `artist.schedule`에 같은 모양(공개 일괄 조회 하나)으로 둔다. `EmptyArtistScheduleReader`는 그 이슈가 지운다.
 - **NSU-127(PRIVATE 행사 열람)**: `findByArtistIds(List.of(viewerId))`로 읽는다. 행이 없거나 출연료가 없으면 열람 조건을 채우지 못한 것으로 본다. 판정식(장르 겹침, 범위 겹침, 지역 포함)은 그 이슈가 정한다.
 - **NSU-63(추천 조합)**(F5): 활동명 조회에서 키가 없으면 그 곡을 뺀다. Eligibility를 통과했다고 행이 있다고 가정하지 않는다. 사이에 `DELETE`가 커밋될 수 있다.
 - **NSU-79(공개 범위)**: 다른 ARTIST나 비로그인에게 열 때는 응답을 만드는 곳에서 출연료 값을 `null`로 가린다.
-- **로그와 개인정보**: 활동명과 소개는 개인정보다. 로그·예외 메시지에 넣지 않는다. 형식은 맞지만 목록에 없는 지역 코드만 WARN으로 남긴다(사용자 정보 없음). 처리방침의 수집 항목 반영은 NSU-165다(NSU-133은 EVENT_PARTNER 범위다). 탈퇴 기능과 탈퇴할 때의 프로필 파기는 NSU-167이 맡는다. 모두 실사용자에게 열기 전에 끝낸다.
+- **로그와 개인정보**: 활동명과 소개는 개인정보다. 로그·예외 메시지에 넣지 않는다. 형식은 맞지만 목록에 없는 지역 코드만 WARN으로 남긴다(사용자 정보 없음). 처리방침의 수집 항목 반영은 NSU-165다(NSU-133은 EVENT_PARTNER 범위다). 탈퇴할 때의 프로필 파기는 이 이슈의 트리거가, 탈퇴 기능은 NSU-167이 맡는다. 모두 실사용자에게 열기 전에 끝낸다.
 - **V7의 같은 허점**(F2): `event_partner_profiles`의 지역 `CHECK`도 NULL 원소와 하한이 1이 아닌 배열(`'[0:1]={11,26}'`)을 거절하지 않는다. 이 표는 하한·중복도 막는다(NSU-121이 `events.genres`에서 찾은 허점과 같다). 새 마이그레이션으로 `CHECK`를 바꾸는 NSU-166으로 넘겼다.
 - **화면과 서버를 함께 배포한다**. 필드를 더하면 그 필드를 모르는 이전 화면의 저장이 새 필드를 지울 수 있다.
 - **실행으로 확인할 것**(구현 첫 단계):
@@ -487,7 +550,9 @@ $$;
 
 - **계층 패키지와 public 쓰기 메서드(후보 2)**: 다른 모듈이 접근 검사를 건너뛴 쓰기를 할 수 있다.
 - **JPA 엔티티**: 첫 저장 경쟁에 재시도가 필요하고, 일괄 조회가 입력 크기만큼 바인딩을 만든다.
-- **FK `ON DELETE CASCADE`(후보 1)**: 파기 정책이 정해지기 전에 삭제 동작을 묶는다.
+- **FK `ON DELETE CASCADE`(후보 1)**: 탈퇴는 사용자 행을 지우지 않으므로 탈퇴 파기가 되지 않고, 하드 삭제에만 삭제 동작을 묶는다.
+- **탈퇴 파기를 NSU-167의 앱 메서드로(B)**: 상태를 바꾸는 경로마다 호출을 기억해야 한다(Rationale "탈퇴 시 파기").
+- **탈퇴와 저장의 겹침을 받아들인 위험으로 둠**: 탈퇴한 사용자의 프로필이 남는다.
 - **쓰기의 계정 상태를 받아들인 위험으로 둠**: `ART-027`과 어긋난다.
 - **프로필이 없으면 `404`**: 가입 직후의 아티스트와 계정 없음이 헷갈리고, 화면이 분기해야 한다.
 - **`fee` 객체(후보 2)**: 행사 예산과 모양이 달라진다.
