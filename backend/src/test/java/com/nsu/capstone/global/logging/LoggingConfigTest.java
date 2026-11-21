@@ -119,7 +119,7 @@ class LoggingConfigTest {
         properties.load(new StringReader(propertiesText));
         return properties.stringPropertyNames().stream()
                 .filter(key -> isForbidden(key.strip().toLowerCase(Locale.ROOT), properties.getProperty(key)))
-                .map(key -> key.strip() + "=" + properties.getProperty(key).strip())
+                .map(key -> key.strip() + "=" + properties.getProperty(key))
                 .sorted()
                 .toList();
     }
@@ -127,9 +127,8 @@ class LoggingConfigTest {
     private static boolean isForbidden(String key, String value) {
         String setting = value.strip().toLowerCase(Locale.ROOT);
         boolean verboseLevel = key.startsWith("logging.level.") && (setting.equals("debug") || setting.equals("trace"));
-        // Boot는 값이 정확히 false가 아니면 켜진 것으로 본다(LoggingApplicationListener.isSet)
-        boolean debugSwitch =
-                (key.equals("debug") || key.equals("trace")) && !value.strip().equals("false");
+        // Boot는 값이 정확히 false가 아니면 켜진 것으로 본다(LoggingApplicationListener.isSet). 값 뒤의 공백도 남기므로 원문을 비교한다
+        boolean debugSwitch = (key.equals("debug") || key.equals("trace")) && !value.equals("false");
         boolean requestLogging =
                 (key.contains("accesslog.enabled") || key.contains("log-request-details")) && bindsToTrue(setting);
         return verboseLevel || debugSwitch || requestLogging;
@@ -202,6 +201,14 @@ class LoggingConfigTest {
         assertThat(forbiddenSettings("debug=on\ntrace=\n")).containsExactlyInAnyOrder("debug=on", "trace=");
         assertThat(forbiddenSettings("debug=False\n")).containsExactly("debug=False");
         assertThat(forbiddenSettings("debug=false\ntrace=false\n")).isEmpty();
+    }
+
+    /** Boot의 속성 로더는 값 뒤의 공백을 남기고 isSet은 원문을 비교한다. "false " 는 false가 아니라서 켜진다(PR #249 리뷰). */
+    @Test
+    void debug와_trace_스위치는_false_뒤에_공백이나_줄바꿈이_붙어도_금지다() throws IOException {
+        assertThat(forbiddenSettings("debug=false \n")).containsExactly("debug=false ");
+        assertThat(forbiddenSettings("trace=false\\n\n")).containsExactly("trace=false\n");
+        assertThat(forbiddenSettings("debug =  false\n")).isEmpty();
     }
 
     @Test
