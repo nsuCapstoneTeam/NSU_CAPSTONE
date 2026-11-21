@@ -37,6 +37,7 @@ src/main/java/com/nsu/capstone/event/recommendation/EventSnapshot.java
 src/main/java/com/nsu/capstone/event/region/Region.java
 src/main/java/com/nsu/capstone/event/region/RegionController.java
 src/main/java/com/nsu/capstone/event/region/RegionListResponse.java
+src/main/java/com/nsu/capstone/event/region/RegionNormalizer.java
 src/main/java/com/nsu/capstone/event/region/RegionRepository.java
 src/main/java/com/nsu/capstone/event/repository/EventRepository.java
 src/main/java/com/nsu/capstone/global/config/OpenApiConfig.java
@@ -58,7 +59,6 @@ src/main/java/com/nsu/capstone/identity/repository/UserAccountRow.java
 src/main/java/com/nsu/capstone/music/domain/RightsBasis.java
 src/main/java/com/nsu/capstone/partner/profile/application/EventPartnerProfileService.java
 src/main/java/com/nsu/capstone/partner/profile/application/ProfileContent.java
-src/main/java/com/nsu/capstone/partner/profile/application/RegionNormalizer.java
 src/main/java/com/nsu/capstone/partner/profile/presentation/EventPartnerProfileController.java
 src/main/java/com/nsu/capstone/partner/profile/presentation/dto/EventPartnerProfileRequest.java
 src/main/java/com/nsu/capstone/partner/profile/presentation/dto/EventPartnerProfileResponse.java
