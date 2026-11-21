@@ -225,8 +225,11 @@ class LogDeviceSelfCheckTest {
 
         assertThat(confirmedLevels(confirmed + "\n")).containsExactly("INFO");
         assertThat(confirmedLevels("평문 " + confirmed + "\n"))
-                .as("JSON 앞에 평문이 붙은 줄")
-                .isEmpty();
+                .as("JSON 앞에 평문이 붙은 줄은 INFO 확인 줄이 아니다")
+                .containsExactly(NOT_JSON);
+        assertThat(confirmedLevels(confirmed + "\n" + CHECK_CONFIRMED + ": 출력 장치 1개\n"))
+                .as("JSON 확인 줄과 같은 문구의 평문 줄이 함께 나오면 둘 다 센다(PR #249 리뷰)")
+                .containsExactly("INFO", NOT_JSON);
         assertThat(confirmedLevels("{\"level\":\"INFO\",\"message\":\"다른 문장\",\"note\":\"" + CHECK_CONFIRMED + "\"}\n"))
                 .as("확인 문구가 message가 아닌 필드에 있는 줄")
                 .isEmpty();
@@ -236,13 +239,25 @@ class LogDeviceSelfCheckTest {
                 .containsExactly("WARN");
     }
 
-    /** 확인 완료 레코드(줄 전체가 JSON 객체 하나이고 message가 확인 문구로 시작한다)마다 그 레코드의 level 필드. */
+    /** 확인 문구가 든 줄이 JSON 객체가 아닐 때 confirmedLevels가 그 줄 자리에 넣는 값. */
+    static final String NOT_JSON = "JSON이 아닌 줄";
+
+    /**
+     * 확인 완료 레코드(줄 전체가 JSON 객체 하나이고 message가 확인 문구로 시작한다)마다 그 레코드의 level 필드. 확인 문구가 든 줄이 JSON 객체가
+     * 아니면 그 자리에 {@link #NOT_JSON}을 넣는다. 평문 확인 줄이 함께 나와도 한 줄로 세지 않게 한다.
+     */
     static List<String> confirmedLevels(String output) {
         return output.lines()
-                .map(LogDeviceSelfCheckTest::jsonObject)
-                .flatMap(Optional::stream)
-                .filter(record -> record.path("message").asString("").startsWith(CHECK_CONFIRMED))
-                .map(record -> record.path("level").asString(""))
+                .flatMap(line -> {
+                    Optional<JsonNode> record = jsonObject(line);
+                    if (record.isEmpty()) {
+                        return line.contains(CHECK_CONFIRMED) ? Stream.of(NOT_JSON) : Stream.empty();
+                    }
+                    return record
+                            .filter(r -> r.path("message").asString("").startsWith(CHECK_CONFIRMED))
+                            .map(r -> r.path("level").asString(""))
+                            .stream();
+                })
                 .toList();
     }
 
