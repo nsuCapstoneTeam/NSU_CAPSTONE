@@ -675,6 +675,16 @@ class LogSafetyCheckerTest {
                         """)).extracting("rule").containsExactly("S6");
     }
 
+    /** 호출 체인 중간의 괄호도 벗긴다. (e.getCause()).getMessage()는 e.getCause().getMessage()와 같다(PR #249 리뷰). */
+    @Test
+    void 호출_체인_중간을_괄호로_감싼_예외_메시지도_S6_위반이다() {
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (Exception e) { log.warn("실패 {}", (e.getCause()).getMessage()); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+    }
+
     @Test
     void 괄호로_감싼_마지막_예외_인자와_예외가_아닌_값은_통과한다() {
         assertThat(checkClassBody("""

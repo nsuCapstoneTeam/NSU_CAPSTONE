@@ -645,10 +645,11 @@ final class LogSafetyChecker {
             }
         }
 
-        /** 호출·필드 접근 체인의 시작 변수(또는 this.필드)가 예외로 보이는지. */
+        /** 호출·필드 접근 체인의 시작 변수(또는 this.필드)가 예외로 보이는지. 체인 중간의 괄호도 벗긴다. */
         private boolean isExceptionExpression(ExpressionTree expression) {
             ExpressionTree current = expression;
             while (true) {
+                current = unparenthesized(current);
                 if (current instanceof MethodInvocationTree invocation
                         && invocation.getMethodSelect() instanceof MemberSelectTree inner) {
                     current = inner.getExpression();
