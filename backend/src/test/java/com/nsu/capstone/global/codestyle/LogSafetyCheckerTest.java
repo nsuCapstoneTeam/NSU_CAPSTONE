@@ -856,4 +856,21 @@ class LogSafetyCheckerTest {
                 .extracting(LogSafetyChecker.Violation::rule)
                 .containsExactly("S4");
     }
+
+    /**
+     * 이름을 하나씩 가져온 정적 import는 와일드카드 정적 import의 같은 이름을 가린다. MDC.*와 Cache.clear를 함께 가져오면 clear()는
+     * Cache.clear()다(PR #249 리뷰). 검사기는 시그니처를 모르므로 이름이 같으면 가린 것으로 본다.
+     */
+    @Test
+    void 이름을_하나씩_가져온_다른_정적_import가_있으면_와일드카드_MDC로_보지_않는다() {
+        assertThat(checkWithImport(
+                        "import static org.slf4j.MDC.*;\nimport static com.nsu.capstone.identity.support.Cache.clear;",
+                        "clear();"))
+                .isEmpty();
+        assertThat(checkWithImport(
+                        "import static org.slf4j.MDC.*;\nimport static com.nsu.capstone.identity.support.Cache.clear;",
+                        "setContextMap(map);"))
+                .extracting(LogSafetyChecker.Violation::rule)
+                .containsExactly("S4");
+    }
 }

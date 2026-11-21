@@ -429,8 +429,16 @@ final class LogSafetyChecker {
         private boolean isStaticImportOf(String owner, String member) {
             boolean declaredByEnclosingClass = enclosingMethods.stream().anyMatch(methods -> methods.contains(member));
             // shortcut: 상위 클래스에서 물려받은 같은 이름의 메서드는 구문만으로 알 수 없어 정적 import로 본다, 그런 오탐이 나오면 다시 본다
-            return !declaredByEnclosingClass
-                    && (staticImports.contains(owner + "." + member) || staticImports.contains(owner + ".*"));
+            if (declaredByEnclosingClass) {
+                return false;
+            }
+            if (staticImports.contains(owner + "." + member)) {
+                return true;
+            }
+            // 이름을 하나씩 가져온 다른 소유자의 정적 import는 와일드카드의 같은 이름을 가린다. 시그니처는 모르므로 이름으로만 본다
+            boolean shadowedBySingleImport =
+                    staticImports.stream().anyMatch(imported -> imported.endsWith("." + member));
+            return !shadowedBySingleImport && staticImports.contains(owner + ".*");
         }
 
         /** java.util.concurrent.Executors처럼 정규화된 이름이면 마지막 조각을, 호출 체인이면 그대로 돌려준다. */
