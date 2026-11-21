@@ -1,0 +1,350 @@
+# 아티스트 프로필 API
+
+ARTIST가 자기 프로필(활동명, 소개, 공연 형태, 장르, 공연 가능 지역, 출연료)을 조회·수정·삭제하고, EVENT_PARTNER가 아티스트의 프로필을 열람하는 API다. 추천 Eligibility가 같은 저장 값을 읽는다.
+
+- 구현 이슈: NSU-119(GitHub #175)
+- 요구사항: SSOT v1.17.1(최종 승인) `ART-027`(Artist Profile, 관리 주체 `ACTIVE` ARTIST), `ART-028`(출연료 범위, EVENT_PARTNER에게만 공개), `EVT-041`(EVENT_PARTNER의 Artist Profile 열람), `AUTH-160`, `AI-MATCH-051`, `SEC-120`
+- 결정 기록: [artist_profile/00 아티스트 프로필 API](../adr/artist_profile/00_artist_profile_api.md)
+- 관련 계약: [05 EVENT_PARTNER 프로필 API](./05_event_partner_profile.md)(같은 모양의 본인 프로필 API), [03 행사 API](./03_events.md) §3.3 분류 값·§7 지역 목록, [01 Trust Profile API](./01_trust_profile.md) §1~§3(열람 접근 규칙)
+- 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
+- 공통 규칙: [00_conventions.md](./00_conventions.md). 에러 형식과 공통 `code`는 [ADR-007](../adr/ADR-007-spring-backend-global-exception-handling.md)을 따른다. Scalar 태그 이름은 `아티스트 프로필`이다(00 §10.1 목록에 더한다)
+
+> 상태: 2026-11-22 NSU-119 설계 세션에서 정했다. 설계 리뷰 전이다.
+
+---
+
+## 0. 범위
+
+| 이 문서가 정한다 | 이 문서가 정하지 않는다 |
+|---|---|
+| 자기 프로필의 조회·수정·삭제(§1~§4) | 다른 ARTIST·비로그인에게 공개(NSU-79) |
+| EVENT_PARTNER의 아티스트 프로필 열람(§1·§4) | 프로필 사진(NSU-130) |
+| 필드, 검증·정규화 규칙, 저장 전 프로필의 응답(§2·§3) | 아티스트 일정(NSU-120) |
+| 응답 상태와 오류, 두 경로의 검사 순서(§4) | 추천 판정식(ADR recommendation_eligibility/00) |
+| 저장과 동시성, 지역 개편(§5), 화면이 바꿀 것(§8), 테스트 기준(§9) | 탈퇴할 때 프로필 파기(후속 이슈) |
+
+## 1. 엔드포인트
+
+| 동작 | 메서드·경로 | 호출 주체 | 성공 |
+|---|---|---|---|
+| 내 프로필 조회 | `GET /api/v1/me/artist-profile` | ARTIST | `200` + 프로필(§3) |
+| 내 프로필 수정 | `PUT /api/v1/me/artist-profile` | `ACTIVE` ARTIST | `200` + 프로필(§3) |
+| 내 프로필 삭제 | `DELETE /api/v1/me/artist-profile` | `ACTIVE` ARTIST | `204` |
+| 아티스트 프로필 열람 | `GET /api/v1/artists/{artistId}/profile` | EVENT_PARTNER, 본인 ARTIST | `200` + 프로필(§3) |
+
+- 모든 요청에 `Authorization: Bearer {accessToken}`이 필요하다(00 §7).
+- `/me` 경로의 대상은 토큰의 `sub` 사용자다(00 §1). 본문에 `artistId`·`userId`를 넣어도 무시한다.
+- `artistId`는 `role = ARTIST`인 사용자의 `users.id`다(00 §6). 정규형 UUID(8-4-4-4-12자리, 대소문자 구분 없음)만 받는다. `1-2-3-4-5` 같은 축약형은 `400 INVALID_ARTIST_ID`다(01 §1과 같다).
+- 프로필은 가입할 때 생기지 않는다. 처음 `PUT`하면 생기고, 그 뒤의 `PUT`은 전체를 교체한다.
+- `PUT`은 다시 보내도 저장 값이 같으므로 멱등 키 없이 다시 시도해도 된다. 같은 본문을 다시 보내도 `updatedAt`은 그 저장 시각으로 바뀐다.
+- `DELETE`는 프로필을 지운다. 프로필이 없어도 `204`다. 지운 뒤 조회는 저장 전과 같은 빈 값(§3)이고, 다시 `PUT`하면 새로 생긴다. 지운 뒤에는 그 아티스트의 곡이 추천에서 `PROFILE_MISSING`으로 빠진다.
+- 열람은 본인 조회와 같은 본문(§3)을 돌려준다. 호출자에 따라 필드를 바꾸지 않는다.
+- 이 API는 REST 성숙도 2단계로 설계한다. 응답에 링크(HATEOAS)를 넣지 않는다.
+
+## 2. 요청 본문 (수정)
+
+| 필드 | 타입 | 필수 | 규칙 |
+|---|---|---|---|
+| `name` | 문자열 | O | 활동명. 1~40자 |
+| `bio` | 문자열 \| `null` | | 소개. 700자 이하. 빠지거나 `null`이거나 비면 지운다 |
+| `artistTypes` | enum 배열 | O | 공연 형태. [03 §3.3](./03_events.md#33-분류-값)의 공연 형태 코드(`SOLO`, `DUO_GROUP`, `BAND`, `DJ`). 0~4개, 중복 불가 |
+| `genres` | enum 배열 | O | 장르. 03 §3.3의 장르 코드. 0~3개, 중복 불가 |
+| `regionCodes` | 문자열 배열 | O | 공연 가능 지역. 0~20개. 각 값은 아래 지역 규칙을 따른다 |
+| `feeMin` | 정수 \| `null` | | 출연료 최소(원) |
+| `feeMax` | 정수 \| `null` | | 출연료 최대(원) |
+
+- **문자열**(`name`, `bio`): 05 §2의 규칙과 같다. 앞뒤 공백·보이지 않는 글자를 지운 뒤 유니코드 코드포인트 수로 센다. 보이는 글자가 없으면 빈 값이다. NUL 문자와 짝 없는 서로게이트는 `400 VALIDATION_ERROR`다. `name`이 비면 `400 VALIDATION_ERROR`다.
+- **목록**(`artistTypes`, `genres`, `regionCodes`): 빈 배열 `[]`을 보낼 수 있다. 키가 빠지거나 `null`이면 `400 VALIDATION_ERROR`다. 원소가 `null`이어도 `400 VALIDATION_ERROR`다. 목록을 비우려면 `[]`을 보낸다.
+- enum과 코드 값은 서버가 문자열로 받아 직접 검사한다. 목록에 없는 값은 `400 VALIDATION_ERROR`다(ADR-007 §4.4). 행사 종류 코드(`CONCERT` 등)는 공연 형태가 아니다.
+- **출연료**:
+  - 단위는 원이고 정수다. 행사 예산(03 §3.1)과 같은 단위다. 화면이 만 원 단위로 입력받으면 10,000을 곱해 보낸다.
+  - `feeMin`과 `feeMax`는 둘 다 보내거나 둘 다 `null`(또는 키 없음)이어야 한다. 하나만 있으면 `400 VALIDATION_ERROR`다.
+  - `0 ≤ feeMin ≤ feeMax ≤ 1,000,000,000`이어야 한다. 아니면 `400 VALIDATION_ERROR`다. 두 값이 같으면 한 가격이다.
+  - 소수(`100.5`)와 범위를 넘는 큰 수는 `400 VALIDATION_ERROR`다.
+- JSON 문법 오류나 필드 타입으로 바꿀 수 없는 값(배열 자리에 객체 등)은 Spring 표준 400(`ProblemDetail`)이다(05 §2와 같다).
+- 서버가 정하는 필드(`updatedAt`)와 모르는 필드는 무시한다.
+
+**지역 규칙** (05 §2와 같고 개수만 다르다)
+
+- 각 값은 시·도 코드(2자리)나 시·군·구 코드(5자리)다. [지역 목록(03 §7)](./03_events.md#7-지역-목록)에 있어야 한다. 아니면 `400 VALIDATION_ERROR`다. 시·도 코드는 "그 시·도 전체"를 뜻한다.
+- 요청 배열은 20개 이하다. 21개 이상이면 정규화 전에 `400`이다. 16개 시·도를 모두 고를 수 있다.
+- 서버는 검증을 통과한 값을 05 §2의 순서로 정규화해 저장한다.
+  1. 시·군·구가 하나뿐인 시·도의 시·군·구 코드는 그 시·도 코드로 바꾼다(세종 `36110` → `36`).
+  2. 함께 보낸 시·도 안에 있는 시·군·구 코드는 뺀다. `["11", "11680"]` → `["11"]`
+  3. 같은 코드는 하나로 합친다.
+- 정규화는 오류를 내지 않는다. 결과는 응답(§3)으로 돌려주므로 화면은 응답으로 다시 그린다.
+
+## 3. 응답 본문 (프로필)
+
+조회, 수정, 열람이 같은 본문을 돌려준다.
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `name` | 문자열 \| `null` | 활동명 |
+| `bio` | 문자열 \| `null` | 소개 |
+| `artistTypes` | enum 배열 | 03 §3.3 표의 순서로 돌려준다 |
+| `genres` | enum 배열 | 03 §3.3 표의 순서로 돌려준다(`["TROT", "POP"]` → `["POP", "TROT"]`) |
+| `regionCodes` | 문자열 배열 | 정규화한 코드를 문자열 오름차순으로 돌려준다 |
+| `feeMin` | 정수 \| `null` | 출연료 최소(원) |
+| `feeMax` | 정수 \| `null` | 출연료 최대(원) |
+| `updatedAt` | 시각(00 §4) \| `null` | 마지막으로 저장한 시각 |
+
+불변식:
+
+- `updatedAt = null` ⇔ 프로필이 없음(저장 전이거나 삭제함) ⇔ `name = null`. 이때 `bio`·`feeMin`·`feeMax`는 `null`, 목록은 `[]`다.
+- 저장한 프로필은 `name ≠ null`이다.
+- `feeMin = null` ⇔ `feeMax = null`. 값이 있으면 `0 ≤ feeMin ≤ feeMax ≤ 1,000,000,000`이다.
+- `regionCodes`에는 시·도와 그 안의 시·군·구가 함께 있지 않고, 중복이 없으며, 세종은 `36`으로만 나온다.
+- 목록은 비어 있으면 `[]`다(00 §3). enum 값은 늘어날 수 있다(00 §3).
+- 이메일·휴대폰·사용자 ID는 담지 않는다. 사용자가 소개에 직접 적은 내용은 그대로 돌려준다.
+
+덜 채운 프로필도 저장된다. 추천 Eligibility(ADR recommendation_eligibility/00)는 다음처럼 본다.
+
+| 저장 값 | 추천에서 |
+|---|---|
+| 프로필 행 없음 | `PROFILE_MISSING`으로 빠진다 |
+| `regionCodes = []` | `PROFILE_INCOMPLETE`로 빠진다 |
+| `feeMin = null` | `PROFILE_INCOMPLETE`로 빠진다 |
+| `artistTypes = []` | 행사가 공연 형태를 정했으면 `PROFILE_INCOMPLETE`로 빠진다 |
+| `genres = []`, `bio = null` | 판정에 쓰지 않는다 |
+
+## 4. 응답 상태와 오류
+
+오류 본문은 ADR-007의 `{code, message}`다. `VALIDATION_ERROR`는 어느 필드가 틀렸는지 알려 주지 않는다(ADR-007 §4.2). 새 `code`는 없다.
+
+### 4.1 내 프로필(`/api/v1/me/artist-profile`)
+
+| 상황 | HTTP | `code` |
+|---|---|---|
+| 토큰 없음·만료·서명 오류 | 401 | `AUTHENTICATION_REQUIRED` |
+| 시연 서버(`DEMO`)에서 허용 목록 밖 계정의 수정·삭제 | 403 | `DEMO_WRITE_NOT_ALLOWED` |
+| EVENT_PARTNER가 부름 | 403 | `ACCESS_DENIED` |
+| 수정·삭제에서 계정이 `ACTIVE`가 아님(`SUSPENDED`·`WITHDRAWN`) | 403 | `ACCESS_DENIED` |
+| 본문 검증 실패. 필수·길이, 목록에 없는 코드, 개수 초과, 중복, 목록 키가 빠지거나 `null`, 출연료 규칙 | 400 | `VALIDATION_ERROR` |
+| JSON 문법 오류, 필드 타입으로 바꿀 수 없는 값 | 400 | 없음. Spring 표준 `ProblemDetail`(ADR-007 §4.4) |
+| 서버 오류 | 500 | `INTERNAL_SERVER_ERROR` |
+
+검사 순서:
+
+- 조회: `401` → `403`(역할) → `200`
+- 수정: `401` → `403 DEMO_WRITE_NOT_ALLOWED` → `403 ACCESS_DENIED`(역할) → `403 ACCESS_DENIED`(계정 상태) → `400 VALIDATION_ERROR`(본문) → `200`
+- 삭제: `401` → `403 DEMO_WRITE_NOT_ALLOWED` → `403 ACCESS_DENIED`(역할) → `403 ACCESS_DENIED`(계정 상태) → `204`
+
+순서의 이유:
+
+- 역할은 `SecurityConfig`의 URL 규칙이 본문을 읽기 전에 막는다. 그래서 EVENT_PARTNER가 깨진 JSON을 보내도 `403`이다. 컨트롤러의 `@PreAuthorize`는 두 번째 방어선이다.
+- 계정 상태는 본문 검증보다 먼저다. 곡 업로드(04 §2.2 검사 2)와 같은 순서다. 그래서 정지된 아티스트가 틀린 본문을 보내도 `400`이 아니라 `403`이다.
+- 다만 JSON 문법·타입 오류(`ProblemDetail`)는 본문을 객체로 읽는 단계에서 나므로 계정 상태 검사보다 먼저 나올 수 있다.
+- 시연 서버 검사(00 §8)는 인증 바로 다음이다. 이 검사는 전역 필터(NSU-158)가 하며 2026-11-22 기준 아직 구현되지 않았다. 조회는 이 검사를 받지 않는다.
+- 본인 조회는 계정 상태를 보지 않는다. 본인의 Trust Profile·외부 계정 조회(01 §3, 06 §2)와 같다.
+
+### 4.2 열람(`/api/v1/artists/{artistId}/profile`)
+
+| 상황 | HTTP | `code` |
+|---|---|---|
+| 토큰 없음·만료·서명 오류 | 401 | `AUTHENTICATION_REQUIRED` |
+| `artistId`가 정규형 UUID가 아님 | 400 | `INVALID_ARTIST_ID` |
+| ARTIST가 다른 아티스트의 프로필을 부름 | 403 | `ACCESS_DENIED` |
+| 대상이 없음, ARTIST가 아님, `ACTIVE`가 아님(EVENT_PARTNER가 부를 때) | 404 | `ARTIST_NOT_FOUND` |
+| 대상이 `ACTIVE` ARTIST인데 프로필이 없음 | 200 | 없음. §3의 빈 값 |
+| 서버 오류 | 500 | `INTERNAL_SERVER_ERROR` |
+
+검사 순서는 `401` → `400` → `403` → `404` → `200`이다. 01 §3과 같은 접근 규칙(`ArtistReadAccess`)이다.
+
+- 이 경로는 여러 역할이 부르므로 URL 규칙으로 역할을 거르지 않는다. 접근은 대상마다 정해진다.
+- `403`은 대상 사용자를 조회하기 전에 정한다. 그래서 다른 아티스트가 있는지 드러내지 않는다.
+- 정지·탈퇴·역할 차이는 모두 `404`로 같다.
+- 본인 ARTIST의 호출은 대상을 조회하지 않고 통과한다. 계정 상태도 보지 않는다.
+
+## 5. 저장과 동시성
+
+- 저장은 `artist_profiles` 테이블 한 행이다. `user_id`가 PK이면서 `users.id`를 참조한다(FK에 `ON DELETE` 없음). 목록은 배열이다(ADR artist_profile/00).
+- 공연 형태·장르의 개수와 허용 값, 지역의 개수·형식(2자리 또는 5자리 숫자, `null` 원소 없음), 출연료의 쌍·순서·범위는 DB `CHECK`로도 막는다. 배열은 1차원(또는 빈 배열)만 저장할 수 있다. 지역이 목록에 있는지와 정규화는 서버가 한다(배열에는 FK를 걸 수 없다).
+- 공연 형태·장르 허용 값은 `events`와 이 테이블의 `CHECK` 두 곳에 있다. 값을 더할 때는 두 `CHECK`를 같은 마이그레이션에서 고친다.
+- 수정은 `INSERT … ON CONFLICT (user_id) DO UPDATE` 한 문장이다. 삭제는 `DELETE … WHERE user_id = ?` 한 문장이다.
+- 버전 비교는 두지 않는다(05 §5와 같은 방침).
+
+| 동시에 일어난 일 | 결과 |
+|---|---|
+| 프로필이 없는 아티스트의 첫 `PUT` 두 개 | 둘 다 `200`이고 행은 하나다. 나중에 실행된 문장의 값이 남는다. 필드가 섞이지 않는다 |
+| `PUT`과 `DELETE` | 나중에 실행된 문장의 결과가 남는다 |
+| 같은 아티스트가 두 화면에서 저장 | 나중 저장이 이긴다 |
+| 저장 중의 일괄 조회(추천) | 커밋된 값 하나를 본다. 필드가 섞이지 않는다 |
+| 계정 상태 확인 직후 정지 | 그 요청의 저장은 통과한다(받아들인 위험. ADR Consequences) |
+| `PUT`의 지역 검증 뒤, 저장 전에 개편 마이그레이션 커밋 | 사라진 코드가 저장될 수 있다(05 §5와 같은 받아들인 위험. 개편 배포는 앱을 멈추고 한다) |
+
+**지역 개편**
+
+- 행정구역이 개편되면 이 배열의 코드도 지역 목록 변경과 같은 마이그레이션에서 옮긴다(ADR event_management/01). 옮긴 뒤 §2의 정규화를 다시 적용하고 문자열 오름차순으로 정렬한다. 결과는 20개 이하여야 한다(넘치면 `CHECK`가 마이그레이션을 막는다).
+- 개편 마이그레이션은 끝에서 `SELECT check_profile_regions()`를 부른다. 이 함수는 EVENT_PARTNER 프로필과 아티스트 프로필의 지역 배열을 모두 점검한다. 저장된 코드가 `regions`에 없거나 배열이 정규형이 아니면 예외로 그 마이그레이션을 롤백시킨다.
+- 배열 이전이나 다시 정규화하기를 빠뜨리면 테스트 `ProfileRegionMigrationIntegrationTest`가 잡는다. 두 표 중 하나만 옮긴 경우도 잡는다. PR마다 자동으로 돌리는 CI가 없으므로(NSU-135) 개편 PR 작성자가 이 테스트를 돌려 결과를 PR 설명에 적는다.
+- 형식은 맞지만 지역 목록에 없는 코드를 거절하면 그 코드만 WARN 로그로 남긴다(사용자 정보 없음).
+
+## 6. 로그와 개인정보
+
+- 활동명과 소개는 개인정보다. 로그와 예외 메시지에 넣지 않는다.
+- 응답은 이메일·휴대폰·사용자 ID를 담지 않는다.
+- 출연료는 EVENT_PARTNER에게만 보인다(`ART-028`). 이 API에서 출연료를 볼 수 있는 호출자는 EVENT_PARTNER와 본인뿐이다.
+
+## 7. 예시
+
+조회(저장 전 또는 삭제 뒤):
+
+```http
+GET /api/v1/me/artist-profile
+Authorization: Bearer {accessToken}
+```
+
+```json
+{
+  "name": null,
+  "bio": null,
+  "artistTypes": [],
+  "genres": [],
+  "regionCodes": [],
+  "feeMin": null,
+  "feeMax": null,
+  "updatedAt": null
+}
+```
+
+수정:
+
+```http
+PUT /api/v1/me/artist-profile
+Authorization: Bearer {accessToken}
+Content-Type: application/json
+```
+
+```json
+{
+  "name": "  노을밴드 ",
+  "bio": "어쿠스틱 록 밴드입니다.",
+  "artistTypes": ["BAND"],
+  "genres": ["ROCK", "ACOUSTIC"],
+  "regionCodes": ["41", "11", "11680"],
+  "feeMin": 500000,
+  "feeMax": 1500000
+}
+```
+
+```json
+{
+  "name": "노을밴드",
+  "bio": "어쿠스틱 록 밴드입니다.",
+  "artistTypes": ["BAND"],
+  "genres": ["ROCK", "ACOUSTIC"],
+  "regionCodes": ["11", "41"],
+  "feeMin": 500000,
+  "feeMax": 1500000,
+  "updatedAt": "2026-11-22T14:05:31+09:00"
+}
+```
+
+열람(EVENT_PARTNER):
+
+```http
+GET /api/v1/artists/3f2b8c1e-5d4a-4e7b-9c0f-1a2b3c4d5e6f/profile
+Authorization: Bearer {accessToken}
+```
+
+응답은 위 수정 응답과 같은 모양이다.
+
+삭제:
+
+```http
+DELETE /api/v1/me/artist-profile
+Authorization: Bearer {accessToken}
+```
+
+`204 No Content`
+
+## 8. 화면이 바꿀 것
+
+체험판 화면(`frontend/src/features/my-page/components/profile-tab.jsx`)은 프로필을 브라우저에 저장한다. 서버에 연결할 때 다음이 바뀐다.
+
+| 체험판 | 서버 연결 뒤 |
+|---|---|
+| 장르 하나(한국어 이름) | `genres` 코드 0~3개 다중 선택 |
+| 지역 하나 | `regionCodes` 0~20개. `GET /api/v1/regions`로 두 단계 선택(시·도 전체 포함). 라벨은 "공연 가능 지역". 저장 뒤 응답의 정규화된 값으로 다시 그린다 |
+| 출연료 하나(만 원, 필수) | `feeMin`·`feeMax` 범위(원, 선택). 만 원으로 입력받으면 10,000을 곱해 보낸다 |
+| 공연 형태 없음 | `artistTypes` 다중 선택 |
+| 채널 주소 | 외부 계정 연결(06, NSU-37)로 옮기거나 뺀다 |
+| 프로필 사진 | NSU-130 전까지 브라우저 저장 그대로 |
+| 브라우저 저장 | 조회는 `GET`, 저장은 `PUT`이고 `PUT` 응답으로 다시 그린다. 저장 전 `GET`은 빈 값(`updatedAt = null`)이다 |
+
+- 응답 값으로 "추천 후보가 되려면 공연 가능 지역과 출연료가 필요합니다" 같은 안내를 계산할 수 있다(§3 표).
+- 정지된 계정의 저장·삭제는 `403 ACCESS_DENIED`다.
+
+## 9. 테스트 기준
+
+DB가 관여하는 경우(upsert, `CHECK`, 동시 요청, 배열, 조회 횟수)는 실제 PostgreSQL(Testcontainers)로 확인한다.
+
+**내 프로필 API**
+
+| 대상 | 경우 |
+|---|---|
+| 역할 | 토큰이 없으면 `401`. EVENT_PARTNER의 조회·수정·삭제는 `403 ACCESS_DENIED`이고 행이 생기거나 지워지지 않는다. 깨진 JSON을 보내도 `403`이다 |
+| 계정 상태 | `SUSPENDED`·`WITHDRAWN` 아티스트의 유효한 토큰으로 한 `PUT`·`DELETE`는 `403 ACCESS_DENIED`이고 행이 바뀌지 않는다. 검증에 걸리는 본문을 보내도 `400`이 아니라 `403`이다. 같은 토큰의 본인 조회는 `200`이다 |
+| 저장 전 조회 | 가입만 한 아티스트의 조회는 `200`이고 §3의 빈 값이며 키가 모두 있다 |
+| 첫 저장 | 첫 `PUT`은 `200`이고 응답이 이어서 한 조회와 같다. `updatedAt`이 채워진다 |
+| 전체 교체 | `bio`를 뺀 `PUT`은 소개를 지운다. `genres: []`는 목록을 비운다. 출연료 둘 다 `null`은 출연료를 지운다 |
+| 삭제 | 저장한 뒤 `DELETE`는 `204`이고, 이어서 한 조회는 빈 값이다. 프로필이 없을 때도 `204`다. 삭제 뒤 `PUT`은 `200`이다 |
+| 본인만 | 두 아티스트가 각자 저장하면 서로의 조회에 상대 값이 나오지 않는다. 한 사람의 `DELETE`가 다른 사람의 프로필을 지우지 않는다 |
+| 문자열 | `name` 공백만·0자·41자, `bio` 701자는 `VALIDATION_ERROR`. 40·700자는 통과. 앞뒤 공백은 지워 저장된다. 보이지 않는 글자 규칙은 05 §6과 같다 |
+| 공연 형태 | 없는 코드, 행사 종류 코드(`CONCERT`), 5개, 중복, `null` 원소는 `VALIDATION_ERROR`. 요청 `["DJ", "SOLO"]` → 응답 `["SOLO", "DJ"]` |
+| 장르 | 없는 코드, 4개, 중복은 `VALIDATION_ERROR`. 요청 `["TROT", "POP"]` → 응답 `["POP", "TROT"]` |
+| 지역 | 3자리·숫자가 아닌 값·목록에 없는 코드·21개는 `VALIDATION_ERROR`. 20개는 통과. 정규화는 05 §6의 경우와 같다(`["11", "11680"]` → `["11"]`, `["36110"]` → `["36"]`) |
+| 출연료 | `feeMin > feeMax`, 음수, 10억 초과, 소수, 한쪽만 있음은 `VALIDATION_ERROR`. 0과 10억, 두 값이 같은 경우는 통과 |
+| 목록 키 | `artistTypes`·`genres`·`regionCodes`가 빠지거나 `null`이면 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다 |
+| 형식 오류 | 깨진 JSON은 Spring 표준 400(`ProblemDetail`) |
+| 무시하는 필드 | 본문의 `updatedAt`·`artistId`와 모르는 필드는 저장 결과에 영향이 없다 |
+| 운영 관측 | 형식은 맞지만 목록에 없는 지역 코드(`29`)를 보내면 `400`이고 WARN 로그에 그 코드가 남는다. 활동명과 소개는 로그에 남지 않는다 |
+
+**열람 API**
+
+| 대상 | 경우 |
+|---|---|
+| EVENT_PARTNER | `ACTIVE` 아티스트의 프로필을 `200`으로 받고 출연료가 들어 있다. 프로필이 없으면 `200`과 빈 값이다 |
+| 없는 대상 | 없는 사용자, EVENT_PARTNER, `SUSPENDED`·`WITHDRAWN` 아티스트는 모두 `404 ARTIST_NOT_FOUND` |
+| 다른 ARTIST | 대상이 있든 없든 `403 ACCESS_DENIED` |
+| 본인 | 본인 ARTIST는 `200`. `SUSPENDED`여도 유효한 토큰이면 `200` |
+| 형식 | `1-2-3-4-5`는 `400 INVALID_ARTIST_ID`. 토큰이 없으면 `401` |
+
+**저장과 DB**
+
+| 대상 | 경우 |
+|---|---|
+| 동시 첫 저장 | 프로필이 없는 아티스트에 대해 서로 다른 본문의 `PUT` 두 개를 배리어로 같은 순간에 출발시키고 20번 되풀이한다(매번 행을 지운다). 매번 둘 다 `200`, 행은 1개, 남은 값은 두 본문 가운데 하나와 정확히 같다 |
+| upsert 경로 | 같은 `user_id` 행을 실제로 넣어 두고, 저장소의 조회는 "행이 없다"고 답하게 고정(`@MockitoSpyBean`)한 뒤 `PUT`해도 `200`이다 |
+| DB 제약 | `CHECK`가 허용 밖 공연 형태·장르, 개수 초과, 형식이 틀린 지역 코드, `ARRAY['11,26', NULL]` 같은 `null` 원소, 2차원 배열, 출연료 한쪽만·음수·역순·10억 초과를 직접 INSERT에서 거절한다 |
+| 허용 값 일치 | 장르·공연 형태 `CHECK`가 허용하는 값이 `Genre`·`ArtistType` 값 전체와 같다 |
+| 지역 점검 함수 | `check_artist_profile_regions()`가 목록에 없는 코드와 정규형이 아닌 배열(`["26","11"]`, `["11","11680"]`, `["36110"]`, `["11","11"]`)에서 실패하고 정상 데이터에서 통과한다 |
+| 개편 마이그레이션 | `ProfileRegionMigrationIntegrationTest`(기존 EVENT_PARTNER 테스트를 옮김)가 V12 뒤 버전마다 두 표를 함께 시드하고 묶음 함수를 부른다. 기존 실패 픽스처는 두 표에서 모두 실패하고, EVENT_PARTNER 표만 옮긴 픽스처도 실패한다. 배열 컬럼 `region_codes`를 가진 표가 모두 묶음 함수 정의에 나온다 |
+| 마이그레이션 락 | 다른 연결이 `users`를 잡고 있으면 V12는 `lock timeout`으로 실패한다 |
+
+**추천 Eligibility**
+
+| 대상 | 경우 |
+|---|---|
+| 조회 횟수 | 아티스트 1명과 100명의 `filter()`가 같은 수의 SQL 문장을 쓰고, `artist_profiles` 조회는 `filter()`마다 1번이다. 계수기가 `JdbcClient` 문장을 세는지 함께 확인한다 |
+| 판정 | 행사 지역 `11680`, 예산 50만~100만 원, 공연 형태 `BAND`일 때: 지역 `["11"]`·출연료 10만~·`["SOLO","BAND"]`는 통과. 지역 `["41"]`은 `REGION`, 출연료 최소 1,000,001원은 `BUDGET`, `["SOLO"]`는 `PERFORMANCE_TYPE`, 출연료 없음은 `PROFILE_INCOMPLETE`, 행 없음은 `PROFILE_MISSING`으로 빠진다 |
+| 기본값 없음 | 출연료를 입력하지 않은 프로필은 `feeMin = null`로 넘어간다 |
+
+**함께 지키는 것**
+
+| 대상 | 경우 |
+|---|---|
+| 옮긴 코드 | EVENT_PARTNER 프로필 테스트, `INVALID_ARTIST_ID` 테스트(Trust Profile, 외부 계정)가 그대로 통과한다. `UserText` 단위 테스트를 둔다 |
+| 문서 | `OpenApiDocsIntegrationTest`가 연산 21개와 태그 `아티스트 프로필`을 확인한다 |
+| 코드 규칙 | `LombokStyleFilesTest`, `LogSafetyFilesTest`가 통과한다 |
+
+## 10. 함께 바뀌는 문서
+
+| 문서 | 바꿀 내용 |
+|---|---|
+| [05 EVENT_PARTNER 프로필 API](./05_event_partner_profile.md) §1·§5·§6·§8 | 아티스트 프로필 제안 문장을 이 문서 링크로. 개편 마이그레이션이 부르는 함수를 `check_profile_regions()`로, 테스트 이름을 `ProfileRegionMigrationIntegrationTest`로. 이 PR에서 고친다 |
+| [ADR event_management/01](../adr/event_management/01_region_code_standard.md) | 저장된 코드 이전 대상에 아티스트 프로필의 공연 가능 지역 배열을 더하고, 점검 함수·테스트 이름을 바꾼다. 이 PR에서 고친다 |
+| [ADR event_partner_profile/00](../adr/event_partner_profile/00_event_partner_profile_api.md), [ADR recommendation_eligibility/00](../adr/recommendation_eligibility/00_eligibility_rules.md) | NSU-119를 가리키는 문장에 이 ADR 링크를 단다. 결정은 바꾸지 않는다. 이 PR에서 고친다 |
+| [00 공통 규칙 §10.1](./00_conventions.md) | 태그 목록에 `아티스트 프로필`을 더한다. 여러 세션이 함께 쓰는 파일이라 지휘 세션에 요청한다 |
+| 개인정보처리방침, 탈퇴 기능 | 수집 항목에 아티스트 활동명·소개·출연료를 더하고, 탈퇴할 때 아티스트 프로필을 파기한다. 후속 이슈(실사용자에게 열기 전 완료) |
