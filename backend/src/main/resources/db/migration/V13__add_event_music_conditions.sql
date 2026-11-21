@@ -19,6 +19,27 @@ ALTER TABLE events
     ADD COLUMN tempo VARCHAR(32),
     ADD COLUMN vocal VARCHAR(32);
 
+-- 새 장르 모양 제약을 어기는 행만 같은 장르 집합으로 다시 쓴다. 첫 등장 순서를 지키며 중복을 지우고
+-- 1차원·하한 1로 편다. DB는 장르 순서를 본 적이 없고 순서는 EventContent가 읽을 때 정한다.
+-- updated_at은 바꾸지 않는다. 사용자가 고친 것이 아니라 뜻이 같은 정리이기 때문이다.
+-- WHERE 식은 아래 ck_events_genres_distinct의 부정이라, 이 문장이 고치는 행이 곧 제약이 거절할 행이다.
+UPDATE events
+SET genres = ARRAY(
+    SELECT first_seen.genre
+    FROM (
+        SELECT g.genre, min(g.position) AS position
+        FROM unnest(events.genres) WITH ORDINALITY AS g(genre, position)
+        GROUP BY g.genre
+    ) AS first_seen
+    ORDER BY first_seen.position
+)
+WHERE NOT (
+    array_ndims(genres) = 1
+    AND array_lower(genres, 1) = 1
+    AND (cardinality(genres) < 2 OR genres[1] <> genres[2])
+    AND (cardinality(genres) < 3 OR (genres[1] <> genres[3] AND genres[2] <> genres[3]))
+);
+
 ALTER TABLE events
     ADD CONSTRAINT ck_events_mood CHECK (
         mood IS NULL OR mood IN ('ENERGETIC', 'CHEERFUL', 'EMOTIONAL', 'CALM', 'ROMANTIC', 'GRAND')
