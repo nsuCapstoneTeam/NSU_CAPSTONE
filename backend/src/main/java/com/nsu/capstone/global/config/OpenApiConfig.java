@@ -3,8 +3,10 @@ package com.nsu.capstone.global.config;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -27,6 +29,34 @@ public class OpenApiConfig {
 
         필드 규칙, null 조건, 결정 근거는 GitHub `docs/api`의 계약 문서에 있다.
         """;
+
+    /**
+     * type에 "null"을 적은 enum 속성의 enum에도 null을 더한다. JSON Schema는 type과 enum을 따로 검사하므로
+     * enum에 null이 없으면 type이 null을 허용해도 null을 보낼 수 없는 스키마가 된다(ADR event_management/05).
+     */
+    @Bean
+    OpenApiCustomizer nullableEnumCustomizer() {
+        return openApi -> {
+            Components components = openApi.getComponents();
+            if (components == null || components.getSchemas() == null) {
+                return;
+            }
+            for (Schema<?> schema : components.getSchemas().values()) {
+                if (schema.getProperties() != null) {
+                    for (Schema<?> property : schema.getProperties().values()) {
+                        allowNullInEnum(property);
+                    }
+                }
+            }
+        };
+    }
+
+    private static void allowNullInEnum(Schema<?> property) {
+        boolean typeAllowsNull = property.getTypes() != null && property.getTypes().contains("null");
+        if (typeAllowsNull && property.getEnum() != null && !property.getEnum().contains(null)) {
+            property.addEnumItemObject(null);
+        }
+    }
 
     /** 모든 API에 bearer JWT를 기본으로 건다. 공개 API는 컨트롤러에서 빈 @SecurityRequirements로 뺀다. */
     @Bean

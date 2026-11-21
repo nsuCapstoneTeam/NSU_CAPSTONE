@@ -38,7 +38,7 @@ public record EventRequest(
     @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal performanceMinutes,
     @Schema(requiredMode = REQUIRED) String venue,
     @Schema(requiredMode = REQUIRED) String regionCode,
-    @Schema(implementation = ArtistType.class) String artistType,
+    @Schema(implementation = ArtistType.class, types = {"string", "null"}) String artistType,
     @ArraySchema(arraySchema = @Schema(requiredMode = REQUIRED), schema = @Schema(implementation = Genre.class))
     List<String> genres,
     @Schema(implementation = Mood.class, types = {"string", "null"}) String mood,

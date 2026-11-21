@@ -10,6 +10,7 @@ import com.nsu.capstone.event.domain.Mood;
 import com.nsu.capstone.event.domain.Tempo;
 import com.nsu.capstone.event.domain.Visibility;
 import com.nsu.capstone.event.domain.Vocal;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -30,11 +31,11 @@ public record EventResponse(
     int performanceMinutes,
     String venue,
     String regionCode,
-    ArtistType artistType,
+    @Schema(types = {"string", "null"}) ArtistType artistType,
     List<Genre> genres,
-    Mood mood,
-    Tempo tempo,
-    Vocal vocal,
+    @Schema(types = {"string", "null"}) Mood mood,
+    @Schema(types = {"string", "null"}) Tempo tempo,
+    @Schema(types = {"string", "null"}) Vocal vocal,
     long budgetMin,
     long budgetMax,
     int expectedAudience,
