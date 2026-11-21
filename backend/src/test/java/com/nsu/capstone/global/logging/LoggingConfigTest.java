@@ -13,7 +13,9 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.convert.ApplicationConversionService;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.convert.ConversionException;
 import org.springframework.core.env.Environment;
 
 /** ADR logging/00 Decision 7: 커밋한 설정 파일이 정한 값. OS 환경 변수 없이(배포와 같은 설정) 읽는다. */
@@ -127,8 +129,17 @@ class LoggingConfigTest {
         boolean verboseLevel = key.startsWith("logging.level.") && (setting.equals("debug") || setting.equals("trace"));
         boolean debugSwitch = (key.equals("debug") || key.equals("trace")) && setting.equals("true");
         boolean requestLogging =
-                (key.contains("accesslog.enabled") || key.contains("log-request-details")) && setting.equals("true");
+                (key.contains("accesslog.enabled") || key.contains("log-request-details")) && bindsToTrue(setting);
         return verboseLevel || debugSwitch || requestLogging;
+    }
+
+    /** Spring이 설정 값을 Boolean으로 바꾸는 규칙을 그대로 쓴다(true·on·yes·1). Boolean으로 읽지 못하는 값은 켜진 것이 아니다. */
+    private static boolean bindsToTrue(String setting) {
+        try {
+            return Boolean.TRUE.equals(ApplicationConversionService.getSharedInstance().convert(setting, Boolean.class));
+        } catch (ConversionException e) {
+            return false;
+        }
     }
 
     @Test
@@ -151,6 +162,33 @@ class LoggingConfigTest {
                         "server.tomcat.accesslog.enabled=true",
                         "spring.mvc.log-request-details=true",
                         "debug=true");
+    }
+
+    /** Spring은 on·yes·1도 true로 바인딩한다. 문자열 true만 보면 accesslog.enabled=on이 통과한다(NSU-162). */
+    @Test
+    void 요청_로깅_설정은_Spring이_true로_읽는_값이면_모두_금지다() throws IOException {
+        String text = """
+                server.tomcat.accesslog.enabled=on
+                spring.mvc.log-request-details=YES
+                spring.codec.log-request-details=1
+                """;
+
+        assertThat(forbiddenSettings(text))
+                .containsExactlyInAnyOrder(
+                        "server.tomcat.accesslog.enabled=on",
+                        "spring.mvc.log-request-details=YES",
+                        "spring.codec.log-request-details=1");
+    }
+
+    @Test
+    void 요청_로깅_설정은_Spring이_false로_읽는_값이면_허용한다() throws IOException {
+        String text = """
+                server.tomcat.accesslog.enabled=off
+                spring.mvc.log-request-details=no
+                spring.codec.log-request-details=0
+                """;
+
+        assertThat(forbiddenSettings(text)).isEmpty();
     }
 
     @Test
