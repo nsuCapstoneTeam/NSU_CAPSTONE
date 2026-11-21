@@ -112,7 +112,7 @@ ARTIST가 자기 프로필(활동명, 소개, 공연 형태, 장르, 공연 가�
 
 ## 4. 응답 상태와 오류
 
-오류 본문은 ADR-007의 `{code, message}`다. `VALIDATION_ERROR`는 어느 필드가 틀렸는지 알려 주지 않는다(ADR-007 §4.2). 새 `code`는 없다.
+오류 본문은 ADR-007의 `{code, message}`다. `VALIDATION_ERROR`는 어느 필드가 틀렸는지 알려 주지 않는다(ADR-007 §4.2). 새 `code`는 `ARTIST_PROFILE_BUSY`(503) 하나다.
 
 ### 4.1 내 프로필(`/api/v1/me/artist-profile`)
 
@@ -124,13 +124,14 @@ ARTIST가 자기 프로필(활동명, 소개, 공연 형태, 장르, 공연 가�
 | 수정에서 계정이 `ACTIVE`가 아님(`SUSPENDED`·`WITHDRAWN`) | 403 | `ACCESS_DENIED` |
 | 본문 검증 실패. 필수·길이, 목록에 없는 코드, 개수 초과, 중복, 목록 키가 빠지거나 `null`, 출연료 규칙 | 400 | `VALIDATION_ERROR` |
 | JSON 문법 오류, 필드 타입으로 바꿀 수 없는 값 | 400 | 없음. Spring 표준 `ProblemDetail`(ADR-007 §4.4) |
+| 수정·삭제에서 필요한 행 잠금을 3초 안에 잡지 못함. 같은 사용자의 탈퇴·상태 변경이나 다른 쓰기가 끝나지 않았거나 DB가 느림. 아무것도 바뀌지 않는다. `Retry-After`는 붙이지 않는다 | 503 | `ARTIST_PROFILE_BUSY` |
 | 서버 오류 | 500 | `INTERNAL_SERVER_ERROR` |
 
 검사 순서:
 
 - 조회: `401` → `403`(역할) → `200`
-- 수정: `401` → `403 DEMO_WRITE_NOT_ALLOWED` → `403 ACCESS_DENIED`(역할) → `403 ACCESS_DENIED`(계정 상태) → `400 VALIDATION_ERROR`(본문) → `200`
-- 삭제: `401` → `403 DEMO_WRITE_NOT_ALLOWED` → `403 ACCESS_DENIED`(역할) → `204`
+- 수정: `401` → `403 DEMO_WRITE_NOT_ALLOWED` → `403 ACCESS_DENIED`(역할) → `403 ACCESS_DENIED`(계정 상태) → `400 VALIDATION_ERROR`(본문) → `200`. 계정 상태 확인(`users` 행 잠금)과 저장 문장에서 잠금을 3초 안에 잡지 못하면 `503 ARTIST_PROFILE_BUSY`다
+- 삭제: `401` → `403 DEMO_WRITE_NOT_ALLOWED` → `403 ACCESS_DENIED`(역할) → `204`. 삭제 문장이 행 잠금을 3초 안에 잡지 못하면 `503 ARTIST_PROFILE_BUSY`다
 
 순서의 이유:
 
@@ -166,6 +167,7 @@ ARTIST가 자기 프로필(활동명, 소개, 공연 형태, 장르, 공연 가�
 - 공연 형태·장르 허용 값은 `events`와 이 테이블의 `CHECK` 두 곳에 있다. 값을 더할 때는 두 `CHECK`를 같은 마이그레이션에서 고친다.
 - 수정은 `INSERT … ON CONFLICT (user_id) DO UPDATE` 한 문장이다. 삭제는 `DELETE … WHERE user_id = ?` 한 문장이다.
 - 수정의 계정 상태 확인은 저장과 같은 트랜잭션에서 `users` 행을 `FOR SHARE`로 잠그며 한다(ADR 결정 13). 탈퇴와 저장이 겹쳐도 탈퇴한 사용자의 프로필이 남지 않게 하기 위해서다.
+- 수정·삭제 트랜잭션은 잠금을 3초까지만 기다린다(`SET LOCAL lock_timeout = '3s'`, 외부 계정 06 §11.3과 같은 방식). 넘으면 `503 ARTIST_PROFILE_BUSY`이고 아무것도 바뀌지 않는다. 운영자 `psql`이나 탈퇴 트랜잭션이 행을 오래 잡아도 요청이 연결과 스레드를 무한정 쥐지 않게 하기 위해서다.
 - 탈퇴하면 프로필을 즉시 지운다. `users.status`가 `WITHDRAWN`으로 바뀌는 UPDATE의 같은 트랜잭션에서 DB 트리거(V12)가 그 사용자의 행을 지운다. 탈퇴 기능은 NSU-167이 만든다. 탈퇴 트랜잭션이 `READ COMMITTED`가 아니면 트리거가 예외를 던져 탈퇴를 롤백한다.
 - 로그인할 수 없는 정지 계정의 삭제 요구는 운영자가 처리한다(ADR Consequences "운영자 runbook").
 - 버전 비교는 두지 않는다(05 §5와 같은 방침). 필드를 더하면, 그 필드를 모르는 이전 화면이 `PUT`할 때 새 필드가 지워질 수 있다. 화면과 서버를 함께 배포한다.
@@ -280,6 +282,7 @@ Authorization: Bearer {accessToken}
 | 지역 하나 | `regionCodes` 0~20개. `GET /api/v1/regions`로 두 단계 선택(시·도 전체 포함). 라벨은 "공연 가능 지역". 저장 뒤 응답의 정규화된 값으로 다시 그린다 |
 | 출연료 하나(만 원, 필수) | `feeMin`·`feeMax` 범위(원, 선택). 만 원으로 입력받으면 10,000을 곱해 보낸다. 칸이 비면 빈 문자열이 아니라 `null`을 보낸다(빈 문자열은 `400`, §2) |
 | 저장과 삭제 | 저장 요청이 진행 중이면 삭제 버튼을 막거나 저장 응답을 기다린 뒤 삭제한다(§5 겹침) |
+| `503 ARTIST_PROFILE_BUSY` | 저장·삭제가 되지 않았다. 입력값을 그대로 두고 "잠시 후 다시 시도해 주세요"를 보여 준다. 자동으로 다시 보내지 않는다 |
 | 공연 형태 없음 | `artistTypes` 다중 선택 |
 | 채널 주소 | 외부 계정 연결(06, NSU-37)로 옮기거나 뺀다 |
 | 프로필 사진 | NSU-130 전까지 브라우저 저장 그대로 |
@@ -337,6 +340,7 @@ DB가 관여하는 경우(upsert, `CHECK`, 동시 요청, 배열, 조회 횟수)
 | 탈퇴 파기 | 프로필이 있는 아티스트의 `status`를 `WITHDRAWN`으로 바꾸고 커밋하면 행이 없다. 롤백하면 행이 남는다. `SUSPENDED`로 바꾸면 행이 남는다. 다른 사용자의 행은 그대로다. 프로필이 없는 사용자와 이미 `WITHDRAWN`인 사용자의 UPDATE도 성공한다. `REPEATABLE READ` 트랜잭션에서 `WITHDRAWN`으로 바꾸면 예외이고 상태와 행이 그대로다. 같은 이름의 임시 표(`CREATE TEMP TABLE artist_profiles (user_id uuid)`)에 같은 `user_id`를 넣고 `search_path`를 바꾼 연결에서 탈퇴를 커밋해도 실제 표의 행이 지워지고 임시 표의 행은 그대로다 |
 | `PUT`과 탈퇴 겹침 | 두 DB 연결. (1) 탈퇴 UPDATE의 커밋을 보류한 채 `ArtistProfiles.save`를 다른 스레드에서 시작하면 기다린다. 탈퇴를 커밋하면 저장은 `ACCESS_DENIED`이고 행이 없다. (2) `save`가 `users` 행을 잡은 뒤 커밋을 보류한 채(테스트용 트랜잭션으로 `require`와 upsert까지 실행) 탈퇴 UPDATE를 시작하면 기다린다. 저장을 커밋하면 탈퇴가 끝나고 행이 없다 |
 | 잠금 필수 | `ArtistWriteAccess.require`를 트랜잭션 밖에서 부르면 예외다 |
+| 잠금 대기 상한 | 다른 연결이 그 사용자의 `users` 행을 UPDATE한 채 커밋하지 않으면 `PUT`은 약 3초 뒤 `503 ARTIST_PROFILE_BUSY`이고(`500`이 아니다) 행이 그대로다. 다른 연결이 그 `artist_profiles` 행을 잠근 채 있으면 `PUT`·`DELETE` 모두 같은 `503`이고 행이 그대로다. 잠금을 풀면 다음 요청은 성공한다 |
 | 마이그레이션 락 | 다른 연결이 `users`를 잡고 있으면 V12는 `lock timeout`으로 실패한다(FK와 트리거 모두 `users`에 락을 건다) |
 
 **추천 Eligibility**

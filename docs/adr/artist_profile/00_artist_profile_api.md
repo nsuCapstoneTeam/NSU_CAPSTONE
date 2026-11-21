@@ -385,7 +385,7 @@ public record SavedArtistProfile(
 | `lombok-style-files.txt` | 새 파일과 옮긴 `RegionNormalizer`를 더하고, 지운 파일과 옛 경로를 뺀다 |
 | 테스트 | `EligibilityFilterIntegrationTest`(조회 횟수), `EventPartnerProfileApiIntegrationTest`(WARN 기대값 한 줄), `OpenApiDocsIntegrationTest`(연산 수 기존 + 4, main 기준 17 → 21. 나중에 머지하는 PR이 숫자를 맞춘다. 태그 분기), `EventIntegrationTestBase.setUp`(프로필 행을 사용자보다 먼저 지움), 지역 개편 테스트 이동(아래) |
 
-`ErrorCode`는 바꾸지 않는다. 새 `code`가 없다.
+`ErrorCode`에는 `ARTIST_PROFILE_BUSY`(503) 한 줄만 더한다(잠금 대기 상한, Consequences). `ErrorCode`는 다른 사람이 만든 파일이므로 PR 특이사항에 적는다.
 
 의존 방향: `artist.profile` → `event.domain`(enum), `event.region`, `identity.application`, `global`. `eligibility.infrastructure` → `artist.profile`. NSU-127이 `event.application` → `artist.profile`을 더하면 패키지 수준 순환(`event` ↔ `artist.profile`)이 생긴다. 클래스 수준 순환은 아니다. 분류 enum을 공용 모듈로 옮기는 일은 이 이슈 범위가 아니다.
 
@@ -509,6 +509,7 @@ CREATE TRIGGER trg_users_withdrawal_delete_artist_profile
   - **받아들인 위험**: `PUT`이 지역을 검증한 뒤 저장하기 전에 개편 마이그레이션이 커밋되면 사라진 코드가 저장될 수 있다. EVENT_PARTNER 프로필과 같은 위험이며 같은 결정(개편 배포는 앱을 멈추고 한다, 2026-11-05)을 따른다.
 - **쓰기의 계정 상태**: 확인이 `users` 행을 `FOR SHARE`로 잠그므로(Rationale "탈퇴 시 파기") 확인 직후의 정지·탈퇴는 `PUT`이 커밋될 때까지 기다린다. 정지는 그 뒤에 커밋되어 저장은 통과한 채로 남고, 정지된 아티스트는 Eligibility에서 계정 상태로 빠진다. 탈퇴는 트리거가 그 저장을 지운다.
 - **정지·탈퇴한 아티스트의 삭제**: `DELETE`는 계정 상태를 보지 않으므로 정지된 아티스트도 만료 전 토큰으로 지울 수 있다. 탈퇴하면 트리거가 즉시 지운다(결정 13). 탈퇴 기능은 NSU-167이 만들고, 그 이슈가 상태를 `WITHDRAWN`으로 바꾸면 이 트리거가 프로필을 지운다. 탈퇴 트랜잭션은 `READ COMMITTED`(기본값)여야 한다.
+- **잠금 대기 상한**(구현 리뷰 backend-verify 지적, 2026-11-22): `FOR SHARE`와 upsert·삭제의 행 잠금은 상한이 없으면, 운영자 `psql`이나 탈퇴 트랜잭션(NSU-167)이 행을 쥔 채 끝나지 않을 때 요청이 연결(풀 10개)과 스레드를 무한정 쥔다. 그래서 `PUT`·`DELETE` 트랜잭션은 첫 문장 전에 `SET LOCAL lock_timeout = '3s'`를 두고, SQLSTATE `55P03`을 `ArtistProfiles`에서 `503 ARTIST_PROFILE_BUSY`로 바꾼다(`Retry-After` 없음). `GlobalExceptionHandler`는 바꾸지 않는다. 외부 계정(06 §11.3)과 같은 방식이다. 500으로 두는 안은 재시도할 수 있는지 화면이 알 수 없고 서버 오류 알림이 잡음이 되어, 상한을 두지 않는 안은 풀 고갈이 남아 쓰지 않는다.
 - **운영자 runbook(정지 계정의 삭제 요구)**: 로그인할 수 없는 정지 계정이 삭제를 요구하면 본인 확인 뒤 운영자가 `DELETE FROM artist_profiles WHERE user_id = '<사용자 UUID>';` 한 줄을 실행하고, 지운 행 수(0 또는 1)와 처리 일시를 기록한다. 탈퇴 요구라면 상태를 `WITHDRAWN`으로 바꾸는 것(NSU-167)으로 트리거가 대신 지운다.
 - **NSU-134(EVENT_PARTNER 프로필 파기)**: 같은 방식(상태 트리거)을 쓸 수 있다.
 - **시연 서버 배포**: 시연 서버의 쓰기 필터(NSU-158)가 끝나기 전에는 이 쓰기 API를 외부에서 접속할 수 있는 시연 서버에 배포하지 않는다. 외부 가입자가 활동명·소개를 쓸 수 있기 때문이다(04 §2.2, 06 §1과 같은 제약).
@@ -548,7 +549,7 @@ CREATE TRIGGER trg_users_withdrawal_delete_artist_profile
 
 - EVENT_PARTNER 프로필의 결정(ADR event_partner_profile/00): 첫 `PUT` 생성과 저장 전 `200` + 빈 값, `PUT` 전체 교체와 upsert 한 문장, `DELETE`(개인정보보호법 §36), 나중 저장 우선, 역할별 경로와 `SecurityConfig` URL 규칙, 배열 + `CHECK`, `JdbcClient`, `lock_timeout` 3초, 지역 정규화, 개편 점검과 받아들인 위험
 - 분류 enum `ArtistType`·`Genre`와 허용 목록(03 §3.3), 지역 목록 `regions`(03 §7)
-- 접근 규칙 `ArtistReadAccess`(01 §2, 06 §2)와 오류 형식 `ErrorCode`·`ErrorResponse`(ADR-007). 새 `code`는 없다
+- 접근 규칙 `ArtistReadAccess`(01 §2, 06 §2)와 오류 형식 `ErrorCode`·`ErrorResponse`(ADR-007). 새 `code`는 `ARTIST_PROFILE_BUSY` 하나이고, 잠금 대기 상한은 외부 계정(06 §11.3 `EXTERNAL_ACCOUNT_BUSY`)의 방식을 따른다
 - 지역 정규화 `RegionNormalizer`, 문자열 규칙(05 §2), `parseArtistId`를 옮겨 재사용한다(Decision 12)
 - Eligibility 포트 `ArtistProfileReader`와 값 `ArtistProfile`(바꾸지 않는다)
 
