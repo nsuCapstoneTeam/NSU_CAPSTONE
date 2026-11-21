@@ -224,12 +224,14 @@ class LogDeviceSelfCheckTest {
         String confirmed = "{\"level\":\"INFO\",\"message\":\"" + CHECK_CONFIRMED + ": 출력 장치 1개\"}";
 
         assertThat(confirmedLevels(confirmed + "\n")).containsExactly("INFO");
-        assertThat(confirmedLevels("평문 " + confirmed + "\n")).as("JSON 앞에 평문이 붙은 줄").isEmpty();
+        assertThat(confirmedLevels("평문 " + confirmed + "\n"))
+                .as("JSON 앞에 평문이 붙은 줄")
+                .isEmpty();
         assertThat(confirmedLevels("{\"level\":\"INFO\",\"message\":\"다른 문장\",\"note\":\"" + CHECK_CONFIRMED + "\"}\n"))
                 .as("확인 문구가 message가 아닌 필드에 있는 줄")
                 .isEmpty();
-        assertThat(confirmedLevels(
-                        "{\"level\":\"WARN\",\"message\":\"" + CHECK_CONFIRMED + "\",\"note\":\"\\\"level\\\":\\\"INFO\\\"\"}\n"))
+        assertThat(confirmedLevels("{\"level\":\"WARN\",\"message\":\"" + CHECK_CONFIRMED
+                        + "\",\"note\":\"\\\"level\\\":\\\"INFO\\\"\"}\n"))
                 .as("level 필드는 WARN이고 INFO 문자열은 다른 필드에 있는 줄")
                 .containsExactly("WARN");
     }

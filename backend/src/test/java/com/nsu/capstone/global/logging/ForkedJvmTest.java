@@ -84,8 +84,8 @@ class ForkedJvmTest {
     @Test
     void 자식_JVM을_띄우지_못하면_기다리는_쪽이_시작_오류를_바로_받는다() {
         StartedChild child = new StartedChild();
-        ProcessBuilder missingExecutable = new ProcessBuilder(
-                Path.of("no-such-directory", "no-such-java").toString());
+        ProcessBuilder missingExecutable =
+                new ProcessBuilder(Path.of("no-such-directory", "no-such-java").toString());
 
         assertThatThrownBy(() -> child.start(missingExecutable)).isInstanceOf(IOException.class);
 

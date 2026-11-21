@@ -128,8 +128,8 @@ class LoggingConfigTest {
         String setting = value.strip().toLowerCase(Locale.ROOT);
         boolean verboseLevel = key.startsWith("logging.level.") && (setting.equals("debug") || setting.equals("trace"));
         // Boot는 값이 정확히 false가 아니면 켜진 것으로 본다(LoggingApplicationListener.isSet)
-        boolean debugSwitch = (key.equals("debug") || key.equals("trace"))
-                && !value.strip().equals("false");
+        boolean debugSwitch =
+                (key.equals("debug") || key.equals("trace")) && !value.strip().equals("false");
         boolean requestLogging =
                 (key.contains("accesslog.enabled") || key.contains("log-request-details")) && bindsToTrue(setting);
         return verboseLevel || debugSwitch || requestLogging;
@@ -138,7 +138,8 @@ class LoggingConfigTest {
     /** Spring이 설정 값을 Boolean으로 바꾸는 규칙을 그대로 쓴다(true·on·yes·1). Boolean으로 읽지 못하는 값은 켜진 것이 아니다. */
     private static boolean bindsToTrue(String setting) {
         try {
-            return Boolean.TRUE.equals(ApplicationConversionService.getSharedInstance().convert(setting, Boolean.class));
+            return Boolean.TRUE.equals(
+                    ApplicationConversionService.getSharedInstance().convert(setting, Boolean.class));
         } catch (ConversionException e) {
             return false;
         }
