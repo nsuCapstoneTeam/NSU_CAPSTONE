@@ -49,6 +49,7 @@ src/main/java/com/nsu/capstone/global/logging/RequestIdFilter.java
 src/main/java/com/nsu/capstone/global/logging/RequestIdExecutors.java
 src/main/java/com/nsu/capstone/global/logging/RequestIdInterceptor.java
 src/main/java/com/nsu/capstone/global/logging/UncaughtExceptionLogger.java
+src/main/java/com/nsu/capstone/global/text/UserText.java
 src/main/java/com/nsu/capstone/identity/application/ArtistReadAccess.java
 src/main/java/com/nsu/capstone/identity/config/OAuthProviderHttpConfig.java
 src/main/java/com/nsu/capstone/identity/oauth/GetOnlyAuthorizationRequestResolver.java
