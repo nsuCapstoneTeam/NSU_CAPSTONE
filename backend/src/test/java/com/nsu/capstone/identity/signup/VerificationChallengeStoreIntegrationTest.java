@@ -505,7 +505,7 @@ class VerificationChallengeStoreIntegrationTest {
         assertFalse(signupSessionStore
                 .findById(artistSession.signupSessionId())
                 .orElseThrow()
-                .emailVerified());
+                .adultConfirmed());
     }
 
     @Test

@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -64,6 +66,18 @@ class SignupCompletionIntegrationTest {
         assertEquals("local@example.com", completed.email());
         assertEquals("01012345678", completed.phone());
         assertEquals(SignupTestTerms.consent(), completed.consent());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"requiredTermsAgreed,false", "agreements,''", "agreedAt,''"})
+    void localCompletionRejectsEachIncompleteTermsState(String field, String value) {
+        String id = "terms-" + UUID.randomUUID();
+        sessions.save(SignupSession.createArtist(id, "terms@example.com", "01012345678")
+                .withConsent(SignupTestTerms.consent()));
+        SignupSessionFixtures.markAllVerified(redis, id);
+        redis.opsForHash().put(SignupRedisKeys.session(id), field, value);
+
+        assertRejected(ErrorCode.REQUIRED_TERMS_AGREEMENT_REQUIRED, () -> sessions.completeLocal(id, UserRole.ARTIST));
     }
 
     @Test
