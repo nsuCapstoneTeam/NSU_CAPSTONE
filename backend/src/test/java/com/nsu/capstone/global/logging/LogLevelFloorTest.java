@@ -15,7 +15,11 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.AfterAllCallback;
+import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.extension.ExtensionContext;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -46,6 +50,30 @@ class LogLevelFloorTest {
 
     private static Map<String, Level> levelsBefore;
 
+    private static Thread.UncaughtExceptionHandler defaultHandlerBefore;
+
+    /** 앱이 띄우며 바꾼 JVM 전체 기본 예외 처리기가 이 클래스 뒤에 남으면 같은 JVM의 다음 테스트로 번진다(NSU-162). */
+    @RegisterExtension
+    static final DefaultHandlerRestored defaultHandlerRestored = new DefaultHandlerRestored();
+
+    /** 클래스가 시작되기 전의 처리기와 @AfterAll까지 끝난 뒤의 처리기가 같은지 확인한다. */
+    static final class DefaultHandlerRestored implements BeforeAllCallback, AfterAllCallback {
+
+        private Thread.UncaughtExceptionHandler before;
+
+        @Override
+        public void beforeAll(ExtensionContext context) {
+            before = Thread.getDefaultUncaughtExceptionHandler();
+        }
+
+        @Override
+        public void afterAll(ExtensionContext context) {
+            assertThat(Thread.getDefaultUncaughtExceptionHandler())
+                    .as("클래스가 끝난 뒤의 JVM 기본 미처리 예외 처리기")
+                    .isSameAs(before);
+        }
+    }
+
     @Autowired
     Environment environment;
 
@@ -59,13 +87,15 @@ class LogLevelFloorTest {
     JdbcTemplate jdbcTemplate;
 
     @BeforeAll
-    static void snapshotLevels() {
+    static void snapshotGlobalState() {
         levelsBefore = LoggerLevels.snapshot();
+        defaultHandlerBefore = Thread.getDefaultUncaughtExceptionHandler();
     }
 
     @AfterAll
-    static void restoreLevels() {
+    static void restoreGlobalState() {
         LoggerLevels.restore(levelsBefore);
+        Thread.setDefaultUncaughtExceptionHandler(defaultHandlerBefore);
     }
 
     @Test
