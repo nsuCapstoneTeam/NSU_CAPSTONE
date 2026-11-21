@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -136,21 +137,26 @@ class LoggingConfigTest {
      * 같은 파일의 참조는 푼 값으로 판정한다. 파일 밖 값(환경 변수 등)에 기대는 참조는 기본값과 상관없이 금지다. 배포 환경이 그 값을 켤 수 있다.
      */
     private static boolean isForbidden(String key, String rawValue, Properties properties) {
-        Set<String> outsideReferences = new HashSet<>();
+        List<String> asked = new ArrayList<>();
+        Set<String> missing = new HashSet<>();
         String value = REFERENCES.replacePlaceholders(rawValue, name -> {
+            asked.add(name);
             String found = properties.getProperty(name);
-            // 해석기는 ${키:기본값}의 "키:기본값" 전체를 먼저 묻고, 없으면 키만 다시 묻는다. 키만 물은 것을 센다
-            if (found == null && !name.contains(":")) {
-                outsideReferences.add(name);
+            if (found == null) {
+                missing.add(name);
             }
             return found;
         });
+        // 해석기는 ${키:기본값}의 "키:기본값" 전체를 먼저 묻고, 없으면 키만 다시 묻는다. 뒤이어 앞부분(키)을 물었으면 그 전체는 조회한 키가 아니다.
+        // 중첩 참조가 만든 LOG:DETAILS처럼 앞부분을 다시 묻지 않은 이름은 실제로 조회한 키다
+        boolean outsideReference = missing.stream()
+                .anyMatch(name -> !name.contains(":") || !asked.contains(name.substring(0, name.indexOf(':'))));
         boolean loggingSwitch = key.startsWith("logging.level.")
                 || key.equals("debug")
                 || key.equals("trace")
                 || key.contains("accesslog.enabled")
                 || key.contains("log-request-details");
-        return loggingSwitch && (!outsideReferences.isEmpty() || isForbiddenValue(key, value));
+        return loggingSwitch && (outsideReference || isForbiddenValue(key, value));
     }
 
     private static boolean isForbiddenValue(String key, String value) {
@@ -272,6 +278,13 @@ class LoggingConfigTest {
                         "logging.level.com.nsu.capstone=${LOG_LEVEL:INFO}");
         assertThat(forbiddenSettings("app.level=INFO\nlogging.level.root=${app.level:DEBUG}\n"))
                 .isEmpty();
+    }
+
+    /** 중첩 참조가 만든 키(LOG:DETAILS)는 콜론이 있어도 실제로 조회하는 키다. 파일에 없으면 파일 밖 참조다(PR #249 리뷰). */
+    @Test
+    void 중첩_참조가_만든_콜론_있는_키도_파일_밖_참조다() throws IOException {
+        assertThat(forbiddenSettings("app.key=LOG:DETAILS\nspring.mvc.log-request-details=${${app.key}:false}\n"))
+                .containsExactly("spring.mvc.log-request-details=${${app.key}:false}");
     }
 
     @Test
