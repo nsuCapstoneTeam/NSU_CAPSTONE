@@ -654,4 +654,36 @@ class LogSafetyCheckerTest {
                         }
                         """)).extracting("rule").containsExactly("S6");
     }
+
+    /** 괄호로 감싸도 같은 예외다. 괄호만 붙이면 S6을 빠져나가던 틈이다(NSU-162, CodeRabbit PR #231 4차 지적). */
+    @Test
+    void 괄호로_감싼_예외도_S6_위반이다() {
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (RuntimeException failure) { log.warn("실패: " + (failure)); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        void run(String channel) {
+                            try { work(); } catch (Exception e) { log.warn("실패 {} {}", ((e)), channel); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (Exception e) { log.warn("실패 {}", (e).getMessage()); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+    }
+
+    @Test
+    void 괄호로_감싼_마지막_예외_인자와_예외가_아닌_값은_통과한다() {
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (Exception e) { log.error("처리 실패", (e)); }
+                        }
+                        """)).isEmpty();
+        assertThat(checkClassBody("""
+                        void run(String channel) { log.warn("채널: " + (channel)); }
+                        """)).isEmpty();
+    }
 }

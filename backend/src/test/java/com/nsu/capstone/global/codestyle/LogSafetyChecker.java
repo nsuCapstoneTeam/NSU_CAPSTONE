@@ -17,6 +17,7 @@ import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.ParenthesizedTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import com.sun.source.util.JavacTask;
@@ -608,16 +609,25 @@ final class LogSafetyChecker {
             return isExceptionOperand(current);
         }
 
-        /** 변수 하나(x) 또는 this.필드(this.x)가 예외로 보이는지. */
+        /** 변수 하나(x) 또는 this.필드(this.x)가 예외로 보이는지. 괄호로 감싼 것((x))도 같은 식이다. */
         private boolean isExceptionOperand(ExpressionTree expression) {
-            if (expression instanceof IdentifierTree identifier) {
+            ExpressionTree operand = unparenthesized(expression);
+            if (operand instanceof IdentifierTree identifier) {
                 return isExceptionVariable(identifier.getName().toString());
             }
-            return expression instanceof MemberSelectTree select
+            return operand instanceof MemberSelectTree select
                     && isThis(select.getExpression())
                     && isExceptionNamed(
                             fieldType(select.getIdentifier().toString()),
                             select.getIdentifier().toString());
+        }
+
+        private static ExpressionTree unparenthesized(ExpressionTree expression) {
+            ExpressionTree current = expression;
+            while (current instanceof ParenthesizedTree parenthesized) {
+                current = parenthesized.getExpression();
+            }
+            return current;
         }
 
         private boolean isExceptionVariable(String name) {
