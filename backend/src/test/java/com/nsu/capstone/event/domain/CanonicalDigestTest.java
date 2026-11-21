@@ -1,6 +1,7 @@
 package com.nsu.capstone.event.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -84,6 +85,38 @@ class CanonicalDigestTest {
         assertThat(digest().text("a").tagged("mood", null).canonical()).isEqualTo("1:a;");
         assertThat(digest().text("a").tagged("mood", null).tagged("tempo", Tempo.FAST).canonical())
             .isEqualTo("1:a;5:tempo;4:FAST;");
+    }
+
+    @Test
+    @DisplayName("이름표 구역: 같은 이름표를 두 번 쓰면 값이 null이어도 IllegalStateException이다")
+    void taggedRejectsTheSameTagTwice() {
+        // 같은 타입의 두 필드가 한 이름표를 나눠 쓰면 값을 맞바꾼 본문이 같은 문자열이 된다
+        assertThatThrownBy(() -> digest().tagged("mood", Mood.CALM).tagged("mood", Mood.GRAND))
+            .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> digest().tagged("mood", null).tagged("mood", Mood.GRAND))
+            .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> digest().tagged("mood", null).tagged("mood", null))
+            .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("이름표 구역에 들어선 뒤 위치 값을 쓰면 값이 null이어도 IllegalStateException이다")
+    void positionalValuesCannotFollowATag() {
+        // 위치 구역의 토큰 수는 고정이라는 전제가 깨지면 서로 다른 본문이 같은 문자열이 될 수 있다
+        assertThatThrownBy(() -> digest().tagged("mood", Mood.CALM).text("a"))
+            .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> digest().tagged("mood", null).text(null))
+            .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> digest().tagged("mood", Mood.CALM).code(EventType.CONCERT))
+            .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> digest().tagged("mood", Mood.CALM).number(1))
+            .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> digest().tagged("mood", Mood.CALM).flag(true))
+            .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> digest().tagged("mood", Mood.CALM).time(LocalDateTime.of(2026, 11, 6, 18, 0)))
+            .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> digest().tagged("mood", Mood.CALM).codeSet(List.of(Genre.POP)))
+            .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
