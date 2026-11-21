@@ -67,6 +67,19 @@ public class Event {
     @Column(nullable = false, length = 32)
     private List<Genre> genres;
 
+    /** 음악 조건 선택값(ADR event_management/05). null은 "고르지 않음"이다. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private Mood mood;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private Tempo tempo;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private Vocal vocal;
+
     @Column(name = "budget_min", nullable = false)
     private long budgetMin;
 
@@ -161,12 +174,23 @@ public class Event {
         this.regionCode = content.regionCode();
         this.artistType = content.artistType();
         this.genres = List.copyOf(content.genres());
+        this.mood = content.mood();
+        this.tempo = content.tempo();
+        this.vocal = content.vocal();
         this.budgetMin = content.budgetMin();
         this.budgetMax = content.budgetMax();
         this.expectedAudience = content.expectedAudience();
         this.description = content.description();
         this.visibility = content.visibility();
         this.details = content.details();
+    }
+
+    /**
+     * 행사에서 {@link MusicConditions}를 만드는 유일한 길이다(ADR event_management/05 결정 3). 추천 snapshot과
+     * 지문이 모두 이 메서드를 쓴다.
+     */
+    public MusicConditions musicConditions() {
+        return new MusicConditions(eventType, List.copyOf(genres), mood, tempo, vocal);
     }
 
     /** 선택정보가 모두 비면 JPA가 null로 읽으므로, 항상 객체로 돌려준다(03 §3.6 불변식 5). */

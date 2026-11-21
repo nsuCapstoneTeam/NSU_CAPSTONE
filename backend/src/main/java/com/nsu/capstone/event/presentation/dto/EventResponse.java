@@ -6,7 +6,10 @@ import com.nsu.capstone.event.domain.EventDetails;
 import com.nsu.capstone.event.domain.EventStatus;
 import com.nsu.capstone.event.domain.EventType;
 import com.nsu.capstone.event.domain.Genre;
+import com.nsu.capstone.event.domain.Mood;
+import com.nsu.capstone.event.domain.Tempo;
 import com.nsu.capstone.event.domain.Visibility;
+import com.nsu.capstone.event.domain.Vocal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -29,6 +32,9 @@ public record EventResponse(
     String regionCode,
     ArtistType artistType,
     List<Genre> genres,
+    Mood mood,
+    Tempo tempo,
+    Vocal vocal,
     long budgetMin,
     long budgetMax,
     int expectedAudience,
@@ -92,6 +98,9 @@ public record EventResponse(
             event.getRegionCode(),
             event.getArtistType(),
             event.getGenres().stream().sorted().toList(),
+            event.getMood(),
+            event.getTempo(),
+            event.getVocal(),
             event.getBudgetMin(),
             event.getBudgetMax(),
             event.getExpectedAudience(),

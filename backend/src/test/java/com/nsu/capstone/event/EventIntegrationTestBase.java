@@ -120,6 +120,9 @@ public abstract class EventIntegrationTestBase {
         body.put("regionCode", "11680");
         body.put("artistType", "BAND");
         body.put("genres", List.of("ROCK", "POP"));
+        body.put("mood", "ENERGETIC");
+        body.put("tempo", "FAST");
+        body.put("vocal", "WITH_VOCALS");
         body.put("budgetMin", 300000);
         body.put("budgetMax", 500000);
         body.put("expectedAudience", 800);

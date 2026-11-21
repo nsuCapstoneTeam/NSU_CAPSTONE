@@ -2,6 +2,7 @@ package com.nsu.capstone.event.domain;
 
 import static com.nsu.capstone.event.EventContentFixtures.sample;
 import static com.nsu.capstone.event.EventContentFixtures.sampleWithDetails;
+import static com.nsu.capstone.event.EventContentFixtures.sampleWithDetailsNoMusic;
 import static com.nsu.capstone.event.EventContentFixtures.with;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -28,8 +29,14 @@ class EventContentRequestHashTest {
         return Stream.of(
             Arguments.of("03 §10.1 기본값, details 없음", sample(),
                 "d630350efbf192897b58adc50615bb0a6c609f9a8c1c1716fb5072ca4e10a84a"),
-            Arguments.of("validBody()와 같은 내용(details 포함)", sampleWithDetails(),
+            Arguments.of("validBody()에서 음악 조건만 뺀 내용(details 포함)", sampleWithDetailsNoMusic(),
                 "e15358b78af180c845c0701352126e8e69109d70a64b70c35c342a3c0922371f"),
+            Arguments.of("세 음악 조건을 모두 고른 validBody()", sampleWithDetails(),
+                "beaae69ee0953047fb7b88ee0c8436847d244f9cf81efb5df403c3da761e4e10"),
+            Arguments.of("mood만 CALM", with(b -> b.mood = Mood.CALM),
+                "dfada37c10337bf732f5d5014901819e3abd3791d93442aa111942606fec13ea"),
+            Arguments.of("vocal만 INSTRUMENTAL", with(b -> b.vocal = Vocal.INSTRUMENTAL),
+                "3a8e268f9c05f5d351e40c47ab028d64d03a13999f66987542ce62f62d72fd22"),
             Arguments.of("artistType null은 -1;", with(b -> b.artistType = null),
                 "5045d036aa9564a570b4b005152f00347d5b37def447c2cdcc6601bcd2f07ff1"),
             Arguments.of("장르 [ROCK, POP]은 [POP, ROCK]과 같다",
@@ -79,6 +86,9 @@ class EventContentRequestHashTest {
             Arguments.of("artistType", (Consumer<Builder>) b -> b.artistType = ArtistType.DJ),
             Arguments.of("artistType을 상관없음으로", (Consumer<Builder>) b -> b.artistType = null),
             Arguments.of("genres", (Consumer<Builder>) b -> b.genres = List.of(Genre.POP, Genre.JAZZ)),
+            Arguments.of("mood", (Consumer<Builder>) b -> b.mood = Mood.ENERGETIC),
+            Arguments.of("tempo", (Consumer<Builder>) b -> b.tempo = Tempo.FAST),
+            Arguments.of("vocal", (Consumer<Builder>) b -> b.vocal = Vocal.WITH_VOCALS),
             Arguments.of("budgetMin", (Consumer<Builder>) b -> b.budgetMin = 300001),
             Arguments.of("budgetMax", (Consumer<Builder>) b -> b.budgetMax = 500001),
             Arguments.of("expectedAudience", (Consumer<Builder>) b -> b.expectedAudience = 801),

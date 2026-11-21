@@ -59,9 +59,21 @@ class EventFieldCoverageTest {
     }
 
     @Test
+    @DisplayName("alternate()의 컴포넌트는 모두 null이 아니다(null == null로 대입 누락이 통과하는 구멍을 막는다)")
+    void alternateHasNoNullComponent() throws Exception {
+        EventContent alternate = alternate();
+        for (String component : names(EventContent.class)) {
+            assertThat(value(alternate, component)).as("alternate().%s", component).isNotNull();
+        }
+        for (String field : names(EventDetails.class)) {
+            assertThat(value(alternate.details(), field)).as("alternate().details.%s", field).isNotNull();
+        }
+    }
+
+    @Test
     @DisplayName("Event는 EventContent의 모든 컴포넌트를 그대로 저장한다")
     void entityStoresEveryComponent() throws Exception {
-        EventContent content = sampleWithDetails();
+        EventContent content = alternate();
         Event event = event(content);
         for (String component : names(EventContent.class)) {
             Object actual = switch (component) {

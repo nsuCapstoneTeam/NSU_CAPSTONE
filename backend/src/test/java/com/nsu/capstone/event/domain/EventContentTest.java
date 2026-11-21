@@ -221,7 +221,7 @@ class EventContentTest {
 
         EventContent twice = new EventContent(once.name(), once.eventType(), once.start(), once.end(),
             once.performanceMinutes(), once.venue(), once.regionCode(), once.artistType(), once.genres(),
-            once.budgetMin(), once.budgetMax(), once.expectedAudience(), once.description(),
+            once.mood(), once.tempo(), once.vocal(), once.budgetMin(), once.budgetMax(), once.expectedAudience(), once.description(),
             once.visibility(), once.details());
 
         assertThat(twice).isEqualTo(once);

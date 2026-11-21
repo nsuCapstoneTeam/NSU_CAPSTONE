@@ -1,14 +1,20 @@
 package com.nsu.capstone.event.presentation.dto;
 
 import static com.nsu.capstone.event.EventContentFixtures.sampleWithDetails;
+import static com.nsu.capstone.event.EventContentFixtures.sampleWithDetailsNoMusic;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.nsu.capstone.event.domain.EventContent;
 import com.nsu.capstone.event.domain.EventDetails;
 import com.nsu.capstone.event.domain.Genre;
+import com.nsu.capstone.event.domain.Tempo;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
+import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.RecordComponent;
+import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
@@ -43,6 +49,9 @@ class EventRequestTest {
         String regionCode = "11680";
         String artistType = "BAND";
         List<String> genres = List.of("ROCK", "POP");
+        String mood = "ENERGETIC";
+        String tempo = "FAST";
+        String vocal = "WITH_VOCALS";
         BigDecimal budgetMin = new BigDecimal("300000");
         BigDecimal budgetMax = new BigDecimal("500000");
         BigDecimal expectedAudience = new BigDecimal("800");
@@ -53,8 +62,8 @@ class EventRequestTest {
 
         EventRequest build() {
             return new EventRequest(name, eventType, startDate, startTime, endDate, endTime, performanceMinutes,
-                venue, regionCode, artistType, genres, budgetMin, budgetMax, expectedAudience, description,
-                visibility, details);
+                venue, regionCode, artistType, genres, mood, tempo, vocal, budgetMin, budgetMax, expectedAudience,
+                description, visibility, details);
         }
     }
 
@@ -97,6 +106,47 @@ class EventRequestTest {
         assertThat(content.name()).isEqualTo("행사");
         assertThat(content.details())
             .isEqualTo(new EventDetails(null, "8m × 6m", null, null, null, null, null, null, null, null));
+    }
+
+    @Test
+    @DisplayName("음악 조건을 보내지 않거나 null로 보내면 고르지 않음이다. 세 값을 따로 고를 수 있다")
+    void omittedMusicConditionsAreNotChosen() {
+        EventContent none = request(d -> { d.mood = null; d.tempo = null; d.vocal = null; }).toContent();
+        EventContent onlyTempo = request(d -> { d.mood = null; d.vocal = null; }).toContent();
+
+        assertThat(none).isEqualTo(sampleWithDetailsNoMusic());
+        assertThat(onlyTempo.mood()).isNull();
+        assertThat(onlyTempo.tempo()).isEqualTo(Tempo.FAST);
+        assertThat(onlyTempo.vocal()).isNull();
+    }
+
+    /** 코드를 문자열로 받는 컴포넌트(enum, enum의 List)의 이름. 새 코드 필드를 더하면 자동으로 따라온다. */
+    static Stream<String> codeComponents() {
+        return Arrays.stream(EventContent.class.getRecordComponents())
+            .filter(component -> {
+                Type type = component.getGenericType();
+                if (type instanceof ParameterizedType parameterized && parameterized.getRawType() == List.class) {
+                    type = parameterized.getActualTypeArguments()[0];
+                }
+                return type instanceof Class<?> clazz && clazz.isEnum();
+            })
+            .map(RecordComponent::getName);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("codeComponents")
+    @DisplayName("코드 필드마다 목록 밖 값, 빈 문자열, 소문자는 VALIDATION_ERROR다")
+    void rejectsAnUnknownCodeInEveryCodeField(String component) throws Exception {
+        Field field = Draft.class.getDeclaredField(component);
+        for (String bad : List.of("NOT_A_CODE", "", "energetic")) {
+            Draft draft = new Draft();
+            field.set(draft, field.getType() == List.class ? List.of(bad) : bad);
+
+            assertThatThrownBy(draft.build()::toContent)
+                .as("%s = '%s'", component, bad)
+                .isInstanceOfSatisfying(BusinessException.class,
+                    e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
+        }
     }
 
     static Stream<Arguments> accepted() {

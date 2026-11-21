@@ -11,7 +11,8 @@ import java.util.regex.Pattern;
 
 /**
  * 등록·수정 본문을 검사해 얻은 행사 내용. 시간대는 Asia/Seoul 벽시계 값이다.
- * genres는 03 §3.3 표의 순서로 정렬되어 있다.
+ * genres는 03 §3.3 표의 순서로 정렬되어 있다. mood·tempo·vocal은 선택 항목이고 null은 "고르지 않음"이다
+ * (ADR event_management/05).
  */
 public record EventContent(
         String name,
@@ -23,6 +24,9 @@ public record EventContent(
         String regionCode,
         ArtistType artistType,
         List<Genre> genres,
+        Mood mood,
+        Tempo tempo,
+        Vocal vocal,
         long budgetMin,
         long budgetMax,
         int expectedAudience,
@@ -56,8 +60,10 @@ public record EventContent(
     }
 
     /**
-     * 등록 본문 해시(ADR event_management/03). 24개 값을 아래 순서로 쓴다. 순서나 표기를 바꾸면
-     * events.request_hash에 저장된 값과 달라져, 이미 쓴 멱등 키의 재전송이 모두 422가 된다.
+     * 등록 본문 해시(ADR event_management/03). 24개 위치 값을 아래 순서로 쓰고, 그 뒤에 이름표 구역을 쓴다.
+     * 순서나 표기를 바꾸면 events.request_hash에 저장된 값과 달라져, 이미 쓴 멱등 키의 재전송이 모두 422가 된다.
+     * 선택 항목을 더할 때는 위치 구역을 건드리지 않고 이름표 구역 끝에 tagged로 더한다
+     * (ADR event_management/05 R2). 고르지 않은 항목은 아무것도 쓰지 않아 NSU-121 전 본문과 해시가 같다.
      */
     public String requestHash() {
         return CanonicalDigest.start()
@@ -85,6 +91,9 @@ public record EventContent(
                 .flag(details.transportationFeeProvided())
                 .flag(details.accommodationProvided())
                 .text(details.otherConditions())
+                .tagged("mood", mood)
+                .tagged("tempo", tempo)
+                .tagged("vocal", vocal)
                 .hex();
     }
 

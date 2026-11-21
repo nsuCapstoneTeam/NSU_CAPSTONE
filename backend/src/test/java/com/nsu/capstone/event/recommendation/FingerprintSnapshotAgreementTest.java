@@ -2,6 +2,7 @@ package com.nsu.capstone.event.recommendation;
 
 import static com.nsu.capstone.event.EventContentFixtures.alternate;
 import static com.nsu.capstone.event.EventContentFixtures.sampleWithDetails;
+import static com.nsu.capstone.event.EventContentFixtures.sampleWithDetailsNoMusic;
 import static com.nsu.capstone.event.RecordReflection.names;
 import static com.nsu.capstone.event.RecordReflection.rebuildWith;
 import static com.nsu.capstone.event.RecordReflection.value;
@@ -16,8 +17,12 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * 지문(03 §8.3)이 추천 입력(§8.2)과 같은 필드로 만들어졌는지 본다(ADR event_management/04 Consequences).
@@ -55,6 +60,9 @@ class FingerprintSnapshotAgreementTest {
             entry("regionCode", Role.ELIGIBILITY),
             entry("artistType", Role.ELIGIBILITY),
             entry("genres", Role.MUSIC_CONDITIONS),
+            entry("mood", Role.MUSIC_CONDITIONS),
+            entry("tempo", Role.MUSIC_CONDITIONS),
+            entry("vocal", Role.MUSIC_CONDITIONS),
             entry("budgetMin", Role.ELIGIBILITY),
             entry("budgetMax", Role.ELIGIBILITY),
             entry("expectedAudience", Role.NONE),
@@ -74,10 +82,18 @@ class FingerprintSnapshotAgreementTest {
         assertThat(ROLE.keySet()).containsExactlyInAnyOrderElementsOf(names(EventContent.class));
     }
 
-    @Test
+    /** 바탕을 둘로 돌린다. 값이 있는 바탕은 "값 → 다른 값"을, 고르지 않은 바탕은 "고르지 않음 → 값"을 본다. */
+    static Stream<Arguments> bases() {
+        return Stream.of(
+                Arguments.of("세 음악 조건이 있는 바탕", sampleWithDetails()),
+                Arguments.of("음악 조건을 고르지 않은 바탕", sampleWithDetailsNoMusic()));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("bases")
     @DisplayName("컴포넌트를 바꾸면 표가 정한 쪽만 바뀌고, 검색 문장은 조건이, 지문은 추천 입력이 바뀔 때만 바뀐다")
-    void eligibilityConditionsKeyphraseAndFingerprintChangeAsTheTableSays() throws Exception {
-        EventContent base = sampleWithDetails();
+    void eligibilityConditionsKeyphraseAndFingerprintChangeAsTheTableSays(String label, EventContent base)
+            throws Exception {
         EventSnapshot before = snapshot(base);
 
         for (String component : names(EventContent.class)) {

@@ -7,7 +7,11 @@ import com.nsu.capstone.event.domain.EventContent;
 import com.nsu.capstone.event.domain.EventDetails;
 import com.nsu.capstone.event.domain.EventType;
 import com.nsu.capstone.event.domain.Genre;
+import com.nsu.capstone.event.domain.Mood;
+import com.nsu.capstone.event.domain.MusicChoice;
+import com.nsu.capstone.event.domain.Tempo;
 import com.nsu.capstone.event.domain.Visibility;
+import com.nsu.capstone.event.domain.Vocal;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -37,6 +41,9 @@ public record EventRequest(
     @Schema(implementation = ArtistType.class) String artistType,
     @ArraySchema(arraySchema = @Schema(requiredMode = REQUIRED), schema = @Schema(implementation = Genre.class))
     List<String> genres,
+    @Schema(implementation = Mood.class, types = {"string", "null"}) String mood,
+    @Schema(implementation = Tempo.class, types = {"string", "null"}) String tempo,
+    @Schema(implementation = Vocal.class, types = {"string", "null"}) String vocal,
     @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal budgetMin,
     @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal budgetMax,
     @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal expectedAudience,
@@ -77,6 +84,9 @@ public record EventRequest(
             required(regionCode),
             artistType == null ? null : enumValue(ArtistType.class, artistType),
             required(genres).stream().map(genre -> enumValue(Genre.class, genre)).toList(),
+            MusicChoice.parse(Mood.class, mood),
+            MusicChoice.parse(Tempo.class, tempo),
+            MusicChoice.parse(Vocal.class, vocal),
             longValue(budgetMin),
             longValue(budgetMax),
             intValue(expectedAudience),

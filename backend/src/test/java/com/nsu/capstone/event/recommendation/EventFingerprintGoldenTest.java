@@ -2,6 +2,7 @@ package com.nsu.capstone.event.recommendation;
 
 import static com.nsu.capstone.event.EventContentFixtures.sample;
 import static com.nsu.capstone.event.EventContentFixtures.sampleWithDetails;
+import static com.nsu.capstone.event.EventContentFixtures.sampleWithDetailsNoMusic;
 import static com.nsu.capstone.event.EventContentFixtures.with;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -9,6 +10,7 @@ import com.nsu.capstone.event.domain.ArtistType;
 import com.nsu.capstone.event.domain.Event;
 import com.nsu.capstone.event.domain.EventContent;
 import com.nsu.capstone.event.domain.Genre;
+import com.nsu.capstone.event.domain.Tempo;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -45,8 +47,16 @@ class EventFingerprintGoldenTest {
                 Arguments.of("기본값", sample(), "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
                 Arguments.of(
                         "details를 채워도 같다(지문 밖)",
-                        sampleWithDetails(),
+                        sampleWithDetailsNoMusic(),
                         "464134767296f7655279736775d4fa56f539b655abc311902806d50593900c47"),
+                Arguments.of(
+                        "세 음악 조건을 모두 고른 validBody()",
+                        sampleWithDetails(),
+                        "f069e1df08009138b64e3c52dfd2063edc8e09e1d20ad821c4f87c18edc792e6"),
+                Arguments.of(
+                        "tempo만 SLOW",
+                        with(b -> b.tempo = Tempo.SLOW),
+                        "0071f7f66d95cb209519bd9a08446755d663b1f9464fc42a70e7fbd7c5590182"),
                 Arguments.of(
                         "artistType null은 -1;로 적는다",
                         with(b -> b.artistType = null),
