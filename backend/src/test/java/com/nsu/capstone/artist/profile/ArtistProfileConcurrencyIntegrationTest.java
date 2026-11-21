@@ -4,15 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,7 +32,9 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -231,6 +237,70 @@ class ArtistProfileConcurrencyIntegrationTest extends ArtistProfileIntegrationTe
         assertThat(profileRows(artist)).as("정리 뒤에 커밋된 행").isZero();
     }
 
+    /** 09 §9 "잠금 대기 상한": 잠금이 풀리지 않아도 요청이 연결과 스레드를 무한정 쥐지 않는다. */
+    @Test
+    void 다른_연결이_users_행을_UPDATE한_채_커밋하지_않으면_PUT은_잠금을_3초만_기다리고_503이며_행이_생기지_않는다() throws Exception {
+        try (HeldLock lock = new HeldLock("UPDATE users SET status = 'ACTIVE' WHERE id = '" + artist.getId() + "'")) {
+            Future<ResultActions> put = executor.submit(() -> putProfile(artist, validProfile()));
+            awaitLockWait("FOR SHARE");
+
+            assertThat(put).as("잠금 대기 상한 안에 응답한다").succeedsWithin(Duration.ofSeconds(WAIT_SECONDS));
+            assertBusy(put.get());
+        }
+
+        assertThat(profileRows(artist)).as("실패한 저장은 행을 남기지 않는다").isZero();
+        putProfile(artist, validProfile()).andExpect(status().isOk());
+    }
+
+    @Test
+    void 다른_연결이_프로필_행을_잠근_채면_PUT은_잠금을_3초만_기다리고_503이며_행이_그대로다() throws Exception {
+        putProfile(artist, validProfile()).andExpect(status().isOk());
+        Map<String, Object> changed = validProfile();
+        changed.put("name", "바꾼 이름");
+
+        try (HeldLock lock = new HeldLock(lockProfileRow())) {
+            Future<ResultActions> put = executor.submit(() -> putProfile(artist, changed));
+            awaitLockWait("ON CONFLICT");
+
+            assertThat(put).as("잠금 대기 상한 안에 응답한다").succeedsWithin(Duration.ofSeconds(WAIT_SECONDS));
+            assertBusy(put.get());
+        }
+
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT name FROM artist_profiles WHERE user_id = ?", String.class, artist.getId()))
+                .as("실패한 저장은 값을 바꾸지 않는다")
+                .isEqualTo("노을밴드");
+        putProfile(artist, changed)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("바꾼 이름"));
+    }
+
+    @Test
+    void 잠금_대기_초과가_아닌_DB_오류는_503으로_바꾸지_않고_500으로_남긴다() throws Exception {
+        doThrow(new DataAccessResourceFailureException("연결 끊김")).when(table).upsert(any(), any(), any(), any());
+
+        putProfile(artist, validProfile())
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
+    }
+
+    @Test
+    void 다른_연결이_프로필_행을_잠근_채면_DELETE는_잠금을_3초만_기다리고_503이며_행이_그대로다() throws Exception {
+        putProfile(artist, validProfile()).andExpect(status().isOk());
+
+        try (HeldLock lock = new HeldLock(lockProfileRow())) {
+            Future<ResultActions> delete = executor.submit(() -> deleteProfile(artist));
+            awaitLockWait("DELETE FROM artist_profiles");
+
+            assertThat(delete).as("잠금 대기 상한 안에 응답한다").succeedsWithin(Duration.ofSeconds(WAIT_SECONDS));
+            assertBusy(delete.get());
+        }
+
+        assertThat(profileRows(artist)).as("실패한 삭제는 행을 지우지 않는다").isEqualTo(1);
+        deleteProfile(artist).andExpect(status().isNoContent());
+        assertThat(profileRows(artist)).isZero();
+    }
+
     /** 저장 트랜잭션을 열어 두고 커밋하지 않는다. {@link HeldSave#finish()}가 커밋한다. */
     private HeldSave holdSave(String name) throws Exception {
         CountDownLatch saved = new CountDownLatch(1);
@@ -256,6 +326,44 @@ class ArtistProfileConcurrencyIntegrationTest extends ArtistProfileIntegrationTe
             release.countDown();
             transaction.get(WAIT_SECONDS, TimeUnit.SECONDS);
         }
+    }
+
+    /** 다른 연결이 잠금을 쥔 채 커밋하지 않는다. 닫으면 롤백해서 잠금을 푼다. */
+    private final class HeldLock implements AutoCloseable {
+
+        private final Connection connection;
+
+        HeldLock(String lockSql) throws SQLException {
+            connection = dataSource.getConnection();
+            try {
+                connection.setAutoCommit(false);
+                try (Statement statement = connection.createStatement()) {
+                    statement.execute(lockSql);
+                }
+            } catch (SQLException | RuntimeException exception) {
+                connection.close();
+                throw exception;
+            }
+        }
+
+        @Override
+        public void close() throws SQLException {
+            try {
+                connection.rollback();
+            } finally {
+                connection.close();
+            }
+        }
+    }
+
+    private String lockProfileRow() {
+        return "SELECT 1 FROM artist_profiles WHERE user_id = '" + artist.getId() + "' FOR UPDATE";
+    }
+
+    private static void assertBusy(ResultActions response) throws Exception {
+        response.andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("ARTIST_PROFILE_BUSY"))
+                .andExpect(header().doesNotExist("Retry-After"));
     }
 
     /** 해제됐으면 true. 시간이 지났거나 인터럽트되면 false이고, 인터럽트 상태는 남긴다. */

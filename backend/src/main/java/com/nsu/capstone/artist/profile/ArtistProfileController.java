@@ -70,6 +70,10 @@ public class ArtistProfileController {
             responseCode = "400",
             description = "VALIDATION_ERROR. 잘못된 JSON·타입은 code 없는 ProblemDetail",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(
+            responseCode = "503",
+            description = "ARTIST_PROFILE_BUSY",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     public ArtistProfileResponse put(@AuthenticationPrincipal Jwt jwt, @RequestBody ArtistProfileRequest request) {
         return ArtistProfileResponse.of(profiles.save(UUID.fromString(jwt.getSubject()), request));
     }
@@ -78,6 +82,10 @@ public class ArtistProfileController {
     @PreAuthorize("hasRole('ARTIST')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @ApiResponse(responseCode = "204")
+    @ApiResponse(
+            responseCode = "503",
+            description = "ARTIST_PROFILE_BUSY",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     public void delete(@AuthenticationPrincipal Jwt jwt) {
         profiles.delete(UUID.fromString(jwt.getSubject()));
     }

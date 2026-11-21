@@ -316,8 +316,10 @@ class OpenApiDocsIntegrationTest {
         put    | /api/v1/me/external-accounts/{externalAccountId}/works | 400=INVALID_EXTERNAL_ACCOUNT_ID,VALIDATION_ERROR,EXTERNAL_ACCOUNT_WORK_NOT_CANDIDATE,ProblemDetail;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;404=EXTERNAL_ACCOUNT_NOT_FOUND;409=EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED;429=TOO_MANY_REQUESTS;503=EXTERNAL_PROVIDER_UNAVAILABLE,EXTERNAL_PROVIDER_DISABLED,RATE_LIMIT_UNAVAILABLE,EXTERNAL_ACCOUNT_BUSY
         delete | /api/v1/me/external-accounts/{externalAccountId} | 400=INVALID_EXTERNAL_ACCOUNT_ID;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;404=EXTERNAL_ACCOUNT_NOT_FOUND;429=TOO_MANY_REQUESTS;503=RATE_LIMIT_UNAVAILABLE,EXTERNAL_ACCOUNT_BUSY
         get    | /api/v1/artists/{artistId}/external-accounts | 400=INVALID_ARTIST_ID;403=ACCESS_DENIED;404=ARTIST_NOT_FOUND
+        put    | /api/v1/me/artist-profile             | 400=VALIDATION_ERROR,ProblemDetail;403=ACCESS_DENIED;503=ARTIST_PROFILE_BUSY
+        delete | /api/v1/me/artist-profile             | 403=ACCESS_DENIED;503=ARTIST_PROFILE_BUSY
         """)
-    @DisplayName("행사·지역·외부 계정 API의 오류 상태와 code를 계약(03 §9, 06 §10)대로 적는다")
+    @DisplayName("행사·지역·외부 계정·아티스트 프로필 쓰기 API의 오류 상태와 code를 계약(03 §9, 06 §10, 09 §4.1)대로 적는다")
     void documentsErrorResponsesFromContract(String method, String path, String errors) throws Exception {
         Map<String, List<String>> expected = new TreeMap<>();
         for (String entry : errors.split(";")) {

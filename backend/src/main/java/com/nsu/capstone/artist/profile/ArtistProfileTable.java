@@ -21,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * {@code artist_profiles} 표의 읽기·쓰기. 배열 값을 enum으로 바꾸지 못하면 스키마와 코드가 어긋난 것이므로 예외를 그대로 던진다.
@@ -86,6 +88,15 @@ class ArtistProfileTable {
                 .query(MAPPER)
                 .single()
                 .getValue();
+    }
+
+    /**
+     * 이 트랜잭션이 잠금을 기다리는 시간을 3초로 제한한다. 쥔 쪽이 풀리지 않아도 요청이 DB 연결과 스레드를 무한정 쥐지 않게 한다.
+     * SET LOCAL이라 이 트랜잭션에만 적용된다. 트랜잭션 밖에서 부르면 아무것도 제한하지 못해 MANDATORY가 거절한다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    void limitLockWait() {
+        jdbc.sql("SET LOCAL lock_timeout = '3s'").update();
     }
 
     void delete(UUID artistId) {
