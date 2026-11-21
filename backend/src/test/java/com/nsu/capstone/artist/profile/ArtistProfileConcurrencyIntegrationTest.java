@@ -13,10 +13,10 @@ import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import java.sql.Connection;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
@@ -36,6 +36,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 class ArtistProfileConcurrencyIntegrationTest extends ArtistProfileIntegrationTestBase {
 
     private static final long WAIT_SECONDS = 10;
+    private static final int ROUNDS = 20;
+    private static final String STORED_ROW = """
+            SELECT name, bio, array_to_string(artist_types, ',') AS artist_types,
+                   array_to_string(genres, ',') AS genres,
+                   array_to_string(region_codes, ',') AS region_codes, fee_min, fee_max
+            FROM artist_profiles
+            """;
 
     @Autowired
     ArtistProfiles profiles;
@@ -51,9 +58,11 @@ class ArtistProfileConcurrencyIntegrationTest extends ArtistProfileIntegrationTe
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
+    /** 스레드가 끝난 뒤에 부모 클래스의 정리(@AfterEach)가 돌게 한다. 안 기다리면 정리 뒤에 커밋된 행이 남을 수 있다. */
     @AfterEach
-    void stopThreads() {
+    void stopThreads() throws InterruptedException {
         executor.shutdownNow();
+        executor.awaitTermination(WAIT_SECONDS, TimeUnit.SECONDS);
     }
 
     @Test
@@ -141,25 +150,59 @@ class ArtistProfileConcurrencyIntegrationTest extends ArtistProfileIntegrationTe
         assertThat(profileRows(artist)).isZero();
     }
 
+    /** 09 §9 "동시 첫 저장": 모든 필드가 다른 본문 두 개를 배리어로 같은 순간에 보내고, 매번 행을 지우고 20번 되풀이한다. */
     @Test
-    void 동시에_첫_저장을_20번_해도_모두_성공하고_행은_하나다() throws Exception {
-        int callers = 20;
-        CyclicBarrier start = new CyclicBarrier(callers);
-        List<Future<SavedArtistProfile>> results = new ArrayList<>();
-        for (int caller = 0; caller < callers; caller++) {
-            String name = "동시 " + caller;
-            results.add(executor.submit(() -> {
-                start.await(WAIT_SECONDS, TimeUnit.SECONDS);
-                return profiles.save(artist.getId(), request(name));
-            }));
-        }
+    void 서로_다른_본문의_첫_저장_두_개를_같은_순간에_20번_보내면_매번_둘_다_200이고_행은_하나이며_값이_섞이지_않는다() throws Exception {
+        Map<String, Object> first = validProfile();
+        first.put("name", "첫째");
+        first.put("bio", "첫째 소개");
+        first.put("artistTypes", List.of("SOLO"));
+        first.put("genres", List.of("POP"));
+        first.put("regionCodes", List.of("11", "26"));
+        first.put("feeMin", 100000);
+        first.put("feeMax", 200000);
+        Map<String, Object> second = validProfile();
+        second.put("name", "둘째");
+        second.put("bio", "둘째 소개");
+        second.put("artistTypes", List.of("BAND", "DJ"));
+        second.put("genres", List.of("ROCK", "JAZZ", "TROT"));
+        second.put("regionCodes", List.of("41", "44"));
+        second.put("feeMin", 700000);
+        second.put("feeMax", 900000);
+        Map<String, Object> firstStored = Map.of(
+                "name", "첫째",
+                "bio", "첫째 소개",
+                "artist_types", "SOLO",
+                "genres", "POP",
+                "region_codes", "11,26",
+                "fee_min", 100000L,
+                "fee_max", 200000L);
+        Map<String, Object> secondStored = Map.of(
+                "name", "둘째",
+                "bio", "둘째 소개",
+                "artist_types", "BAND,DJ",
+                "genres", "ROCK,JAZZ,TROT",
+                "region_codes", "41,44",
+                "fee_min", 700000L,
+                "fee_max", 900000L);
 
-        for (Future<SavedArtistProfile> result : results) {
-            assertThat(result.get(30, TimeUnit.SECONDS).name()).startsWith("동시 ");
-        }
+        for (int round = 0; round < ROUNDS; round++) {
+            jdbcTemplate.update("DELETE FROM artist_profiles");
+            CyclicBarrier start = new CyclicBarrier(2);
+            Future<Integer> firstStatus = executor.submit(putAtSameTime(first, start));
+            Future<Integer> secondStatus = executor.submit(putAtSameTime(second, start));
 
-        assertThat(profileRows(artist)).isEqualTo(1);
-        assertThat(profiles.find(artist.getId()).orElseThrow().name()).startsWith("동시 ");
+            assertThat(firstStatus.get(30, TimeUnit.SECONDS))
+                    .as("round %d 첫째", round)
+                    .isEqualTo(200);
+            assertThat(secondStatus.get(30, TimeUnit.SECONDS))
+                    .as("round %d 둘째", round)
+                    .isEqualTo(200);
+            assertThat(profileRows(artist)).as("round %d 행 수", round).isEqualTo(1);
+            assertThat(jdbcTemplate.queryForMap(STORED_ROW))
+                    .as("round %d 저장된 값은 한 본문과 정확히 같다", round)
+                    .isIn(firstStored, secondStored);
+        }
     }
 
     @Test
@@ -179,6 +222,15 @@ class ArtistProfileConcurrencyIntegrationTest extends ArtistProfileIntegrationTe
         assertThat(profileRows(artist)).isEqualTo(1);
     }
 
+    @Test
+    void 테스트가_실패해_정리가_스레드를_멈추면_보류_중인_저장은_커밋되지_않고_롤백된다() throws Exception {
+        holdSave("정리될 저장");
+
+        stopThreads();
+
+        assertThat(profileRows(artist)).as("정리 뒤에 커밋된 행").isZero();
+    }
+
     /** 저장 트랜잭션을 열어 두고 커밋하지 않는다. {@link HeldSave#finish()}가 커밋한다. */
     private HeldSave holdSave(String name) throws Exception {
         CountDownLatch saved = new CountDownLatch(1);
@@ -187,7 +239,10 @@ class ArtistProfileConcurrencyIntegrationTest extends ArtistProfileIntegrationTe
                 executor.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
                     profiles.save(artist.getId(), request(name));
                     saved.countDown();
-                    awaitUninterruptibly(release);
+                    if (!awaitRelease(release)) {
+                        // 정상 해제가 아니면(시간 초과, 정리의 인터럽트) 커밋하지 않는다. 실패한 테스트가 행을 남기지 않게 한다
+                        status.setRollbackOnly();
+                    }
                 }));
         assertThat(saved.await(WAIT_SECONDS, TimeUnit.SECONDS))
                 .as("저장 문장이 실행됐다")
@@ -203,11 +258,13 @@ class ArtistProfileConcurrencyIntegrationTest extends ArtistProfileIntegrationTe
         }
     }
 
-    private static void awaitUninterruptibly(CountDownLatch latch) {
+    /** 해제됐으면 true. 시간이 지났거나 인터럽트되면 false이고, 인터럽트 상태는 남긴다. */
+    private static boolean awaitRelease(CountDownLatch latch) {
         try {
-            latch.await(WAIT_SECONDS, TimeUnit.SECONDS);
+            return latch.await(WAIT_SECONDS, TimeUnit.SECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+            return false;
         }
     }
 
@@ -225,6 +282,13 @@ class ArtistProfileConcurrencyIntegrationTest extends ArtistProfileIntegrationTe
             Thread.sleep(20);
         }
         throw new AssertionError("잠금을 기다리는 문장이 없다: " + queryFragment);
+    }
+
+    private Callable<Integer> putAtSameTime(Map<String, Object> body, CyclicBarrier start) {
+        return () -> {
+            start.await(WAIT_SECONDS, TimeUnit.SECONDS);
+            return putProfile(artist, body).andReturn().getResponse().getStatus();
+        };
     }
 
     private static ArtistProfileRequest request(String name) {
