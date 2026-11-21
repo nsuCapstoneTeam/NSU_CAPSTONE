@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -13,6 +14,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
 
 /**
  * ADR logging/00 Decision 4: 로컬 모드가 아니면 설정 이름이 아니라 실제로 붙은 출력 장치를 검사한다.
@@ -212,9 +215,42 @@ class LogDeviceSelfCheckTest {
         ForkedJvm.Result result = ForkedJvm.run(List.of(), Map.of(), "light");
 
         assertThat(result.exitCode()).as("종료 코드. 출력: %s", result.output()).isZero();
-        assertThat(result.output().lines().filter(line -> line.contains(CHECK_CONFIRMED)))
-                .hasSize(1)
-                .allSatisfy(line -> assertThat(line).contains("\"level\":\"INFO\""));
+        assertThat(confirmedLevels(result.output())).as("확인 완료 줄의 level").containsExactly("INFO");
+    }
+
+    /** 문구와 level 문자열이 줄 어딘가에 있기만 하면 통과하던 틈이다(NSU-162). 배포 확인은 JSON 레코드의 message와 level을 읽는다. */
+    @Test
+    void 확인_완료_줄은_줄_전체가_JSON_객체이고_message가_확인_문구인_레코드만_센다() {
+        String confirmed = "{\"level\":\"INFO\",\"message\":\"" + CHECK_CONFIRMED + ": 출력 장치 1개\"}";
+
+        assertThat(confirmedLevels(confirmed + "\n")).containsExactly("INFO");
+        assertThat(confirmedLevels("평문 " + confirmed + "\n")).as("JSON 앞에 평문이 붙은 줄").isEmpty();
+        assertThat(confirmedLevels("{\"level\":\"INFO\",\"message\":\"다른 문장\",\"note\":\"" + CHECK_CONFIRMED + "\"}\n"))
+                .as("확인 문구가 message가 아닌 필드에 있는 줄")
+                .isEmpty();
+        assertThat(confirmedLevels(
+                        "{\"level\":\"WARN\",\"message\":\"" + CHECK_CONFIRMED + "\",\"note\":\"\\\"level\\\":\\\"INFO\\\"\"}\n"))
+                .as("level 필드는 WARN이고 INFO 문자열은 다른 필드에 있는 줄")
+                .containsExactly("WARN");
+    }
+
+    /** 확인 완료 레코드(줄 전체가 JSON 객체 하나이고 message가 확인 문구로 시작한다)마다 그 레코드의 level 필드. */
+    static List<String> confirmedLevels(String output) {
+        return output.lines()
+                .map(LogDeviceSelfCheckTest::jsonObject)
+                .flatMap(Optional::stream)
+                .filter(record -> record.path("message").asString("").startsWith(CHECK_CONFIRMED))
+                .map(record -> record.path("level").asString(""))
+                .toList();
+    }
+
+    private static Optional<JsonNode> jsonObject(String line) {
+        try {
+            JsonNode node = ForkedJvm.JSON.readTree(line);
+            return node.isObject() ? Optional.of(node) : Optional.empty();
+        } catch (JacksonException e) {
+            return Optional.empty();
+        }
     }
 
     @Test
