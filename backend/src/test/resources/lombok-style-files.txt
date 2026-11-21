@@ -84,8 +84,8 @@ src/main/java/com/nsu/capstone/recommendation/eligibility/domain/EligibleMusic.j
 src/main/java/com/nsu/capstone/recommendation/eligibility/domain/MusicCandidate.java
 src/main/java/com/nsu/capstone/recommendation/eligibility/domain/ScheduleSlot.java
 src/main/java/com/nsu/capstone/recommendation/eligibility/domain/ScheduleStatus.java
-src/main/java/com/nsu/capstone/recommendation/eligibility/infrastructure/EmptyArtistProfileReader.java
 src/main/java/com/nsu/capstone/recommendation/eligibility/infrastructure/EmptyArtistScheduleReader.java
+src/main/java/com/nsu/capstone/recommendation/eligibility/infrastructure/SavedArtistProfileReader.java
 src/main/java/com/nsu/capstone/recommendation/eligibility/infrastructure/UserArtistAccountReader.java
 src/main/java/com/nsu/capstone/trust/profile/application/PerformanceOutcomeReader.java
 src/main/java/com/nsu/capstone/trust/profile/application/TrustProfileAssembler.java
