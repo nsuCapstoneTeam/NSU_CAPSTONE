@@ -464,13 +464,18 @@ $$;
 
 ```sql
 CREATE FUNCTION delete_artist_profile_on_withdrawal() RETURNS trigger
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $$
 BEGIN
     IF current_setting('transaction_isolation') <> 'read committed' THEN
         RAISE EXCEPTION '탈퇴 처리는 READ COMMITTED 트랜잭션에서 해야 한다: %',
             current_setting('transaction_isolation');
     END IF;
-    DELETE FROM artist_profiles WHERE user_id = NEW.id;
+    -- 표는 트리거가 걸린 users와 같은 스키마(V12가 함께 만든다)에서 찾는다.
+    -- 호출 세션의 search_path나 같은 이름의 임시 표에 기대지 않는다(설계 리뷰 지적).
+    EXECUTE format('DELETE FROM %I.artist_profiles WHERE user_id = $1', TG_TABLE_SCHEMA)
+        USING NEW.id;
     RETURN NULL;
 END;
 $$;
@@ -484,12 +489,13 @@ CREATE TRIGGER trg_users_withdrawal_delete_artist_profile
 
 - 조건은 새 상태만 본다. 이미 `WITHDRAWN`인 행을 다시 `WITHDRAWN`으로 써도 지울 행이 없어 0행이다. 역할은 보지 않는다(ARTIST가 아니면 행이 없다).
 - `UPDATE OF status`는 `SET`에 `status`가 있는 UPDATE에만 걸린다. 상태를 바꾸는 UPDATE는 반드시 `status`를 `SET`한다.
+- 함수는 삭제할 표를 `TG_TABLE_SCHEMA`(트리거가 걸린 `users`의 스키마)로 한정하고, 함수의 `search_path`를 `pg_catalog, pg_temp`로 고정한다. 그래서 탈퇴를 실행한 세션(운영자 `psql` 포함)의 `search_path`나 같은 이름의 임시 표와 관계없이 V12가 만든 표에서 지운다. 스키마 이름을 SQL에 적지 않으므로 Flyway 기본 스키마가 바뀌어도 그대로 맞다.
 
 ## Consequences
 
 - **V12**는 새 표, 점검 함수 둘, 탈퇴 파기 함수와 `users`의 트리거 하나를 더한다. 기존 표의 열·제약은 바꾸지 않는다. FK와 트리거를 만드는 동안 `users`에 `SHARE ROW EXCLUSIVE` 락이 걸리고, 3초 안에 얻지 못하면 마이그레이션이 실패한다. 그러면 배포를 다시 시도한다.
 - **마이그레이션 번호**: 설계 시점의 번호는 V12다(V11은 NSU-105, V13은 NSU-121이 쓴다). 적용된 버전보다 낮은 버전이 뒤에 오면 Flyway 검증이 실패한다(`outOfOrder` 설정 없음). 그래서 나중에 머지되는 PR이 머지 직전에 자기 마이그레이션 번호와 그 번호를 적은 문서·테스트를 바꾼다. 이 문서와 09의 "V12"도 그때 함께 바꾼다.
-- **롤백**(F6): 1차는 앱만 이전 버전으로 되돌린다. Flyway 기본 설정(`ignoreMigrationPatterns=*:future`)이라 이전 앱은 V12가 적용된 DB로도 뜬다. 이전 앱은 이 표를 읽지 않고 빈 구현으로 돌아가므로 추천은 이 PR 전처럼 `PROFILE_MISSING`으로 빈다. 저장된 프로필은 표에 남는다. 표까지 없애야 할 때만 데이터를 백업한 뒤 함수 둘과 표를 지우는 forward 마이그레이션을 쓴다. 그러면 저장된 프로필이 사라진다. 이 절차를 PR 설명에도 적는다.
+- **롤백**(F6): 1차는 앱만 이전 버전으로 되돌린다. Flyway 기본 설정(`ignoreMigrationPatterns=*:future`)이라 이전 앱은 V12가 적용된 DB로도 뜬다. 이전 앱은 이 표를 읽지 않고 빈 구현으로 돌아가므로 추천은 이 PR 전처럼 `PROFILE_MISSING`으로 빈다. 저장된 프로필은 표에 남는다. 앱만 되돌려도 탈퇴 트리거는 DB에 남아 탈퇴할 때 프로필을 계속 지운다(바라는 동작이다). 표까지 없애야 할 때만 데이터를 백업한 뒤 forward 마이그레이션을 쓴다. 그 마이그레이션은 한 트랜잭션에서 `users`의 트리거 `trg_users_withdrawal_delete_artist_profile` → 파기 함수 `delete_artist_profile_on_withdrawal()` → 점검 함수 둘 → 표 순서로 지운다. 트리거를 남긴 채 표만 지우면 PostgreSQL이 함수 본문의 표 참조를 의존성으로 추적하지 않아 트리거가 남고, 그 뒤 모든 탈퇴 UPDATE가 없는 표를 찾다 실패한다(설계 리뷰 지적). 적용한 뒤 시험 DB에서 `WITHDRAWN` UPDATE가 커밋되는지 확인한다. 그러면 저장된 프로필이 사라진다. 이 절차를 PR 설명에도 적는다.
 - **행정구역 개편**: ADR event_management/01의 "목록 변경과 저장된 코드 이전을 마이그레이션 하나로"를 이 배열에도 적용한다. 코드를 옮긴 뒤 05 §2의 정규화를 다시 적용하고, 결과가 20개 이하여야 한다. 개편 마이그레이션은 끝에서 `check_profile_regions()`를 부른다.
   - 기존 테스트 `EventPartnerProfileRegionMigrationIntegrationTest`를 `event/region/ProfileRegionMigrationIntegrationTest`로 옮긴다. 기준 버전은 두 표가 모두 있는 V12다. V12 뒤의 버전마다 두 표를 그 시점의 정규형 지역 조합으로 다시 넣고 한 버전을 적용한 뒤 묶음 함수를 부른다. 테스트가 점검 함수를 직접 부르므로, 개편 마이그레이션이 함수 호출 자체를 빠뜨린 것은 잡지 못한다(05 §5와 같은 한계).
   - 기존 실패 픽스처 4개는 두 표 모두에서 실패해야 한다. EVENT_PARTNER 표만 옮기고 아티스트 표를 빠뜨린 픽스처(`move-partner-but-not-artist`)를 더한다.

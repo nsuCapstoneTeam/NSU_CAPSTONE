@@ -334,7 +334,7 @@ DB가 관여하는 경우(upsert, `CHECK`, 동시 요청, 배열, 조회 횟수)
 | 허용 값 일치 | 장르·공연 형태 `CHECK`가 허용하는 값이 `Genre`·`ArtistType` 값 전체와 같다 |
 | 지역 점검 함수 | `check_artist_profile_regions()`가 목록에 없는 코드와 정규형이 아닌 배열(`["26","11"]`, `["11","11680"]`, `["36110"]`, `["11","11"]`)에서 실패하고 정상 데이터에서 통과한다 |
 | 개편 마이그레이션 | `ProfileRegionMigrationIntegrationTest`(기존 EVENT_PARTNER 테스트를 옮김)가 V12 뒤 버전마다 두 표를 함께 시드하고 묶음 함수를 부른다. 기존 실패 픽스처는 두 표에서 모두 실패하고, EVENT_PARTNER 표만 옮긴 픽스처도 실패한다. 시드한 사용자의 배열은 개편 뒤에도 남은 코드를 잃지 않고(그 시·도 코드로 덮인 경우 포함), 비지 않으며, 사라진 코드는 개편 PR이 더한 대응표의 기대 배열과 같다. 바뀐 원소만 떨어뜨린 이전 픽스처는 실패한다. 배열 컬럼 `region_codes`를 가진 표마다 그 표에만 목록에 없는 코드(`99999`)를 넣으면 묶음 함수가 실패한다(정의 문자열에 기대지 않는다) |
-| 탈퇴 파기 | 프로필이 있는 아티스트의 `status`를 `WITHDRAWN`으로 바꾸고 커밋하면 행이 없다. 롤백하면 행이 남는다. `SUSPENDED`로 바꾸면 행이 남는다. 다른 사용자의 행은 그대로다. 프로필이 없는 사용자와 이미 `WITHDRAWN`인 사용자의 UPDATE도 성공한다. `REPEATABLE READ` 트랜잭션에서 `WITHDRAWN`으로 바꾸면 예외이고 상태와 행이 그대로다 |
+| 탈퇴 파기 | 프로필이 있는 아티스트의 `status`를 `WITHDRAWN`으로 바꾸고 커밋하면 행이 없다. 롤백하면 행이 남는다. `SUSPENDED`로 바꾸면 행이 남는다. 다른 사용자의 행은 그대로다. 프로필이 없는 사용자와 이미 `WITHDRAWN`인 사용자의 UPDATE도 성공한다. `REPEATABLE READ` 트랜잭션에서 `WITHDRAWN`으로 바꾸면 예외이고 상태와 행이 그대로다. 같은 이름의 임시 표(`CREATE TEMP TABLE artist_profiles (user_id uuid)`)에 같은 `user_id`를 넣고 `search_path`를 바꾼 연결에서 탈퇴를 커밋해도 실제 표의 행이 지워지고 임시 표의 행은 그대로다 |
 | `PUT`과 탈퇴 겹침 | 두 DB 연결. (1) 탈퇴 UPDATE의 커밋을 보류한 채 `ArtistProfiles.save`를 다른 스레드에서 시작하면 기다린다. 탈퇴를 커밋하면 저장은 `ACCESS_DENIED`이고 행이 없다. (2) `save`가 `users` 행을 잡은 뒤 커밋을 보류한 채(테스트용 트랜잭션으로 `require`와 upsert까지 실행) 탈퇴 UPDATE를 시작하면 기다린다. 저장을 커밋하면 탈퇴가 끝나고 행이 없다 |
 | 잠금 필수 | `ArtistWriteAccess.require`를 트랜잭션 밖에서 부르면 예외다 |
 | 마이그레이션 락 | 다른 연결이 `users`를 잡고 있으면 V12는 `lock timeout`으로 실패한다(FK와 트리거 모두 `users`에 락을 건다) |
