@@ -127,7 +127,9 @@ class LoggingConfigTest {
     private static boolean isForbidden(String key, String value) {
         String setting = value.strip().toLowerCase(Locale.ROOT);
         boolean verboseLevel = key.startsWith("logging.level.") && (setting.equals("debug") || setting.equals("trace"));
-        boolean debugSwitch = (key.equals("debug") || key.equals("trace")) && setting.equals("true");
+        // Boot는 값이 정확히 false가 아니면 켜진 것으로 본다(LoggingApplicationListener.isSet)
+        boolean debugSwitch = (key.equals("debug") || key.equals("trace"))
+                && !value.strip().equals("false");
         boolean requestLogging =
                 (key.contains("accesslog.enabled") || key.contains("log-request-details")) && bindsToTrue(setting);
         return verboseLevel || debugSwitch || requestLogging;
@@ -189,6 +191,16 @@ class LoggingConfigTest {
                 """;
 
         assertThat(forbiddenSettings(text)).isEmpty();
+    }
+
+    /**
+     * Boot는 debug·trace 값이 정확히 false가 아니면 켜진 것으로 본다(LoggingApplicationListener.isSet). on, 빈 값, False도 켜진다.
+     */
+    @Test
+    void debug와_trace_스위치는_정확히_false가_아니면_금지다() throws IOException {
+        assertThat(forbiddenSettings("debug=on\ntrace=\n")).containsExactlyInAnyOrder("debug=on", "trace=");
+        assertThat(forbiddenSettings("debug=False\n")).containsExactly("debug=False");
+        assertThat(forbiddenSettings("debug=false\ntrace=false\n")).isEmpty();
     }
 
     @Test
