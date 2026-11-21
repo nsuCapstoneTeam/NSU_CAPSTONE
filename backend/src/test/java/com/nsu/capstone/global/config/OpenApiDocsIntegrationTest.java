@@ -187,7 +187,7 @@ class OpenApiDocsIntegrationTest {
 
         assertThat(publicApis).hasSize(21);
         assertThat(publicApisWithAuth).isEmpty();
-        assertThat(otherApis).hasSize(17);
+        assertThat(otherApis).hasSize(21);
         assertThat(otherApisWithOverride).isEmpty();
     }
 
@@ -229,6 +229,9 @@ class OpenApiDocsIntegrationTest {
         if (path.startsWith("/api/v1/me/event-partner-profile")) {
             return "EVENT_PARTNER 프로필";
         }
+        if (path.startsWith("/api/v1/me/artist-profile") || path.equals("/api/v1/artists/{artistId}/profile")) {
+            return "아티스트 프로필";
+        }
         if (path.contains("external-accounts")) {
             return "외부 계정";
         }
@@ -254,8 +257,12 @@ class OpenApiDocsIntegrationTest {
         put    | /api/v1/me/external-accounts/{externalAccountId}/works | 200 | ExternalAccountResponse
         delete | /api/v1/me/external-accounts/{externalAccountId} | 204 | ''
         get    | /api/v1/artists/{artistId}/external-accounts | 200 | ExternalAccountListResponse
+        get    | /api/v1/me/artist-profile              | 200 | ArtistProfileResponse
+        put    | /api/v1/me/artist-profile              | 200 | ArtistProfileResponse
+        delete | /api/v1/me/artist-profile              | 204 | ''
+        get    | /api/v1/artists/{artistId}/profile     | 200 | ArtistProfileResponse
         """)
-    @DisplayName("행사·지역·외부 계정 API의 성공 상태와 응답 스키마를 적는다")
+    @DisplayName("행사·지역·외부 계정·아티스트 프로필 API의 성공 상태와 응답 스키마를 적는다")
     void documentsSuccessStatusAndSchema(String method, String path, String status, String schema) throws Exception {
         JsonNode responses = operation(method, path).path("responses");
 
@@ -280,6 +287,10 @@ class OpenApiDocsIntegrationTest {
         put    | /api/v1/me/external-accounts/{externalAccountId}/works
         delete | /api/v1/me/external-accounts/{externalAccountId}
         get    | /api/v1/artists/{artistId}/external-accounts
+        get    | /api/v1/me/artist-profile
+        put    | /api/v1/me/artist-profile
+        delete | /api/v1/me/artist-profile
+        get    | /api/v1/artists/{artistId}/profile
         """)
     @DisplayName("인증이 필요한 API에 401 AUTHENTICATION_REQUIRED를 적는다")
     void documentsUnauthorizedResponse(String method, String path) throws Exception {
@@ -393,6 +404,18 @@ class OpenApiDocsIntegrationTest {
                         "expectedAudience",
                         "description",
                         "visibility");
+    }
+
+    @Test
+    @DisplayName("아티스트 프로필 수정 본문의 필수 필드를 계약(09 §2)대로 적고 출연료를 integer로 적는다")
+    void documentsArtistProfileRequest() throws Exception {
+        Set<String> required = new TreeSet<>();
+        schema("ArtistProfileRequest").path("required").forEach(field -> required.add(field.asString()));
+        JsonNode properties = schema("ArtistProfileRequest").path("properties");
+
+        assertThat(required).containsExactlyInAnyOrder("name", "artistTypes", "genres", "regionCodes");
+        assertThat(type(properties.path("feeMin"))).isEqualTo("integer");
+        assertThat(type(properties.path("feeMax"))).isEqualTo("integer");
     }
 
     @ParameterizedTest

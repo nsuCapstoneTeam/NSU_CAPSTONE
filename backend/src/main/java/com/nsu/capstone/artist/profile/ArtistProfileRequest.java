@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /**
  * 수정 본문(09 아티스트 프로필 API §2). enum과 코드는 문자열로 받아 직접 검사한다.
@@ -36,8 +37,11 @@ record ArtistProfileRequest(
         @ArraySchema(arraySchema = @Schema(requiredMode = REQUIRED))
         List<String> regionCodes,
 
-        @Schema(types = "integer") BigDecimal feeMin,
-        @Schema(types = "integer") BigDecimal feeMax) {
+        @JsonDeserialize(using = JsonNumberOnlyDeserializer.class) @Schema(types = "integer")
+        BigDecimal feeMin,
+
+        @JsonDeserialize(using = JsonNumberOnlyDeserializer.class) @Schema(types = "integer")
+        BigDecimal feeMax) {
 
     private static final int NAME_MAX = 40;
     private static final int BIO_MAX = 700;
