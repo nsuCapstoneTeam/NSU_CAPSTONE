@@ -686,4 +686,46 @@ class LogSafetyCheckerTest {
                         void run(String channel) { log.warn("채널: " + (channel)); }
                         """)).isEmpty();
     }
+
+    /** 문자열 연결은 피연산자의 toString()을 부른다. record·DTO를 이어 붙이면 통째로 넘긴 것과 같다(NSU-162). */
+    @Test
+    void record와_DTO를_문자열에_이어_붙여도_S2b_위반이다() {
+        assertThat(checkClassBody("""
+                        record Profile(String name) {}
+                        void run(Profile profile) { log.info("사용자: " + profile); }
+                        """)).extracting("rule").containsExactly("S2b");
+        assertThat(checkClassBody("""
+                        void run(LoginRequest request) { log.warn("로그인 " + request + " 실패"); }
+                        """)).extracting("rule").containsExactly("S2b");
+        assertThat(checkClassBody("""
+                        private final UserDto user = null;
+                        void run() { log.warn("사용자 " + this.user); }
+                        """)).extracting("rule").containsExactly("S2b");
+        assertThat(checkClassBody("""
+                        void run() { log.warn("요청 " + new LoginRequest("a")); }
+                        """)).extracting("rule").containsExactly("S2b");
+        assertThat(checkClassBody("""
+                        void run(LoginRequest request) { throw new IllegalStateException("잘못된 요청: " + request); }
+                        """)).extracting("rule").containsExactly("S2b");
+    }
+
+    @Test
+    void 괄호로_감싼_record와_DTO도_S2b_위반이다() {
+        assertThat(checkClassBody("""
+                        void run(LoginRequest request) { log.warn("로그인 " + (request)); }
+                        """)).extracting("rule").containsExactly("S2b");
+        assertThat(checkClassBody("""
+                        void run(LoginRequest request) { log.warn("로그인 {}", (request)); }
+                        """)).extracting("rule").containsExactly("S2b");
+    }
+
+    @Test
+    void 이어_붙인_DTO의_단일_값과_DTO가_아닌_값은_통과한다() {
+        assertThat(checkClassBody("""
+                        void run(LoginRequest request) { log.warn("요청 " + request.id()); }
+                        """)).isEmpty();
+        assertThat(checkClassBody("""
+                        void run(String request, int count) { log.warn("요청 " + request + " " + (count + 1)); }
+                        """)).isEmpty();
+    }
 }

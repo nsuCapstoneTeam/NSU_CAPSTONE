@@ -532,6 +532,8 @@ final class LogSafetyChecker {
                 public Void visitBinary(BinaryTree node, Void unused) {
                     if (node.getKind() == Tree.Kind.PLUS) {
                         for (ExpressionTree operand : List.of(node.getLeftOperand(), node.getRightOperand())) {
+                            // 문자열 연결은 피연산자의 toString()을 부른다. 통째로 넘긴 것과 같다
+                            checkWholeObject(operand);
                             if (isExceptionOperand(operand)) {
                                 report(node, "S6", "예외 '" + operand + "'를 문자열에 이어 붙이지 않는다. 예외를 마지막 인자로 통째로 넘긴다");
                             }
@@ -642,8 +644,12 @@ final class LogSafetyChecker {
             return EXCEPTION_NAMES.contains(name);
         }
 
-        /** S2b: record·DTO를 통째로 넘기면 toString이 모든 필드를 찍는다. 변수·필드(this.x)·new 식 자체인 인자만 본다. */
-        private void checkWholeObject(ExpressionTree argument) {
+        /**
+         * S2b: record·DTO를 통째로 넘기면 toString이 모든 필드를 찍는다. 변수·필드(this.x)·new 식 자체인 인자와 문자열 연결의
+         * 피연산자만 본다. 괄호로 감싼 것도 같은 식이다.
+         */
+        private void checkWholeObject(ExpressionTree expression) {
+            ExpressionTree argument = unparenthesized(expression);
             String typeName = null;
             String shown = null;
             if (argument instanceof IdentifierTree identifier) {
