@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -79,6 +80,22 @@ class ForkedJvmTest {
         }
     }
 
+    /** 자식을 띄우지 못하면 기다리는 테스트가 20초 시간 초과가 아니라 실제 시작 오류를 바로 받는다(NSU-162). */
+    @Test
+    void 자식_JVM을_띄우지_못하면_기다리는_쪽이_시작_오류를_바로_받는다() {
+        StartedChild child = new StartedChild();
+        ProcessBuilder missingExecutable = new ProcessBuilder(
+                Path.of("no-such-directory", "no-such-java").toString());
+
+        assertThatThrownBy(() -> child.start(missingExecutable)).isInstanceOf(IOException.class);
+
+        long startNanos = System.nanoTime();
+        assertThatThrownBy(child::awaitStarted)
+                .isInstanceOf(ExecutionException.class)
+                .hasCauseInstanceOf(IOException.class);
+        assertThat(Duration.ofNanos(System.nanoTime() - startNanos)).isLessThan(Duration.ofSeconds(10));
+    }
+
     /**
      * run이 띄운 자식 프로세스를 테스트가 직접 받는다. 명령줄로 자식을 찾지 않는 이유: Linux는 /proc의 명령줄을 한 페이지(4KB)에서 잘라, 긴
      * 클래스패스 뒤에 붙인 표식이 보이지 않는다.
@@ -89,7 +106,14 @@ class ForkedJvmTest {
 
         @Override
         public Process start(ProcessBuilder builder) throws IOException {
-            Process process = ForkedJvm.Hooks.super.start(builder);
+            Process process;
+            try {
+                process = ForkedJvm.Hooks.super.start(builder);
+            } catch (IOException | RuntimeException e) {
+                // 기다리는 쪽이 시간 초과까지 가지 않고 실제 시작 오류를 받게 한다
+                started.completeExceptionally(e);
+                throw e;
+            }
             started.complete(process);
             return process;
         }
