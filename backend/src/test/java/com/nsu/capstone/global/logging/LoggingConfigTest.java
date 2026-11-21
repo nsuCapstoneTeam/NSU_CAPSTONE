@@ -6,9 +6,11 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -114,26 +116,44 @@ class LoggingConfigTest {
         }
     }
 
-    /**
-     * 같은 파일의 키를 가리키는 참조(${..})만 푼다. 기본값 구분자를 쓰지 않아 ${ENV:false}처럼 파일 밖 값에 기대는 참조는 그대로 남고, false가 아니므로
-     * 금지로 본다(배포 환경이 그 값을 켤 수 있다).
-     */
-    private static final PropertyPlaceholderHelper SAME_FILE_REFERENCES = new PropertyPlaceholderHelper("${", "}");
+    /** Spring과 같이 ${키:기본값}을 읽는다. 키는 같은 파일에서만 찾는다. */
+    private static final PropertyPlaceholderHelper REFERENCES =
+            new PropertyPlaceholderHelper("${", "}", ":", null, true);
 
     /** Properties가 읽는 모든 표기(`:`·공백 구분, 줄 이음, 앞뒤 공백)에서 금지된 설정을 찾는다. 줄 단위 정규식은 이 표기들을 놓친다. */
     static List<String> forbiddenSettings(String propertiesText) throws IOException {
         Properties properties = new Properties();
         properties.load(new StringReader(propertiesText));
         return properties.stringPropertyNames().stream()
-                .filter(key -> isForbidden(
-                        key.strip().toLowerCase(Locale.ROOT),
-                        SAME_FILE_REFERENCES.replacePlaceholders(properties.getProperty(key), properties)))
+                .filter(key ->
+                        isForbidden(key.strip().toLowerCase(Locale.ROOT), properties.getProperty(key), properties))
                 .map(key -> key.strip() + "=" + properties.getProperty(key))
                 .sorted()
                 .toList();
     }
 
-    private static boolean isForbidden(String key, String value) {
+    /**
+     * 같은 파일의 참조는 푼 값으로 판정한다. 파일 밖 값(환경 변수 등)에 기대는 참조는 기본값과 상관없이 금지다. 배포 환경이 그 값을 켤 수 있다.
+     */
+    private static boolean isForbidden(String key, String rawValue, Properties properties) {
+        Set<String> outsideReferences = new HashSet<>();
+        String value = REFERENCES.replacePlaceholders(rawValue, name -> {
+            String found = properties.getProperty(name);
+            // 해석기는 ${키:기본값}의 "키:기본값" 전체를 먼저 묻고, 없으면 키만 다시 묻는다. 키만 물은 것을 센다
+            if (found == null && !name.contains(":")) {
+                outsideReferences.add(name);
+            }
+            return found;
+        });
+        boolean loggingSwitch = key.startsWith("logging.level.")
+                || key.equals("debug")
+                || key.equals("trace")
+                || key.contains("accesslog.enabled")
+                || key.contains("log-request-details");
+        return loggingSwitch && (!outsideReferences.isEmpty() || isForbiddenValue(key, value));
+    }
+
+    private static boolean isForbiddenValue(String key, String value) {
         String setting = value.strip().toLowerCase(Locale.ROOT);
         boolean verboseLevel = key.startsWith("logging.level.") && (setting.equals("debug") || setting.equals("trace"));
         // Boot는 값이 정확히 false가 아니면 켜진 것으로 본다(LoggingApplicationListener.isSet). 값 뒤의 공백도 남기므로 원문을 비교한다
@@ -229,6 +249,29 @@ class LoggingConfigTest {
                 .containsExactly("trace=${app.logging.verbose}");
         // 파일 밖 값(환경 변수)에 기대는 참조는 배포에서 켜질 수 있어 금지로 둔다
         assertThat(forbiddenSettings("debug=${LOG_DEBUG:false}\n")).containsExactly("debug=${LOG_DEBUG:false}");
+    }
+
+    /**
+     * 기본값(:)이 붙은 참조도 같은 파일에 키가 있으면 그 값으로 판정한다. 파일 밖 값에 기대는 참조는 로그 설정 키 모두에서 기본값과 상관없이 금지다(PR #249
+     * 리뷰).
+     */
+    @Test
+    void 기본값이_붙은_참조는_같은_파일의_값으로_판정하고_파일_밖_참조는_금지다() throws IOException {
+        assertThat(forbiddenSettings("app.logging.verbose=false\ndebug=${app.logging.verbose:true}\n"))
+                .isEmpty();
+        assertThat(forbiddenSettings("app.verbose=yes\nserver.tomcat.accesslog.enabled=${app.verbose:false}\n"
+                        + "spring.mvc.log-request-details=${LOG_DETAILS:on}\n"
+                        + "spring.codec.log-request-details=${LOG_DETAILS:false}\n"
+                        + "logging.level.root=${LOG_LEVEL:DEBUG}\n"
+                        + "logging.level.com.nsu.capstone=${LOG_LEVEL:INFO}\n"))
+                .containsExactlyInAnyOrder(
+                        "server.tomcat.accesslog.enabled=${app.verbose:false}",
+                        "spring.mvc.log-request-details=${LOG_DETAILS:on}",
+                        "spring.codec.log-request-details=${LOG_DETAILS:false}",
+                        "logging.level.root=${LOG_LEVEL:DEBUG}",
+                        "logging.level.com.nsu.capstone=${LOG_LEVEL:INFO}");
+        assertThat(forbiddenSettings("app.level=INFO\nlogging.level.root=${app.level:DEBUG}\n"))
+                .isEmpty();
     }
 
     @Test
