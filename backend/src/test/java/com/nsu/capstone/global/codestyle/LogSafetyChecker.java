@@ -217,8 +217,8 @@ final class LogSafetyChecker {
         /** 정적 import한 이름. "소유자의 정규화된 이름.멤버"로 담고, 와일드카드는 "소유자.*"다. */
         private final Set<String> staticImports = new HashSet<>();
 
-        /** 이 파일에서 선언한 메서드 이름. Java는 소유자 없는 호출을 정적 import보다 이 메서드로 먼저 해석한다. */
-        private final Set<String> localMethods = new HashSet<>();
+        /** 호출 위치를 둘러싼 클래스마다 그 클래스가 선언한 메서드 이름. Java는 소유자 없는 호출을 정적 import보다 이 메서드로 먼저 해석한다. */
+        private final Deque<Set<String>> enclosingMethods = new ArrayDeque<>();
 
         /** S1을 적용하지 않는 파일(시뮬레이터 CLI) */
         private final boolean s1Allowed;
@@ -246,13 +246,6 @@ final class LogSafetyChecker {
                     staticImports.add(member.getExpression() + "." + member.getIdentifier());
                 }
             }
-            new TreeScanner<Void, Void>() {
-                @Override
-                public Void visitMethod(MethodTree node, Void unused) {
-                    localMethods.add(node.getName().toString());
-                    return super.visitMethod(node, unused);
-                }
-            }.scan(unit, null);
         }
 
         @Override
@@ -261,18 +254,23 @@ final class LogSafetyChecker {
                 localRecords.add(node.getSimpleName().toString());
             }
             Map<String, String> fields = new HashMap<>();
+            Set<String> methods = new HashSet<>();
             for (Tree member : node.getMembers()) {
                 if (member instanceof VariableTree field) {
                     fields.put(field.getName().toString(), simpleTypeName(field.getType()));
+                } else if (member instanceof MethodTree method) {
+                    methods.add(method.getName().toString());
                 } else if (member instanceof ClassTree nested && nested.getKind() == Tree.Kind.RECORD) {
                     localRecords.add(nested.getSimpleName().toString());
                 }
             }
             scopes.push(fields);
             classFields.push(fields);
+            enclosingMethods.push(methods);
             try {
                 return super.visitClass(node, unused);
             } finally {
+                enclosingMethods.pop();
                 classFields.pop();
                 scopes.pop();
             }
@@ -425,12 +423,13 @@ final class LogSafetyChecker {
         }
 
         /**
-         * 소유자 없는 호출 member가 정규화된 이름 owner의 정적 import로 해석되는지(import static owner.member 또는 owner.*). 이 파일에서 같은
-         * 이름의 메서드를 선언했으면 Java가 그 메서드로 해석하므로 아니다.
+         * 소유자 없는 호출 member가 정규화된 이름 owner의 정적 import로 해석되는지(import static owner.member 또는 owner.*). 호출 위치를
+         * 둘러싼 클래스가 같은 이름의 메서드를 선언했으면 Java가 그 메서드로 해석하므로 아니다.
          */
         private boolean isStaticImportOf(String owner, String member) {
+            boolean declaredByEnclosingClass = enclosingMethods.stream().anyMatch(methods -> methods.contains(member));
             // shortcut: 상위 클래스에서 물려받은 같은 이름의 메서드는 구문만으로 알 수 없어 정적 import로 본다, 그런 오탐이 나오면 다시 본다
-            return !localMethods.contains(member)
+            return !declaredByEnclosingClass
                     && (staticImports.contains(owner + "." + member) || staticImports.contains(owner + ".*"));
         }
 

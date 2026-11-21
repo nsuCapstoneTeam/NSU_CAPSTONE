@@ -833,4 +833,27 @@ class LogSafetyCheckerTest {
         assertThat(checkWithImport("import static com.example.async.CompletableFuture.*;", "runAsync(() -> work());"))
                 .isEmpty();
     }
+
+    /** 다른 클래스의 clear()는 그 클래스 안에서만 보인다. Sample 안의 clear()는 정적 import한 MDC.clear()다(PR #249 리뷰). */
+    @Test
+    void 같은_파일의_다른_클래스에_같은_이름_메서드가_있어도_정적_import_호출은_위반이다() {
+        String source = """
+                package com.nsu.capstone.identity.application;
+
+                import static org.slf4j.MDC.clear;
+
+                class Sample {
+                    void run() {
+                        clear();
+                    }
+                }
+
+                class Helper {
+                    void clear() {}
+                }
+                """;
+        assertThat(LogSafetyChecker.check(PATH, source))
+                .extracting(LogSafetyChecker.Violation::rule)
+                .containsExactly("S4");
+    }
 }
