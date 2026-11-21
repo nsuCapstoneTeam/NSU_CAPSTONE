@@ -350,6 +350,7 @@ Authorization: Bearer {accessToken}
 | 곡 아티스트가 `AI_RECOMMENDATION_ENABLED`가 아니다(AI 추천을 껐거나 AI 분석 동의를 철회한 경우 등, SSOT `AI-031`) | 뺀다. 재생 주소도 발급하지 않는다(§2.5) |
 | 곡이 저작권 조건(SSOT `AI-MATCH-051`의 `COPYRIGHT_SATISFIED`)을 더 이상 충족하지 않는다. 권리 신고로 재생이 중단된 경우다(NSU-104) | 뺀다. 재생 주소도 발급하지 않는다(§2.5) |
 | 곡이 삭제되었다 | 뺀다 |
+| 곡 아티스트의 프로필이 없다(삭제함) | 뺀다 |
 | 곡의 현재 ACTIVE revision이 저장한 revision과 다르다 | 남기고 `availability = MUSIC_REVISED`. 추천 당시와 다른 음원이다. 재생은 현재 음원으로 한다(§2.5) |
 | 그 밖의 경우 | 남기고 `availability = AVAILABLE` |
 
