@@ -774,4 +774,30 @@ class LogSafetyCheckerTest {
                         "import static com.nsu.capstone.identity.support.Tasks.runAsync;", "runAsync(() -> work());"))
                 .isEmpty();
     }
+
+    /** MDC의 메서드를 정적 import해 소유자 없이 불러도 요청 ID가 지워진다(NSU-162). */
+    @Test
+    void 정적_import로_부른_MDC_변경도_S4_위반이다() {
+        assertThat(checkWithImport("import static org.slf4j.MDC.clear;", "clear();"))
+                .extracting("rule")
+                .containsExactly("S4");
+        assertThat(checkWithImport("import static org.slf4j.MDC.setContextMap;", "setContextMap(map);"))
+                .extracting("rule")
+                .containsExactly("S4");
+        assertThat(checkWithImport("import static org.slf4j.MDC.put;", "put(\"requestId\", id);"))
+                .extracting("rule")
+                .containsExactly("S4");
+        assertThat(checkWithImport("import static org.slf4j.MDC.*;", "remove(\"requestId\");"))
+                .extracting("rule")
+                .containsExactly("S4");
+    }
+
+    @Test
+    void MDC가_아닌_같은_이름의_메서드와_정적_import한_다른_MDC_키는_통과한다() {
+        assertThat(checkWithImport("import java.util.List;", "clear();")).isEmpty();
+        assertThat(checkWithImport("import static com.nsu.capstone.identity.support.Cache.clear;", "clear();"))
+                .isEmpty();
+        assertThat(checkWithImport("import static org.slf4j.MDC.put;", "put(\"eventId\", id);"))
+                .isEmpty();
+    }
 }

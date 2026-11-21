@@ -425,11 +425,17 @@ final class LogSafetyChecker {
 
         /** S4: 요청 ID의 MDC 키는 global.logging이 주인이다. 다른 곳이 MDC를 통째로 지우거나 갈아 끼우면 요청 ID가 사라진다. */
         private void checkMdcUse(MethodInvocationTree node) {
-            if (!(node.getMethodSelect() instanceof MemberSelectTree select)
-                    || !lastSegment(select.getExpression().toString()).equals("MDC")) {
+            String method;
+            if (node.getMethodSelect() instanceof MemberSelectTree select
+                    && lastSegment(select.getExpression().toString()).equals("MDC")) {
+                method = select.getIdentifier().toString();
+            } else if (node.getMethodSelect() instanceof IdentifierTree bare
+                    && isStaticImportOf("MDC", bare.getName().toString())) {
+                // clear()·put(..)은 흔한 이름이라 정적 import의 소유자가 MDC일 때만 본다
+                method = bare.getName().toString();
+            } else {
                 return;
             }
-            String method = select.getIdentifier().toString();
             if (method.equals("clear") || method.equals("setContextMap")) {
                 report(node, "S4", "MDC." + method + "()는 global.logging만 쓴다. 키별 MDC.putCloseable을 쓴다");
             } else if (!node.getArguments().isEmpty()
