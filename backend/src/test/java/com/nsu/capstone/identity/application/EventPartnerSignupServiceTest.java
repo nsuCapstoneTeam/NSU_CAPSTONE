@@ -24,15 +24,12 @@ import com.nsu.capstone.identity.signup.SignupSession;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
 import java.sql.SQLException;
 import java.time.Clock;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Stream;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -70,7 +67,6 @@ class EventPartnerSignupServiceTest {
                 signupSessionStore,
                 passwordEncoder,
                 userIdGenerator,
-                new SignupRequiredConditionsValidator(),
                 SignupTestTerms.policy(),
                 Clock.systemUTC(),
                 new SignupPersistenceService(userRepository, Mockito.mock(UserTermsAgreementRepository.class)),
@@ -96,7 +92,8 @@ class EventPartnerSignupServiceTest {
 
     @Test
     void createsActiveEventPartnerWithHashedPasswordAndDeletesSession() {
-        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(verifiedSession()));
+        when(signupSessionStore.completeLocal(SESSION_ID, UserRole.EVENT_PARTNER))
+                .thenReturn(verifiedSession());
         when(userRepository.existsByEmail(EMAIL)).thenReturn(false);
         when(userIdGenerator.generate()).thenReturn(USER_ID);
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -119,7 +116,8 @@ class EventPartnerSignupServiceTest {
 
     @Test
     void rejectsDuplicateEmailWithoutCreatingUserOrDeletingSession() {
-        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(verifiedSession()));
+        when(signupSessionStore.completeLocal(SESSION_ID, UserRole.EVENT_PARTNER))
+                .thenReturn(verifiedSession());
         when(userRepository.existsByEmail(EMAIL)).thenReturn(true);
 
         BusinessException exception = assertThrows(BusinessException.class, () -> service.signup(SESSION_ID, PASSWORD));
@@ -131,7 +129,8 @@ class EventPartnerSignupServiceTest {
 
     @Test
     void mapsConcurrentDatabaseDuplicateToEmailConflict() {
-        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(verifiedSession()));
+        when(signupSessionStore.completeLocal(SESSION_ID, UserRole.EVENT_PARTNER))
+                .thenReturn(verifiedSession());
         when(userRepository.existsByEmail(EMAIL)).thenReturn(false);
         when(userIdGenerator.generate()).thenReturn(USER_ID);
         when(userRepository.saveAndFlush(any(User.class)))
@@ -147,32 +146,24 @@ class EventPartnerSignupServiceTest {
     }
 
     @ParameterizedTest
-    @MethodSource("invalidSessions")
-    void rejectsInvalidOrIncompleteSessionWithoutCreatingUser(SignupSession session, ErrorCode expectedError) {
-        when(signupSessionStore.findById(SESSION_ID)).thenReturn(Optional.of(session));
+    @EnumSource(
+            value = ErrorCode.class,
+            names = {
+                "SIGNUP_SESSION_INVALID",
+                "EMAIL_VERIFICATION_REQUIRED",
+                "PHONE_VERIFICATION_REQUIRED",
+                "REQUIRED_TERMS_AGREEMENT_REQUIRED",
+                "ADULT_CONFIRMATION_REQUIRED"
+            })
+    void rejectsInvalidOrIncompleteSessionWithoutCreatingUser(ErrorCode expectedError) {
+        when(signupSessionStore.completeLocal(SESSION_ID, UserRole.EVENT_PARTNER))
+                .thenThrow(new BusinessException(expectedError));
 
         BusinessException exception = assertThrows(BusinessException.class, () -> service.signup(SESSION_ID, PASSWORD));
 
         assertEquals(expectedError, exception.getErrorCode());
         verify(userRepository, never()).saveAndFlush(any());
         verify(signupSessionStore, never()).deleteById(any());
-    }
-
-    private static Stream<Arguments> invalidSessions() {
-        return Stream.of(
-                Arguments.of(
-                        session(false, true, true, true, UserRole.EVENT_PARTNER),
-                        ErrorCode.EMAIL_VERIFICATION_REQUIRED),
-                Arguments.of(
-                        session(true, false, true, true, UserRole.EVENT_PARTNER),
-                        ErrorCode.PHONE_VERIFICATION_REQUIRED),
-                Arguments.of(
-                        session(true, true, false, true, UserRole.EVENT_PARTNER),
-                        ErrorCode.REQUIRED_TERMS_AGREEMENT_REQUIRED),
-                Arguments.of(
-                        session(true, true, true, false, UserRole.EVENT_PARTNER),
-                        ErrorCode.ADULT_CONFIRMATION_REQUIRED),
-                Arguments.of(session(true, true, true, true, UserRole.ARTIST), ErrorCode.SIGNUP_SESSION_INVALID));
     }
 
     private SignupSession verifiedSession() {

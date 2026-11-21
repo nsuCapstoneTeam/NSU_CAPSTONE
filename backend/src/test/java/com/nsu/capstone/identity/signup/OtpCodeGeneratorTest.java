@@ -1,11 +1,10 @@
-package com.nsu.capstone.identity.verification;
+package com.nsu.capstone.identity.signup;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.nsu.capstone.identity.signup.SignupVerificationProperties;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.List;

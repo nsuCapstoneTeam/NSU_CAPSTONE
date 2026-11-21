@@ -14,6 +14,8 @@ import com.nsu.capstone.identity.repository.*;
 import com.nsu.capstone.identity.signup.*;
 import com.nsu.capstone.identity.support.UuidV7Generator;
 import com.nsu.capstone.identity.verification.*;
+import com.nsu.capstone.identity.verification.port.EmailSender;
+import com.nsu.capstone.identity.verification.port.SmsSender;
 import java.time.*;
 import java.util.*;
 import java.util.List;
@@ -28,6 +30,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 // Deliberately no test transaction: assertions observe actual commit/rollback.
@@ -80,16 +83,19 @@ class ArtistOAuthSignupIntegrationTest {
     SignupVerificationService verification;
 
     @Autowired
-    VerificationChallengeStore challenges;
-
-    @Autowired
     OtpDigestService digests;
+
+    @MockitoBean
+    EmailSender emailSender;
+
+    @MockitoBean
+    SmsSender smsSender;
 
     @MockitoSpyBean
     UuidV7Generator ids;
 
     @MockitoSpyBean
-    RedisOAuthSignupStateStore stateSpy;
+    OAuthSignupStateStore stateSpy;
 
     @Autowired
     StringRedisTemplate requestLimitRedis;
@@ -127,18 +133,16 @@ class ArtistOAuthSignupIntegrationTest {
                 () -> service.prepare(id, "01099999999", null, SignupTestTerms.agreements(), "127.0.0.1"));
         var session = sessions.findById(id).orElseThrow();
         assertEquals(SignupMethod.OAUTH, session.signupMethod());
-        assertEquals(ChallengeIssueResult.ISSUED, issue(session, VerificationChannel.PHONE));
+        send(id, VerificationChannel.PHONE);
         String challenge = SignupRedisKeys.challenge(id, VerificationChannel.PHONE);
+        assertTrue(redis.opsForHash().hasKey(challenge, "generationId"));
         redis.opsForHash().put(challenge, "failedAttempts", "3");
         var before = redis.opsForHash().entries(challenge);
         long expiresAt = redis.getExpire(SignupRedisKeys.session(id), TimeUnit.MILLISECONDS);
         assertFalse(service.prepare(id, "01012345678", prepared.email(), SignupTestTerms.agreements(), "127.0.0.1")
                 .created());
         assertEquals(before, redis.opsForHash().entries(challenge));
-        assertTrue(challenges.retryAfterCooldown(
-                        VerificationChannel.PHONE,
-                        digests.rateLimitDestinationDigest(VerificationChannel.PHONE, session.phone()))
-                > 0);
+        assertTrue(redis.getExpire(cooldownKey(VerificationChannel.PHONE, session.phone()), TimeUnit.MILLISECONDS) > 0);
         assertTrue(redis.getExpire(SignupRedisKeys.session(id), TimeUnit.MILLISECONDS) <= expiresAt);
         assertFalse(sessions.findById(id).orElseThrow().phoneVerified());
     }
@@ -503,37 +507,37 @@ class ArtistOAuthSignupIntegrationTest {
     }
 
     private void completeFlags(String id) {
-        sessions.markEmailVerified(id, UserRole.ARTIST);
-        sessions.markPhoneVerified(id, UserRole.ARTIST);
+        SignupSessionFixtures.markEmailVerified(redis, id);
+        SignupSessionFixtures.markPhoneVerified(redis, id);
         sessions.markAdultConfirmed(id, UserRole.ARTIST);
     }
 
     private void confirm(String id, VerificationChannel channel) {
-        SignupSession session = sessions.findById(id).orElseThrow();
-        assertEquals(ChallengeIssueResult.ISSUED, issue(session, channel));
-        if (channel == VerificationChannel.EMAIL)
-            verification.confirmEmailCode(id, "123456", UserRole.ARTIST, "127.0.0.1");
-        else verification.confirmPhoneCode(id, "123456", UserRole.ARTIST, "127.0.0.1");
+        String code = send(id, channel);
+        if (channel == VerificationChannel.EMAIL) verification.confirmEmailCode(id, code, UserRole.ARTIST, "127.0.0.1");
+        else verification.confirmPhoneCode(id, code, UserRole.ARTIST, "127.0.0.1");
     }
 
-    private ChallengeIssueResult issue(SignupSession session, VerificationChannel channel) {
+    /** Sends through the real verification flow and returns the code the provider received. */
+    private String send(String id, VerificationChannel channel) {
+        SignupSession session = sessions.findById(id).orElseThrow();
         String destination = channel == VerificationChannel.EMAIL ? session.email() : session.phone();
-        String recipient = digests.rateLimitDestinationDigest(channel, destination);
-        redis.delete("signup:limit:cooldown:" + channel.keyPart() + ":" + recipient);
-        ChallengeIssueResult result = challenges.issue(
-                session.signupSessionId(),
-                UserRole.ARTIST,
-                channel,
-                digests.codeDigest(session.signupSessionId(), channel, destination, "generation", "123456"),
-                digests.destinationDigest(channel, destination),
-                "generation",
-                Instant.now(),
-                recipient,
-                digests.clientIpDigest("127.0.0.1"));
-        if (result == ChallengeIssueResult.ISSUED) {
-            challenges.promote(session.signupSessionId(), channel, "generation", recipient);
+        redis.delete(cooldownKey(channel, destination));
+        clearInvocations(emailSender, smsSender);
+        var code = org.mockito.ArgumentCaptor.forClass(String.class);
+        if (channel == VerificationChannel.EMAIL) {
+            verification.sendEmailCode(id, UserRole.ARTIST, "127.0.0.1");
+            verify(emailSender).sendVerificationCode(eq(destination), code.capture(), any());
+        } else {
+            verification.sendPhoneCode(id, UserRole.ARTIST, "127.0.0.1");
+            verify(smsSender).sendVerificationCode(eq(destination), code.capture(), any());
         }
-        return result;
+        return code.getValue();
+    }
+
+    private String cooldownKey(VerificationChannel channel, String destination) {
+        return "signup:limit:cooldown:" + channel.keyPart() + ":"
+                + digests.rateLimitDestinationDigest(channel, destination);
     }
 
     private String email(String id) {

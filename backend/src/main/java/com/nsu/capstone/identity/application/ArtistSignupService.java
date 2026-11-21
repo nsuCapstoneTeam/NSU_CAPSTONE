@@ -9,7 +9,6 @@ import com.nsu.capstone.identity.presentation.dto.CreateArtistSignupSessionRespo
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.signup.RedisPublicRequestLimitStore;
 import com.nsu.capstone.identity.signup.SignupIdentityNormalizer;
-import com.nsu.capstone.identity.signup.SignupMethod;
 import com.nsu.capstone.identity.signup.SignupSession;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
 import com.nsu.capstone.identity.verification.terms.RequiredTermsPolicy;
@@ -34,14 +33,12 @@ public class ArtistSignupService {
     private final SignupSessionStore signupSessionStore;
     private final PasswordEncoder passwordEncoder;
     private final UserIdGenerator userIdGenerator;
-    private final SignupRequiredConditionsValidator conditionsValidator;
 
     public ArtistSignupService(
             UserRepository userRepository,
             SignupSessionStore signupSessionStore,
             PasswordEncoder passwordEncoder,
             UserIdGenerator userIdGenerator,
-            SignupRequiredConditionsValidator conditionsValidator,
             RequiredTermsPolicy termsPolicy,
             Clock clock,
             SignupPersistenceService persistence,
@@ -54,7 +51,6 @@ public class ArtistSignupService {
         this.signupSessionStore = signupSessionStore;
         this.passwordEncoder = passwordEncoder;
         this.userIdGenerator = userIdGenerator;
-        this.conditionsValidator = conditionsValidator;
     }
 
     public CreateArtistSignupSessionResponse createSession(
@@ -78,14 +74,7 @@ public class ArtistSignupService {
     }
 
     public ArtistSignupResponse signup(String signupSessionId, String password) {
-        SignupSession signupSession = signupSessionStore
-                .findById(signupSessionId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID));
-
-        if (signupSession.signupMethod() != SignupMethod.LOCAL) {
-            throw new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID);
-        }
-        conditionsValidator.validate(signupSession, UserRole.ARTIST);
+        SignupSession signupSession = signupSessionStore.completeLocal(signupSessionId, UserRole.ARTIST);
 
         if (userRepository.existsByEmail(signupSession.email())) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);

@@ -1,6 +1,6 @@
-package com.nsu.capstone.identity.verification;
+package com.nsu.capstone.identity.signup;
 
-public enum ChallengeVerificationResult {
+enum ChallengeVerificationResult {
     VERIFIED,
     ALREADY_VERIFIED,
     SESSION_INVALID,

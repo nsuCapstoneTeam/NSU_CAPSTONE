@@ -5,6 +5,7 @@ import static org.mockito.Mockito.*;
 
 import com.nsu.capstone.SignupTestTerms;
 import com.nsu.capstone.TestcontainersConfiguration;
+import com.nsu.capstone.identity.signup.SignupChallengeTestSupport;
 import com.nsu.capstone.identity.signup.SignupRateLimitKeys;
 import com.nsu.capstone.identity.signup.SignupSession;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
@@ -64,13 +65,16 @@ class VerificationAlertIntegrationTest {
     }
 
     private String counter(VerificationChannel channel, Instant now) {
-        var window = VerificationRateWindows.at(now, channel);
-        return SignupRateLimitKeys.counter("total-" + channel.keyPart(), window.channelDayStart(), "all");
+        return SignupRateLimitKeys.counter(
+                "total-" + channel.keyPart(), SignupChallengeTestSupport.channelDayStart(now, channel), "all");
     }
 
     private void quota(VerificationAlertService service, VerificationChannel channel, Instant now) {
-        var window = VerificationRateWindows.at(now, channel);
-        service.quota(channel, counter(channel, now), window.channelDayStart(), window.channelDayEnd());
+        service.quota(
+                channel,
+                counter(channel, now),
+                SignupChallengeTestSupport.channelDayStart(now, channel),
+                SignupChallengeTestSupport.channelDayEnd(now, channel));
     }
 
     @Test
@@ -107,9 +111,6 @@ class VerificationAlertIntegrationTest {
     }
 
     @Autowired
-    OtpDigestService digests;
-
-    @Autowired
     SignupSessionStore sessions;
 
     @Test
@@ -117,24 +118,12 @@ class VerificationAlertIntegrationTest {
         var executor = executor();
         try (var service = service(NOW, executor)) {
             redis.opsForValue().set(counter(VerificationChannel.PHONE, NOW), "239", Duration.ofHours(1));
-            var store = new RedisVerificationChallengeStore(redis, limits, SignupTestTerms.timing(), service);
             String id = UUID.randomUUID().toString();
             var session = SignupSession.createArtist(id, "test@example.com", "01087654321")
                     .withConsent(SignupTestTerms.consent());
             sessions.save(session);
-            String destination = digests.rateLimitDestinationDigest(VerificationChannel.PHONE, session.phone());
-            assertEquals(
-                    ChallengeIssueResult.ISSUED,
-                    store.issue(
-                            id,
-                            session.role(),
-                            VerificationChannel.PHONE,
-                            "code-digest",
-                            destination,
-                            id,
-                            NOW,
-                            destination,
-                            digests.clientIpDigest("192.0.2.6")));
+            assertTrue(SignupChallengeTestSupport.reserve(
+                    redis, limits, service, session, VerificationChannel.PHONE, NOW, "192.0.2.6"));
             idle(executor);
             verify(slack, times(1)).send(contains("count=240 limit=300"));
         }

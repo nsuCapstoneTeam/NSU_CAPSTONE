@@ -1,15 +1,15 @@
-package com.nsu.capstone.identity.verification;
+package com.nsu.capstone.identity.signup;
 
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.global.logging.RequestIdExecutors;
-import com.nsu.capstone.identity.signup.SignupSessionStore;
+import com.nsu.capstone.identity.verification.VerificationChannel;
 import com.nsu.capstone.identity.verification.config.SignupSendRedisProperties;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
 
 /** Runs only Redis work; provider calls always remain on the requesting thread. */
-public class SignupSendPreflight implements AutoCloseable {
+class SignupSendPreflight implements AutoCloseable {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SignupSendPreflight.class);
 
     private final SignupSessionStore sessions;
@@ -26,7 +26,7 @@ public class SignupSendPreflight implements AutoCloseable {
             Thread.ofVirtual().name("signup-send-redis-", 0).factory(),
             new ThreadPoolExecutor.AbortPolicy()));
 
-    public SignupSendPreflight(
+    SignupSendPreflight(
             SignupSessionStore sessions,
             VerificationChallengeStore challenges,
             SignupSendRedisProperties properties,
