@@ -214,8 +214,11 @@ final class LogSafetyChecker {
         /** 이 파일에서 선언한 record 이름. 다른 파일의 record는 접미사로 추정한다. */
         private final Set<String> localRecords = new HashSet<>();
 
-        /** 정적 import한 이름. "소유자의 단순 이름.멤버"로 담고, 와일드카드는 "소유자.*"다. */
+        /** 정적 import한 이름. "소유자의 정규화된 이름.멤버"로 담고, 와일드카드는 "소유자.*"다. */
         private final Set<String> staticImports = new HashSet<>();
+
+        /** 이 파일에서 선언한 메서드 이름. Java는 소유자 없는 호출을 정적 import보다 이 메서드로 먼저 해석한다. */
+        private final Set<String> localMethods = new HashSet<>();
 
         /** S1을 적용하지 않는 파일(시뮬레이터 CLI) */
         private final boolean s1Allowed;
@@ -240,9 +243,16 @@ final class LogSafetyChecker {
             this.localRecords.addAll(knownRecords);
             for (ImportTree imported : unit.getImports()) {
                 if (imported.isStatic() && imported.getQualifiedIdentifier() instanceof MemberSelectTree member) {
-                    staticImports.add(lastSegment(member.getExpression().toString()) + "." + member.getIdentifier());
+                    staticImports.add(member.getExpression() + "." + member.getIdentifier());
                 }
             }
+            new TreeScanner<Void, Void>() {
+                @Override
+                public Void visitMethod(MethodTree node, Void unused) {
+                    localMethods.add(node.getName().toString());
+                    return super.visitMethod(node, unused);
+                }
+            }.scan(unit, null);
         }
 
         @Override
@@ -384,7 +394,8 @@ final class LogSafetyChecker {
                 String name = bare.getName().toString();
                 if (EXECUTOR_FACTORY_METHODS.contains(name) || THREAD_HANDOFF_METHODS.contains(name)) {
                     report(node, "S5", name + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
-                } else if (isStaticImportOf("CompletableFuture", name) && isAsyncWithoutExecutor(name, node)) {
+                } else if (isStaticImportOf("java.util.concurrent.CompletableFuture", name)
+                        && isAsyncWithoutExecutor(name, node)) {
                     // *Async는 흔한 이름이라 이름만으로 잡지 않고 정적 import의 소유자를 확인한다
                     report(node, "S5", name + "()에 실행기를 넘긴다. 실행기가 없으면 공용 풀로 넘어가 요청 ID가 끊긴다");
                 }
@@ -413,9 +424,14 @@ final class LogSafetyChecker {
                     == node.getArguments().size();
         }
 
-        /** member를 owner에서 정적 import했는지(import static ..owner.member 또는 ..owner.*). */
+        /**
+         * 소유자 없는 호출 member가 정규화된 이름 owner의 정적 import로 해석되는지(import static owner.member 또는 owner.*). 이 파일에서 같은
+         * 이름의 메서드를 선언했으면 Java가 그 메서드로 해석하므로 아니다.
+         */
         private boolean isStaticImportOf(String owner, String member) {
-            return staticImports.contains(owner + "." + member) || staticImports.contains(owner + ".*");
+            // shortcut: 상위 클래스에서 물려받은 같은 이름의 메서드는 구문만으로 알 수 없어 정적 import로 본다, 그런 오탐이 나오면 다시 본다
+            return !localMethods.contains(member)
+                    && (staticImports.contains(owner + "." + member) || staticImports.contains(owner + ".*"));
         }
 
         /** java.util.concurrent.Executors처럼 정규화된 이름이면 마지막 조각을, 호출 체인이면 그대로 돌려준다. */
@@ -430,7 +446,7 @@ final class LogSafetyChecker {
                     && lastSegment(select.getExpression().toString()).equals("MDC")) {
                 method = select.getIdentifier().toString();
             } else if (node.getMethodSelect() instanceof IdentifierTree bare
-                    && isStaticImportOf("MDC", bare.getName().toString())) {
+                    && isStaticImportOf("org.slf4j.MDC", bare.getName().toString())) {
                 // clear()·put(..)은 흔한 이름이라 정적 import의 소유자가 MDC일 때만 본다
                 method = bare.getName().toString();
             } else {

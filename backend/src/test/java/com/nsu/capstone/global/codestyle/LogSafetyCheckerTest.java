@@ -800,4 +800,37 @@ class LogSafetyCheckerTest {
         assertThat(checkWithImport("import static org.slf4j.MDC.put;", "put(\"eventId\", id);"))
                 .isEmpty();
     }
+
+    /**
+     * Java는 클래스가 선언한 메서드를 정적 import보다 먼저 찾는다. 와일드카드로 MDC·CompletableFuture를 가져와도 자기 clear()·runAsync(..)는
+     * 그 메서드다. 이름이 같은 다른 패키지의 MDC·CompletableFuture도 대상이 아니다(PR #249 리뷰).
+     */
+    @Test
+    void 자기_메서드와_다른_패키지의_같은_이름_클래스는_S4_S5_대상이_아니다() {
+        String source = """
+                package com.nsu.capstone.identity.application;
+
+                import static org.slf4j.MDC.*;
+                import static java.util.concurrent.CompletableFuture.*;
+
+                class Sample {
+                    void run(String id) {
+                        put("eventId", id);
+                        clear();
+                        runAsync(() -> work());
+                    }
+
+                    void clear() {}
+
+                    void runAsync(Runnable task) {}
+
+                    void work() {}
+                }
+                """;
+        assertThat(LogSafetyChecker.check(PATH, source)).isEmpty();
+        assertThat(checkWithImport("import static com.example.logging.MDC.clear;", "clear();"))
+                .isEmpty();
+        assertThat(checkWithImport("import static com.example.async.CompletableFuture.*;", "runAsync(() -> work());"))
+                .isEmpty();
+    }
 }
