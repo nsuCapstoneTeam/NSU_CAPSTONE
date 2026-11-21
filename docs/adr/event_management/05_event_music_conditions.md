@@ -49,7 +49,11 @@
    - **R2** 새 nullable 필드는 이름표 구역 끝에 `tagged("<API 필드 이름>", value)`로 더한다. 이름표 문자열은 저장 형식의 일부라 한 번 배포하면 바꾸지 않는다.
    - **R3** 이름표 구역에서 "고르지 않음"의 표기는 하나, 쓰지 않는 것이다. 나중에 선택 집합 필드를 더하면 빈 집합과 `null`을 같은 것으로 정규화한 뒤 쓴다. 지금은 쓸 곳이 없어 집합용 메서드를 만들지 않는다.
    - **R4** 필수 필드 추가, 기존 행 채워 넣기, 위치 구역 변경은 저장된 값을 모두 바꾼다. 이런 변경은 해시·지문 버전을 어떻게 둘지부터 정한다. NSU-63이 지문을 저장한 뒤라면 반드시 정한다.
-   - **R5 (알려진 한계)** 새 앱과 이전 앱이 함께 요청을 받거나 앱을 이전 버전으로 되돌린 구간에는, 음악 조건을 담은 본문을 같은 키로 다시 보내면 `422`가 될 수 있다. 이전 앱은 음악 조건을 모르는 필드로 버리고 해시하기 때문이다. 음악 조건이 없는 본문은 영향이 없다.
+   - **R5 (배포 조건)** NSU-121 전 서버는 `mood`·`tempo`·`vocal`을 모르는 필드로 버린다(`FAIL_ON_UNKNOWN_PROPERTIES` 꺼짐). 그래서 그 서버가 음악 조건을 담은 요청을 받으면 값을 저장하지 않고도 성공을 돌려준다.
+     - 등록: 같은 키로 음악 조건만 더한 재전송은 해시가 처음과 같아 `201`이다. 화면은 키를 버리고 등록을 끝내지만 행사에는 값이 없다. 반대로 새 서버가 음악 조건을 담아 저장한 키를 이전 서버가 받으면 `422`다.
+     - 수정: `PUT`도 `200`을 돌려주고 값을 저장하지 않는다.
+     - 이전 서버는 고칠 수 없으므로 실패 신호는 배포 순서로만 막는다. 조건 1: 음악 조건을 보내는 화면(NSU-125)은 모든 서버 인스턴스가 NSU-121 이상이 된 뒤에 연다. 조건 2: 서버를 NSU-121 전으로 되돌리면 음악 조건 입력 칸도 먼저 닫는다(화면 배포를 되돌리거나 칸을 숨긴다). 이미 열린 화면 탭은 새로고침 전까지 옛 화면이므로, 서버를 되돌리기 전에 화면부터 닫는다.
+     - 이 조건은 이전 서버의 동작이라 저장소 테스트로 확인할 수 없다. PR 설명의 배포 확인 항목과 NSU-125 이슈에 둔다. 지금은 서버 인스턴스가 하나이고, 이 API를 부르는 화면이 없다.
 6. **DB는 `V13__add_event_music_conditions.sql` 한 파일이다.**
    1. `SET LOCAL lock_timeout = '3s'`(V6~V10과 같다)
    2. `ADD COLUMN mood`·`tempo`·`vocal VARCHAR(32)`. NULL 허용, 기본값 없음이라 표를 다시 쓰지 않는다
@@ -68,6 +72,9 @@
    - 데이터가 있는 DB에 적용하기 전에 행 수와 3번이 고칠 행 수를 센다. PR 설명의 배포 확인 항목으로 둔다.
 7. **값 목록을 바꾸는 절차를 정한다.**
    - 값 추가: enum, `KeyphraseVocabulary` 문구와 매핑 버전, 새 마이그레이션의 CHECK 교체(`DROP CONSTRAINT` + `ADD CONSTRAINT`를 한 `ALTER`로), 03 §3.3 표를 같은 PR에서 고친다. 해시·지문 코드는 고치지 않는다.
+   - 값을 저장하기 시작한 뒤에는 그 값을 모르는 서버로 되돌리지 않는다. `@Enumerated(STRING)`은 읽을 때 `Enum.valueOf`를 불러, 모르는 값이 든 행은 상세와 그 행이 든 목록 페이지가 `500`이 된다. 이 규칙은 `artistType`·`eventType`·`genres`에도 같다.
+     - 서버 인스턴스가 하나인 지금은 값 추가를 한 번에 배포하고, 그 배포의 롤백 대상은 값 추가 전 버전으로 두지 않는다. 되돌려야 하면 새 값을 가진 행을 먼저 `NULL`(음악 조건) 또는 다른 값으로 정리한다.
+     - 인스턴스가 여럿이 되면 두 번에 나눈다. 먼저 읽기만 아는 버전(enum과 CHECK에 값 추가, `MusicChoice.parse`는 아직 거절)을 모두 배포한 뒤, 쓰기를 여는 버전을 배포한다.
    - 값 삭제와 의미 변경은 breaking change다(00 §3). 사람 승인 뒤, 그 값을 가진 행을 먼저 정리하고 CHECK를 좁힌다. 저장된 `request_hash`는 바뀌지 않는다. 지운 코드를 다시 보내면 `400`이고, 값을 정리한 행의 지문은 바뀐다.
 8. **규칙은 테스트로 강제한다.** 목록은 Rationale의 "안전망"에 있다. 기존 golden 25개의 기대값은 한 글자도 바꾸지 않는다.
 
@@ -176,7 +183,7 @@ final class CanonicalDigest {                                 // package-private
 }
 
 public record EventRequest(/* … */ List<String> genres,
-        @Schema(implementation = Mood.class) String mood,     // MusicChoice.parse(Mood.class, mood)
+        @Schema(implementation = Mood.class, types = {"string", "null"}) String mood,  // 구현 방법은 구현 세션이 정한다. 기준은 아래 OpenAPI 테스트
         @Schema(implementation = Tempo.class) String tempo,
         @Schema(implementation = Vocal.class) String vocal /* … */) {}
 
@@ -305,7 +312,7 @@ public record EventResponse(/* … */ List<Genre> genres, Mood mood, Tempo tempo
 - 장르 모양 식은 최대 개수 3에 묶인다. 최대 개수를 바꾸면 식을 고쳐야 하고, `EventGenresConstraintIntegrationTest`가 그것을 알린다.
 - V13은 데이터를 고친다(어기는 장르 행). 뜻이 같은 정리라 롤백 대상에서 뺀다. 그 행의 지문은 장르 토큰이 바뀔 수 있지만 저장된 지문이 없어 영향이 없다.
 - 머지 순서는 V11(PR #245) → V12(NSU-119) → V13이다. 순서가 바뀌면 나중에 머지되는 PR이 머지 직전에 자기 파일 번호와 그 번호를 적은 문서·테스트를 바꾼다. NSU-119 문서는 지금 V12를 적고 있다.
-- 생성된 OpenAPI 스키마는 세 필드의 허용 값만 보여 주고 `null` 허용은 따로 표시하지 않는다. 지금의 `artistType`과 같은 한계다. "고르지 않으면 `null`"은 03 §3.1·§3.6이 정한다.
+- 생성된 OpenAPI 스키마(`/v3/api-docs`, OpenAPI 3.1)에서 `mood`·`tempo`·`vocal`·`artistType`은 요청(`EventRequest`)과 응답(`EventResponse`) 모두 enum 값과 `null`을 허용한다. 스키마로 응답을 검증하는 클라이언트가 NSU-121 전 행사의 `null` 응답을 거절하지 않게 하기 위해서다. `artistType`은 지금 `null`을 표시하지 않는 같은 결함이라 함께 고친다. 응답 키를 `required`로 표시하는 것은 다른 응답 필드와 같이 하지 않는다(00 §3의 "키를 생략하지 않는다"는 md가 정한다).
 - 문자열을 enum으로 바꾸는 private 파서(`EventRequest.enumValue` 등)는 그대로 둔다. `MusicChoice.parse`와 합치는 일은 recommendation_search_input/00이 적은 별도 LOW 작업 후보다.
 - 지휘 세션이 할 외부 쓰기
   - SSOT `EVT-042`: "행사에서 필수인지는 NSU-121이 정한다"(v1.20 초안)를 "행사에서 선택 항목이며, 고르지 않으면 검색 문구에서 빠진다"로 바꾼다. v1.20을 고치지 않고 새 minor 초안 리비전으로 올려 변경 이력에 행을 더한다(0.4절).
@@ -334,6 +341,7 @@ public record EventResponse(/* … */ List<Genre> genres, Mood mood, Tempo tempo
 - `EventFieldCoverageTest`: `entityStoresEveryComponent`를 `alternate()`로 돌리고 `alternateHasNoNullComponent`를 더한다.
 - `FingerprintSnapshotAgreementTest`: `ROLE`에 세 필드 = `MUSIC_CONDITIONS`. 바탕을 둘(값 있음, 고르지 않음)로 돌려 "값 → 다른 값"과 "고르지 않음 → 값"을 모두 본다.
 - `OpenApiDocsIntegrationTest.codeFields()`: 손으로 적은 목록 대신 `EventContent`의 enum 컴포넌트에서 인자를 뽑는다. 새 enum 필드의 `@Schema`를 빠뜨리면 실패한다.
+- `OpenApiDocsIntegrationTest`에 `nullableCodeFieldsAcceptNull`을 더한다. `EventRequest`·`EventResponse`의 `mood`·`tempo`·`vocal`·`artistType` 스키마가 `null`을 허용하는지 본다. 기준: `type`(또는 `types`)에 `"null"`이 있고, `enum`이 있으면 `enum`에도 `null`이 있다. 또는 `anyOf`·`oneOf`에 `{"type": "null"}`가 있다. 필수 enum(`eventType`, `visibility`)은 `null`을 허용하지 않는다.
 - `EventRequestTest`: `rejectsAnUnknownCodeInEveryCodeField`(enum 컴포넌트마다 `"NOT_A_CODE"` → `VALIDATION_ERROR`), `Draft`에 세 값.
 - golden 25개(본문 해시 9개, 저장 열 8개, 지문 8개): 기대값은 그대로다. `sampleWithDetails()`·`validBody()`를 입력으로 쓰던 행만 입력을 음악 조건 없는 본문으로 바꾼다.
 

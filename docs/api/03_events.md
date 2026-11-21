@@ -338,7 +338,7 @@ Content-Type: application/json
 - 본문 해시는 필드가 늘어도 이미 저장된 값과 맞게 만든다([ADR 05](../adr/event_management/05_event_music_conditions.md) 결정 4·5). 음악 조건처럼 나중에 더한 선택 필드는 고른 값만 해시에 들어간다.
   - NSU-121 전에 저장된 키로 음악 조건 없이 같은 본문을 다시 보내면 `201`이다.
   - NSU-121 전에는 `mood` 등이 모르는 필드로 무시됐다. 그때의 키로 음악 조건을 담아 다시 보내면 저장된 행사와 본문이 달라 `422 IDEMPOTENCY_KEY_REUSED`다. 배포 전에 저장된 키라면 처음과 똑같은 JSON이어도 그렇다.
-  - 새 서버와 이전 서버가 함께 요청을 받거나 서버를 이전 버전으로 되돌린 동안에는, 음악 조건을 담은 본문을 같은 키로 다시 보내면 `422`가 될 수 있다(ADR 05 R5).
+  - NSU-121 전 서버는 음악 조건을 모르는 필드로 버린다. 그 서버가 음악 조건을 담은 등록·수정을 받으면 값을 저장하지 않고 `201`·`200`을 돌려줄 수 있고, 새 서버가 저장한 키에는 `422`를 돌려줄 수 있다. 그래서 음악 조건을 보내는 화면은 모든 서버가 NSU-121 이상일 때만 연다. 서버를 되돌릴 때는 화면의 음악 조건 칸부터 닫는다(ADR 05 R5).
 
 **화면이 할 일**
 
@@ -743,7 +743,7 @@ HTTP/1.1 400 Bad Request
 | 역할 | ARTIST의 등록·내 행사 목록은 `403`. ARTIST가 멱등 키 없이 등록해도 `403`(역할을 키보다 먼저 검사) |
 | 목록 | 시작 = 지금인 행사는 `PAST`. `UPCOMING` 오름차순, `PAST` 내림차순. `size = 101`은 `400`, 끝을 넘은 `page`는 `items: []` |
 | 지문 | `name`·`details`·`description` 수정은 `isEventChanged = false`, `endDate`·`regionCode` 수정은 `true`. `genres` 순서만 바꾸면 `false`. `mood`만 바꾸면 `true`, 고르지 않음 → 값도 `true`. 음악 조건을 고르지 않은 행사의 지문은 NSU-121 전 값과 같다 |
-| 음악 조건 | 세 값을 보내면 같은 값으로 저장·응답한다(상세·내 행사 목록 포함). 빼거나 `null`이면 응답에 `null`. `""`, `"energetic"`, `" CALM"`, `"NOISE"`는 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다. `["CALM"]`은 `ProblemDetail` 400. `PUT`에서 빼면 지워진다 |
+| 음악 조건 | 세 값을 보내면 같은 값으로 저장·응답한다(상세·내 행사 목록 포함). 빼거나 `null`이면 응답에 `null`. `""`, `"energetic"`, `" CALM"`, `"NOISE"`는 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다. `["CALM"]`은 `ProblemDetail` 400. `PUT`에서 빼면 지워진다. 생성된 OpenAPI 스키마에서 `mood`·`tempo`·`vocal`·`artistType`은 요청·응답 모두 enum 값과 `null`을 허용한다 |
 | 음악 조건 추천 입력 | 저장한 세 값이 snapshot의 음악 조건과 검색 문구에 들어간다(DB를 거쳐 확인) |
 | DB 제약 | `mood`·`tempo`·`vocal`에 목록 밖 값·빈 문자열·소문자를 SQL로 넣으면 DB가 거절한다. 장르의 중복·2차원·하한이 1이 아닌 배열도 거절한다. `Event`의 enum 열마다 `CHECK`의 허용 값이 enum 값 전체와 같다 |
 | 생성 중 변경 | AI 응답을 기다리는 동안 행사를 취소하면 결과가 저장되고 `201`. 삭제하면 결과가 저장되고 `404`이며, 그 결과가 하루 5회 계산에 들어간다. `name`만 고치면 생성 응답의 `isEventChanged = false`, `endDate`를 고치면 `true`. 저장 직전 횟수 재확인에서 한도를 넘으면 행사를 지웠어도 `429`이고 저장하지 않는다 |
