@@ -29,42 +29,63 @@ import java.util.regex.Pattern;
  * 그래서 API 문서의 필수 여부, 정수 타입, 허용 값은 @Schema로 보정한다(00 공통 규칙 §10.1).
  */
 public record EventRequest(
-    @Schema(requiredMode = REQUIRED) String name,
-    @Schema(requiredMode = REQUIRED, implementation = EventType.class) String eventType,
-    @Schema(requiredMode = REQUIRED) String startDate,
-    @Schema(requiredMode = REQUIRED) String startTime,
-    @Schema(requiredMode = REQUIRED) String endDate,
-    @Schema(requiredMode = REQUIRED) String endTime,
-    @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal performanceMinutes,
-    @Schema(requiredMode = REQUIRED) String venue,
-    @Schema(requiredMode = REQUIRED) String regionCode,
-    @Schema(implementation = ArtistType.class, types = {"string", "null"}) String artistType,
-    @ArraySchema(arraySchema = @Schema(requiredMode = REQUIRED), schema = @Schema(implementation = Genre.class))
-    List<String> genres,
-    @Schema(implementation = Mood.class, types = {"string", "null"}) String mood,
-    @Schema(implementation = Tempo.class, types = {"string", "null"}) String tempo,
-    @Schema(implementation = Vocal.class, types = {"string", "null"}) String vocal,
-    @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal budgetMin,
-    @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal budgetMax,
-    @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal expectedAudience,
-    @Schema(requiredMode = REQUIRED) String description,
-    @Schema(requiredMode = REQUIRED, implementation = Visibility.class) String visibility,
-    Details details
-) {
+        @Schema(requiredMode = REQUIRED) String name,
+
+        @Schema(requiredMode = REQUIRED, implementation = EventType.class)
+        String eventType,
+
+        @Schema(requiredMode = REQUIRED) String startDate,
+        @Schema(requiredMode = REQUIRED) String startTime,
+        @Schema(requiredMode = REQUIRED) String endDate,
+        @Schema(requiredMode = REQUIRED) String endTime,
+        @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal performanceMinutes,
+        @Schema(requiredMode = REQUIRED) String venue,
+        @Schema(requiredMode = REQUIRED) String regionCode,
+
+        @Schema(
+                implementation = ArtistType.class,
+                types = {"string", "null"})
+        String artistType,
+
+        @ArraySchema(arraySchema = @Schema(requiredMode = REQUIRED), schema = @Schema(implementation = Genre.class))
+        List<String> genres,
+
+        @Schema(
+                implementation = Mood.class,
+                types = {"string", "null"})
+        String mood,
+
+        @Schema(
+                implementation = Tempo.class,
+                types = {"string", "null"})
+        String tempo,
+
+        @Schema(
+                implementation = Vocal.class,
+                types = {"string", "null"})
+        String vocal,
+
+        @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal budgetMin,
+        @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal budgetMax,
+        @Schema(requiredMode = REQUIRED, types = "integer") BigDecimal expectedAudience,
+        @Schema(requiredMode = REQUIRED) String description,
+
+        @Schema(requiredMode = REQUIRED, implementation = Visibility.class)
+        String visibility,
+
+        Details details) {
 
     public record Details(
-        String rehearsal,
-        String stageSize,
-        Boolean isPaProvided,
-        String microphones,
-        String instruments,
-        Boolean isWaitingRoomProvided,
-        Boolean isMealProvided,
-        Boolean isTransportationFeeProvided,
-        Boolean isAccommodationProvided,
-        String otherConditions
-    ) {
-    }
+            String rehearsal,
+            String stageSize,
+            Boolean isPaProvided,
+            String microphones,
+            String instruments,
+            Boolean isWaitingRoomProvided,
+            Boolean isMealProvided,
+            Boolean isTransportationFeeProvided,
+            Boolean isAccommodationProvided,
+            String otherConditions) {}
 
     private static final Pattern DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
     private static final Pattern TIME = Pattern.compile("([01]\\d|2[0-3]):[0-5]\\d");
@@ -75,25 +96,26 @@ public record EventRequest(
      */
     public EventContent toContent() {
         return new EventContent(
-            required(name),
-            enumValue(EventType.class, eventType),
-            LocalDateTime.of(date(startDate), time(startTime)),
-            LocalDateTime.of(date(endDate), time(endTime)),
-            intValue(performanceMinutes),
-            required(venue),
-            required(regionCode),
-            artistType == null ? null : enumValue(ArtistType.class, artistType),
-            required(genres).stream().map(genre -> enumValue(Genre.class, genre)).toList(),
-            MusicChoice.parse(Mood.class, mood),
-            MusicChoice.parse(Tempo.class, tempo),
-            MusicChoice.parse(Vocal.class, vocal),
-            longValue(budgetMin),
-            longValue(budgetMax),
-            intValue(expectedAudience),
-            required(description),
-            enumValue(Visibility.class, visibility),
-            details == null ? null : toDomain(details)
-        );
+                required(name),
+                enumValue(EventType.class, eventType),
+                LocalDateTime.of(date(startDate), time(startTime)),
+                LocalDateTime.of(date(endDate), time(endTime)),
+                intValue(performanceMinutes),
+                required(venue),
+                required(regionCode),
+                artistType == null ? null : enumValue(ArtistType.class, artistType),
+                required(genres).stream()
+                        .map(genre -> enumValue(Genre.class, genre))
+                        .toList(),
+                MusicChoice.parse(Mood.class, mood),
+                MusicChoice.parse(Tempo.class, tempo),
+                MusicChoice.parse(Vocal.class, vocal),
+                longValue(budgetMin),
+                longValue(budgetMax),
+                intValue(expectedAudience),
+                required(description),
+                enumValue(Visibility.class, visibility),
+                details == null ? null : toDomain(details));
     }
 
     /**
@@ -158,16 +180,15 @@ public record EventRequest(
 
     private static EventDetails toDomain(Details details) {
         return new EventDetails(
-            details.rehearsal(),
-            details.stageSize(),
-            details.isPaProvided(),
-            details.microphones(),
-            details.instruments(),
-            details.isWaitingRoomProvided(),
-            details.isMealProvided(),
-            details.isTransportationFeeProvided(),
-            details.isAccommodationProvided(),
-            details.otherConditions()
-        );
+                details.rehearsal(),
+                details.stageSize(),
+                details.isPaProvided(),
+                details.microphones(),
+                details.instruments(),
+                details.isWaitingRoomProvided(),
+                details.isMealProvided(),
+                details.isTransportationFeeProvided(),
+                details.isAccommodationProvided(),
+                details.otherConditions());
     }
 }

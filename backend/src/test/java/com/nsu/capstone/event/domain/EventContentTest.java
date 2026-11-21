@@ -31,8 +31,9 @@ class EventContentTest {
 
     static void assertValidationError(Runnable create) {
         assertThatThrownBy(create::run)
-            .isInstanceOfSatisfying(BusinessException.class,
-                e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
     }
 
     @Test
@@ -43,17 +44,17 @@ class EventContentTest {
 
     static Stream<Arguments> rejectedTimeAndRequiredValues() {
         return Stream.of(
-            Arguments.of("종료 = 시작", (Consumer<Builder>) b -> b.end = b.start),
-            Arguments.of("종료가 시작보다 이름", (Consumer<Builder>) b -> b.end = b.start.minusMinutes(1)),
-            Arguments.of("24시간 1분", (Consumer<Builder>) b -> b.end = b.start.plusHours(24).plusMinutes(1)),
-            Arguments.of("공연시간이 시간대보다 1분 김", (Consumer<Builder>) b -> b.performanceMinutes = 61),
-            Arguments.of("공연시간 0", (Consumer<Builder>) b -> b.performanceMinutes = 0),
-            Arguments.of("공연시간 음수", (Consumer<Builder>) b -> b.performanceMinutes = -1),
-            Arguments.of("null eventType", (Consumer<Builder>) b -> b.eventType = null),
-            Arguments.of("null visibility", (Consumer<Builder>) b -> b.visibility = null),
-            Arguments.of("null start", (Consumer<Builder>) b -> b.start = null),
-            Arguments.of("null end", (Consumer<Builder>) b -> b.end = null)
-        );
+                Arguments.of("종료 = 시작", (Consumer<Builder>) b -> b.end = b.start),
+                Arguments.of("종료가 시작보다 이름", (Consumer<Builder>) b -> b.end = b.start.minusMinutes(1)),
+                Arguments.of("24시간 1분", (Consumer<Builder>)
+                        b -> b.end = b.start.plusHours(24).plusMinutes(1)),
+                Arguments.of("공연시간이 시간대보다 1분 김", (Consumer<Builder>) b -> b.performanceMinutes = 61),
+                Arguments.of("공연시간 0", (Consumer<Builder>) b -> b.performanceMinutes = 0),
+                Arguments.of("공연시간 음수", (Consumer<Builder>) b -> b.performanceMinutes = -1),
+                Arguments.of("null eventType", (Consumer<Builder>) b -> b.eventType = null),
+                Arguments.of("null visibility", (Consumer<Builder>) b -> b.visibility = null),
+                Arguments.of("null start", (Consumer<Builder>) b -> b.start = null),
+                Arguments.of("null end", (Consumer<Builder>) b -> b.end = null));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -65,13 +66,12 @@ class EventContentTest {
 
     static Stream<Arguments> rejectedBudgetAndAudience() {
         return Stream.of(
-            Arguments.of("최소 예산 > 최대 예산", (Consumer<Builder>) b -> b.budgetMin = b.budgetMax + 1),
-            Arguments.of("예산 상한 초과", (Consumer<Builder>) b -> b.budgetMax = 1_000_000_001L),
-            Arguments.of("음수 예산", (Consumer<Builder>) b -> b.budgetMin = -1),
-            Arguments.of("관객 0", (Consumer<Builder>) b -> b.expectedAudience = 0),
-            Arguments.of("관객 음수", (Consumer<Builder>) b -> b.expectedAudience = -1),
-            Arguments.of("관객 상한 초과", (Consumer<Builder>) b -> b.expectedAudience = 1_000_001)
-        );
+                Arguments.of("최소 예산 > 최대 예산", (Consumer<Builder>) b -> b.budgetMin = b.budgetMax + 1),
+                Arguments.of("예산 상한 초과", (Consumer<Builder>) b -> b.budgetMax = 1_000_000_001L),
+                Arguments.of("음수 예산", (Consumer<Builder>) b -> b.budgetMin = -1),
+                Arguments.of("관객 0", (Consumer<Builder>) b -> b.expectedAudience = 0),
+                Arguments.of("관객 음수", (Consumer<Builder>) b -> b.expectedAudience = -1),
+                Arguments.of("관객 상한 초과", (Consumer<Builder>) b -> b.expectedAudience = 1_000_001));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -83,13 +83,12 @@ class EventContentTest {
 
     static Stream<Arguments> rejectedGenres() {
         return Stream.of(
-            Arguments.of("장르 0개", (Consumer<Builder>) b -> b.genres = List.of()),
-            Arguments.of("장르 4개", (Consumer<Builder>) b -> b.genres =
-                List.of(Genre.POP, Genre.ROCK, Genre.JAZZ, Genre.TROT)),
-            Arguments.of("장르 중복", (Consumer<Builder>) b -> b.genres = List.of(Genre.POP, Genre.POP)),
-            Arguments.of("장르 null 원소", (Consumer<Builder>) b -> b.genres = Arrays.asList(Genre.POP, null)),
-            Arguments.of("장르 null", (Consumer<Builder>) b -> b.genres = null)
-        );
+                Arguments.of("장르 0개", (Consumer<Builder>) b -> b.genres = List.of()),
+                Arguments.of("장르 4개", (Consumer<Builder>)
+                        b -> b.genres = List.of(Genre.POP, Genre.ROCK, Genre.JAZZ, Genre.TROT)),
+                Arguments.of("장르 중복", (Consumer<Builder>) b -> b.genres = List.of(Genre.POP, Genre.POP)),
+                Arguments.of("장르 null 원소", (Consumer<Builder>) b -> b.genres = Arrays.asList(Genre.POP, null)),
+                Arguments.of("장르 null", (Consumer<Builder>) b -> b.genres = null));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -103,19 +102,18 @@ class EventContentTest {
 
     static Stream<Arguments> rejectedRequiredText() {
         return Stream.of(
-            Arguments.of("공백뿐인 이름", (Consumer<Builder>) b -> b.name = "   "),
-            Arguments.of("전각 공백뿐인 이름", (Consumer<Builder>) b -> b.name = "　"),
-            Arguments.of("null 이름", (Consumer<Builder>) b -> b.name = null),
-            Arguments.of("101자 이름", (Consumer<Builder>) b -> b.name = "가".repeat(101)),
-            Arguments.of("이모지로 102 code unit인 이름", (Consumer<Builder>) b -> b.name = EMOJI.repeat(51)),
-            Arguments.of("NUL이 든 이름", (Consumer<Builder>) b -> b.name = "행사\0"),
-            Arguments.of("빈 장소", (Consumer<Builder>) b -> b.venue = ""),
-            Arguments.of("null 장소", (Consumer<Builder>) b -> b.venue = null),
-            Arguments.of("201자 장소", (Consumer<Builder>) b -> b.venue = "가".repeat(201)),
-            Arguments.of("null 설명", (Consumer<Builder>) b -> b.description = null),
-            Arguments.of("2001자 설명", (Consumer<Builder>) b -> b.description = "가".repeat(2001)),
-            Arguments.of("NUL뿐인 설명", (Consumer<Builder>) b -> b.description = "\0")
-        );
+                Arguments.of("공백뿐인 이름", (Consumer<Builder>) b -> b.name = "   "),
+                Arguments.of("전각 공백뿐인 이름", (Consumer<Builder>) b -> b.name = "　"),
+                Arguments.of("null 이름", (Consumer<Builder>) b -> b.name = null),
+                Arguments.of("101자 이름", (Consumer<Builder>) b -> b.name = "가".repeat(101)),
+                Arguments.of("이모지로 102 code unit인 이름", (Consumer<Builder>) b -> b.name = EMOJI.repeat(51)),
+                Arguments.of("NUL이 든 이름", (Consumer<Builder>) b -> b.name = "행사\0"),
+                Arguments.of("빈 장소", (Consumer<Builder>) b -> b.venue = ""),
+                Arguments.of("null 장소", (Consumer<Builder>) b -> b.venue = null),
+                Arguments.of("201자 장소", (Consumer<Builder>) b -> b.venue = "가".repeat(201)),
+                Arguments.of("null 설명", (Consumer<Builder>) b -> b.description = null),
+                Arguments.of("2001자 설명", (Consumer<Builder>) b -> b.description = "가".repeat(2001)),
+                Arguments.of("NUL뿐인 설명", (Consumer<Builder>) b -> b.description = "\0"));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -127,14 +125,13 @@ class EventContentTest {
 
     static Stream<Arguments> rejectedRegionCodes() {
         return Stream.of(
-            Arguments.of("지역 4자리", (Consumer<Builder>) b -> b.regionCode = "1168"),
-            Arguments.of("지역 6자리", (Consumer<Builder>) b -> b.regionCode = "116800"),
-            Arguments.of("지역에 숫자가 아닌 글자", (Consumer<Builder>) b -> b.regionCode = "1168a"),
-            Arguments.of("전각 숫자 지역", (Consumer<Builder>) b -> b.regionCode = "１１６８０"),
-            Arguments.of("앞에 공백이 붙은 지역(strip하지 않는다)", (Consumer<Builder>) b -> b.regionCode = " 11680"),
-            Arguments.of("뒤에 공백이 붙은 지역", (Consumer<Builder>) b -> b.regionCode = "11680 "),
-            Arguments.of("null 지역", (Consumer<Builder>) b -> b.regionCode = null)
-        );
+                Arguments.of("지역 4자리", (Consumer<Builder>) b -> b.regionCode = "1168"),
+                Arguments.of("지역 6자리", (Consumer<Builder>) b -> b.regionCode = "116800"),
+                Arguments.of("지역에 숫자가 아닌 글자", (Consumer<Builder>) b -> b.regionCode = "1168a"),
+                Arguments.of("전각 숫자 지역", (Consumer<Builder>) b -> b.regionCode = "１１６８０"),
+                Arguments.of("앞에 공백이 붙은 지역(strip하지 않는다)", (Consumer<Builder>) b -> b.regionCode = " 11680"),
+                Arguments.of("뒤에 공백이 붙은 지역", (Consumer<Builder>) b -> b.regionCode = "11680 "),
+                Arguments.of("null 지역", (Consumer<Builder>) b -> b.regionCode = null));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -146,17 +143,16 @@ class EventContentTest {
 
     static Stream<Arguments> rejectedDetails() {
         return Stream.of(
-            Arguments.of("101자 리허설", (Consumer<Builder>) b -> b.details =
-                new EventDetails("가".repeat(101), null, null, null, null, null, null, null, null, null)),
-            Arguments.of("101자 무대 크기", (Consumer<Builder>) b -> b.details =
-                new EventDetails(null, "가".repeat(101), null, null, null, null, null, null, null, null)),
-            Arguments.of("NUL이 든 마이크", (Consumer<Builder>) b -> b.details =
-                new EventDetails(null, null, null, "마이크\0", null, null, null, null, null, null)),
-            Arguments.of("101자 악기", (Consumer<Builder>) b -> b.details =
-                new EventDetails(null, null, null, null, "가".repeat(101), null, null, null, null, null)),
-            Arguments.of("501자 기타 조건", (Consumer<Builder>) b -> b.details =
-                new EventDetails(null, null, null, null, null, null, null, null, null, "가".repeat(501)))
-        );
+                Arguments.of("101자 리허설", (Consumer<Builder>) b -> b.details =
+                        new EventDetails("가".repeat(101), null, null, null, null, null, null, null, null, null)),
+                Arguments.of("101자 무대 크기", (Consumer<Builder>) b -> b.details =
+                        new EventDetails(null, "가".repeat(101), null, null, null, null, null, null, null, null)),
+                Arguments.of("NUL이 든 마이크", (Consumer<Builder>) b ->
+                        b.details = new EventDetails(null, null, null, "마이크\0", null, null, null, null, null, null)),
+                Arguments.of("101자 악기", (Consumer<Builder>) b -> b.details =
+                        new EventDetails(null, null, null, null, "가".repeat(101), null, null, null, null, null)),
+                Arguments.of("501자 기타 조건", (Consumer<Builder>) b -> b.details =
+                        new EventDetails(null, null, null, null, null, null, null, null, null, "가".repeat(501))));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -171,36 +167,38 @@ class EventContentTest {
     void detailsAreNormalized() {
         assertThat(with(b -> b.details = null).details()).isEqualTo(EventDetails.empty());
 
-        EventContent content = with(b -> b.details = new EventDetails(
-            "", "   ", true, "  무선 2개  ", null, null, null, null, null, "　"));
+        EventContent content = with(
+                b -> b.details = new EventDetails("", "   ", true, "  무선 2개  ", null, null, null, null, null, "　"));
 
-        assertThat(content.details()).isEqualTo(
-            new EventDetails(null, null, true, "무선 2개", null, null, null, null, null, null));
+        assertThat(content.details())
+                .isEqualTo(new EventDetails(null, null, true, "무선 2개", null, null, null, null, null, null));
     }
 
     static Stream<Arguments> accepted() {
         return Stream.of(
-            Arguments.of("정확히 24시간", (Consumer<Builder>) b -> b.end = b.start.plusHours(24)),
-            Arguments.of("공연시간 = 시간대", (Consumer<Builder>) b -> b.performanceMinutes = 60),
-            Arguments.of("공연시간 1분", (Consumer<Builder>) b -> b.performanceMinutes = 1),
-            Arguments.of("예산 0~0(무보수)", (Consumer<Builder>) b -> { b.budgetMin = 0; b.budgetMax = 0; }),
-            Arguments.of("예산 최소 = 최대 = 상한", (Consumer<Builder>) b -> {
-                b.budgetMin = 1_000_000_000L;
-                b.budgetMax = 1_000_000_000L;
-            }),
-            Arguments.of("관객 1", (Consumer<Builder>) b -> b.expectedAudience = 1),
-            Arguments.of("관객 1,000,000", (Consumer<Builder>) b -> b.expectedAudience = 1_000_000),
-            Arguments.of("장르 3개", (Consumer<Builder>) b -> b.genres = List.of(Genre.TROT, Genre.ROCK, Genre.POP)),
-            Arguments.of("공연 형태 상관없음(null)", (Consumer<Builder>) b -> b.artistType = null),
-            Arguments.of("100자 이름", (Consumer<Builder>) b -> b.name = "가".repeat(100)),
-            Arguments.of("이모지로 정확히 100 code unit인 이름", (Consumer<Builder>) b -> b.name = EMOJI.repeat(50)),
-            Arguments.of("NBSP는 공백으로 지우지 않으므로 이름이 된다", (Consumer<Builder>) b -> b.name = " "),
-            Arguments.of("자정을 넘기는 시간대", (Consumer<Builder>) b -> {
-                b.start = b.start.withHour(22);
-                b.end = b.start.plusHours(4);
-                b.performanceMinutes = 120;
-            })
-        );
+                Arguments.of("정확히 24시간", (Consumer<Builder>) b -> b.end = b.start.plusHours(24)),
+                Arguments.of("공연시간 = 시간대", (Consumer<Builder>) b -> b.performanceMinutes = 60),
+                Arguments.of("공연시간 1분", (Consumer<Builder>) b -> b.performanceMinutes = 1),
+                Arguments.of("예산 0~0(무보수)", (Consumer<Builder>) b -> {
+                    b.budgetMin = 0;
+                    b.budgetMax = 0;
+                }),
+                Arguments.of("예산 최소 = 최대 = 상한", (Consumer<Builder>) b -> {
+                    b.budgetMin = 1_000_000_000L;
+                    b.budgetMax = 1_000_000_000L;
+                }),
+                Arguments.of("관객 1", (Consumer<Builder>) b -> b.expectedAudience = 1),
+                Arguments.of("관객 1,000,000", (Consumer<Builder>) b -> b.expectedAudience = 1_000_000),
+                Arguments.of("장르 3개", (Consumer<Builder>) b -> b.genres = List.of(Genre.TROT, Genre.ROCK, Genre.POP)),
+                Arguments.of("공연 형태 상관없음(null)", (Consumer<Builder>) b -> b.artistType = null),
+                Arguments.of("100자 이름", (Consumer<Builder>) b -> b.name = "가".repeat(100)),
+                Arguments.of("이모지로 정확히 100 code unit인 이름", (Consumer<Builder>) b -> b.name = EMOJI.repeat(50)),
+                Arguments.of("NBSP는 공백으로 지우지 않으므로 이름이 된다", (Consumer<Builder>) b -> b.name = " "),
+                Arguments.of("자정을 넘기는 시간대", (Consumer<Builder>) b -> {
+                    b.start = b.start.withHour(22);
+                    b.end = b.start.plusHours(4);
+                    b.performanceMinutes = 120;
+                }));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -219,10 +217,25 @@ class EventContentTest {
             b.details = new EventDetails(" 가 ", "", null, null, null, null, null, null, null, null);
         });
 
-        EventContent twice = new EventContent(once.name(), once.eventType(), once.start(), once.end(),
-            once.performanceMinutes(), once.venue(), once.regionCode(), once.artistType(), once.genres(),
-            once.mood(), once.tempo(), once.vocal(), once.budgetMin(), once.budgetMax(), once.expectedAudience(), once.description(),
-            once.visibility(), once.details());
+        EventContent twice = new EventContent(
+                once.name(),
+                once.eventType(),
+                once.start(),
+                once.end(),
+                once.performanceMinutes(),
+                once.venue(),
+                once.regionCode(),
+                once.artistType(),
+                once.genres(),
+                once.mood(),
+                once.tempo(),
+                once.vocal(),
+                once.budgetMin(),
+                once.budgetMax(),
+                once.expectedAudience(),
+                once.description(),
+                once.visibility(),
+                once.details());
 
         assertThat(twice).isEqualTo(once);
         assertThat(twice.requestHash()).isEqualTo(once.requestHash());
@@ -239,8 +252,9 @@ class EventContentTest {
         content.requireStartAfter(oneSecondBefore);
         for (Clock tooLate : List.of(atStart, afterStart)) {
             assertThatThrownBy(() -> content.requireStartAfter(tooLate))
-                .isInstanceOfSatisfying(BusinessException.class,
-                    e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.EVENT_START_IN_PAST));
+                    .isInstanceOfSatisfying(
+                            BusinessException.class,
+                            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.EVENT_START_IN_PAST));
         }
     }
 
@@ -268,7 +282,6 @@ class EventContentTest {
         EventContent content = with(b -> b.genres = List.of(Genre.TROT, Genre.ROCK, Genre.POP));
 
         assertThat(content.genres()).containsExactly(Genre.POP, Genre.ROCK, Genre.TROT);
-        assertThatThrownBy(() -> content.genres().add(Genre.JAZZ))
-            .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> content.genres().add(Genre.JAZZ)).isInstanceOf(UnsupportedOperationException.class);
     }
 }

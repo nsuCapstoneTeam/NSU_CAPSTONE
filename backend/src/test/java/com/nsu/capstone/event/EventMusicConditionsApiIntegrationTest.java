@@ -139,7 +139,9 @@ class EventMusicConditionsApiIntegrationTest extends EventIntegrationTestBase {
         Map<String, Object> body = validBody();
         body.put("mood", List.of("CALM"));
 
-        register(partner, body).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").doesNotExist());
+        register(partner, body)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").doesNotExist());
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM events", Integer.class))
                 .isZero();
     }

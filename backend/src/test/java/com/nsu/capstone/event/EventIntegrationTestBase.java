@@ -1,9 +1,7 @@
 package com.nsu.capstone.event;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.TestcontainersConfiguration;
@@ -73,14 +71,26 @@ public abstract class EventIntegrationTestBase {
         }
     }
 
-    @Autowired protected MutableClock clock;
+    @Autowired
+    protected MutableClock clock;
 
-    @Autowired protected MockMvc mockMvc;
-    @Autowired protected ObjectMapper objectMapper;
-    @Autowired protected UserRepository userRepository;
-    @Autowired protected UuidV7Generator uuidV7Generator;
-    @Autowired protected JwtAccessTokenService jwtAccessTokenService;
-    @Autowired protected JdbcTemplate jdbcTemplate;
+    @Autowired
+    protected MockMvc mockMvc;
+
+    @Autowired
+    protected ObjectMapper objectMapper;
+
+    @Autowired
+    protected UserRepository userRepository;
+
+    @Autowired
+    protected UuidV7Generator uuidV7Generator;
+
+    @Autowired
+    protected JwtAccessTokenService jwtAccessTokenService;
+
+    @Autowired
+    protected JdbcTemplate jdbcTemplate;
 
     protected User partner;
 
@@ -97,13 +107,15 @@ public abstract class EventIntegrationTestBase {
 
     protected User newUser(UserRole role, String email) {
         UUID id = uuidV7Generator.generate();
-        return userRepository.saveAndFlush(role == UserRole.ARTIST
-            ? User.createArtist(id, email, "hash", "01011112222")
-            : User.createEventPartner(id, email, "hash", "01011112222"));
+        return userRepository.saveAndFlush(
+                role == UserRole.ARTIST
+                        ? User.createArtist(id, email, "hash", "01011112222")
+                        : User.createEventPartner(id, email, "hash", "01011112222"));
     }
 
     protected String bearer(User user) {
-        return "Bearer " + jwtAccessTokenService.issue(user.getId(), user.getRole()).value();
+        return "Bearer "
+                + jwtAccessTokenService.issue(user.getId(), user.getRole()).value();
     }
 
     /** 03 §10.1의 예시 본문. 시작은 지금(10-18 10:00)보다 뒤다. */
@@ -148,26 +160,28 @@ public abstract class EventIntegrationTestBase {
         return register(caller, body, UUID.randomUUID().toString());
     }
 
-    protected ResultActions register(User caller, Map<String, Object> body, String idempotencyKey)
-        throws Exception {
+    protected ResultActions register(User caller, Map<String, Object> body, String idempotencyKey) throws Exception {
         return mockMvc.perform(post("/api/v1/events")
-            .header("Authorization", bearer(caller))
-            .header("Idempotency-Key", idempotencyKey)
-            .contentType(APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(body)));
+                .header("Authorization", bearer(caller))
+                .header("Idempotency-Key", idempotencyKey)
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)));
     }
 
     /** 멱등 키 헤더 없이 등록한다. */
     protected ResultActions registerWithoutKey(User caller, Map<String, Object> body) throws Exception {
         return mockMvc.perform(post("/api/v1/events")
-            .header("Authorization", bearer(caller))
-            .contentType(APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(body)));
+                .header("Authorization", bearer(caller))
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)));
     }
 
     protected String registeredId(Map<String, Object> body) throws Exception {
-        String json = register(partner, body).andExpect(status().isCreated())
-            .andReturn().getResponse().getContentAsString();
+        String json = register(partner, body)
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         return objectMapper.readTree(json).get("id").asString();
     }
 }

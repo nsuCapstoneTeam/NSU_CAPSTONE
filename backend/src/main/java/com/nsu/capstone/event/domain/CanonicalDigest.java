@@ -17,8 +17,7 @@ final class CanonicalDigest {
     private final StringBuilder canonical = new StringBuilder();
     private final Set<String> tags = new HashSet<>();
 
-    private CanonicalDigest() {
-    }
+    private CanonicalDigest() {}
 
     static CanonicalDigest start() {
         return new CanonicalDigest();
@@ -85,15 +84,15 @@ final class CanonicalDigest {
      * 관계없이 같은 집합이면 같은 값이다(03 §8.3).
      */
     CanonicalDigest codeSet(Collection<? extends Enum<?>> value) {
-        return text(value == null ? null
-            : value.stream().sorted().map(Enum::name).reduce("", (a, b) -> a + "," + b));
+        return text(
+                value == null ? null : value.stream().sorted().map(Enum::name).reduce("", (a, b) -> a + "," + b));
     }
 
     /** 정규 문자열 UTF-8 바이트의 SHA-256을 소문자 hex 64자로 돌려준다. */
     String hex() {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
-                .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
+                    .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest);
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 알고리즘을 사용할 수 없다", exception);

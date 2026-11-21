@@ -479,7 +479,10 @@ class OpenApiDocsIntegrationTest {
 
     @ParameterizedTest(name = "{0}.{1}")
     @CsvSource({
-        "EventRequest,eventType", "EventRequest,visibility", "EventResponse,eventType", "EventResponse,visibility"
+        "EventRequest,eventType",
+        "EventRequest,visibility",
+        "EventResponse,eventType",
+        "EventResponse,visibility"
     })
     @DisplayName("필수 코드값 필드는 문서에서 null을 허용하지 않는다")
     void requiredCodeFieldsRejectNull(String schemaName, String field) throws Exception {

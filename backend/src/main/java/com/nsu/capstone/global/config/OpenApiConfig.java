@@ -52,7 +52,8 @@ public class OpenApiConfig {
     }
 
     private static void allowNullInEnum(Schema<?> property) {
-        boolean typeAllowsNull = property.getTypes() != null && property.getTypes().contains("null");
+        boolean typeAllowsNull =
+                property.getTypes() != null && property.getTypes().contains("null");
         if (typeAllowsNull && property.getEnum() != null && !property.getEnum().contains(null)) {
             property.addEnumItemObject(null);
         }

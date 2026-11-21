@@ -78,8 +78,10 @@ class MusicConditionDigestTest {
     void everyCombinationHasItsOwnFingerprint() {
         List<EventContent> contents = allCombinations();
 
-        Set<String> fingerprints = distinct(contents, content -> EventDigests.recommendationFingerprint(
-                Event.register(UUID.randomUUID(), UUID.randomUUID(), content, CLOCK)));
+        Set<String> fingerprints = distinct(
+                contents,
+                content -> EventDigests.recommendationFingerprint(
+                        Event.register(UUID.randomUUID(), UUID.randomUUID(), content, CLOCK)));
 
         assertThat(fingerprints).hasSameSizeAs(contents);
     }

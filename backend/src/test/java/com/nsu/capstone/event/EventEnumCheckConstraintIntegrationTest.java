@@ -76,7 +76,8 @@ class EventEnumCheckConstraintIntegrationTest extends EventIntegrationTestBase {
     @Test
     @DisplayName("Event의 @Enumerated 필드를 빠짐없이 찾는다")
     void findsEveryEnumeratedColumnOfEvent() {
-        List<Object> columns = enumeratedColumns().map(arguments -> arguments.get()[0]).toList();
+        List<Object> columns =
+                enumeratedColumns().map(arguments -> arguments.get()[0]).toList();
 
         assertThat(columns)
                 .contains("status", "event_type", "artist_type", "genres", "visibility", "mood", "tempo", "vocal");

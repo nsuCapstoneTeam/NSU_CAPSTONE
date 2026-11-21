@@ -20,8 +20,7 @@ import java.util.function.Consumer;
  */
 public final class EventContentFixtures {
 
-    private EventContentFixtures() {
-    }
+    private EventContentFixtures() {}
 
     /** 값을 하나씩 바꿔 가며 쓰는 가변 builder. 필드는 일부러 공개했다(테스트 전용). */
     public static final class Builder {
@@ -45,9 +44,25 @@ public final class EventContentFixtures {
         public EventDetails details = EventDetails.empty();
 
         public EventContent build() {
-            return new EventContent(name, eventType, start, end, performanceMinutes, venue,
-                regionCode, artistType, genres, mood, tempo, vocal, budgetMin, budgetMax, expectedAudience,
-                description, visibility, details);
+            return new EventContent(
+                    name,
+                    eventType,
+                    start,
+                    end,
+                    performanceMinutes,
+                    venue,
+                    regionCode,
+                    artistType,
+                    genres,
+                    mood,
+                    tempo,
+                    vocal,
+                    budgetMin,
+                    budgetMax,
+                    expectedAudience,
+                    description,
+                    visibility,
+                    details);
         }
     }
 
@@ -75,8 +90,8 @@ public final class EventContentFixtures {
     }
 
     private static EventDetails fullDetails() {
-        return new EventDetails("공연 2시간 전 30분", "8m × 6m", true,
-            "무선 2개, 유선 4개", "드럼 세트, 베이스 앰프", true, true, false, null, null);
+        return new EventDetails(
+                "공연 2시간 전 30분", "8m × 6m", true, "무선 2개, 유선 4개", "드럼 세트, 베이스 앰프", true, true, false, null, null);
     }
 
     public static EventContent with(Consumer<Builder> change) {
@@ -92,12 +107,24 @@ public final class EventContentFixtures {
      * 걸리지 않는다. 컴포넌트를 하나씩 바꿔 끼우는 안전망 테스트가 쓴다.
      */
     public static EventContent alternate() {
-        return new EventContent("다른 이름", EventType.WEDDING,
-            LocalDateTime.of(2026, 11, 6, 17, 50), LocalDateTime.of(2026, 11, 6, 19, 10), 41,
-            "다른 장소", "11650", ArtistType.DJ, List.of(Genre.POP, Genre.JAZZ),
-            Mood.CALM, Tempo.SLOW, Vocal.INSTRUMENTAL,
-            300001, 500001, 801, "다른 설명", Visibility.PRIVATE,
-            new EventDetails("다른 리허설", "다른 무대", false, "다른 마이크", "다른 악기", false, false, true, true,
-                "다른 조건"));
+        return new EventContent(
+                "다른 이름",
+                EventType.WEDDING,
+                LocalDateTime.of(2026, 11, 6, 17, 50),
+                LocalDateTime.of(2026, 11, 6, 19, 10),
+                41,
+                "다른 장소",
+                "11650",
+                ArtistType.DJ,
+                List.of(Genre.POP, Genre.JAZZ),
+                Mood.CALM,
+                Tempo.SLOW,
+                Vocal.INSTRUMENTAL,
+                300001,
+                500001,
+                801,
+                "다른 설명",
+                Visibility.PRIVATE,
+                new EventDetails("다른 리허설", "다른 무대", false, "다른 마이크", "다른 악기", false, false, true, true, "다른 조건"));
     }
 }

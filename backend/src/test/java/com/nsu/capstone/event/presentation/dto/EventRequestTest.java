@@ -57,13 +57,31 @@ class EventRequestTest {
         BigDecimal expectedAudience = new BigDecimal("800");
         String description = "축제 첫날 저녁 무대를 여는 밴드 공연이에요.";
         String visibility = "PUBLIC";
-        EventRequest.Details details = new EventRequest.Details("공연 2시간 전 30분", "8m × 6m", true,
-            "무선 2개, 유선 4개", "드럼 세트, 베이스 앰프", true, true, false, null, null);
+        EventRequest.Details details = new EventRequest.Details(
+                "공연 2시간 전 30분", "8m × 6m", true, "무선 2개, 유선 4개", "드럼 세트, 베이스 앰프", true, true, false, null, null);
 
         EventRequest build() {
-            return new EventRequest(name, eventType, startDate, startTime, endDate, endTime, performanceMinutes,
-                venue, regionCode, artistType, genres, mood, tempo, vocal, budgetMin, budgetMax, expectedAudience,
-                description, visibility, details);
+            return new EventRequest(
+                    name,
+                    eventType,
+                    startDate,
+                    startTime,
+                    endDate,
+                    endTime,
+                    performanceMinutes,
+                    venue,
+                    regionCode,
+                    artistType,
+                    genres,
+                    mood,
+                    tempo,
+                    vocal,
+                    budgetMin,
+                    budgetMax,
+                    expectedAudience,
+                    description,
+                    visibility,
+                    details);
         }
     }
 
@@ -80,7 +98,7 @@ class EventRequestTest {
     @Test
     @DisplayName("문자열과 숫자를 도메인 값으로 바꾼다. 장르는 표 순서가 된다")
     void convertsToTheValidatedContent() {
-        EventContent content = request(d -> { }).toContent();
+        EventContent content = request(d -> {}).toContent();
 
         assertThat(content).isEqualTo(sampleWithDetails());
         assertThat(content.genres()).containsExactly(Genre.POP, Genre.ROCK);
@@ -89,7 +107,11 @@ class EventRequestTest {
     @Test
     @DisplayName("details가 없으면 선택정보를 모두 비운다. artistType이 없으면 상관없음이다")
     void missingOptionalPartsBecomeEmptyDetailsAndAnyArtistType() {
-        EventContent content = request(d -> { d.details = null; d.artistType = null; }).toContent();
+        EventContent content = request(d -> {
+                    d.details = null;
+                    d.artistType = null;
+                })
+                .toContent();
 
         assertThat(content.details()).isEqualTo(EventDetails.empty());
         assertThat(content.artistType()).isNull();
@@ -99,20 +121,31 @@ class EventRequestTest {
     @DisplayName("앞뒤 공백은 지우고, 빈 선택정보는 null로 바꾼다")
     void stripsTextAndTurnsBlankOptionalTextIntoNull() {
         EventContent content = request(d -> {
-            d.name = "  행사  ";
-            d.details = new EventRequest.Details("   ", " 8m × 6m ", null, "", null, null, null, null, null, null);
-        }).toContent();
+                    d.name = "  행사  ";
+                    d.details =
+                            new EventRequest.Details("   ", " 8m × 6m ", null, "", null, null, null, null, null, null);
+                })
+                .toContent();
 
         assertThat(content.name()).isEqualTo("행사");
         assertThat(content.details())
-            .isEqualTo(new EventDetails(null, "8m × 6m", null, null, null, null, null, null, null, null));
+                .isEqualTo(new EventDetails(null, "8m × 6m", null, null, null, null, null, null, null, null));
     }
 
     @Test
     @DisplayName("음악 조건을 보내지 않거나 null로 보내면 고르지 않음이다. 세 값을 따로 고를 수 있다")
     void omittedMusicConditionsAreNotChosen() {
-        EventContent none = request(d -> { d.mood = null; d.tempo = null; d.vocal = null; }).toContent();
-        EventContent onlyTempo = request(d -> { d.mood = null; d.vocal = null; }).toContent();
+        EventContent none = request(d -> {
+                    d.mood = null;
+                    d.tempo = null;
+                    d.vocal = null;
+                })
+                .toContent();
+        EventContent onlyTempo = request(d -> {
+                    d.mood = null;
+                    d.vocal = null;
+                })
+                .toContent();
 
         assertThat(none).isEqualTo(sampleWithDetailsNoMusic());
         assertThat(onlyTempo.mood()).isNull();
@@ -123,14 +156,14 @@ class EventRequestTest {
     /** 코드를 문자열로 받는 컴포넌트(enum, enum의 List)의 이름. 새 코드 필드를 더하면 자동으로 따라온다. */
     static Stream<String> codeComponents() {
         return Arrays.stream(EventContent.class.getRecordComponents())
-            .filter(component -> {
-                Type type = component.getGenericType();
-                if (type instanceof ParameterizedType parameterized && parameterized.getRawType() == List.class) {
-                    type = parameterized.getActualTypeArguments()[0];
-                }
-                return type instanceof Class<?> clazz && clazz.isEnum();
-            })
-            .map(RecordComponent::getName);
+                .filter(component -> {
+                    Type type = component.getGenericType();
+                    if (type instanceof ParameterizedType parameterized && parameterized.getRawType() == List.class) {
+                        type = parameterized.getActualTypeArguments()[0];
+                    }
+                    return type instanceof Class<?> clazz && clazz.isEnum();
+                })
+                .map(RecordComponent::getName);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -143,24 +176,33 @@ class EventRequestTest {
             field.set(draft, field.getType() == List.class ? List.of(bad) : bad);
 
             assertThatThrownBy(draft.build()::toContent)
-                .as("%s = '%s'", component, bad)
-                .isInstanceOfSatisfying(BusinessException.class,
-                    e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
+                    .as("%s = '%s'", component, bad)
+                    .isInstanceOfSatisfying(
+                            BusinessException.class,
+                            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
         }
     }
 
     static Stream<Arguments> accepted() {
         return Stream.of(
-            Arguments.of("소수부가 0인 정수(40.0)", (Consumer<Draft>) d -> d.performanceMinutes = n("40.0")),
-            Arguments.of("정확히 24시간", (Consumer<Draft>) d -> { d.endDate = "2026-11-07"; d.endTime = "18:00"; }),
-            Arguments.of("자정을 넘기는 22:00~02:00", (Consumer<Draft>) d -> {
-                d.startTime = "22:00"; d.endDate = "2026-11-07"; d.endTime = "02:00"; d.performanceMinutes = n("120");
-            }),
-            Arguments.of("공연시간이 시간대 길이와 같음", (Consumer<Draft>) d -> d.performanceMinutes = n("60")),
-            Arguments.of("예산 0~0(무보수)", (Consumer<Draft>) d -> { d.budgetMin = n("0"); d.budgetMax = n("0"); }),
-            Arguments.of("100자 이름", (Consumer<Draft>) d -> d.name = "가".repeat(100)),
-            Arguments.of("이모지로 정확히 100 code unit인 이름", (Consumer<Draft>) d -> d.name = "😀".repeat(50))
-        );
+                Arguments.of("소수부가 0인 정수(40.0)", (Consumer<Draft>) d -> d.performanceMinutes = n("40.0")),
+                Arguments.of("정확히 24시간", (Consumer<Draft>) d -> {
+                    d.endDate = "2026-11-07";
+                    d.endTime = "18:00";
+                }),
+                Arguments.of("자정을 넘기는 22:00~02:00", (Consumer<Draft>) d -> {
+                    d.startTime = "22:00";
+                    d.endDate = "2026-11-07";
+                    d.endTime = "02:00";
+                    d.performanceMinutes = n("120");
+                }),
+                Arguments.of("공연시간이 시간대 길이와 같음", (Consumer<Draft>) d -> d.performanceMinutes = n("60")),
+                Arguments.of("예산 0~0(무보수)", (Consumer<Draft>) d -> {
+                    d.budgetMin = n("0");
+                    d.budgetMax = n("0");
+                }),
+                Arguments.of("100자 이름", (Consumer<Draft>) d -> d.name = "가".repeat(100)),
+                Arguments.of("이모지로 정확히 100 code unit인 이름", (Consumer<Draft>) d -> d.name = "😀".repeat(50)));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -172,66 +214,67 @@ class EventRequestTest {
 
     static Stream<Arguments> rejected() {
         return Stream.of(
-            // 형식 변환 실패
-            Arguments.of("없는 날짜", (Consumer<Draft>) d -> d.startDate = "2026-02-30"),
-            Arguments.of("슬래시 날짜", (Consumer<Draft>) d -> d.startDate = "2026/11/07"),
-            Arguments.of("자릿수가 모자란 날짜", (Consumer<Draft>) d -> d.endDate = "2026-11-6"),
-            Arguments.of("null 날짜", (Consumer<Draft>) d -> d.startDate = null),
-            Arguments.of("24:00", (Consumer<Draft>) d -> d.endTime = "24:00"),
-            Arguments.of("초가 붙은 시각", (Consumer<Draft>) d -> d.startTime = "22:00:00"),
-            Arguments.of("한 자리 시", (Consumer<Draft>) d -> d.startTime = "7:00"),
-            Arguments.of("null 시각", (Consumer<Draft>) d -> d.endTime = null),
-            Arguments.of("모르는 eventType", (Consumer<Draft>) d -> d.eventType = "PARTY"),
-            Arguments.of("소문자 eventType", (Consumer<Draft>) d -> d.eventType = "concert"),
-            Arguments.of("null eventType", (Consumer<Draft>) d -> d.eventType = null),
-            Arguments.of("모르는 artistType", (Consumer<Draft>) d -> d.artistType = "ORCHESTRA"),
-            Arguments.of("모르는 visibility", (Consumer<Draft>) d -> d.visibility = "SECRET"),
-            Arguments.of("모르는 장르", (Consumer<Draft>) d -> d.genres = List.of("POP", "KPOP")),
-            Arguments.of("null 장르 원소", (Consumer<Draft>) d -> d.genres = Arrays.asList("POP", null)),
-            Arguments.of("null 장르 목록", (Consumer<Draft>) d -> d.genres = null),
-            Arguments.of("소수 공연시간", (Consumer<Draft>) d -> d.performanceMinutes = n("40.9")),
-            Arguments.of("소수 최소 예산", (Consumer<Draft>) d -> d.budgetMin = n("0.5")),
-            Arguments.of("소수 최대 예산", (Consumer<Draft>) d -> d.budgetMax = n("500000.9")),
-            Arguments.of("소수 관객수", (Consumer<Draft>) d -> d.expectedAudience = n("800.5")),
-            Arguments.of("long 범위를 넘는 예산", (Consumer<Draft>) d -> d.budgetMax = n("99999999999999999999")),
-            Arguments.of("int 범위를 넘는 관객수", (Consumer<Draft>) d -> d.expectedAudience = n("2147483648")),
-            Arguments.of("int로 감기면 800이 되는 관객수(2^32 + 800)",
-                (Consumer<Draft>) d -> d.expectedAudience = n("4294968096")),
-            Arguments.of("int 범위를 넘는 공연시간", (Consumer<Draft>) d -> d.performanceMinutes = n("4294967336")),
-            Arguments.of("null 공연시간", (Consumer<Draft>) d -> d.performanceMinutes = null),
-            // 불변식 위반(03 §3.6)
-            Arguments.of("24시간 1분", (Consumer<Draft>) d -> { d.endDate = "2026-11-07"; d.endTime = "18:01"; }),
-            Arguments.of("종료 = 시작", (Consumer<Draft>) d -> d.endTime = "18:00"),
-            Arguments.of("종료가 시작보다 이름", (Consumer<Draft>) d -> d.endTime = "17:00"),
-            Arguments.of("공연시간이 시간대보다 1분 김", (Consumer<Draft>) d -> d.performanceMinutes = n("61")),
-            Arguments.of("공연시간 0", (Consumer<Draft>) d -> d.performanceMinutes = n("0")),
-            Arguments.of("최소 예산 > 최대 예산", (Consumer<Draft>) d -> d.budgetMin = n("600000")),
-            Arguments.of("예산 상한 초과", (Consumer<Draft>) d -> d.budgetMax = n("1000000001")),
-            Arguments.of("음수 예산", (Consumer<Draft>) d -> d.budgetMin = n("-1")),
-            Arguments.of("관객 0", (Consumer<Draft>) d -> d.expectedAudience = n("0")),
-            Arguments.of("관객 상한 초과", (Consumer<Draft>) d -> d.expectedAudience = n("1000001")),
-            Arguments.of("장르 0개", (Consumer<Draft>) d -> d.genres = List.of()),
-            Arguments.of("장르 4개", (Consumer<Draft>) d -> d.genres = List.of("POP", "ROCK", "JAZZ", "TROT")),
-            Arguments.of("장르 중복", (Consumer<Draft>) d -> d.genres = List.of("POP", "POP")),
-            Arguments.of("시·도 코드 2자리", (Consumer<Draft>) d -> d.regionCode = "11"),
-            Arguments.of("지역에 숫자가 아닌 글자", (Consumer<Draft>) d -> d.regionCode = "1168a"),
-            Arguments.of("앞에 공백이 붙은 지역 코드(지역 코드는 strip하지 않는다)",
-                (Consumer<Draft>) d -> d.regionCode = " 11680"),
-            Arguments.of("뒤에 공백이 붙은 지역 코드", (Consumer<Draft>) d -> d.regionCode = "11680 "),
-            Arguments.of("null 지역", (Consumer<Draft>) d -> d.regionCode = null),
-            Arguments.of("공백뿐인 이름", (Consumer<Draft>) d -> d.name = "   "),
-            Arguments.of("null 이름", (Consumer<Draft>) d -> d.name = null),
-            Arguments.of("101자 이름", (Consumer<Draft>) d -> d.name = "가".repeat(101)),
-            Arguments.of("이모지로 102 code unit인 이름", (Consumer<Draft>) d -> d.name = "😀".repeat(51)),
-            Arguments.of("빈 장소", (Consumer<Draft>) d -> d.venue = ""),
-            Arguments.of("2001자 설명", (Consumer<Draft>) d -> d.description = "가".repeat(2001)),
-            Arguments.of("NUL이 든 이름", (Consumer<Draft>) d -> d.name = "행사\0"),
-            Arguments.of("NUL뿐인 설명", (Consumer<Draft>) d -> d.description = "\0"),
-            Arguments.of("101자 리허설", (Consumer<Draft>) d -> d.details =
-                new EventRequest.Details("가".repeat(101), null, null, null, null, null, null, null, null, null)),
-            Arguments.of("NUL이 든 기타 조건", (Consumer<Draft>) d -> d.details =
-                new EventRequest.Details(null, null, null, null, null, null, null, null, null, "조건\0"))
-        );
+                // 형식 변환 실패
+                Arguments.of("없는 날짜", (Consumer<Draft>) d -> d.startDate = "2026-02-30"),
+                Arguments.of("슬래시 날짜", (Consumer<Draft>) d -> d.startDate = "2026/11/07"),
+                Arguments.of("자릿수가 모자란 날짜", (Consumer<Draft>) d -> d.endDate = "2026-11-6"),
+                Arguments.of("null 날짜", (Consumer<Draft>) d -> d.startDate = null),
+                Arguments.of("24:00", (Consumer<Draft>) d -> d.endTime = "24:00"),
+                Arguments.of("초가 붙은 시각", (Consumer<Draft>) d -> d.startTime = "22:00:00"),
+                Arguments.of("한 자리 시", (Consumer<Draft>) d -> d.startTime = "7:00"),
+                Arguments.of("null 시각", (Consumer<Draft>) d -> d.endTime = null),
+                Arguments.of("모르는 eventType", (Consumer<Draft>) d -> d.eventType = "PARTY"),
+                Arguments.of("소문자 eventType", (Consumer<Draft>) d -> d.eventType = "concert"),
+                Arguments.of("null eventType", (Consumer<Draft>) d -> d.eventType = null),
+                Arguments.of("모르는 artistType", (Consumer<Draft>) d -> d.artistType = "ORCHESTRA"),
+                Arguments.of("모르는 visibility", (Consumer<Draft>) d -> d.visibility = "SECRET"),
+                Arguments.of("모르는 장르", (Consumer<Draft>) d -> d.genres = List.of("POP", "KPOP")),
+                Arguments.of("null 장르 원소", (Consumer<Draft>) d -> d.genres = Arrays.asList("POP", null)),
+                Arguments.of("null 장르 목록", (Consumer<Draft>) d -> d.genres = null),
+                Arguments.of("소수 공연시간", (Consumer<Draft>) d -> d.performanceMinutes = n("40.9")),
+                Arguments.of("소수 최소 예산", (Consumer<Draft>) d -> d.budgetMin = n("0.5")),
+                Arguments.of("소수 최대 예산", (Consumer<Draft>) d -> d.budgetMax = n("500000.9")),
+                Arguments.of("소수 관객수", (Consumer<Draft>) d -> d.expectedAudience = n("800.5")),
+                Arguments.of("long 범위를 넘는 예산", (Consumer<Draft>) d -> d.budgetMax = n("99999999999999999999")),
+                Arguments.of("int 범위를 넘는 관객수", (Consumer<Draft>) d -> d.expectedAudience = n("2147483648")),
+                Arguments.of("int로 감기면 800이 되는 관객수(2^32 + 800)", (Consumer<Draft>)
+                        d -> d.expectedAudience = n("4294968096")),
+                Arguments.of("int 범위를 넘는 공연시간", (Consumer<Draft>) d -> d.performanceMinutes = n("4294967336")),
+                Arguments.of("null 공연시간", (Consumer<Draft>) d -> d.performanceMinutes = null),
+                // 불변식 위반(03 §3.6)
+                Arguments.of("24시간 1분", (Consumer<Draft>) d -> {
+                    d.endDate = "2026-11-07";
+                    d.endTime = "18:01";
+                }),
+                Arguments.of("종료 = 시작", (Consumer<Draft>) d -> d.endTime = "18:00"),
+                Arguments.of("종료가 시작보다 이름", (Consumer<Draft>) d -> d.endTime = "17:00"),
+                Arguments.of("공연시간이 시간대보다 1분 김", (Consumer<Draft>) d -> d.performanceMinutes = n("61")),
+                Arguments.of("공연시간 0", (Consumer<Draft>) d -> d.performanceMinutes = n("0")),
+                Arguments.of("최소 예산 > 최대 예산", (Consumer<Draft>) d -> d.budgetMin = n("600000")),
+                Arguments.of("예산 상한 초과", (Consumer<Draft>) d -> d.budgetMax = n("1000000001")),
+                Arguments.of("음수 예산", (Consumer<Draft>) d -> d.budgetMin = n("-1")),
+                Arguments.of("관객 0", (Consumer<Draft>) d -> d.expectedAudience = n("0")),
+                Arguments.of("관객 상한 초과", (Consumer<Draft>) d -> d.expectedAudience = n("1000001")),
+                Arguments.of("장르 0개", (Consumer<Draft>) d -> d.genres = List.of()),
+                Arguments.of("장르 4개", (Consumer<Draft>) d -> d.genres = List.of("POP", "ROCK", "JAZZ", "TROT")),
+                Arguments.of("장르 중복", (Consumer<Draft>) d -> d.genres = List.of("POP", "POP")),
+                Arguments.of("시·도 코드 2자리", (Consumer<Draft>) d -> d.regionCode = "11"),
+                Arguments.of("지역에 숫자가 아닌 글자", (Consumer<Draft>) d -> d.regionCode = "1168a"),
+                Arguments.of("앞에 공백이 붙은 지역 코드(지역 코드는 strip하지 않는다)", (Consumer<Draft>) d -> d.regionCode = " 11680"),
+                Arguments.of("뒤에 공백이 붙은 지역 코드", (Consumer<Draft>) d -> d.regionCode = "11680 "),
+                Arguments.of("null 지역", (Consumer<Draft>) d -> d.regionCode = null),
+                Arguments.of("공백뿐인 이름", (Consumer<Draft>) d -> d.name = "   "),
+                Arguments.of("null 이름", (Consumer<Draft>) d -> d.name = null),
+                Arguments.of("101자 이름", (Consumer<Draft>) d -> d.name = "가".repeat(101)),
+                Arguments.of("이모지로 102 code unit인 이름", (Consumer<Draft>) d -> d.name = "😀".repeat(51)),
+                Arguments.of("빈 장소", (Consumer<Draft>) d -> d.venue = ""),
+                Arguments.of("2001자 설명", (Consumer<Draft>) d -> d.description = "가".repeat(2001)),
+                Arguments.of("NUL이 든 이름", (Consumer<Draft>) d -> d.name = "행사\0"),
+                Arguments.of("NUL뿐인 설명", (Consumer<Draft>) d -> d.description = "\0"),
+                Arguments.of("101자 리허설", (Consumer<Draft>) d -> d.details = new EventRequest.Details(
+                        "가".repeat(101), null, null, null, null, null, null, null, null, null)),
+                Arguments.of("NUL이 든 기타 조건", (Consumer<Draft>) d -> d.details =
+                        new EventRequest.Details(null, null, null, null, null, null, null, null, null, "조건\0")));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -239,7 +282,8 @@ class EventRequestTest {
     @DisplayName("형식이 틀리거나 불변식을 어기면 VALIDATION_ERROR다")
     void rejectsMalformedOrInvalidBodies(String label, Consumer<Draft> change) {
         assertThatThrownBy(() -> request(change).toContent())
-            .isInstanceOfSatisfying(BusinessException.class,
-                e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
     }
 }
