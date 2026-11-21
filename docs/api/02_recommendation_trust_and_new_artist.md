@@ -71,7 +71,7 @@
 
 ### 1.0 검색 문구
 
-Spring은 0의 snapshot에 담긴 음악 조건(행사 종류·장르, NSU-121 이후 분위기·템포·보컬)으로 짧은 영문 검색 문구를 만들어 AI에 보낸다. AI는 이 문구를 그대로 CLAP 검색 입력으로 쓰고, 번역하거나 다시 해석하지 않는다(서버 협의 016, [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)).
+Spring은 0의 snapshot에 담긴 음악 조건(행사 종류·장르·분위기·템포·보컬, [03 §3.3](./03_events.md#33-분류-값))으로 짧은 영문 검색 문구를 만들어 AI에 보낸다. AI는 이 문구를 그대로 CLAP 검색 입력으로 쓰고, 번역하거나 다시 해석하지 않는다(서버 협의 016, [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)).
 
 - 행사 설명은 검색 문구에 넣지 않는다(SSOT `EVT-042` v1.17).
 - 문장 꼴과 매핑표는 위 ADR을 따른다. 예: `energetic fast-tempo electronic music with vocals for a university festival`.
@@ -365,7 +365,7 @@ Authorization: Bearer {accessToken}
 | 바뀌면 `true` (추천에 쓰인 정보) | 바뀌어도 `false` |
 |---|---|
 | Eligibility 입력: 시간대(`startDate`·`startTime`·`endDate`·`endTime`), `performanceMinutes`, `regionCode`, `budgetMin`·`budgetMax`, `artistType` | `name`, `venue`, `expectedAudience`, `visibility`, `details`(선택정보) |
-| 검색 문구의 재료(음악 조건, §1.0): `eventType`, `genres` (NSU-121 이후 분위기·템포·보컬) | `description`(행사 설명. 검색 문구에 쓰지 않는다) |
+| 검색 문구의 재료(음악 조건, §1.0): `eventType`, `genres`, `mood`, `tempo`, `vocal`. 고르지 않음 ↔ 값 변경도 `true`, 매핑 버전(문구)만 바뀌면 `false` | `description`(행사 설명. 검색 문구에 쓰지 않는다) |
 
 - 필드 이름은 [03 §3](./03_events.md#3-행사-표현)의 행사 필드다. `genres`는 순서와 관계없이 같은 집합이면 같은 값이다([03 §8.3](./03_events.md#83-iseventchanged-지문)).
 - 값을 바꿨다가 원래대로 되돌리면 `false`다.
