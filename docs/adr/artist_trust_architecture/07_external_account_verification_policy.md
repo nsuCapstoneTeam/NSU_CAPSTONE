@@ -253,7 +253,7 @@ Trust Profile을 조회할 때마다 외부 계정을 확인합니다. Refresh T
 | 관리자가 검증을 취소(`VERIFICATION_REVOKED`) | 즉시 제외. 취소 사실과 사유는 공개하지 않으며 관리자 API(NSU-80)에서만 다룬다 |
 | 같은 계정을 다시 연결 | OAuth로 제어권을 다시 확인한 뒤에만 표시 |
 
-해제·취소된 확인 기록의 보관 여부는 Trust Profile 계약과 무관한 저장 방식의 문제로, NSU-33·NSU-37 구현에서 정합니다.
+해제·취소된 확인 기록의 보관 여부는 Trust Profile 계약과 무관한 저장 방식의 문제로, NSU-33·NSU-37 구현에서 정합니다. 외부 계정은 [external_links/00](../external_links/00_external_account_links.md) 7번이, 사업자등록·실연 참여·공식 활동은 [10 D46](./10_evidence_verification_records.md)이 정했습니다(둘 다 행을 지우고 감사 기록만 남깁니다).
 
 > 2026-11-16 [external_links/00](../external_links/00_external_account_links.md) 7번에서 정했다. 해제하면 연결 행을 지우고, 감사 기록에는 플랫폼 계정 ID 없이 해제 사실만 남긴다. 관리자 취소는 관리자 기능(NSU-80)이 생길 때까지 runbook에 따른 행 삭제로 대신한다(같은 ADR 2번).
 

@@ -91,6 +91,7 @@
 | D34 | Spotify Artist Profile 연결은 소유권 인증이 아님 | [바로가기](./07_external_account_verification_policy.md#d34-spotify-policy) |
 | D35 | 외부 계정 / 작업물 / Rights / AI Sample 분리 | [바로가기](./07_external_account_verification_policy.md#d35-work-rights-sample) |
 | D36 | MVP OAuth Token 장기 보관 안 함 | [바로가기](./07_external_account_verification_policy.md#d36-oauth-token) |
+| D46 | 사업자등록·실연 참여·공식 활동은 운영자의 증빙 확인 기록으로 표시, 취소하면 즉시 제외 | [바로가기](./10_evidence_verification_records.md) |
 
 ---
 
