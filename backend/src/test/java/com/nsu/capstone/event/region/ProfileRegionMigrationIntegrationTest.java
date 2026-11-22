@@ -49,7 +49,8 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
  * <p>같은 컨테이너에 별도 데이터베이스를 두 표가 모두 있는 버전({@link #PROFILE_TABLES_VERSION})까지 만들고, 그 뒤의 버전마다
  * 그 시점의 지역 목록으로 여러 지역 조합을 담은 프로필을 넣은 뒤 한 버전을 적용하고 묶음 함수 {@code check_profile_regions()}를
  * 부른다. 이어서 시드한 같은 user_id의 배열을 기대값과 비교한다(코드 보존 검사). 개편이 코드를 없앴다면 그 개편 PR이 테스트에
- * 더하는 대응표(옛 코드 → 새 코드 목록, 아래 {@code SUWON_MOVED}처럼)로 기대 배열을 계산한다.
+ * {@link #OPERATIONAL_MAPPINGS}에 자기 버전으로 더하는 대응표(옛 코드 → 새 코드 목록, 아래 {@code SUWON_MOVED}처럼)로
+ * 기대 배열을 계산한다. 단계마다 그 버전의 대응표만 쓴다.
  * 별도 데이터베이스를 쓰는 이유는 운영과 같은 기본 search_path로 돌게 해서 확장(pgvector 등)을 쓰는 마이그레이션도 그대로 적용하기 위해서다.
  * 운영 기동 경로(Flyway 콜백)에서 점검하지 않는 이유는 ADR event_partner_profile/00 "지역 점검을 강제하는 방법"에 있다.
  * 테스트가 점검 함수를 직접 부르므로, 개편 마이그레이션이 함수 호출 자체를 빠뜨린 것은 잡지 못한다(05 §5와 같은 한계).
@@ -64,8 +65,21 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
     private static final String DATABASE = "region_migration_check";
     private static final String MIGRATIONS = "classpath:db/migration";
     private static final String FIXTURES = "classpath:db/region-migration-fixture/";
-    private static final Map<String, List<String>> NO_MAPPING = Map.of();
+    /** 운영 위치에 개편 마이그레이션(V13)이 이미 있는 상태를 흉내 내는 테스트 전용 위치 */
+    private static final String OPERATIONAL_LIKE = "classpath:db/region-migration-operational-like";
+    /** 실패 픽스처의 마이그레이션 버전. 픽스처는 모두 이 버전 하나다. */
+    private static final String FIXTURE_VERSION = "900";
+
+    /**
+     * 운영 개편 마이그레이션의 버전별 대응표(버전 → 개편이 없앤 옛 코드 → 새 코드 목록). 개편 PR이 여기에 자기 버전의 대응표를 더한다.
+     * 지금은 지역 개편이 없어 비어 있다.
+     */
+    private static final Map<String, Map<String, List<String>>> OPERATIONAL_MAPPINGS = Map.of();
+
+    private static final Map<String, Map<String, List<String>>> NO_MAPPING = Map.of();
     private static final Map<String, List<String>> SUWON_MOVED = Map.of("41110", List.of("41999"));
+    private static final Map<String, Map<String, List<String>>> SUWON_MOVED_AT_FIXTURE =
+            Map.of(FIXTURE_VERSION, SUWON_MOVED);
 
     @Autowired
     DataSource dataSource;
@@ -194,12 +208,13 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
 
     @Test
     void 여러_지역_조합을_담은_프로필은_최신_마이그레이션까지_점검을_통과한다() {
-        migrateStepwiseWithProfiles(EnumSet.allOf(ProfileTable.class), NO_MAPPING, MIGRATIONS);
+        migrateStepwiseWithProfiles(EnumSet.allOf(ProfileTable.class), OPERATIONAL_MAPPINGS, MIGRATIONS);
     }
 
     @Test
     void 시드는_두_표_모두_원소가_여러_개인_배열을_담는다() {
-        JdbcTemplate migrated = migrateStepwiseWithProfiles(EnumSet.allOf(ProfileTable.class), NO_MAPPING, MIGRATIONS);
+        JdbcTemplate migrated =
+                migrateStepwiseWithProfiles(EnumSet.allOf(ProfileTable.class), OPERATIONAL_MAPPINGS, MIGRATIONS);
 
         for (ProfileTable table : ProfileTable.values()) {
             assertThat(migrated.queryForObject(
@@ -212,7 +227,8 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
 
     @Test
     void 시드는_두_표_모두_원소가_세_개_이상인_배열을_담는다() {
-        JdbcTemplate migrated = migrateStepwiseWithProfiles(EnumSet.allOf(ProfileTable.class), NO_MAPPING, MIGRATIONS);
+        JdbcTemplate migrated =
+                migrateStepwiseWithProfiles(EnumSet.allOf(ProfileTable.class), OPERATIONAL_MAPPINGS, MIGRATIONS);
 
         for (ProfileTable table : ProfileTable.values()) {
             assertThat(migrated.queryForObject(
@@ -226,7 +242,20 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
     @Test
     void 두_표를_모두_옮기고_대응표대로_코드를_보존한_개편은_통과한다() {
         migrateStepwiseWithProfiles(
-                EnumSet.allOf(ProfileTable.class), SUWON_MOVED, MIGRATIONS, fixture("move-both-tables"));
+                EnumSet.allOf(ProfileTable.class), SUWON_MOVED_AT_FIXTURE, MIGRATIONS, fixture("move-both-tables"));
+    }
+
+    @Test
+    void 운영_개편은_자기_버전의_대응표대로_코드를_보존하면_통과한다() {
+        migrateStepwiseWithProfiles(
+                EnumSet.allOf(ProfileTable.class), Map.of("13", SUWON_MOVED), MIGRATIONS, OPERATIONAL_LIKE);
+    }
+
+    @Test
+    void 다른_버전의_대응표로는_그_버전이_없앤_코드를_설명하지_못한다() {
+        assertThatThrownBy(() -> migrateStepwiseWithProfiles(
+                        EnumSet.allOf(ProfileTable.class), Map.of("14", SUWON_MOVED), MIGRATIONS, OPERATIONAL_LIKE))
+                .hasMessageContaining("대응표 없이 사라진 코드: 41110");
     }
 
     @Test
@@ -240,7 +269,7 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
     @EnumSource(ProfileTable.class)
     void 바뀐_원소만_떨어뜨린_이전은_점검_함수를_통과해도_코드_보존_검사에서_실패한다(ProfileTable table) {
         assertThatThrownBy(() -> migrateStepwiseWithProfiles(
-                        EnumSet.of(table), SUWON_MOVED, MIGRATIONS, fixture("drop-changed-element")))
+                        EnumSet.of(table), SUWON_MOVED_AT_FIXTURE, MIGRATIONS, fixture("drop-changed-element")))
                 .hasMessageContaining(table.label)
                 .hasMessageContaining("지역 배열")
                 .hasMessageContaining("41110");
@@ -282,7 +311,7 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
     void EVENT_PARTNER_표만_옮기고_아티스트_표를_빠뜨린_개편은_아티스트_점검에서_실패한다() {
         assertThatThrownBy(() -> migrateStepwiseWithProfiles(
                         EnumSet.allOf(ProfileTable.class),
-                        SUWON_MOVED,
+                        SUWON_MOVED_AT_FIXTURE,
                         MIGRATIONS,
                         fixture("move-partner-but-not-artist")))
                 .hasMessageContaining(ProfileTable.ARTIST.label + " 지역 코드")
@@ -293,7 +322,7 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
     void EVENT_PARTNER_표만_옮긴_픽스처는_EVENT_PARTNER_표만_보면_통과한다() {
         migrateStepwiseWithProfiles(
                 EnumSet.of(ProfileTable.EVENT_PARTNER),
-                SUWON_MOVED,
+                SUWON_MOVED_AT_FIXTURE,
                 MIGRATIONS,
                 fixture("move-partner-but-not-artist"));
     }
@@ -378,10 +407,10 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
      * 점검이 실패하면 그 예외가 그대로 나온다.
      *
      * @param tables 시드할 표. 표 하나만 주면 그 표의 점검만 따로 볼 수 있다
-     * @param codeMapping 개편이 없앤 옛 코드 → 새 코드 목록. 개편 PR이 픽스처에 더한다
+     * @param mappings 버전 → 그 버전이 없앤 옛 코드 → 새 코드 목록. 개편 PR이 자기 버전의 대응표를 더한다
      */
     private JdbcTemplate migrateStepwiseWithProfiles(
-            Set<ProfileTable> tables, Map<String, List<String>> codeMapping, String... locations) {
+            Set<ProfileTable> tables, Map<String, Map<String, List<String>>> mappings, String... locations) {
         DataSource databaseDataSource = databaseDataSource();
         JdbcTemplate jdbc = new JdbcTemplate(databaseDataSource);
         MigrationVersion profileTables = MigrationVersion.fromVersion(PROFILE_TABLES_VERSION);
@@ -402,6 +431,7 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
             jdbc.execute("SELECT check_profile_regions()");
 
             RegionIndex regions = RegionIndex.load(jdbc);
+            Map<String, List<String>> codeMapping = mappings.getOrDefault(version.getVersion(), Map.of());
             for (ProfileTable table : tables) {
                 assertCodesPreserved(table, seeded.get(table), regionCodesByUser(jdbc, table), regions, codeMapping);
             }
