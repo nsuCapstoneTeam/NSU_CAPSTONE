@@ -23,11 +23,14 @@
 ### 기록 절차
 
 1. 기록할 아티스트 ID, 항목, 내 GitHub 아이디를 정한다.
-2. 증빙을 보기 전에 `SELECT uuidv7() AS verification_id, clock_timestamp() AS checked_at;`으로 기록 ID와 기준 시각을 한 번 만들어 작업 메모에 적는다. 기준 시각 뒤에 그 항목에 생긴 기록·취소는 내가 본 증빙보다 나중 일로 본다. 결과를 못 받아 다시 실행할 때도 두 값을 그대로 쓴다. 새 값은 증빙을 새로 확인했을 때만 만든다.
-3. "입력값 확인"을 한다.
-4. "대상 확인"으로 팀 시드 계정인지, 그 항목이 이미 있는지 본다.
-5. "기록 SQL"을 실행한다.
-6. "실행 뒤 확인"을 한다.
+2. "입력값 확인"을 한다. 형식에 맞지 않으면 어떤 조회에도 넣지 않고 끝낸다.
+3. 증빙을 보기 전에 "기준값 확보"를 실행해 기록 ID(`verification_id`)와 본 사건 수(`seen_events`)를 작업 메모에 적는다. 결과를 못 받아 기록 SQL을 다시 실행할 때도 두 값을 그대로 쓴다.
+4. 증빙을 확인한다.
+5. "대상 확인"으로 팀 시드 계정인지, 그 항목이 이미 있는지 본다.
+6. "기록 SQL"을 실행한다.
+7. "실행 뒤 확인"을 한다.
+
+기록이 `0`건으로 끝났거나 취소한 항목을 다시 넣는 등 새로 기록해야 하면 언제나 1단계부터 다시 한다. 기준값을 증빙보다 먼저 잡는 순서는 이 절에만 있다.
 
 ### 취소 절차
 
@@ -54,7 +57,7 @@
 | 값 | 형식 |
 |---|---|
 | `artist_id`, `verification_id` | UUID(`8-4-4-4-12`자리, 영문자·숫자·`-`만) |
-| `checked_at` | 2단계 `clock_timestamp()` 결과를 그대로(숫자·`-`·`:`·`.`·`+`·`T`·공백만) |
+| `seen_events` | "기준값 확보" 결과를 그대로(숫자만) |
 | `verification_type` | 위 표의 세 값 중 하나 |
 | `operator` | 내 GitHub 아이디(영문자·숫자·`-`, 39자 이하). 이름이나 메모를 적지 않는다 |
 | `reason` | 위 표의 네 값 중 하나 |
@@ -93,21 +96,37 @@ ORDER BY verification_type;
 - 기록하려는 항목이 이미 있으면 다시 기록하지 않는다. 실행해도 `INSERT 0 0`이고 아무것도 바뀌지 않는다.
 - 취소할 때는 이 결과 줄의 `id`와 `verification_type`을 "취소 SQL"에 넣는다. 취소 요청 하나에 이 조회는 한 번만 쓴다. 다시 조회해서 다른 `id`가 보이면 그것은 새 기록이다. 그 기록에도 같은 사유가 맞는지 따로 확인한 뒤 새 취소 요청으로 처리한다.
 
+## 기준값 확보
+
+증빙을 보기 전에 실행하는 읽기 조회다. 기록 ID와, 지금 그 아티스트·항목에 커밋된 감사 사건 수를 한 번에 만든다.
+
+```sql
+\set artist_id '00000000-0000-0000-0000-000000000000'
+\set verification_type 'BUSINESS_REGISTRATION'
+
+SELECT uuidv7() AS verification_id, count(*) AS seen_events
+FROM evidence_verification_audit_events
+WHERE artist_id = (:'artist_id')::uuid
+  AND verification_type = :'verification_type';
+```
+
+감사 표는 행을 더하기만 한다. 그래서 이 수가 그대로면 그 항목의 기록·취소가 그 사이에 하나도 커밋되지 않은 것이다. 기록 SQL은 잠금을 잡은 뒤 이 수를 다시 세어 같을 때만 넣는다. 아직 커밋되지 않은 기록·취소는 지금 세어지지 않지만, 나중에 커밋되면 수가 늘어 기록 SQL이 멈춘다.
+
 ## 기록 SQL
 
 먼저 그 아티스트·항목의 잠금을 잡고, 그다음 문장에서 기록 행을 넣고 `GRANTED` 감사 기록을 남긴다. 둘은 함께 커밋되거나 함께 실패한다. 같은 아티스트·항목의 기록과 취소는 이 잠금으로 한 번에 하나만 돈다. 잠금 뒤의 문장은 앞 작업이 커밋한 감사 기록을 본다.
 
 - `users`에서 `role = 'ARTIST'`이고 `status = 'ACTIVE'`인 행만 골라 넣는다.
 - 같은 아티스트·항목의 기록이 이미 있으면 넣지 않고, 감사 기록도 남기지 않는다.
-- 같은 기록 ID로 이미 실행한 적이 있거나, 기준 시각(`checked_at`) 뒤에 그 아티스트·항목에 감사 사건(다른 운영자의 기록이나 취소)이 생겼으면 넣지 않는다. 증빙을 확인한 뒤 상태가 바뀌었으면 그 확인은 낡은 것이다. 그래서 재실행이 취소된 항목을 증빙 재확인 없이 되살리지 않는다.
-- 행의 `id`와 `checked_at`은 "기록 절차" 2단계에서 만든 값이다.
+- 그 아티스트·항목의 감사 사건 수가 기준값(`seen_events`)과 다르면 넣지 않는다. 기준값을 잡은 뒤 커밋된 기록이나 취소가 있으면(같은 기록 ID로 이미 성공한 실행 포함) 내가 본 증빙은 낡은 것이다. 그래서 재실행이 취소된 항목을 증빙 재확인 없이 되살리지 않는다.
+- 행의 `id`와 `seen_events`는 "기록 절차" 3단계에서 만든 값이다.
 
 `ON_ERROR_STOP` 아래 `\set` 다섯 줄만 바꿔서 블록 전체를 파일로 저장해 `psql -f <파일>`로 실행한다. 한 줄씩 입력하다 오류가 나면 트랜잭션이 중단 상태로 남는다. 그때는 `ROLLBACK;`을 입력하고 처음부터 다시 한다. 예시 `operator` 값은 일부러 형식에 맞지 않게 두었다. 바꾸지 않고 실행하면 DB가 거절한다.
 
 ```sql
 \set ON_ERROR_STOP on
 \set verification_id '00000000-0000-0000-0000-000000000000'
-\set checked_at '2026-01-01T00:00:00+09:00'
+\set seen_events 0
 \set artist_id '00000000-0000-0000-0000-000000000000'
 \set verification_type 'BUSINESS_REGISTRATION'
 \set operator 'CHANGE_ME'
@@ -124,13 +143,9 @@ WITH granted AS (
     WHERE u.id = (:'artist_id')::uuid
       AND u.role = 'ARTIST'
       AND u.status = 'ACTIVE'
-      AND NOT EXISTS (
-          SELECT 1 FROM evidence_verification_audit_events a
-          WHERE a.evidence_verification_id = (:'verification_id')::uuid
-             OR (a.artist_id = u.id
-                 AND a.verification_type = :'verification_type'
-                 AND a.occurred_at >= (:'checked_at')::timestamptz)
-      )
+      AND (SELECT count(*) FROM evidence_verification_audit_events a
+           WHERE a.artist_id = u.id
+             AND a.verification_type = :'verification_type') = (:'seen_events')::bigint
     ON CONFLICT DO NOTHING
     RETURNING id, artist_id, verification_type, verified_at
 )
@@ -142,7 +157,7 @@ COMMIT;
 ```
 
 - `INSERT 0 1`이면 기록하고 감사 기록을 남긴 것이다.
-- `INSERT 0 0`이면 아무것도 바뀌지 않았다. 대상이 `ARTIST`·`ACTIVE`가 아니거나, 그 항목이 이미 있거나, 이 기록 ID로 이미 실행했거나, 확인 시각 뒤에 그 항목에 다른 사건이 생긴 경우다. 이 요청은 여기서 끝낸다. 같은 값으로 다시 실행해도 결과는 같다. 그래도 기록해야 하면 증빙을 다시 확인하고 새 기록 ID와 확인 시각으로 새 요청을 시작한다. 앞 실행의 결과를 못 받았으면 "실행 뒤 확인"에서 이 기록 ID의 감사 기록을 본다. 넣을 행이 없으면 DB가 `operator` 형식도 검사하지 않으므로 입력값도 다시 확인한다. "대상 확인"부터 다시 한다.
+- `INSERT 0 0`이면 아무것도 바뀌지 않았다. 대상이 `ARTIST`·`ACTIVE`가 아니거나, 그 항목이 이미 있거나, 기준값을 잡은 뒤 그 항목에 기록·취소가 커밋된 경우(이 기록 ID로 이미 성공한 실행 포함)다. 이 요청은 여기서 끝낸다. 같은 값으로 다시 실행해도 결과는 같다. 그래도 기록해야 하면 "기록 절차" 1단계부터 다시 한다. 앞 실행의 결과를 못 받았으면 "실행 뒤 확인"에서 이 기록 ID의 감사 기록을 본다. 넣을 행이 없으면 DB가 `operator` 형식도 검사하지 않으므로 입력값도 다시 확인한다. "대상 확인"부터 다시 한다.
 - `verification_type`이 세 값 밖이거나 `operator`가 형식 밖이면 DB가 거절한다. 이때는 기록도 감사 기록도 바뀌지 않는다.
 - 잠금을 5초 안에 얻지 못하면 실패한다. 다시 실행한다.
 
@@ -150,7 +165,7 @@ COMMIT;
 
 기록 SQL과 같은 잠금을 잡은 뒤 한 문장에서 기록 행을 지우고 `REVOKED` 감사 기록을 남긴다. 감사 시각은 트랜잭션 시작(`now()`)이 아니라 지운 시점(`clock_timestamp()`)이다. 지울 행은 기록 ID(`verification_id`)로 정한다. 아티스트와 항목만으로 지우면, 조회한 뒤 다른 운영자가 취소하고 다시 기록했을 때 새 기록을 지운다.
 
-`ON_ERROR_STOP` 아래 `\set` 다섯 줄만 바꿔서 기록 SQL처럼 `psql -f <파일>`로 실행한다. `verification_id`와 `verification_type`은 "취소 절차" 4단계에서 적어 둔 값이다. 다시 실행할 때도 같은 값을 쓴다.
+`ON_ERROR_STOP` 아래 `\set` 다섯 줄만 바꿔서 기록 SQL처럼 `psql -f <파일>`로 실행한다. `verification_id`와 `verification_type`은 "취소 절차" 3단계에서 적어 둔 값이다. 다시 실행할 때도 같은 값을 쓴다.
 
 ```sql
 \set ON_ERROR_STOP on
@@ -183,7 +198,7 @@ COMMIT;
 - `INSERT 0 0`이면 그 기록 ID의 행이 없었던 것이고, 아무것도 바뀌지 않았다. 다른 운영자가 이미 취소했거나 입력값이 틀린 경우다. 지울 행이 없으면 DB가 사유 코드와 `operator`도 검사하지 않으므로 입력값도 다시 확인한다.
 - 이때 "대상 확인"으로 새 `id`를 찾아 다시 지우지 않는다. "실행 뒤 확인"의 기록 ID 조회로 그 ID의 `REVOKED`가 있는지 본다. 있으면 이 요청은 끝난 것이다. 없으면 입력값을 고쳐 같은 기록 ID로 다시 실행한다.
 - 사유 코드가 위 표의 네 값이 아니거나 `operator`가 형식 밖이면 DB가 거절한다. 이때는 기록도 감사 기록도 바뀌지 않는다.
-- 취소한 항목을 다시 넣으려면 증빙을 다시 확인하고 "기록 SQL"을 실행한다.
+- 취소한 항목을 다시 넣으려면 "기록 절차" 1단계부터 다시 한다.
 
 ## 실행 뒤 확인
 
