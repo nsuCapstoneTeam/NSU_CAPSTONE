@@ -47,4 +47,25 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
                 .containsEntry("reason", null);
         assertThat(audit.get("occurred_at")).isNotNull();
     }
+
+    /** ADR 동시성: 같은 항목을 다른 기록 ID로 다시 기록하면 아무 일 없이 끝나고 감사 기록도 남기지 않는다. */
+    @Test
+    void 이미_있는_항목을_다른_기록_ID로_기록하면_아무것도_바뀌지_않는다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-duplicate@example.com");
+        UUID first = uuidV7Generator.generate();
+        runbook.record(first, artist.getId(), "OFFICIAL_ACTIVITY", OPERATOR);
+
+        int inserted = runbook.record(uuidV7Generator.generate(), artist.getId(), "OFFICIAL_ACTIVITY", OPERATOR);
+
+        assertThat(inserted).isZero();
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT id FROM evidence_verifications WHERE artist_id = ?", UUID.class, artist.getId()))
+                .containsExactly(first);
+        assertThat(count("evidence_verification_audit_events", artist.getId())).isEqualTo(1);
+    }
+
+    private int count(String table, UUID artistId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM " + table + " WHERE artist_id = ?", Integer.class, artistId);
+    }
 }

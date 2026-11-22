@@ -11,7 +11,10 @@ CREATE TABLE evidence_verifications (
     id UUID PRIMARY KEY,
     artist_id UUID NOT NULL REFERENCES users (id),
     verification_type VARCHAR(32) NOT NULL,
-    verified_at TIMESTAMP WITH TIME ZONE NOT NULL
+    verified_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    -- 아티스트는 항목마다 기록 하나만 가진다. 기록 SQL의 ON CONFLICT DO NOTHING이 이 제약에 기댄다.
+    -- 이 유니크 인덱스가 artist_id FK 조회와 Trust Profile의 일괄 읽기(artist_id IN (...))도 받친다.
+    CONSTRAINT uk_evidence_verifications_artist_type UNIQUE (artist_id, verification_type)
 );
 
 -- 확인·취소 사실의 감사 기록(AUDIT-099). 추가만 한다. evidence_verification_id는 FK가 없다(상태 행이 지워져도 남아야 한다).
