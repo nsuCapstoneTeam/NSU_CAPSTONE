@@ -27,6 +27,17 @@ class ArtistProfileViewWithdrawalOverlapIntegrationTest extends ArtistProfileInt
                 .andExpect(jsonPath("$.code").value("ARTIST_NOT_FOUND"));
     }
 
+    @Test
+    void 본인_ARTIST의_열람은_탈퇴가_겹쳐도_계정_상태를_보지_않고_200_빈_값이다() throws Exception {
+        putProfile(artist, validProfile()).andExpect(status().isOk());
+        withdrawJustBeforeProfileRead(artist);
+
+        view(artist, artist)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value((Object) null))
+                .andExpect(jsonPath("$.artistTypes").isEmpty());
+    }
+
     /** 탈퇴 UPDATE가 자동 커밋되고, 같은 트랜잭션에서 트리거가 프로필을 지운 뒤에 실제 조회가 돈다. */
     private void withdrawJustBeforeProfileRead(User target) {
         doAnswer(invocation -> {
