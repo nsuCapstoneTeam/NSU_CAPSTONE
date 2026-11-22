@@ -103,7 +103,7 @@
   - V5의 `ck_events_genres`는 개수와 허용 값만 본다. 중복(`{POP,POP}`), 2차원 배열, 하한이 1이 아닌 배열이 통과한다. API로는 들어올 수 없지만(`EventContent`가 막는다) 손으로 넣은 행은 있을 수 있다. 중복 장르 행은 `MusicConditions` 생성자에서 `400`을 내 읽기 전용 추천 입력을 막는다.
   - `/api/v1/events`를 부르는 화면은 아직 없다(NSU-125 Todo).
   - 이 기기의 로컬 DB에는 스키마가 없다. 시연 서버와 다른 개발자 DB의 행 수는 확인하지 못했다.
-- Flyway `out-of-order`는 켜져 있지 않다. V11은 PR #245(NSU-105)가 쓰고, V12는 NSU-119가 쓸 예정이다(지휘 세션 확인, 2026-11-22. NSU-119는 아직 커밋 전이다).
+- Flyway `out-of-order`는 켜져 있지 않다. Flyway 번호는 미리 예약하지 않고, 머지하는 시점의 main 최대 번호 + 1을 쓴다(지휘 세션, 2026-11-22). 이 문서의 `V13`은 작성 시점의 이름이다.
 - 외부 데이터·서비스가 필요한 기능이 아니므로 `public-api-scout`는 쓰지 않았다.
 
 ## Rationale
@@ -309,7 +309,7 @@ public record EventResponse(/* … */ List<Genre> genres, Mood mood, Tempo tempo
 | V13의 잠금 유지 시간 | 이 기기 Docker, 선택정보가 빈 행, 1,000행 중 1행이 어기는 조건에서 10만 행(35MB) UPDATE 17ms + CHECK 27ms, 100만 행(343MB) UPDATE 239ms + CHECK 150ms |
 | 제약 동작 | 중복·2차원·하한 이동 배열을 거절한다. `NOT VALID`로 남긴 어기는 행은 다른 열 UPDATE도 실패한다 |
 | 앱만 되돌리는 롤백 | Flyway 12.4.0: V13이 적용된 DB에 V1~V10만 아는 앱을 붙이면 `validate`·`migrate`가 통과하고 경고만 남는다(V13 상태 `FUTURE_SUCCESS`). 저장소는 `spring.flyway.enabled=true`만 둔다 |
-| 머지 순서 | V13이 적용된 뒤 V11·V12가 오면 `FlywayValidateException: Detected resolved migration not applied to database: 11`이다. 그래서 V11 → V12 → V13 순서로 머지한다 |
+| 번호 순서 | V13이 적용된 뒤 V11·V12가 오면 `FlywayValidateException: Detected resolved migration not applied to database: 11`이다. 그래서 마이그레이션 번호는 머지 순서대로 커져야 한다 |
 | JSON 값 변환 | Jackson 3.1.5 기본 매퍼로 `String` 필드에 배열·객체를 넣으면 `MismatchedInputException`이고, 숫자·불리언은 문자열로 바뀐다. `""`는 `""`로 남는다 |
 
 ## Consequences
@@ -326,7 +326,7 @@ public record EventResponse(/* … */ List<Genre> genres, Mood mood, Tempo tempo
 - 음악 조건을 모르는 화면이 `PUT`으로 저장하면 고른 값이 지워진다. 지금은 이 API를 부르는 화면이 없다. NSU-125가 등록·수정 화면에 세 칸을 함께 더한다.
 - 장르 모양 식은 최대 개수 3에 묶인다. 최대 개수를 바꾸면 식을 고쳐야 하고, `EventGenresConstraintIntegrationTest`가 그것을 알린다.
 - V13은 데이터를 고친다(어기는 장르 행). 뜻이 같은 정리라 롤백 대상에서 뺀다. 그 행의 지문은 장르 토큰이 바뀔 수 있지만 저장된 지문이 없어 영향이 없다.
-- 머지 순서는 V11(PR #245) → V12(NSU-119) → V13이다. 순서가 바뀌면 나중에 머지되는 PR이 머지 직전에 자기 파일 번호와 그 번호를 적은 문서·테스트를 바꾼다. NSU-119 문서는 지금 V12를 적고 있다.
+- 마이그레이션 번호는 머지 직전에 main의 최대 번호 + 1로 맞춘다. 번호가 바뀌면 파일 이름과 그 번호를 적은 문서·테스트(`EventMusicConditionsMigrationIntegrationTest`의 `@DisplayName`·주석, 이 ADR)를 함께 바꾼다. 마이그레이션 테스트는 바로 앞 버전을 Flyway에서 찾으므로 코드는 그대로다.
 - 생성된 OpenAPI 스키마(`/v3/api-docs`, OpenAPI 3.1)에서 `mood`·`tempo`·`vocal`·`artistType`은 요청(`EventRequest`)과 응답(`EventResponse`) 모두 enum 값과 `null`을 허용한다. 스키마로 응답을 검증하는 클라이언트가 NSU-121 전 행사의 `null` 응답을 거절하지 않게 하기 위해서다. `artistType`은 지금 `null`을 표시하지 않는 같은 결함이라 함께 고친다. 응답 키를 `required`로 표시하는 것은 다른 응답 필드와 같이 하지 않는다(00 §3의 "키를 생략하지 않는다"는 md가 정한다).
   - 구현: `@Schema(types = {"string", "null"})`만으로는 `enum` 목록에 `null`이 들어가지 않는다(springdoc, OpenAPI 3.1). `nullable = true`는 3.1에서 효과가 없다. 그래서 `OpenApiConfig.nullableEnumCustomizer`가 `types`에 `"null"`이 있는 enum 속성에만 `enum`에 `null`을 더한다. 새 nullable enum 필드도 `types`만 달면 된다.
 - 문자열을 enum으로 바꾸는 private 파서(`EventRequest.enumValue` 등)는 그대로 둔다. `MusicChoice.parse`와 합치는 일은 recommendation_search_input/00이 적은 별도 LOW 작업 후보다.
