@@ -438,10 +438,16 @@ class OpenApiDocsIntegrationTest {
         "ArtistProfileResponse, updatedAt, string",
         "ArtistProfileRequest, bio, string",
         "ArtistProfileRequest, feeMin, integer",
-        "ArtistProfileRequest, feeMax, integer"
+        "ArtistProfileRequest, feeMax, integer",
+        "EventPartnerProfileResponse, name, string",
+        "EventPartnerProfileResponse, organization, string",
+        "EventPartnerProfileResponse, bio, string",
+        "EventPartnerProfileResponse, updatedAt, string",
+        "EventPartnerProfileRequest, organization, string",
+        "EventPartnerProfileRequest, bio, string"
     })
-    @DisplayName("null일 수 있는 아티스트 프로필 필드는 스키마 type에 null을 함께 적는다(09 §2, §3)")
-    void documentsNullableArtistProfileFields(String schemaName, String field, String type) throws Exception {
+    @DisplayName("null일 수 있는 아티스트·EVENT_PARTNER 프로필 필드는 스키마 type에 null을 함께 적는다(09 §2·§3, 05 §2·§3)")
+    void documentsNullableProfileFields(String schemaName, String field, String type) throws Exception {
         JsonNode property = schema(schemaName).path("properties").path(field);
 
         assertThat(types(property)).as(property.toString()).containsExactlyInAnyOrder(type, "null");
@@ -455,13 +461,18 @@ class OpenApiDocsIntegrationTest {
         "ArtistProfileRequest, name",
         "ArtistProfileRequest, artistTypes",
         "ArtistProfileRequest, genres",
-        "ArtistProfileRequest, regionCodes"
+        "ArtistProfileRequest, regionCodes",
+        "EventPartnerProfileResponse, eventTypes",
+        "EventPartnerProfileResponse, regionCodes",
+        "EventPartnerProfileRequest, name",
+        "EventPartnerProfileRequest, eventTypes",
+        "EventPartnerProfileRequest, regionCodes"
     })
-    @DisplayName("null이 될 수 없는 아티스트 프로필 필드의 스키마 type에는 null을 적지 않는다")
-    void doesNotDocumentNullForNonNullableArtistProfileFields(String schemaName, String field) throws Exception {
+    @DisplayName("null이 될 수 없는 아티스트·EVENT_PARTNER 프로필 필드의 스키마 type에는 null을 적지 않는다")
+    void doesNotDocumentNullForNonNullableProfileFields(String schemaName, String field) throws Exception {
         JsonNode property = schema(schemaName).path("properties").path(field);
 
-        assertThat(types(property)).as(property.toString()).doesNotContain("null");
+        assertThat(types(property)).as(property.toString()).isNotEmpty().doesNotContain("null");
     }
 
     @ParameterizedTest
