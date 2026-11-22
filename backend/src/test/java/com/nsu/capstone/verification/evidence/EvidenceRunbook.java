@@ -19,8 +19,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * runbook(docs/runbook/evidence_verification.md)의 기록·취소 SQL을 실제 PostgreSQL에서 돌린다(ADR artist_trust_architecture/10).
  * 문서의 SQL 블록을 그대로 읽어 psql 변수({@code :'name'})만 값으로 바꾼다. 문서와 테스트가 따로 놀지 않게 하려는 것이다.
  *
- * <p>Gradle은 runbook(.md)을 테스트 입력으로 알지 못한다. runbook만 고쳤을 때는 테스트가 건너뛰어지므로
- * {@code ./gradlew cleanTest test --tests 'com.nsu.capstone.verification.evidence.*'}로 강제로 돌린다.
+ * <p>runbook(.md)은 {@code backend/build.gradle}의 test 입력으로 등록되어 있다. runbook만 고쳐도 테스트가 다시 실행된다.
  */
 final class EvidenceRunbook {
 
