@@ -23,7 +23,7 @@
 ### 기록 절차
 
 1. 기록할 아티스트 ID, 항목, 내 GitHub 아이디를 정한다.
-2. 증빙을 확인한 직후 `SELECT uuidv7() AS verification_id, now() AS checked_at;`으로 기록 ID와 확인 시각을 한 번 만들어 작업 메모에 적는다. 결과를 못 받아 다시 실행할 때도 두 값을 그대로 쓴다. 새 값은 증빙을 새로 확인했을 때만 만든다.
+2. 증빙을 보기 전에 `SELECT uuidv7() AS verification_id, clock_timestamp() AS checked_at;`으로 기록 ID와 기준 시각을 한 번 만들어 작업 메모에 적는다. 기준 시각 뒤에 그 항목에 생긴 기록·취소는 내가 본 증빙보다 나중 일로 본다. 결과를 못 받아 다시 실행할 때도 두 값을 그대로 쓴다. 새 값은 증빙을 새로 확인했을 때만 만든다.
 3. "입력값 확인"을 한다.
 4. "대상 확인"으로 팀 시드 계정인지, 그 항목이 이미 있는지 본다.
 5. "기록 SQL"을 실행한다.
@@ -54,7 +54,7 @@
 | 값 | 형식 |
 |---|---|
 | `artist_id`, `verification_id` | UUID(`8-4-4-4-12`자리, 영문자·숫자·`-`만) |
-| `checked_at` | 2단계 `now()` 결과를 그대로(숫자·`-`·`:`·`.`·`+`·`T`·공백만) |
+| `checked_at` | 2단계 `clock_timestamp()` 결과를 그대로(숫자·`-`·`:`·`.`·`+`·`T`·공백만) |
 | `verification_type` | 위 표의 세 값 중 하나 |
 | `operator` | 내 GitHub 아이디(영문자·숫자·`-`, 39자 이하). 이름이나 메모를 적지 않는다 |
 | `reason` | 위 표의 네 값 중 하나 |
@@ -95,11 +95,11 @@ ORDER BY verification_type;
 
 ## 기록 SQL
 
-한 문장에서 기록 행을 넣고 `GRANTED` 감사 기록을 남긴다. 둘은 함께 커밋되거나 함께 실패한다.
+먼저 그 아티스트·항목의 잠금을 잡고, 그다음 문장에서 기록 행을 넣고 `GRANTED` 감사 기록을 남긴다. 둘은 함께 커밋되거나 함께 실패한다. 같은 아티스트·항목의 기록과 취소는 이 잠금으로 한 번에 하나만 돈다. 잠금 뒤의 문장은 앞 작업이 커밋한 감사 기록을 본다.
 
 - `users`에서 `role = 'ARTIST'`이고 `status = 'ACTIVE'`인 행만 골라 넣는다.
 - 같은 아티스트·항목의 기록이 이미 있으면 넣지 않고, 감사 기록도 남기지 않는다.
-- 같은 기록 ID로 이미 실행한 적이 있거나, 확인 시각(`checked_at`) 뒤에 그 아티스트·항목에 감사 사건(다른 운영자의 기록이나 취소)이 생겼으면 넣지 않는다. 증빙을 확인한 뒤 상태가 바뀌었으면 그 확인은 낡은 것이다. 그래서 재실행이 취소된 항목을 증빙 재확인 없이 되살리지 않는다.
+- 같은 기록 ID로 이미 실행한 적이 있거나, 기준 시각(`checked_at`) 뒤에 그 아티스트·항목에 감사 사건(다른 운영자의 기록이나 취소)이 생겼으면 넣지 않는다. 증빙을 확인한 뒤 상태가 바뀌었으면 그 확인은 낡은 것이다. 그래서 재실행이 취소된 항목을 증빙 재확인 없이 되살리지 않는다.
 - 행의 `id`와 `checked_at`은 "기록 절차" 2단계에서 만든 값이다.
 
 `ON_ERROR_STOP` 아래 `\set` 다섯 줄만 바꿔서 블록 전체를 파일로 저장해 `psql -f <파일>`로 실행한다. 한 줄씩 입력하다 오류가 나면 트랜잭션이 중단 상태로 남는다. 그때는 `ROLLBACK;`을 입력하고 처음부터 다시 한다. 예시 `operator` 값은 일부러 형식에 맞지 않게 두었다. 바꾸지 않고 실행하면 DB가 거절한다.
@@ -114,10 +114,12 @@ ORDER BY verification_type;
 
 BEGIN;
 SET LOCAL lock_timeout = '5s';
+SELECT pg_advisory_xact_lock(hashtextextended(
+    'evidence_verification:' || (:'artist_id')::uuid::text || ':' || :'verification_type', 0));
 
 WITH granted AS (
     INSERT INTO evidence_verifications (id, artist_id, verification_type, verified_at)
-    SELECT (:'verification_id')::uuid, u.id, :'verification_type', now()
+    SELECT (:'verification_id')::uuid, u.id, :'verification_type', clock_timestamp()
     FROM users u
     WHERE u.id = (:'artist_id')::uuid
       AND u.role = 'ARTIST'
@@ -146,7 +148,7 @@ COMMIT;
 
 ## 취소 SQL
 
-한 문장에서 기록 행을 지우고 `REVOKED` 감사 기록을 남긴다. 지울 행은 기록 ID(`verification_id`)로 정한다. 아티스트와 항목만으로 지우면, 조회한 뒤 다른 운영자가 취소하고 다시 기록했을 때 새 기록을 지운다.
+기록 SQL과 같은 잠금을 잡은 뒤 한 문장에서 기록 행을 지우고 `REVOKED` 감사 기록을 남긴다. 감사 시각은 트랜잭션 시작(`now()`)이 아니라 지운 시점(`clock_timestamp()`)이다. 지울 행은 기록 ID(`verification_id`)로 정한다. 아티스트와 항목만으로 지우면, 조회한 뒤 다른 운영자가 취소하고 다시 기록했을 때 새 기록을 지운다.
 
 `ON_ERROR_STOP` 아래 `\set` 다섯 줄만 바꿔서 기록 SQL처럼 `psql -f <파일>`로 실행한다. `verification_id`와 `verification_type`은 "취소 절차" 4단계에서 적어 둔 값이다. 다시 실행할 때도 같은 값을 쓴다.
 
@@ -160,6 +162,8 @@ COMMIT;
 
 BEGIN;
 SET LOCAL lock_timeout = '5s';
+SELECT pg_advisory_xact_lock(hashtextextended(
+    'evidence_verification:' || (:'artist_id')::uuid::text || ':' || :'verification_type', 0));
 
 WITH revoked AS (
     DELETE FROM evidence_verifications
@@ -170,7 +174,7 @@ WITH revoked AS (
 )
 INSERT INTO evidence_verification_audit_events
     (id, artist_id, evidence_verification_id, verification_type, event_type, operator, reason, occurred_at)
-SELECT uuidv7(), artist_id, id, verification_type, 'REVOKED', :'operator', :'reason', now()
+SELECT uuidv7(), artist_id, id, verification_type, 'REVOKED', :'operator', :'reason', clock_timestamp()
 FROM revoked;
 COMMIT;
 ```
