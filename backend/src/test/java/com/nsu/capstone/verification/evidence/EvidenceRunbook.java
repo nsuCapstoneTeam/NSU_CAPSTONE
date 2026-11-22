@@ -27,6 +27,7 @@ final class EvidenceRunbook {
     private static final Pattern RECORD_SQL = Pattern.compile("(?s)## 기록 SQL.*?```sql\\n(.*?)```");
     private static final Pattern REVOKE_SQL = Pattern.compile("(?s)## 취소 SQL.*?```sql\\n(.*?)```");
     private static final Pattern OPERATOR_SET = Pattern.compile("(?m)^\\\\set operator '(.+)'$");
+    private static final Pattern PSQL_VARIABLE = Pattern.compile(":'[A-Za-z_][A-Za-z0-9_]*'");
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -34,9 +35,9 @@ final class EvidenceRunbook {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    /** "기록 절차" 2단계의 {@code SELECT now()}다. 증빙을 확인한 직후의 DB 시각을 문자열로 돌려준다. */
+    /** "기록 절차" 2단계의 {@code clock_timestamp()}다. 증빙을 확인한 직후의 DB 시각을 문자열로 돌려준다. */
     String checkedAt() {
-        return jdbcTemplate.queryForObject("SELECT now()::text", String.class);
+        return jdbcTemplate.queryForObject("SELECT clock_timestamp()::text", String.class);
     }
 
     /** 방금 증빙을 확인한 것으로 보고(확인 시각 = 지금) "기록 SQL"을 실행한다. */
@@ -108,8 +109,9 @@ final class EvidenceRunbook {
     }
 
     private int run(String sql) {
-        // 바꾸지 못한 psql 변수가 남으면 문서의 변수 이름이 바뀐 것이다. 엉뚱한 SQL을 돌리지 않고 여기서 멈춘다
-        assertThat(sql).as("값으로 바꾸지 못한 psql 변수").doesNotContain(":'");
+        // 바꾸지 못한 psql 변수가 남으면 문서의 변수 이름이 바뀐 것이다. 엉뚱한 SQL을 돌리지 않고 여기서 멈춘다.
+        // 문자열 리터럴 'evidence_verification:'처럼 콜론 뒤에 따옴표가 오는 것은 변수가 아니라서 :'이름' 꼴만 찾는다
+        assertThat(sql).as("값으로 바꾸지 못한 psql 변수").doesNotContainPattern(PSQL_VARIABLE);
         return jdbcTemplate.execute((ConnectionCallback<Integer>) connection -> {
             try (Statement statement = connection.createStatement()) {
                 boolean isResultSet = statement.execute(sql);
