@@ -342,6 +342,30 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    void 아직_없는_프로필_표가_있어도_정리와_시드는_있는_표만_다룬다() {
+        DataSource databaseDataSource = databaseDataSource();
+        flyway(databaseDataSource, MIGRATIONS)
+                .target(MigrationVersion.fromVersion(PROFILE_TABLES_VERSION))
+                .load()
+                .migrate();
+        JdbcTemplate jdbc = new JdbcTemplate(databaseDataSource);
+        // 새 표를 만드는 개편 PR이 ProfileTable에 표를 등록했지만 그 표가 아직 없는 시점을 흉내 낸다. 그 시점의 묶음 함수는 있는 표만 부른다
+        jdbc.execute("ALTER TABLE artist_profiles RENAME TO artist_profiles_not_yet");
+        jdbc.execute("""
+                CREATE OR REPLACE FUNCTION check_profile_regions() RETURNS void
+                LANGUAGE plpgsql AS $$
+                BEGIN
+                    PERFORM check_event_partner_profile_regions();
+                END;
+                $$""");
+
+        reseed(jdbc, EnumSet.allOf(ProfileTable.class));
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM event_partner_profiles", Long.class))
+                .isPositive();
+    }
+
+    @Test
     void 지역_배열을_가진_모든_표가_묶음_함수에_연결되어_있다() {
         DataSource databaseDataSource = databaseDataSource();
         flyway(databaseDataSource, MIGRATIONS).load().migrate();
@@ -452,15 +476,16 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
                 .sorted()
                 .toList();
         for (MigrationVersion version : later) {
+            Set<ProfileTable> present = existingTables(jdbc, tables);
             Map<ProfileTable, Map<UUID, List<String>>> seeded = new EnumMap<>(ProfileTable.class);
-            tables.forEach(table -> seeded.put(table, regionCodesByUser(jdbc, table)));
+            present.forEach(table -> seeded.put(table, regionCodesByUser(jdbc, table)));
 
             afterProfileTables.get().target(version).load().migrate();
             jdbc.execute("SELECT check_profile_regions()");
 
             RegionIndex regions = RegionIndex.load(jdbc);
             Map<String, List<String>> codeMapping = mappings.getOrDefault(version.getVersion(), Map.of());
-            for (ProfileTable table : tables) {
+            for (ProfileTable table : present) {
                 assertCodesPreserved(table, seeded.get(table), regionCodesByUser(jdbc, table), regions, codeMapping);
             }
             reseed(jdbc, tables);
@@ -468,18 +493,33 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
         return jdbc;
     }
 
-    /** 이전 시드는 지우고 지금 지역 목록으로 다시 넣는다. */
+    /** 이전 시드는 지우고 지금 지역 목록으로 다시 넣는다. 지금 스키마에 있는 표만 다룬다. */
     private static void reseed(JdbcTemplate jdbc, Set<ProfileTable> tables) {
         clearProfiles(jdbc);
-        tables.forEach(table -> table.insertCombinations(jdbc));
+        existingTables(jdbc, tables).forEach(table -> table.insertCombinations(jdbc));
         jdbc.execute("SELECT check_profile_regions()");
     }
 
     private static void clearProfiles(JdbcTemplate jdbc) {
-        for (ProfileTable table : ProfileTable.values()) {
+        for (ProfileTable table : existingTables(jdbc, EnumSet.allOf(ProfileTable.class))) {
             jdbc.update("DELETE FROM " + table.table);
         }
         jdbc.update("DELETE FROM users WHERE email LIKE 'region-%@test.local'");
+    }
+
+    /**
+     * 지금 스키마에 실제로 있는 표만 고른다. 새 표를 만드는 개편 PR이 ProfileTable에 표를 등록해도, 그 표가 만들어지기 전
+     * 버전에서는 정리·시드·비교가 그 표를 건드리지 않게 한다. 마지막 스키마에서 미등록 표를 거절하는 연결 검사와는 별개다.
+     */
+    private static Set<ProfileTable> existingTables(JdbcTemplate jdbc, Collection<ProfileTable> tables) {
+        Set<ProfileTable> existing = EnumSet.noneOf(ProfileTable.class);
+        for (ProfileTable table : tables) {
+            if (Boolean.TRUE.equals(
+                    jdbc.queryForObject("SELECT to_regclass(?) IS NOT NULL", Boolean.class, table.table))) {
+                existing.add(table);
+            }
+        }
+        return existing;
     }
 
     private static Map<UUID, List<String>> regionCodesByUser(JdbcTemplate jdbc, ProfileTable table) {
