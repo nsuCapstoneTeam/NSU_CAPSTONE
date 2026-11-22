@@ -46,3 +46,7 @@ CREATE TABLE evidence_verification_audit_events (
     -- 기록 ID마다 GRANTED·REVOKED를 한 번씩만 남긴다. runbook SQL을 잘못 고쳐도 같은 사건이 두 번 남지 않는 마지막 장치다.
     CONSTRAINT uk_evidence_verification_audit_events_record_event UNIQUE (evidence_verification_id, event_type)
 );
+
+-- FK 열에는 인덱스가 자동으로 생기지 않는다. 운영자가 아티스트별 이력을 시간순으로 찾는 조회와 users 삭제 검사가 쓴다.
+-- 상태 표의 artist_id는 유니크 인덱스(artist_id, verification_type)가 같은 일을 한다.
+CREATE INDEX ix_evidence_verification_audit_events_artist ON evidence_verification_audit_events (artist_id, occurred_at);
