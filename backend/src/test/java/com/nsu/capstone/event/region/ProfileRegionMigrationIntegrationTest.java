@@ -23,6 +23,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.sql.DataSource;
@@ -308,6 +309,19 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    void 실패_픽스처는_운영_위치에_개편이_있어도_V12_바로_위에서_실행한다() {
+        // 운영 개편(V13)이 이미 수원시 코드를 옮겼다면, 그 위에서 도는 픽스처는 옮길 코드가 없어 실패하지 않는다
+        assertThatThrownBy(() -> migrateStepwiseWithProfiles(
+                        EnumSet.allOf(ProfileTable.class),
+                        Map.of("13", SUWON_MOVED),
+                        MIGRATIONS,
+                        OPERATIONAL_LIKE,
+                        fixture("move-without-profiles")))
+                .hasMessageContaining("지역 코드")
+                .hasMessageContaining("41110");
+    }
+
+    @Test
     void EVENT_PARTNER_표만_옮기고_아티스트_표를_빠뜨린_개편은_아티스트_점검에서_실패한다() {
         assertThatThrownBy(() -> migrateStepwiseWithProfiles(
                         EnumSet.allOf(ProfileTable.class),
@@ -338,9 +352,11 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
     @Test
     void 묶음_함수가_표_하나를_빠뜨리면_연결_검사가_그_표를_짚어_실패한다() {
         DataSource databaseDataSource = databaseDataSource();
-        flyway(databaseDataSource, MIGRATIONS, fixture("bundle-misses-artist"))
+        flyway(databaseDataSource, MIGRATIONS)
+                .target(MigrationVersion.fromVersion(PROFILE_TABLES_VERSION))
                 .load()
                 .migrate();
+        fixtureOnly(databaseDataSource, fixture("bundle-misses-artist")).load().migrate();
 
         assertThatThrownBy(() -> assertEveryRegionTableIsChecked(new JdbcTemplate(databaseDataSource)))
                 .isInstanceOf(AssertionError.class)
@@ -408,17 +424,29 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
      *
      * @param tables 시드할 표. 표 하나만 주면 그 표의 점검만 따로 볼 수 있다
      * @param mappings 버전 → 그 버전이 없앤 옛 코드 → 새 코드 목록. 개편 PR이 자기 버전의 대응표를 더한다
+     * @param locations 운영 마이그레이션 위치와, 있으면 실패 픽스처 위치({@link #FIXTURES}로 시작). 픽스처가 있으면 운영
+     *     마이그레이션은 기준 버전까지만 적용하고 그 뒤에는 픽스처만 적용한다. 운영 위치에 개편이 이미 있어도 픽스처가 그
+     *     위가 아니라 기준 버전 바로 위에서 돌게 하기 위해서다
      */
     private JdbcTemplate migrateStepwiseWithProfiles(
             Set<ProfileTable> tables, Map<String, Map<String, List<String>>> mappings, String... locations) {
         DataSource databaseDataSource = databaseDataSource();
         JdbcTemplate jdbc = new JdbcTemplate(databaseDataSource);
         MigrationVersion profileTables = MigrationVersion.fromVersion(PROFILE_TABLES_VERSION);
+        String[] fixtures = Arrays.stream(locations)
+                .filter(location -> location.startsWith(FIXTURES))
+                .toArray(String[]::new);
+        String[] operational = Arrays.stream(locations)
+                .filter(location -> !location.startsWith(FIXTURES))
+                .toArray(String[]::new);
+        Supplier<FluentConfiguration> afterProfileTables = () -> fixtures.length == 0
+                ? flyway(databaseDataSource, operational)
+                : fixtureOnly(databaseDataSource, fixtures);
 
-        flyway(databaseDataSource, locations).target(profileTables).load().migrate();
+        flyway(databaseDataSource, operational).target(profileTables).load().migrate();
         reseed(jdbc, tables);
         List<MigrationVersion> later = Arrays.stream(
-                        flyway(databaseDataSource, locations).load().info().pending())
+                        afterProfileTables.get().load().info().pending())
                 .map(MigrationInfo::getVersion)
                 .filter(Objects::nonNull) // 반복 마이그레이션(R__)은 버전이 없다
                 .sorted()
@@ -427,7 +455,7 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
             Map<ProfileTable, Map<UUID, List<String>>> seeded = new EnumMap<>(ProfileTable.class);
             tables.forEach(table -> seeded.put(table, regionCodesByUser(jdbc, table)));
 
-            flyway(databaseDataSource, locations).target(version).load().migrate();
+            afterProfileTables.get().target(version).load().migrate();
             jdbc.execute("SELECT check_profile_regions()");
 
             RegionIndex regions = RegionIndex.load(jdbc);
@@ -577,6 +605,11 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
                 .filter(candidate -> candidate.compareTo(version) < 0)
                 .max(Comparator.naturalOrder())
                 .orElseThrow();
+    }
+
+    /** 픽스처 위치만 쓴다. 적용 이력에 있는 운영 마이그레이션이 이 위치에 없어도 검증이 막지 않게 한다. */
+    private static FluentConfiguration fixtureOnly(DataSource databaseDataSource, String... fixtureLocations) {
+        return flyway(databaseDataSource, fixtureLocations).ignoreMigrationPatterns("*:missing");
     }
 
     private static FluentConfiguration flyway(DataSource databaseDataSource, String... locations) {
