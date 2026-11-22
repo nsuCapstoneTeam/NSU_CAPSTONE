@@ -12,6 +12,10 @@ CREATE TABLE evidence_verifications (
     artist_id UUID NOT NULL REFERENCES users (id),
     verification_type VARCHAR(32) NOT NULL,
     verified_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    -- 이 표가 다루는 세 항목만 담는다. 앱에는 쓰기 입구가 없어 값을 다시 검사할 곳이 없으므로 DB가 보장한다.
+    -- 항목을 더할 때(NSU-145) 이 CHECK와 VerificationType을 같은 PR에서 고친다.
+    CONSTRAINT ck_evidence_verifications_type CHECK (
+        verification_type IN ('BUSINESS_REGISTRATION', 'PERFORMANCE_PARTICIPATION', 'OFFICIAL_ACTIVITY')),
     -- 아티스트는 항목마다 기록 하나만 가진다. 기록 SQL의 ON CONFLICT DO NOTHING이 이 제약에 기댄다.
     -- 이 유니크 인덱스가 artist_id FK 조회와 Trust Profile의 일괄 읽기(artist_id IN (...))도 받친다.
     CONSTRAINT uk_evidence_verifications_artist_type UNIQUE (artist_id, verification_type)
@@ -27,6 +31,8 @@ CREATE TABLE evidence_verification_audit_events (
     operator VARCHAR(64) NOT NULL,
     reason VARCHAR(48),
     occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT ck_evidence_verification_audit_events_type CHECK (
+        verification_type IN ('BUSINESS_REGISTRATION', 'PERFORMANCE_PARTICIPATION', 'OFFICIAL_ACTIVITY')),
     -- 운영자는 GitHub 아이디다(공개 정보, 영문자·숫자·하이픈 39자 이하). 이름이나 메모가 들어갈 길을 DB가 막는다.
     -- runbook의 예시 값(CHANGE_ME)은 이 형식을 통과하지 못한다. 바꾸지 않고 실행하면 여기서 거절된다(7번).
     CONSTRAINT ck_evidence_verification_audit_events_operator CHECK (operator ~ '^[A-Za-z0-9-]{1,39}$')

@@ -104,6 +104,19 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
         assertThat(inserted).isEqualTo(1);
     }
 
+    /** 세 항목 밖의 값(다른 Verification 항목 포함)은 이 표에 들어올 수 없다. 앱에 입구가 없어 DB CHECK가 보장한다. */
+    @ParameterizedTest
+    @ValueSource(strings = {"IDENTITY", "COPYRIGHT", "EXTERNAL_ACCOUNT", "NO_SUCH_TYPE"})
+    void 세_항목_밖의_verification_type은_DB가_거절하고_아무것도_바뀌지_않는다(String verificationType) {
+        User artist = newUser(UserRole.ARTIST, "evidence-bad-type@example.com");
+
+        assertThatThrownBy(() -> runbook.record(uuidV7Generator.generate(), artist.getId(), verificationType, OPERATOR))
+                .hasMessageContaining("ck_evidence_verifications_type");
+
+        assertThat(count("evidence_verifications", artist.getId())).isZero();
+        assertThat(count("evidence_verification_audit_events", artist.getId())).isZero();
+    }
+
     private int count(String table, UUID artistId) {
         return jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM " + table + " WHERE artist_id = ?", Integer.class, artistId);
