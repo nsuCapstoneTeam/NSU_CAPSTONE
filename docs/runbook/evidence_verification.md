@@ -94,17 +94,19 @@ ORDER BY verification_type;
 ```
 
 - 기록하려는 항목이 이미 있으면 다시 기록하지 않는다. 실행해도 `INSERT 0 0`이고 아무것도 바뀌지 않는다.
+- 항목이 없으면 "실행 뒤 확인"의 감사 기록 조회로 그 항목의 마지막 사건을 본다. 마지막 사건이 사유 `ARTIST_REQUEST`의 `REVOKED`면 기록하지 않는다. 아티스트가 표시를 원하지 않는다고 한 항목이다. 그 계정의 등록 이메일(팀 시드 계정이면 팀 채널)로 다시 표시를 원한다는 답을 받은 뒤에만 1단계부터 다시 한다.
 - 취소할 때는 이 결과 줄의 `id`와 `verification_type`을 "취소 SQL"에 넣는다. 취소 요청 하나에 이 조회는 한 번만 쓴다. 다시 조회해서 다른 `id`가 보이면 그것은 새 기록이다. 그 기록에도 같은 사유가 맞는지 따로 확인한 뒤 새 취소 요청으로 처리한다.
 
 ## 기준값 확보
 
-증빙을 보기 전에 실행하는 읽기 조회다. 기록 ID와, 지금 그 아티스트·항목에 커밋된 감사 사건 수를 한 번에 만든다.
+증빙을 보기 전에 실행하는 읽기 조회다. 기록 ID와, 지금 그 아티스트·항목에 커밋된 감사 사건 수를 한 번에 만든다. 결과는 아티스트 ID·항목·기록 ID·사건 수를 한 줄로 낸다. 기록 SQL의 네 `\set` 값(`verification_id`, `seen_events`, `artist_id`, `verification_type`)은 이 한 줄에서 그대로 옮긴다. 다른 조회 결과나 다른 항목의 메모와 섞지 않는다. 사건 수는 그 아티스트·항목에서 센 값일 때만 뜻이 있다.
 
 ```sql
 \set artist_id '00000000-0000-0000-0000-000000000000'
 \set verification_type 'BUSINESS_REGISTRATION'
 
-SELECT uuidv7() AS verification_id, count(*) AS seen_events
+SELECT (:'artist_id')::uuid AS artist_id, :'verification_type' AS verification_type,
+       uuidv7() AS verification_id, count(*) AS seen_events
 FROM evidence_verification_audit_events
 WHERE artist_id = (:'artist_id')::uuid
   AND verification_type = :'verification_type';
@@ -157,9 +159,11 @@ COMMIT;
 ```
 
 - `INSERT 0 1`이면 기록하고 감사 기록을 남긴 것이다.
-- `INSERT 0 0`이면 아무것도 바뀌지 않았다. 대상이 `ARTIST`·`ACTIVE`가 아니거나, 그 항목이 이미 있거나, 기준값을 잡은 뒤 그 항목에 기록·취소가 커밋된 경우(이 기록 ID로 이미 성공한 실행 포함)다. 이 요청은 여기서 끝낸다. 같은 값으로 다시 실행해도 결과는 같다. 그래도 기록해야 하면 "기록 절차" 1단계부터 다시 한다. 앞 실행의 결과를 못 받았으면 "실행 뒤 확인"에서 이 기록 ID의 감사 기록을 본다. 넣을 행이 없으면 DB가 `operator` 형식도 검사하지 않으므로 입력값도 다시 확인한다. "대상 확인"부터 다시 한다.
+- `INSERT 0 0`이면 아무것도 바뀌지 않았다. 대상이 `ARTIST`·`ACTIVE`가 아니거나, 그 항목이 이미 있거나, 기준값을 잡은 뒤 그 항목에 기록·취소가 커밋된 경우(이 기록 ID로 이미 성공한 실행 포함)다. 이 요청은 여기서 끝낸다. 같은 값으로 다시 실행해도 결과는 같다. 그래도 기록해야 하면 "기록 절차" 1단계부터 다시 한다. 앞 실행의 결과를 못 받았으면 "실행 뒤 확인"에서 이 기록 ID의 감사 기록을 본다. 넣을 행이 없으면 DB가 `operator` 형식도 검사하지 않으므로 입력값도 다시 확인한다. 입력값이 틀렸으면 고친 값으로 "기록 절차" 1단계부터 다시 한다.
 - `verification_type`이 세 값 밖이거나 `operator`가 형식 밖이면 DB가 거절한다. 이때는 기록도 감사 기록도 바뀌지 않는다.
 - 잠금을 5초 안에 얻지 못하면 실패한다. 다시 실행한다.
+- 감사 표 유니크 제약(`evidence_verification_id`, `event_type`) 위반으로 실패하면, 이미 쓴 기록 ID를 새 기준값과 섞은 것이다. 아무것도 바뀌지 않았다. "기록 절차" 1단계부터 다시 해 새 기록 ID와 기준값을 한 줄로 받는다.
+- psql 세션의 격리 수준(`default_transaction_isolation`)을 바꾸지 않는다. 이 SQL은 PostgreSQL 기본값인 `READ COMMITTED`에서 잠금 뒤 문장이 새 스냅숏을 받는 것에 기댄다.
 
 ## 취소 SQL
 
