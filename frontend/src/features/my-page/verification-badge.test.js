@@ -40,6 +40,34 @@ describe('확인된 항목이 하나도 없는 아티스트', () => {
   });
 });
 
+// 증빙 확인 기록 ADR 12번: 세 항목은 배지를 켜지 않고 목록에만 이름으로 보인다. 배지 기준은 NSU-145가 정한다.
+describe('사업자등록 증빙 확인 기록만 있는 아티스트', () => {
+  const view = badgeView(describeVerifications([{ type: 'BUSINESS_REGISTRATION', provider: null }]));
+
+  it('배지는 회색이다', () => {
+    assert.equal(view.isBlue, false);
+  });
+  it('목록에 "사업자등록 확인"이 나온다', () => {
+    assert.deepEqual(view.listItems, ['사업자등록 확인']);
+  });
+  it('"아직 확인된 항목이 없어요"는 나오지 않는다', () => {
+    assert.notEqual(view.title, NO_ITEMS_TITLE);
+  });
+});
+
+describe('실연 참여·공식 활동 증빙 확인 기록', () => {
+  it('두 항목은 서로 다른 이름으로 목록에 나오고 배지는 회색이다', () => {
+    const view = badgeView(
+      describeVerifications([
+        { type: 'PERFORMANCE_PARTICIPATION', provider: null },
+        { type: 'OFFICIAL_ACTIVITY', provider: null },
+      ]),
+    );
+    assert.equal(view.isBlue, false);
+    assert.deepEqual(view.listItems, ['실연 참여 확인', '공식 활동 확인']);
+  });
+});
+
 describe('서버가 새로 추가한 확인 종류', () => {
   it('모르는 type은 목록에만 나오고 배지를 켜지 않는다', () => {
     const view = badgeView(describeVerifications([{ type: 'NEW_KIND', provider: null }]));
