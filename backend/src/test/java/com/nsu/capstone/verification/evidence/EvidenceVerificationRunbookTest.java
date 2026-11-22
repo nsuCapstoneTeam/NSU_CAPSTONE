@@ -73,13 +73,16 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
         assertThat(count("evidence_verification_audit_events", artist.getId())).isEqualTo(1);
     }
 
-    /** 7번: runbook의 예시 값은 형식에 맞지 않게 두었다. 바꾸지 않고 실행하면 DB가 거절한다. */
+    /** 7번: runbook의 예시 값은 형식에 맞지 않게 두었다. 바꾸지 않고 실행하면 DB가 거절한다. 값은 runbook의 {@code \set} 줄에서 읽는다. */
     @Test
-    void runbook의_예시_operator_값으로_기록하면_DB가_거절하고_아무것도_바뀌지_않는다() {
+    void runbook의_기록_SQL_예시_operator_값으로_기록하면_DB가_거절하고_아무것도_바뀌지_않는다() {
         User artist = newUser(UserRole.ARTIST, "evidence-example-operator@example.com");
 
         assertThatThrownBy(() -> runbook.record(
-                        uuidV7Generator.generate(), artist.getId(), "BUSINESS_REGISTRATION", "CHANGE_ME"))
+                        uuidV7Generator.generate(),
+                        artist.getId(),
+                        "BUSINESS_REGISTRATION",
+                        EvidenceRunbook.recordExampleOperator()))
                 .hasMessageContaining("ck_evidence_verification_audit_events_operator");
 
         assertThat(count("evidence_verifications", artist.getId())).isZero();
@@ -164,7 +167,11 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
         runbook.record(recordId, artist.getId(), "PERFORMANCE_PARTICIPATION", OPERATOR);
 
         assertThatThrownBy(() -> runbook.revoke(
-                        recordId, artist.getId(), "PERFORMANCE_PARTICIPATION", "CHANGE_ME", "FACT_CHANGED"))
+                        recordId,
+                        artist.getId(),
+                        "PERFORMANCE_PARTICIPATION",
+                        EvidenceRunbook.revokeExampleOperator(),
+                        "FACT_CHANGED"))
                 .hasMessageContaining("ck_evidence_verification_audit_events_operator");
 
         assertThat(count("evidence_verifications", artist.getId())).isEqualTo(1);

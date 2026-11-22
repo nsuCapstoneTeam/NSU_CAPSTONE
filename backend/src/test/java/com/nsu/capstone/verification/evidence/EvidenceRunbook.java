@@ -27,6 +27,7 @@ final class EvidenceRunbook {
     private static final Path RUNBOOK = Paths.get("../docs/runbook/evidence_verification.md");
     private static final Pattern RECORD_SQL = Pattern.compile("(?s)## 기록 SQL.*?```sql\\n(.*?)```");
     private static final Pattern REVOKE_SQL = Pattern.compile("(?s)## 취소 SQL.*?```sql\\n(.*?)```");
+    private static final Pattern OPERATOR_SET = Pattern.compile("(?m)^\\\\set operator '(.+)'$");
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -66,7 +67,25 @@ final class EvidenceRunbook {
         return run(sql);
     }
 
-    private static String block(Pattern pattern, String heading) {
+    /** "기록 SQL" 블록의 {@code \set operator} 예시 값이다. 문서가 예시를 바꾸면 이 값도 따라 바뀐다. */
+    static String recordExampleOperator() {
+        return exampleOperator(rawBlock(RECORD_SQL, "기록 SQL"));
+    }
+
+    /** "취소 SQL" 블록의 {@code \set operator} 예시 값이다. 문서가 예시를 바꾸면 이 값도 따라 바뀐다. */
+    static String revokeExampleOperator() {
+        return exampleOperator(rawBlock(REVOKE_SQL, "취소 SQL"));
+    }
+
+    static String exampleOperator(String block) {
+        Matcher operator = OPERATOR_SET.matcher(block);
+        assertThat(operator.find())
+                .as("runbook 블록에 값이 있는 '\\set operator' 줄이 있다")
+                .isTrue();
+        return operator.group(1);
+    }
+
+    private static String rawBlock(Pattern pattern, String heading) {
         Matcher block;
         try {
             block = pattern.matcher(Files.readString(RUNBOOK));
@@ -74,7 +93,11 @@ final class EvidenceRunbook {
             throw new UncheckedIOException("runbook을 읽지 못했다: " + RUNBOOK, e);
         }
         assertThat(block.find()).as("runbook에 '## %s' 아래 sql 블록이 있다", heading).isTrue();
-        String sql = block.group(1)
+        return block.group(1);
+    }
+
+    private static String block(Pattern pattern, String heading) {
+        String sql = rawBlock(pattern, heading)
                 .lines()
                 .filter(line -> !line.startsWith("\\")) // psql 슬래시 명령(\set ...)은 JDBC에 없다
                 .reduce("", (all, line) -> all + line + "\n");
