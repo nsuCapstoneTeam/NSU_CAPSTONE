@@ -5,8 +5,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -178,6 +185,102 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
 
         assertThat(count("evidence_verifications", artist.getId())).isEqualTo(1);
         assertThat(count("evidence_verification_audit_events", artist.getId())).isEqualTo(1);
+    }
+
+    /** 5번: SQL은 계정의 role·status만 강제한다. 허용 목록 확인은 운영 절차다. */
+    @Test
+    void 기록_SQL은_ARTIST와_ACTIVE가_아닌_대상에는_아무것도_넣지_않는다() {
+        User partner = newUser(UserRole.EVENT_PARTNER, "evidence-partner@example.com");
+        User suspended = newUser(UserRole.ARTIST, "evidence-suspended@example.com");
+        User withdrawn = newUser(UserRole.ARTIST, "evidence-withdrawn@example.com");
+        jdbcTemplate.update("UPDATE users SET status = 'SUSPENDED' WHERE id = ?", suspended.getId());
+        jdbcTemplate.update("UPDATE users SET status = 'WITHDRAWN' WHERE id = ?", withdrawn.getId());
+
+        int[] inserted = {
+            runbook.record(uuidV7Generator.generate(), partner.getId(), "BUSINESS_REGISTRATION", OPERATOR),
+            runbook.record(uuidV7Generator.generate(), suspended.getId(), "BUSINESS_REGISTRATION", OPERATOR),
+            runbook.record(uuidV7Generator.generate(), withdrawn.getId(), "BUSINESS_REGISTRATION", OPERATOR),
+            runbook.record(uuidV7Generator.generate(), uuidV7Generator.generate(), "BUSINESS_REGISTRATION", OPERATOR),
+        };
+
+        assertThat(inserted).containsOnly(0);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM evidence_verifications", Integer.class))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT count(*) FROM evidence_verification_audit_events", Integer.class))
+                .isZero();
+    }
+
+    /** ADR 동시성: 기록 → 취소 → 같은 기록 ID로 기록 재시도 뒤에도 항목은 빠진 채이고 감사 기록은 늘지 않는다. */
+    @Test
+    void 취소한_뒤_같은_기록_ID로_기록을_재시도해도_되살아나지_않는다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-retry@example.com");
+        UUID recordId = uuidV7Generator.generate();
+        runbook.record(recordId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+        runbook.revoke(recordId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR, "RECORDED_IN_ERROR");
+
+        int inserted = runbook.record(recordId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+
+        assertThat(inserted).isZero();
+        assertThat(count("evidence_verifications", artist.getId())).isZero();
+        assertThat(count("evidence_verification_audit_events", artist.getId())).isEqualTo(2);
+    }
+
+    /** ADR 동시성: 같은 기록 ID의 두 실행이 동시에 돌아도 상태 행과 GRANTED가 하나씩만 남는다. */
+    @Test
+    void 같은_기록_ID의_두_실행이_동시에_돌아도_기록과_GRANTED는_하나씩만_남는다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "evidence-concurrent@example.com");
+        UUID recordId = uuidV7Generator.generate();
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<Integer>> runs = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                runs.add(executor.submit(() -> {
+                    start.await();
+                    return runbook.record(recordId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+                }));
+            }
+            start.countDown();
+            int inserted = 0;
+            for (Future<Integer> run : runs) {
+                inserted += run.get(10, TimeUnit.SECONDS);
+            }
+
+            assertThat(inserted).isEqualTo(1);
+        } finally {
+            executor.shutdownNow();
+        }
+        assertThat(count("evidence_verifications", artist.getId())).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT count(*) FROM evidence_verification_audit_events WHERE event_type = 'GRANTED' AND artist_id = ?",
+                        Integer.class,
+                        artist.getId()))
+                .isEqualTo(1);
+    }
+
+    /** ADR 동시성: X 취소 요청 → 다른 운영자가 X 취소·Y 기록 → X 취소 재시도 뒤에도 Y가 남는다. */
+    @Test
+    void 취소_요청이_가리킨_기록_ID만_지워서_그_사이_다시_기록된_새_기록은_남는다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-x-y@example.com");
+        UUID x = uuidV7Generator.generate();
+        UUID y = uuidV7Generator.generate();
+        runbook.record(x, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+        // 운영자 A가 X를 조회해 취소를 준비하는 동안, 운영자 B가 X를 취소하고 같은 항목을 Y로 다시 기록했다
+        runbook.revoke(x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b", "RECORDED_IN_ERROR");
+        runbook.record(y, artist.getId(), "BUSINESS_REGISTRATION", "operator-b");
+
+        int inserted = runbook.revoke(x, artist.getId(), "BUSINESS_REGISTRATION", "operator-a", "EVIDENCE_INVALID");
+
+        assertThat(inserted).isZero();
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT id FROM evidence_verifications WHERE artist_id = ?", UUID.class, artist.getId()))
+                .containsExactly(y);
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT event_type FROM evidence_verification_audit_events WHERE evidence_verification_id = ? ORDER BY event_type",
+                        String.class,
+                        y))
+                .containsExactly("GRANTED");
     }
 
     /** 동시성: SQL을 잘못 고쳐도 같은 기록 ID에 같은 사건이 두 번 남지 않게 하는 마지막 장치다. */
