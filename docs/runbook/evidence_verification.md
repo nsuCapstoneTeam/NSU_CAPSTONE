@@ -101,7 +101,7 @@ ORDER BY verification_type;
 - 같은 기록 ID로 이미 실행한 적이 있으면(감사 표에 그 ID가 있으면) 넣지 않는다. 그 사이 다른 운영자가 취소했어도 다시 살아나지 않는다.
 - 행의 `id`는 "기록 절차" 2단계에서 만든 기록 ID다.
 
-`ON_ERROR_STOP` 아래 `\set` 네 줄만 바꿔서 `psql`로 실행한다. 예시 `operator` 값은 일부러 형식에 맞지 않게 두었다. 바꾸지 않고 실행하면 DB가 거절한다.
+`ON_ERROR_STOP` 아래 `\set` 네 줄만 바꿔서 블록 전체를 파일로 저장해 `psql -f <파일>`로 실행한다. 한 줄씩 입력하다 오류가 나면 트랜잭션이 중단 상태로 남는다. 그때는 `ROLLBACK;`을 입력하고 처음부터 다시 한다. 예시 `operator` 값은 일부러 형식에 맞지 않게 두었다. 바꾸지 않고 실행하면 DB가 거절한다.
 
 ```sql
 \set ON_ERROR_STOP on
@@ -143,7 +143,7 @@ COMMIT;
 
 한 문장에서 기록 행을 지우고 `REVOKED` 감사 기록을 남긴다. 지울 행은 기록 ID(`verification_id`)로 정한다. 아티스트와 항목만으로 지우면, 조회한 뒤 다른 운영자가 취소하고 다시 기록했을 때 새 기록을 지운다.
 
-`ON_ERROR_STOP` 아래 `\set` 다섯 줄만 바꿔서 `psql`로 실행한다. `verification_id`와 `verification_type`은 "취소 절차" 4단계에서 적어 둔 값이다. 다시 실행할 때도 같은 값을 쓴다.
+`ON_ERROR_STOP` 아래 `\set` 다섯 줄만 바꿔서 기록 SQL처럼 `psql -f <파일>`로 실행한다. `verification_id`와 `verification_type`은 "취소 절차" 4단계에서 적어 둔 값이다. 다시 실행할 때도 같은 값을 쓴다.
 
 ```sql
 \set ON_ERROR_STOP on
