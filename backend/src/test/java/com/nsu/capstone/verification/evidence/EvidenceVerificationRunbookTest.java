@@ -363,6 +363,39 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
                 .containsExactly("GRANTED", "REVOKED");
     }
 
+    /**
+     * ADR 동시성 3: 취소 트랜잭션이 기준 시각(T)보다 먼저 시작했어도 감사 시각은 트랜잭션 시작이 아니라 지운 시점이다. 그래서 T보다 늦고, T로
+     * 실행한 기록은 아무것도 넣지 않는다. 트랜잭션 시작 시각이 남으면 취소가 T보다 앞선 일로 보여 낡은 확인이 항목을 되살린다.
+     */
+    @Test
+    void 취소_트랜잭션이_기준_시각보다_먼저_시작했어도_감사_시각은_지운_시점이라_그_기준_시각의_기록은_아무것도_넣지_않는다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "evidence-audit-clock@example.com");
+        UUID x = uuidV7Generator.generate();
+        UUID y = uuidV7Generator.generate();
+        runbook.record(x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b");
+        String revokeSql = EvidenceRunbook.revokeSql(
+                x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b", "RECORDED_IN_ERROR");
+        String checkedAt;
+        try (EvidenceRunbookSession revoker = new EvidenceRunbookSession(jdbcTemplate.getDataSource())) {
+            revoker.begin(revokeSql);
+            checkedAt = runbook.checkedAt();
+            revoker.continueUntilCommit(revokeSql);
+            revoker.commit();
+        }
+
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT occurred_at > ?::timestamptz FROM evidence_verification_audit_events WHERE evidence_verification_id = ? AND event_type = 'REVOKED'",
+                        Boolean.class,
+                        checkedAt,
+                        x))
+                .as("REVOKED 감사 시각이 기준 시각보다 늦다")
+                .isTrue();
+        int inserted = runbook.record(y, checkedAt, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
+
+        assertThat(inserted).isZero();
+        assertThat(count("evidence_verifications", artist.getId())).isZero();
+    }
+
     /** ADR 동시성: X 취소 요청 → 다른 운영자가 X 취소·Y 기록 → X 취소 재시도 뒤에도 Y가 남는다. */
     @Test
     void 취소_요청이_가리킨_기록_ID만_지워서_그_사이_다시_기록된_새_기록은_남는다() {
