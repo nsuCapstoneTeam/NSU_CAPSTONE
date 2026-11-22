@@ -225,6 +225,65 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
         assertThat(count("evidence_verification_audit_events", artist.getId())).isEqualTo(2);
     }
 
+    /** ADR 동시성: A가 확인한(T) 뒤 B가 기록하고 취소했으면 A의 확인은 낡았다. A가 T로 실행해도 항목을 되살리지 않는다. */
+    @Test
+    void 확인한_뒤_다른_운영자가_기록하고_취소했으면_같은_확인_시각으로_실행해도_아무것도_바뀌지_않는다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-stale-check@example.com");
+        UUID a = uuidV7Generator.generate();
+        UUID b = uuidV7Generator.generate();
+        String t = runbook.checkedAt();
+        runbook.record(b, artist.getId(), "BUSINESS_REGISTRATION", "operator-b");
+        runbook.revoke(b, artist.getId(), "BUSINESS_REGISTRATION", "operator-b", "RECORDED_IN_ERROR");
+
+        int inserted = runbook.record(a, t, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
+
+        assertThat(inserted).isZero();
+        assertThat(count("evidence_verifications", artist.getId())).isZero();
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT event_type FROM evidence_verification_audit_events WHERE artist_id = ? ORDER BY event_type",
+                        String.class,
+                        artist.getId()))
+                .containsExactly("GRANTED", "REVOKED");
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT count(*) FROM evidence_verification_audit_events WHERE evidence_verification_id = ?",
+                        Integer.class,
+                        a))
+                .isZero();
+    }
+
+    /** 확인 시각 앞의 사건은 낡은 확인을 만들지 않는다. 취소됐던 항목도 그 뒤에 새로 확인했으면 다시 기록한다. */
+    @Test
+    void 확인_시각_앞에_일어난_사건만_있으면_정상으로_기록한다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-fresh-check@example.com");
+        UUID b = uuidV7Generator.generate();
+        UUID a = uuidV7Generator.generate();
+        runbook.record(b, artist.getId(), "BUSINESS_REGISTRATION", "operator-b");
+        runbook.revoke(b, artist.getId(), "BUSINESS_REGISTRATION", "operator-b", "RECORDED_IN_ERROR");
+        String t = runbook.checkedAt();
+
+        int inserted = runbook.record(a, t, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
+
+        assertThat(inserted).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT id FROM evidence_verifications WHERE artist_id = ?", UUID.class, artist.getId()))
+                .containsExactly(a);
+    }
+
+    /** 다른 항목이나 다른 아티스트의 사건은 이 항목의 확인을 낡게 만들지 않는다. */
+    @Test
+    void 확인한_뒤_다른_항목이나_다른_아티스트에_생긴_사건은_기록을_막지_않는다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-unrelated-check@example.com");
+        User other = newUser(UserRole.ARTIST, "evidence-unrelated-other@example.com");
+        String t = runbook.checkedAt();
+        runbook.record(uuidV7Generator.generate(), artist.getId(), "OFFICIAL_ACTIVITY", "operator-b");
+        runbook.record(uuidV7Generator.generate(), other.getId(), "BUSINESS_REGISTRATION", "operator-b");
+
+        int inserted =
+                runbook.record(uuidV7Generator.generate(), t, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
+
+        assertThat(inserted).isEqualTo(1);
+    }
+
     /** ADR 동시성: 같은 기록 ID의 두 실행이 동시에 돌아도 상태 행과 GRANTED가 하나씩만 남는다. */
     @Test
     void 같은_기록_ID의_두_실행이_동시에_돌아도_기록과_GRANTED는_하나씩만_남는다() throws Exception {
