@@ -66,8 +66,13 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
     private static final String DATABASE = "region_migration_check";
     private static final String MIGRATIONS = "classpath:db/migration";
     private static final String FIXTURES = "classpath:db/region-migration-fixture/";
-    /** 운영 위치에 개편 마이그레이션(V13)이 이미 있는 상태를 흉내 내는 테스트 전용 위치 */
+    /**
+     * 운영 위치에 개편 마이그레이션이 이미 있는 상태를 흉내 내는 테스트 전용 위치.
+     * 테스트 전용 픽스처는 V800번대(운영 흉내)와 V900번대(실패 재현)를 쓴다. 운영 번호와 겹치지 않게 하기 위해서다.
+     */
     private static final String OPERATIONAL_LIKE = "classpath:db/region-migration-operational-like";
+    /** 운영 흉내 픽스처의 마이그레이션 버전 */
+    private static final String OPERATIONAL_LIKE_VERSION = "800";
     /** 실패 픽스처의 마이그레이션 버전. 픽스처는 모두 이 버전 하나다. */
     private static final String FIXTURE_VERSION = "900";
 
@@ -249,13 +254,19 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
     @Test
     void 운영_개편은_자기_버전의_대응표대로_코드를_보존하면_통과한다() {
         migrateStepwiseWithProfiles(
-                EnumSet.allOf(ProfileTable.class), Map.of("13", SUWON_MOVED), MIGRATIONS, OPERATIONAL_LIKE);
+                EnumSet.allOf(ProfileTable.class),
+                operationalLikeMappings(OPERATIONAL_LIKE_VERSION),
+                MIGRATIONS,
+                OPERATIONAL_LIKE);
     }
 
     @Test
     void 다른_버전의_대응표로는_그_버전이_없앤_코드를_설명하지_못한다() {
         assertThatThrownBy(() -> migrateStepwiseWithProfiles(
-                        EnumSet.allOf(ProfileTable.class), Map.of("14", SUWON_MOVED), MIGRATIONS, OPERATIONAL_LIKE))
+                        EnumSet.allOf(ProfileTable.class),
+                        operationalLikeMappings("801"),
+                        MIGRATIONS,
+                        OPERATIONAL_LIKE))
                 .hasMessageContaining("대응표 없이 사라진 코드: 41110");
     }
 
@@ -310,10 +321,10 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
 
     @Test
     void 실패_픽스처는_운영_위치에_개편이_있어도_V12_바로_위에서_실행한다() {
-        // 운영 개편(V13)이 이미 수원시 코드를 옮겼다면, 그 위에서 도는 픽스처는 옮길 코드가 없어 실패하지 않는다
+        // 운영 개편이 이미 수원시 코드를 옮겼다면, 그 위에서 도는 픽스처는 옮길 코드가 없어 실패하지 않는다
         assertThatThrownBy(() -> migrateStepwiseWithProfiles(
                         EnumSet.allOf(ProfileTable.class),
-                        Map.of("13", SUWON_MOVED),
+                        operationalLikeMappings(OPERATIONAL_LIKE_VERSION),
                         MIGRATIONS,
                         OPERATIONAL_LIKE,
                         fixture("move-without-profiles")))
@@ -439,6 +450,16 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
                     .isNotNull()
                     .hasMessageContaining("99999");
         }
+    }
+
+    /**
+     * 운영 흉내 픽스처를 쓰는 테스트의 대응표. 운영 대응표({@link #OPERATIONAL_MAPPINGS})에 수원시 이동 행을 더한다.
+     * 운영에 개편이 들어와 그 PR이 {@link #OPERATIONAL_MAPPINGS}에 행을 더해도 그 행이 그대로 쓰이게 하기 위해서다.
+     */
+    private static Map<String, Map<String, List<String>>> operationalLikeMappings(String version) {
+        Map<String, Map<String, List<String>>> mappings = new HashMap<>(OPERATIONAL_MAPPINGS);
+        mappings.put(version, SUWON_MOVED);
+        return mappings;
     }
 
     /**
