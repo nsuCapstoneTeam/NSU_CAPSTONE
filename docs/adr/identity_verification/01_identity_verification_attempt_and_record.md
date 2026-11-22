@@ -360,7 +360,10 @@ return identityVerifications.isVerifiedArtist(viewerId) && matchesEvt044(event, 
 - 시도 행이 쌓인다. 시연 DB는 최종 평가 다음 날 통째로 지우므로 정리 작업을 두지 않는다(`// shortcut: 만료 시도 정리 없음, 운영 단계 ADR에서 보관 기간과 정리 작업을 정할 때`).
 - 동시 완료가 PortOne을 두 번 부를 수 있다. 결과는 기록 하나로 같다.
 - 한 회원의 서로 다른 두 시도가 동시에 성공하면 두 시도 모두 `VERIFIED`가 되고 기록은 먼저 들어간 시도 하나만 가리킨다. 다른 시도의 완료도 `200`이다. 기록이 회원당 하나라는 불변식은 DB 유일성이 지키므로, 기록이 가리키지 않는 `VERIFIED` 시도는 감사용 흔적일 뿐 권한에 쓰이지 않는다.
-- 회원 탈퇴 기능이 생기면 두 테이블의 행을 먼저 지워야 한다(FK에 `ON DELETE`가 없다, V7 관례).
+- 회원 탈퇴(NSU-167)는 `users` 행을 지우지 않고 `status`를 `WITHDRAWN`으로 바꾼다(V2 `ck_users_status`). 그래서 탈퇴해도 두 테이블의 행은 남는다.
+  - 탈퇴 때 두 테이블을 언제, 어떻게 파기할지는 NSU-167이 "표마다 파기 방법과 시점"에서 정한다. NSU-105는 정하지 않는다. NSU-119(PR #254)가 아티스트 프로필에 쓴 상태 트리거(`WITHDRAWN`으로 바뀌는 UPDATE에서 행을 지움)를 같은 방식으로 쓸 수 있다.
+  - 정할 때 볼 것: `MOCK` 기록에는 암호화한 실명이 있다. NSU-89 뒤에는 등록정보 일치 기록이 이 기록을 FK로 가리키므로, 기록을 지우려면 그쪽을 먼저 다뤄야 한다.
+  - `users` 행을 직접 지우는 경우(운영자 SQL 등)에는 두 테이블의 행을 먼저 지워야 한다(FK에 `ON DELETE`가 없다, V7 관례).
 - 기본값 없는 새 설정: `APP_ENVIRONMENT`, `IDENTITY_VERIFICATION_PROVIDER`, `PORTONE_API_SECRET`, `PORTONE_STORE_ID`, `PORTONE_CHANNEL_KEY`, `PORTONE_TEST_CHANNEL_PG_PROVIDER`, `PORTONE_TEST_CHANNEL_PG_MERCHANT_ID`, `IDENTITY_NAME_ENCRYPTION_KEY`. 시연 서버 배포 설정(NSU-129)에 넣는다. 시드 jar의 대상 이메일과 이름은 서버 설정이 아니라 시드를 돌릴 때마다 표준입력으로 주는 값이다(`backend/README.md` "Mock 본인확인 시드 jar").
 - NSU-146(구조화 로그, PR #231) 머지 뒤 이 이슈의 개인정보 이름을 로그 정적 검사 S2 이름 목록에 더했다: `ci`, `di`, `gender`, `customer`(`verifiedCustomer`·`requestedCustomer`), `rawresponse`(`pgRawResponse`), `realname`, `fullname`, `identityname`(NSU-146 ADR logging/00이 새 개인정보를 다루는 이슈에 맡긴 일). `name`·`response`는 기존 코드를 넓게 깨므로 넣지 않았다. 그 빈틈(예: 이름 값을 `name()`으로 꺼내 로그에 넘김)은 배포 인코더의 출력 바이트에 가짜 실명·CI가 없는지 보는 시험이 지킨다.
 - AC "PortOne 테스트 채널로 본인확인 창을 띄우고, 서버 재조회로 결과를 저장한다"는 화면이 있어야 끝난다. 그래서 둘로 나눈다(2026-11-18 Linear NSU-105 작업 범위 10번과 NSU-149에 반영). NSU-105는 커밋하지 않는 로컬 확인 페이지로 KCP 테스트 창을 한 번 띄워, 서버 재조회와 `SANDBOX` 저장까지 실제 PortOne으로 확인한다(구현 0단계와 마지막 확인). NSU-149는 마이페이지에서 창을 띄우고 완료 API로 본인확인을 마치는 것(데스크톱·모바일)을 확인한다.
