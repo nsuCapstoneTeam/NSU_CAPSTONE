@@ -1,6 +1,5 @@
-package com.nsu.capstone.identity.verification;
+package com.nsu.capstone.identity.signup;
 
-import com.nsu.capstone.identity.signup.SignupVerificationProperties;
 import java.security.SecureRandom;
 import org.springframework.stereotype.Component;
 
@@ -11,7 +10,7 @@ public class OtpCodeGenerator {
     private final int length;
     private final int upperBound;
 
-    public OtpCodeGenerator(SecureRandom secureRandom, SignupVerificationProperties properties) {
+    OtpCodeGenerator(SecureRandom secureRandom, SignupVerificationProperties properties) {
         this.secureRandom = secureRandom;
         this.length = properties.otpLength();
         this.upperBound = powerOfTen(length);

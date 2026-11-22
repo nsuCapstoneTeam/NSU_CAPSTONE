@@ -8,7 +8,7 @@ import com.nsu.capstone.global.exception.*;
 import com.nsu.capstone.identity.oauth.OAuthProperties;
 import com.nsu.capstone.identity.security.*;
 import com.nsu.capstone.identity.signup.*;
-import com.nsu.capstone.identity.verification.OtpDigestService;
+import com.nsu.capstone.identity.signup.OtpDigestService;
 import jakarta.servlet.FilterChain;
 import java.time.*;
 import java.util.List;

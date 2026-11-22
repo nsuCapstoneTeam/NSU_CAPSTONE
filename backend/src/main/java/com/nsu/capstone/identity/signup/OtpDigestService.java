@@ -1,7 +1,6 @@
-package com.nsu.capstone.identity.verification;
+package com.nsu.capstone.identity.signup;
 
-import com.nsu.capstone.identity.signup.SignupIdentityNormalizer;
-import com.nsu.capstone.identity.signup.SignupVerificationProperties;
+import com.nsu.capstone.identity.verification.VerificationChannel;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
@@ -21,7 +20,7 @@ public class OtpDigestService {
         this.secretKey = new SecretKeySpec(properties.hmacSecret().getBytes(StandardCharsets.UTF_8), ALGORITHM);
     }
 
-    public String codeDigest(
+    String codeDigest(
             String signupSessionId, VerificationChannel channel, String destination, String generationId, String code) {
         return digest(String.join("\u001f", "otp", signupSessionId, channel.name(), destination, generationId, code));
     }

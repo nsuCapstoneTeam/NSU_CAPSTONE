@@ -1,9 +1,9 @@
-package com.nsu.capstone.identity.verification;
+package com.nsu.capstone.identity.signup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
-import com.nsu.capstone.identity.signup.SignupSessionStore;
+import com.nsu.capstone.identity.verification.VerificationChannel;
 import com.nsu.capstone.identity.verification.config.SignupSendRedisProperties;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;

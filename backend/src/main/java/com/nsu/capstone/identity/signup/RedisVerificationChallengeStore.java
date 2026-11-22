@@ -1,11 +1,10 @@
-package com.nsu.capstone.identity.verification;
+package com.nsu.capstone.identity.signup;
 
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.domain.UserRole;
-import com.nsu.capstone.identity.signup.SignupRateLimitKeys;
-import com.nsu.capstone.identity.signup.SignupRedisKeys;
-import com.nsu.capstone.identity.signup.SignupVerificationProperties;
+import com.nsu.capstone.identity.verification.VerificationAlertService;
+import com.nsu.capstone.identity.verification.VerificationChannel;
 import com.nsu.capstone.identity.verification.config.VerificationTimingProperties;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -22,7 +21,7 @@ import org.springframework.stereotype.Repository;
 import tools.jackson.databind.json.JsonMapper;
 
 @Repository
-public class RedisVerificationChallengeStore implements VerificationChallengeStore {
+class RedisVerificationChallengeStore implements VerificationChallengeStore {
 
     private static final String WRITE_SCRIPT = "#!lua\n";
 
@@ -86,7 +85,8 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         """;
 
     private static final DefaultRedisScript<List> ISSUE_SCRIPT = new DefaultRedisScript<>(
-            WRITE_SCRIPT + REFUND_SCRIPT + RECOVERABLE_SCRIPT + recoveryScript() + """
+            WRITE_SCRIPT + SignupSessionLua.VERIFIED_FIELD + REFUND_SCRIPT + RECOVERABLE_SCRIPT + recoveryScript()
+                    + """
         local sessionTtl = redis.call('PTTL', KEYS[1])
         if sessionTtl <= 0 or redis.call('HGET', KEYS[1], 'role') ~= ARGV[1] then
             return {1}
@@ -94,7 +94,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         if redis.call('HGET', KEYS[1], 'requiredTermsAgreed') ~= 'true'
             or not redis.call('HGET', KEYS[1], 'agreedAt')
             or (redis.call('HGET', KEYS[1], 'agreements') or '') == '' then return {5} end
-        if redis.call('HGET', KEYS[1], ARGV[2]) == 'true' then return {2} end
+        if redis.call('HGET', KEYS[1], signupVerifiedField(ARGV[2])) == 'true' then return {2} end
 
         local counterCount = tonumber(ARGV[12])
         local lastCounter = 6 + counterCount
@@ -168,15 +168,16 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
             redis.call('SET', KEYS[3], ARGV[5], 'PX', ARGV[8])
         end
         return {0}
-        """, List.class);
+        """,
+            List.class);
 
     private static final DefaultRedisScript<Long> START_SCRIPT =
-            new DefaultRedisScript<>(WRITE_SCRIPT + """
+            new DefaultRedisScript<>(WRITE_SCRIPT + SignupSessionLua.VERIFIED_FIELD + """
         if redis.call('HGET', KEYS[1], 'generationId') ~= ARGV[1] then return 0 end
         if redis.call('HGET', KEYS[1], 'dispatching') == 'true' then return 0 end
         local deliveryKey = redis.call('HGET', KEYS[1], 'deliveryKey')
         if deliveryKey and (deliveryKey ~= KEYS[4] or redis.call('GET', KEYS[4]) ~= KEYS[3]) then return 0 end
-        if redis.call('PTTL', KEYS[2]) <= 0 or redis.call('HGET', KEYS[2], ARGV[3]) == 'true' then return 0 end
+        if redis.call('PTTL', KEYS[2]) <= 0 or redis.call('HGET', KEYS[2], signupVerifiedField(ARGV[3])) == 'true' then return 0 end
         local reserveUntil = tonumber(redis.call('HGET', KEYS[1], 'recoverAt'))
         if reserveUntil <= tonumber(ARGV[4]) then return 0 end
         local raw = redis.call('GET', KEYS[3])
@@ -204,11 +205,11 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
             'codeDigest', 'destinationDigest', 'generationId', 'issuedAt', 'failedAttempts')
         """, List.class);
 
-    private static final DefaultRedisScript<List> VERIFY_SCRIPT =
-            new DefaultRedisScript<>(WRITE_SCRIPT + REFUND_SCRIPT + RECOVERABLE_SCRIPT + """
+    private static final DefaultRedisScript<List> VERIFY_SCRIPT = new DefaultRedisScript<>(
+            WRITE_SCRIPT + SignupSessionLua.VERIFIED_FIELD + REFUND_SCRIPT + RECOVERABLE_SCRIPT + """
         if redis.call('EXISTS', KEYS[1]) == 0
             or redis.call('HGET', KEYS[1], 'role') ~= ARGV[1] then return {2} end
-        if redis.call('HGET', KEYS[1], ARGV[2]) == 'true' then
+        if redis.call('HGET', KEYS[1], signupVerifiedField(ARGV[2])) == 'true' then
             discardUnsent(KEYS[4], KEYS[6])
             releaseDelivery(KEYS[4], redis.call('HGET', KEYS[4], 'generationId'), KEYS[6])
             redis.call('DEL', KEYS[2], KEYS[4], KEYS[5])
@@ -268,7 +269,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
         discardUnsent(KEYS[4], KEYS[6])
         releaseDelivery(KEYS[4], redis.call('HGET', KEYS[4], 'generationId'), KEYS[6])
         redis.call('DEL', KEYS[2], KEYS[4], KEYS[5])
-        redis.call('HSET', KEYS[1], ARGV[2], 'true')
+        redis.call('HSET', KEYS[1], signupVerifiedField(ARGV[2]), 'true')
         return {0}
         """, List.class);
 
@@ -298,7 +299,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
     private final VerificationTimingProperties timing;
     private final VerificationAlertService alerts;
 
-    public RedisVerificationChallengeStore(
+    RedisVerificationChallengeStore(
             StringRedisTemplate redisTemplate,
             SignupVerificationProperties properties,
             VerificationTimingProperties timing,
@@ -337,7 +338,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
                 counterKey("total-" + channel.keyPart(), windows.channelDayStart(), "all")));
         List<String> args = new ArrayList<>(List.of(
                 expectedRole.name(),
-                channel.sessionField(),
+                channel.keyPart(),
                 codeDigest,
                 destinationDigest,
                 generationId,
@@ -420,7 +421,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
                         deliveryKey(signupSessionId, channel)),
                 generationId,
                 number(now.toEpochMilli() + timing.pendingRecovery().toMillis()),
-                channel.sessionField(),
+                channel.keyPart(),
                 number(now.toEpochMilli()));
         return Long.valueOf(1).equals(started);
     }
@@ -556,7 +557,7 @@ public class RedisVerificationChallengeStore implements VerificationChallengeSto
                         SignupRedisKeys.preservedChallenge(signupSessionId, channel),
                         SignupRedisKeys.pendingDelivery(channel, rateLimitDestinationDigest)),
                 expectedRole.name(),
-                channel.sessionField(),
+                channel.keyPart(),
                 generationId,
                 codeDigest,
                 destinationDigest,

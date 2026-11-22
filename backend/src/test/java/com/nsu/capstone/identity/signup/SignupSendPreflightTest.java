@@ -1,4 +1,4 @@
-package com.nsu.capstone.identity.verification;
+package com.nsu.capstone.identity.signup;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -6,10 +6,9 @@ import static org.mockito.Mockito.*;
 
 import com.nsu.capstone.SignupTestTerms;
 import com.nsu.capstone.global.exception.*;
-import com.nsu.capstone.identity.application.SignupVerificationService;
 import com.nsu.capstone.identity.domain.UserRole;
-import com.nsu.capstone.identity.signup.*;
-import com.nsu.capstone.identity.verification.adult.AdultEvidenceVerifier;
+import com.nsu.capstone.identity.verification.VerificationAlertService;
+import com.nsu.capstone.identity.verification.VerificationChannel;
 import com.nsu.capstone.identity.verification.config.SignupSendRedisProperties;
 import com.nsu.capstone.identity.verification.port.*;
 import java.time.*;
@@ -96,21 +95,21 @@ class SignupSendPreflightTest {
                 challenges,
                 new SignupSendRedisProperties(Duration.ofMillis(200), Duration.ofMillis(250), Duration.ofMillis(150)),
                 () -> {})) {
-            var service = new SignupVerificationService(
+            var service = new SignupVerificationChallenges(
                     sessions,
                     challenges,
                     otp,
                     new OtpDigestService(properties),
                     email,
                     sms,
-                    mock(AdultEvidenceVerifier.class),
                     properties,
                     Clock.systemUTC(),
                     mock(VerificationAlertService.class),
                     preflight);
             long start = System.nanoTime();
             var failure = assertThrows(
-                    BusinessException.class, () -> service.sendEmailCode("session", UserRole.ARTIST, "127.0.0.1"));
+                    BusinessException.class,
+                    () -> service.issue("session", UserRole.ARTIST, VerificationChannel.EMAIL, "127.0.0.1"));
             long millis = (System.nanoTime() - start) / 1_000_000;
             assertEquals(ErrorCode.VERIFICATION_DELIVERY_FAILED, failure.getErrorCode());
             assertTrue(millis < 250, "Shared 150ms deadline must expire before a new 250ms stage wait: " + millis);

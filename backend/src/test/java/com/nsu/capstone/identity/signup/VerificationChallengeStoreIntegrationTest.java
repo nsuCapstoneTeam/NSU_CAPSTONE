@@ -1,4 +1,4 @@
-package com.nsu.capstone;
+package com.nsu.capstone.identity.signup;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -15,6 +15,8 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import com.nsu.capstone.SignupTestTerms;
+import com.nsu.capstone.TestcontainersConfiguration;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.global.exception.GlobalExceptionHandler;
@@ -28,18 +30,7 @@ import com.nsu.capstone.identity.presentation.ArtistSignupVerificationController
 import com.nsu.capstone.identity.presentation.dto.ArtistSignupResponse;
 import com.nsu.capstone.identity.presentation.dto.EventPartnerSignupResponse;
 import com.nsu.capstone.identity.repository.UserRepository;
-import com.nsu.capstone.identity.signup.SignupRateLimitKeys;
-import com.nsu.capstone.identity.signup.SignupRedisKeys;
-import com.nsu.capstone.identity.signup.SignupSession;
-import com.nsu.capstone.identity.signup.SignupSessionStore;
-import com.nsu.capstone.identity.signup.SignupVerificationProperties;
-import com.nsu.capstone.identity.verification.ChallengeIssueResult;
-import com.nsu.capstone.identity.verification.ChallengeVerificationResult;
-import com.nsu.capstone.identity.verification.OtpCodeGenerator;
-import com.nsu.capstone.identity.verification.OtpDigestService;
-import com.nsu.capstone.identity.verification.RedisVerificationChallengeStore;
 import com.nsu.capstone.identity.verification.VerificationAlertService;
-import com.nsu.capstone.identity.verification.VerificationChallengeStore;
 import com.nsu.capstone.identity.verification.VerificationChannel;
 import com.nsu.capstone.identity.verification.adult.AdultEvidenceVerifier;
 import com.nsu.capstone.identity.verification.port.EmailSender;
@@ -485,7 +476,7 @@ class VerificationChallengeStoreIntegrationTest {
         SignupSession session = saveSession("expired-update");
         redisTemplate.delete(sessionKey(session.signupSessionId()));
 
-        assertFalse(signupSessionStore.markEmailVerified(session.signupSessionId(), UserRole.ARTIST));
+        assertFalse(signupSessionStore.markAdultConfirmed(session.signupSessionId(), UserRole.ARTIST));
         assertEquals(
                 ChallengeIssueResult.SESSION_INVALID,
                 issueResult(session, VerificationChannel.EMAIL, CODE, "expired-generation"));
@@ -495,7 +486,7 @@ class VerificationChallengeStoreIntegrationTest {
     void rejectsExpectedRoleMismatchWithoutIssuingChallengeOrChangingState() {
         SignupSession artistSession = saveSession("role-mismatch");
 
-        assertFalse(signupSessionStore.markEmailVerified(artistSession.signupSessionId(), UserRole.EVENT_PARTNER));
+        assertFalse(signupSessionStore.markAdultConfirmed(artistSession.signupSessionId(), UserRole.EVENT_PARTNER));
         ChallengeData data = challengeData(artistSession, VerificationChannel.EMAIL, CODE, "mismatched-generation");
         assertEquals(
                 ChallengeIssueResult.SESSION_INVALID,
@@ -514,14 +505,14 @@ class VerificationChallengeStoreIntegrationTest {
         assertFalse(signupSessionStore
                 .findById(artistSession.signupSessionId())
                 .orElseThrow()
-                .emailVerified());
+                .adultConfirmed());
     }
 
     @Test
     void completedConditionsEnableExistingFinalSignupFlow() {
         SignupSession session = saveSession("final-flow-" + UUID.randomUUID());
-        assertTrue(signupSessionStore.markEmailVerified(session.signupSessionId(), UserRole.ARTIST));
-        assertTrue(signupSessionStore.markPhoneVerified(session.signupSessionId(), UserRole.ARTIST));
+        SignupSessionFixtures.markEmailVerified(redisTemplate, session.signupSessionId());
+        SignupSessionFixtures.markPhoneVerified(redisTemplate, session.signupSessionId());
         assertTrue(signupSessionStore.markAdultConfirmed(session.signupSessionId(), UserRole.ARTIST));
 
         ArtistSignupResponse response = artistSignupService.signup(session.signupSessionId(), "plain-password");
@@ -673,10 +664,11 @@ class VerificationChallengeStoreIntegrationTest {
         var service = verificationService(challengeStore, otp, sender, retryAt);
         String ip = "192.0.2.72";
         BusinessException limited = assertThrows(
-                BusinessException.class, () -> service.sendPhoneCode(session.signupSessionId(), session.role(), ip));
+                BusinessException.class,
+                () -> service.issue(session.signupSessionId(), session.role(), VerificationChannel.PHONE, ip));
         assertEquals(ErrorCode.VERIFICATION_REQUEST_LIMIT_EXCEEDED, limited.getErrorCode());
         verifyNoInteractions(sender);
-        service.confirmPhoneCode(session.signupSessionId(), "654321", session.role(), ip);
+        service.confirm(session.signupSessionId(), session.role(), VerificationChannel.PHONE, "654321", ip);
         assertTrue(signupSessionStore
                 .findById(session.signupSessionId())
                 .orElseThrow()
@@ -829,7 +821,8 @@ class VerificationChallengeStoreIntegrationTest {
         var service = verificationService(store, otp, sms, now);
 
         BusinessException failure = assertThrows(
-                BusinessException.class, () -> service.sendPhoneCode(session.signupSessionId(), session.role(), ip));
+                BusinessException.class,
+                () -> service.issue(session.signupSessionId(), session.role(), VerificationChannel.PHONE, ip));
         assertEquals(ErrorCode.VERIFICATION_DELIVERY_FAILED, failure.getErrorCode());
         verifyNoInteractions(sms);
 
@@ -988,12 +981,12 @@ class VerificationChallengeStoreIntegrationTest {
 
         BusinessException failure = assertThrows(
                 BusinessException.class,
-                () -> service.sendPhoneCode(retry.signupSessionId(), retry.role(), "192.0.2.71"));
+                () -> service.issue(retry.signupSessionId(), retry.role(), VerificationChannel.PHONE, "192.0.2.71"));
         assertEquals(ErrorCode.VERIFICATION_DELIVERY_FAILED, failure.getErrorCode());
         verifyNoInteractions(sender);
         assertEquals("1", redisTemplate.opsForValue().get(totalCounter));
 
-        service.sendPhoneCode(retry.signupSessionId(), retry.role(), "192.0.2.71");
+        service.issue(retry.signupSessionId(), retry.role(), VerificationChannel.PHONE, "192.0.2.71");
         Mockito.verify(sender).sendVerificationCode(retry.phone(), CODE, verificationProperties.otpTtl());
         assertEquals("1", redisTemplate.opsForValue().get(totalCounter));
     }
@@ -1030,7 +1023,8 @@ class VerificationChallengeStoreIntegrationTest {
                 verificationService(challengeStore, mock(OtpCodeGenerator.class), mock(SmsSender.class), recoveredAt);
         BusinessException wrong = assertThrows(
                 BusinessException.class,
-                () -> recovery.confirmPhoneCode(session.signupSessionId(), "999999", session.role(), ip));
+                () -> recovery.confirm(
+                        session.signupSessionId(), session.role(), VerificationChannel.PHONE, "999999", ip));
         assertEquals(ErrorCode.VERIFICATION_CODE_INVALID, wrong.getErrorCode());
         assertEquals(
                 1,
@@ -1053,7 +1047,8 @@ class VerificationChallengeStoreIntegrationTest {
 
         BusinessException exhausted = assertThrows(
                 BusinessException.class,
-                () -> recovery.confirmPhoneCode(session.signupSessionId(), "654321", session.role(), ip));
+                () -> recovery.confirm(
+                        session.signupSessionId(), session.role(), VerificationChannel.PHONE, "654321", ip));
         assertEquals(ErrorCode.VERIFICATION_ATTEMPT_LIMIT_EXCEEDED, exhausted.getErrorCode());
         assertTrue(exhausted.getRetryAfterSeconds() > 0);
         assertEquals(
@@ -1069,7 +1064,7 @@ class VerificationChallengeStoreIntegrationTest {
                 .orElseThrow()
                 .phoneVerified());
         redisTemplate.opsForValue().set(attemptKeys.iterator().next(), "8", Duration.ofHours(1));
-        recovery.confirmPhoneCode(session.signupSessionId(), "654321", session.role(), ip);
+        recovery.confirm(session.signupSessionId(), session.role(), VerificationChannel.PHONE, "654321", ip);
 
         assertTrue(signupSessionStore
                 .findById(session.signupSessionId())
@@ -1178,7 +1173,9 @@ class VerificationChallengeStoreIntegrationTest {
 
     private MockMvc confirmationMvc(Instant now) {
         var service = verificationService(challengeStore, mock(OtpCodeGenerator.class), mock(SmsSender.class), now);
-        return MockMvcBuilders.standaloneSetup(new ArtistSignupVerificationController(service))
+        var application = new SignupVerificationService(
+                signupSessionStore, service, mock(AdultEvidenceVerifier.class), Clock.fixed(now, ZoneOffset.UTC));
+        return MockMvcBuilders.standaloneSetup(new ArtistSignupVerificationController(application))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -1373,8 +1370,9 @@ class VerificationChallengeStoreIntegrationTest {
         var otp = mock(OtpCodeGenerator.class);
         when(otp.generate()).thenReturn("654321");
         var service = verificationService(store, otp, sender, Instant.now());
-        var failure =
-                assertThrows(BusinessException.class, () -> service.sendPhoneCode(id, session.role(), "192.0.2.88"));
+        var failure = assertThrows(
+                BusinessException.class,
+                () -> service.issue(id, session.role(), VerificationChannel.PHONE, "192.0.2.88"));
         assertEquals(ErrorCode.VERIFICATION_DELIVERY_FAILED, failure.getErrorCode());
         assertEquals(!applied, redisTemplate.hasKey(SignupRedisKeys.pendingChallenge(id, channel)));
         assertEquals(
@@ -1439,20 +1437,19 @@ class VerificationChallengeStoreIntegrationTest {
         assertEquals(expected, redisTemplate.opsForValue().get(keys.iterator().next()));
     }
 
-    private SignupVerificationService verificationService(
+    private SignupVerificationChallenges verificationService(
             VerificationChallengeStore store, OtpCodeGenerator otp, SmsSender sms, Instant now) {
-        return new SignupVerificationService(
+        return new SignupVerificationChallenges(
                 signupSessionStore,
                 store,
                 otp,
                 digestService,
                 mock(EmailSender.class),
                 sms,
-                mock(AdultEvidenceVerifier.class),
                 verificationProperties,
                 Clock.fixed(now, ZoneOffset.UTC),
                 Mockito.mock(VerificationAlertService.class),
-                new com.nsu.capstone.identity.verification.SignupSendPreflight(
+                new SignupSendPreflight(
                         signupSessionStore,
                         store,
                         new com.nsu.capstone.identity.verification.config.SignupSendRedisProperties(

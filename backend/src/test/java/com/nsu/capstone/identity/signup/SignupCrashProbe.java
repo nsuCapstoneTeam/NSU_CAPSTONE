@@ -1,8 +1,7 @@
-package com.nsu.capstone;
+package com.nsu.capstone.identity.signup;
 
-import com.nsu.capstone.identity.application.SignupVerificationService;
+import com.nsu.capstone.SignupTestTerms;
 import com.nsu.capstone.identity.domain.UserRole;
-import com.nsu.capstone.identity.signup.*;
 import com.nsu.capstone.identity.verification.*;
 import com.nsu.capstone.identity.verification.config.*;
 import java.time.*;
@@ -47,7 +46,7 @@ public class SignupCrashProbe {
                 () -> {})) {
             var otp = org.mockito.Mockito.mock(OtpCodeGenerator.class);
             org.mockito.Mockito.when(otp.generate()).thenReturn("123456");
-            var service = new SignupVerificationService(
+            var service = new SignupVerificationChallenges(
                     sessions,
                     store,
                     otp,
@@ -58,12 +57,11 @@ public class SignupCrashProbe {
                     (destination, code, ttl) -> {
                         throw new AssertionError("Provider must not execute");
                     },
-                    org.mockito.Mockito.mock(com.nsu.capstone.identity.verification.adult.AdultEvidenceVerifier.class),
                     properties,
                     Clock.systemUTC(),
                     alerts,
                     worker);
-            service.sendEmailCode(args[2], UserRole.ARTIST, "192.0.2.151");
+            service.issue(args[2], UserRole.ARTIST, VerificationChannel.EMAIL, "192.0.2.151");
         }
         throw new AssertionError("Process did not halt");
     }

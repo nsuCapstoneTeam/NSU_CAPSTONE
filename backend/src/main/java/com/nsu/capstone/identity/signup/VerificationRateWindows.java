@@ -1,5 +1,6 @@
-package com.nsu.capstone.identity.verification;
+package com.nsu.capstone.identity.signup;
 
+import com.nsu.capstone.identity.verification.VerificationChannel;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;

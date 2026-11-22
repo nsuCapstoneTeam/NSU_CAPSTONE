@@ -5,19 +5,13 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import com.nsu.capstone.SignupTestTerms;
-import com.nsu.capstone.identity.application.SignupVerificationService;
+import com.nsu.capstone.identity.signup.SignupChallengeTestSupport;
 import com.nsu.capstone.identity.signup.SignupSession;
-import com.nsu.capstone.identity.signup.SignupSessionStore;
+import com.nsu.capstone.identity.signup.SignupVerificationChallenges;
 import com.nsu.capstone.identity.signup.SignupVerificationProperties;
-import com.nsu.capstone.identity.verification.ChallengeIssueResult;
-import com.nsu.capstone.identity.verification.OtpCodeGenerator;
-import com.nsu.capstone.identity.verification.OtpDigestService;
-import com.nsu.capstone.identity.verification.SignupSendPreflight;
-import com.nsu.capstone.identity.verification.VerificationAlertService;
-import com.nsu.capstone.identity.verification.VerificationChallengeStore;
+import com.nsu.capstone.identity.verification.VerificationChannel;
 import com.nsu.capstone.identity.verification.adapter.resend.ResendEmailSender;
 import com.nsu.capstone.identity.verification.adapter.solapi.SolapiSmsSender;
-import com.nsu.capstone.identity.verification.adult.AdultEvidenceVerifier;
 import com.nsu.capstone.identity.verification.config.SignupSendRedisProperties;
 import com.nsu.capstone.identity.verification.config.SolapiSmsProperties;
 import com.nsu.capstone.identity.verification.port.VerificationDeliveryException;
@@ -233,49 +227,28 @@ class VerificationAdapterContractTest {
                 300,
                 80,
                 10);
-        var sessions = mock(SignupSessionStore.class);
-        var store = mock(VerificationChallengeStore.class);
         var session = SignupSession.createArtist("logging-session", "recipient@example.com", "01087654321")
                 .withConsent(SignupTestTerms.consent());
-        when(sessions.findById("logging-session")).thenReturn(java.util.Optional.of(session));
-        when(store.issue(
-                        anyString(),
-                        any(),
-                        any(),
-                        anyString(),
-                        anyString(),
-                        anyString(),
-                        any(),
-                        anyString(),
-                        anyString()))
-                .thenReturn(ChallengeIssueResult.ISSUED);
-        when(store.startDelivery(anyString(), any(), anyString(), any())).thenReturn(true);
-        var otp = mock(OtpCodeGenerator.class);
-        when(otp.generate()).thenReturn("123456");
-        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(SignupVerificationService.class);
+        var logger =
+                (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(SignupVerificationChallenges.class);
         var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
         appender.start();
         logger.addAppender(appender);
-        try (var worker = new SignupSendPreflight(
-                sessions,
-                store,
-                new SignupSendRedisProperties(Duration.ofMillis(200), Duration.ofMillis(250), Duration.ofMillis(800)),
-                () -> {})) {
-            var service = new SignupVerificationService(
-                    sessions,
-                    store,
-                    otp,
-                    new OtpDigestService(properties),
-                    (to, code, ttl) -> send(false, client),
-                    (to, code, ttl) -> send(true, client),
-                    mock(AdultEvidenceVerifier.class),
-                    properties,
-                    java.time.Clock.systemUTC(),
-                    mock(VerificationAlertService.class),
-                    worker);
+        try (var harness = SignupChallengeTestSupport.acceptingRedis(
+                session,
+                "123456",
+                properties,
+                (to, code, ttl) -> send(false, client),
+                (to, code, ttl) -> send(true, client),
+                new SignupSendRedisProperties(
+                        Duration.ofMillis(200), Duration.ofMillis(250), Duration.ofMillis(800)))) {
+            var challenges = harness.challenges();
             assertDoesNotThrow(() -> {
-                if (sms) service.sendPhoneCode("logging-session", session.role(), "192.0.2.10");
-                else service.sendEmailCode("logging-session", session.role(), "192.0.2.10");
+                challenges.issue(
+                        "logging-session",
+                        session.role(),
+                        sms ? VerificationChannel.PHONE : VerificationChannel.EMAIL,
+                        "192.0.2.10");
             });
             assertTrue(appender.list.stream().anyMatch(event -> event.getLevel() == ch.qos.logback.classic.Level.WARN));
             assertEquals(
