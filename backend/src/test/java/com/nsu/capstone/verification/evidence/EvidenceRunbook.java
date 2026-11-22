@@ -25,6 +25,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 final class EvidenceRunbook {
 
     private static final Path RUNBOOK = Paths.get("../docs/runbook/evidence_verification.md");
+    private static final Pattern BASELINE_SQL = Pattern.compile("(?s)## 기준값 확보.*?```sql\\n(.*?)```");
     private static final Pattern RECORD_SQL = Pattern.compile("(?s)## 기록 SQL.*?```sql\\n(.*?)```");
     private static final Pattern REVOKE_SQL = Pattern.compile("(?s)## 취소 SQL.*?```sql\\n(.*?)```");
     private static final Pattern OPERATOR_SET = Pattern.compile("(?m)^\\\\set operator '(.+)'$");
@@ -36,19 +37,23 @@ final class EvidenceRunbook {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    /** "기록 절차" 2단계의 {@code clock_timestamp()}다. 증빙을 확인한 직후의 DB 시각을 문자열로 돌려준다. */
-    String checkedAt() {
-        return jdbcTemplate.queryForObject("SELECT clock_timestamp()::text", String.class);
+    /** "기준값 확보" 절의 조회를 실행해, 지금 그 아티스트·항목에 커밋된 감사 사건 수({@code seen_events})를 돌려준다. */
+    long seenEvents(UUID artistId, String verificationType) {
+        String sql = block(BASELINE_SQL, "기준값 확보")
+                .replace(":'artist_id'", quoted(artistId))
+                .replace(":'verification_type'", quoted(verificationType));
+        assertThat(sql).as("값으로 바꾸지 못한 psql 변수").doesNotContainPattern(PSQL_VARIABLE);
+        return jdbcTemplate.queryForObject(sql, (result, row) -> result.getLong("seen_events"));
     }
 
-    /** 방금 증빙을 확인한 것으로 보고(확인 시각 = 지금) "기록 SQL"을 실행한다. */
+    /** 방금 기준값을 잡고 증빙을 확인한 것으로 보고 "기록 SQL"을 실행한다. */
     int record(UUID verificationId, UUID artistId, String verificationType, String operator) {
-        return record(verificationId, checkedAt(), artistId, verificationType, operator);
+        return record(verificationId, seenEvents(artistId, verificationType), artistId, verificationType, operator);
     }
 
-    /** "기록 SQL"을 주어진 확인 시각으로 실행하고 psql이 {@code INSERT 0 n}으로 알려 주는 n을 돌려준다. */
-    int record(UUID verificationId, String checkedAt, UUID artistId, String verificationType, String operator) {
-        return run(recordSql(verificationId, checkedAt, artistId, verificationType, operator));
+    /** "기록 SQL"을 주어진 기준값으로 실행하고 psql이 {@code INSERT 0 n}으로 알려 주는 n을 돌려준다. */
+    int record(UUID verificationId, long seenEvents, UUID artistId, String verificationType, String operator) {
+        return run(recordSql(verificationId, seenEvents, artistId, verificationType, operator));
     }
 
     /** "취소 SQL"을 실행하고 psql이 {@code INSERT 0 n}으로 알려 주는 n을 돌려준다. */
@@ -58,10 +63,10 @@ final class EvidenceRunbook {
 
     /** "기록 SQL" 블록에 값을 채운 문장이다. 실행은 {@link #record}나 {@link EvidenceRunbookSession}이 한다. */
     static String recordSql(
-            UUID verificationId, String checkedAt, UUID artistId, String verificationType, String operator) {
+            UUID verificationId, long seenEvents, UUID artistId, String verificationType, String operator) {
         return block(RECORD_SQL, "기록 SQL")
                 .replace(":'verification_id'", quoted(verificationId))
-                .replace(":'checked_at'", quoted(checkedAt))
+                .replace(":'seen_events'", quoted(seenEvents))
                 .replace(":'artist_id'", quoted(artistId))
                 .replace(":'verification_type'", quoted(verificationType))
                 .replace(":'operator'", quoted(operator));

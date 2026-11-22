@@ -217,32 +217,36 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
                 .isZero();
     }
 
-    /** ADR 동시성: 기록 → 취소 → 같은 기록 ID로 기록 재시도 뒤에도 항목은 빠진 채이고 감사 기록은 늘지 않는다. */
+    /**
+     * ADR 동시성: 기록 → 취소 → 같은 기록 ID·같은 기준값으로 기록 재시도 뒤에도 항목은 빠진 채이고 감사 기록은 늘지 않는다. 재시도는 처음의 두 값(기록
+     * ID, 기준값)을 그대로 쓴다.
+     */
     @Test
-    void 취소한_뒤_같은_기록_ID로_기록을_재시도해도_되살아나지_않는다() {
+    void 취소한_뒤_같은_기록_ID와_같은_기준값으로_기록을_재시도해도_되살아나지_않는다() {
         User artist = newUser(UserRole.ARTIST, "evidence-retry@example.com");
         UUID recordId = uuidV7Generator.generate();
-        runbook.record(recordId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+        long seenEvents = runbook.seenEvents(artist.getId(), "BUSINESS_REGISTRATION");
+        runbook.record(recordId, seenEvents, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
         runbook.revoke(recordId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR, "RECORDED_IN_ERROR");
 
-        int inserted = runbook.record(recordId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+        int inserted = runbook.record(recordId, seenEvents, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
 
         assertThat(inserted).isZero();
         assertThat(count("evidence_verifications", artist.getId())).isZero();
         assertThat(count("evidence_verification_audit_events", artist.getId())).isEqualTo(2);
     }
 
-    /** ADR 동시성: A가 확인한(T) 뒤 B가 기록하고 취소했으면 A의 확인은 낡았다. A가 T로 실행해도 항목을 되살리지 않는다. */
+    /** ADR 동시성 1: A가 기준값을 잡은 뒤 B가 기록하고 취소했으면 A의 확인은 낡았다. A가 그 기준값으로 실행해도 항목을 되살리지 않는다. */
     @Test
-    void 확인한_뒤_다른_운영자가_기록하고_취소했으면_같은_확인_시각으로_실행해도_아무것도_바뀌지_않는다() {
+    void 기준값을_잡은_뒤_다른_운영자가_기록하고_취소했으면_같은_기준값으로_실행해도_아무것도_바뀌지_않는다() {
         User artist = newUser(UserRole.ARTIST, "evidence-stale-check@example.com");
         UUID a = uuidV7Generator.generate();
         UUID b = uuidV7Generator.generate();
-        String t = runbook.checkedAt();
+        long seenEvents = runbook.seenEvents(artist.getId(), "BUSINESS_REGISTRATION");
         runbook.record(b, artist.getId(), "BUSINESS_REGISTRATION", "operator-b");
         runbook.revoke(b, artist.getId(), "BUSINESS_REGISTRATION", "operator-b", "RECORDED_IN_ERROR");
 
-        int inserted = runbook.record(a, t, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
+        int inserted = runbook.record(a, seenEvents, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
 
         assertThat(inserted).isZero();
         assertThat(count("evidence_verifications", artist.getId())).isZero();
@@ -258,17 +262,17 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
                 .isZero();
     }
 
-    /** 확인 시각 앞의 사건은 낡은 확인을 만들지 않는다. 취소됐던 항목도 그 뒤에 새로 확인했으면 다시 기록한다. */
+    /** 기준값 앞의 사건은 낡은 확인을 만들지 않는다. 취소됐던 항목도 그 뒤에 기준값을 새로 잡고 확인했으면 다시 기록한다. */
     @Test
-    void 확인_시각_앞에_일어난_사건만_있으면_정상으로_기록한다() {
+    void 기준값을_잡은_뒤_사건이_없으면_정상으로_기록한다() {
         User artist = newUser(UserRole.ARTIST, "evidence-fresh-check@example.com");
         UUID b = uuidV7Generator.generate();
         UUID a = uuidV7Generator.generate();
         runbook.record(b, artist.getId(), "BUSINESS_REGISTRATION", "operator-b");
         runbook.revoke(b, artist.getId(), "BUSINESS_REGISTRATION", "operator-b", "RECORDED_IN_ERROR");
-        String t = runbook.checkedAt();
+        long seenEvents = runbook.seenEvents(artist.getId(), "BUSINESS_REGISTRATION");
 
-        int inserted = runbook.record(a, t, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
+        int inserted = runbook.record(a, seenEvents, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
 
         assertThat(inserted).isEqualTo(1);
         assertThat(jdbcTemplate.queryForList(
@@ -278,15 +282,15 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
 
     /** 다른 항목이나 다른 아티스트의 사건은 이 항목의 확인을 낡게 만들지 않는다. */
     @Test
-    void 확인한_뒤_다른_항목이나_다른_아티스트에_생긴_사건은_기록을_막지_않는다() {
+    void 기준값을_잡은_뒤_다른_항목이나_다른_아티스트에_생긴_사건은_기록을_막지_않는다() {
         User artist = newUser(UserRole.ARTIST, "evidence-unrelated-check@example.com");
         User other = newUser(UserRole.ARTIST, "evidence-unrelated-other@example.com");
-        String t = runbook.checkedAt();
+        long seenEvents = runbook.seenEvents(artist.getId(), "BUSINESS_REGISTRATION");
         runbook.record(uuidV7Generator.generate(), artist.getId(), "OFFICIAL_ACTIVITY", "operator-b");
         runbook.record(uuidV7Generator.generate(), other.getId(), "BUSINESS_REGISTRATION", "operator-b");
 
-        int inserted =
-                runbook.record(uuidV7Generator.generate(), t, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
+        int inserted = runbook.record(
+                uuidV7Generator.generate(), seenEvents, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
 
         assertThat(inserted).isEqualTo(1);
     }
@@ -296,6 +300,7 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
     void 같은_기록_ID의_두_실행이_동시에_돌아도_기록과_GRANTED는_하나씩만_남는다() throws Exception {
         User artist = newUser(UserRole.ARTIST, "evidence-concurrent@example.com");
         UUID recordId = uuidV7Generator.generate();
+        long seenEvents = runbook.seenEvents(artist.getId(), "BUSINESS_REGISTRATION");
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
@@ -303,7 +308,7 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
             for (int i = 0; i < 2; i++) {
                 runs.add(executor.submit(() -> {
                     start.await();
-                    return runbook.record(recordId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+                    return runbook.record(recordId, seenEvents, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
                 }));
             }
             start.countDown();
@@ -325,8 +330,8 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
     }
 
     /**
-     * ADR 동시성 2: 운영자 A가 증빙을 확인한(T) 뒤 운영자 B의 취소가 잠금을 잡고 항목을 지웠지만 아직 커밋하지 않았다. 이때 A가 다른 기록 ID로
-     * 기록을 시작하면 잠금에서 기다렸다가, B가 커밋한 뒤 아무것도 넣지 않는다. 낡은 확인이 취소된 항목을 되살리지 못한다.
+     * ADR 동시성 2: 운영자 A가 기준값을 잡고 증빙을 확인한 뒤 운영자 B의 취소가 잠금을 잡고 항목을 지웠지만 아직 커밋하지 않았다. 이때 A가 다른
+     * 기록 ID로 기록을 시작하면 잠금에서 기다렸다가, B가 커밋한 뒤 아무것도 넣지 않는다. 낡은 확인이 취소된 항목을 되살리지 못한다.
      */
     @Test
     void 취소가_커밋하기_전에_시작한_다른_기록_ID의_기록은_잠금에서_기다렸다가_아무것도_넣지_않는다() throws Exception {
@@ -334,11 +339,11 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
         UUID x = uuidV7Generator.generate();
         UUID y = uuidV7Generator.generate();
         runbook.record(x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b");
-        String checkedAt = runbook.checkedAt();
+        long seenEvents = runbook.seenEvents(artist.getId(), "BUSINESS_REGISTRATION");
         String revokeSql = EvidenceRunbook.revokeSql(
                 x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b", "RECORDED_IN_ERROR");
         String recordSql =
-                EvidenceRunbook.recordSql(y, checkedAt, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
+                EvidenceRunbook.recordSql(y, seenEvents, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try (EvidenceRunbookSession revoker = new EvidenceRunbookSession(jdbcTemplate.getDataSource());
                 EvidenceRunbookSession recorder = new EvidenceRunbookSession(jdbcTemplate.getDataSource())) {
@@ -364,21 +369,20 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
     }
 
     /**
-     * ADR 동시성 3: 취소 트랜잭션이 기준 시각(T)보다 먼저 시작했어도 감사 시각은 트랜잭션 시작이 아니라 지운 시점이다. 그래서 T보다 늦고, T로
-     * 실행한 기록은 아무것도 넣지 않는다. 트랜잭션 시작 시각이 남으면 취소가 T보다 앞선 일로 보여 낡은 확인이 항목을 되살린다.
+     * ADR 동시성 3: 취소 트랜잭션을 일찍 BEGIN하고 늦게 지워도 REVOKED 감사 시각은 트랜잭션 시작 시각이 아니라 지운 시점이다. BEGIN 뒤·지우기 앞에
+     * 잰 DB 시각보다 감사 시각이 늦으면 트랜잭션 시작 시각({@code now()})이 아니라는 뜻이다.
      */
     @Test
-    void 취소_트랜잭션이_기준_시각보다_먼저_시작했어도_감사_시각은_지운_시점이라_그_기준_시각의_기록은_아무것도_넣지_않는다() throws Exception {
+    void 취소_트랜잭션이_일찍_시작하고_늦게_지워도_REVOKED_감사_시각은_지운_시점이다() throws Exception {
         User artist = newUser(UserRole.ARTIST, "evidence-audit-clock@example.com");
         UUID x = uuidV7Generator.generate();
-        UUID y = uuidV7Generator.generate();
         runbook.record(x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b");
         String revokeSql = EvidenceRunbook.revokeSql(
                 x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b", "RECORDED_IN_ERROR");
-        String checkedAt;
+        String afterBegin;
         try (EvidenceRunbookSession revoker = new EvidenceRunbookSession(jdbcTemplate.getDataSource())) {
             revoker.begin(revokeSql);
-            checkedAt = runbook.checkedAt();
+            afterBegin = jdbcTemplate.queryForObject("SELECT clock_timestamp()::text", String.class);
             revoker.continueUntilCommit(revokeSql);
             revoker.commit();
         }
@@ -386,14 +390,10 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
         assertThat(jdbcTemplate.queryForObject(
                         "SELECT occurred_at > ?::timestamptz FROM evidence_verification_audit_events WHERE evidence_verification_id = ? AND event_type = 'REVOKED'",
                         Boolean.class,
-                        checkedAt,
+                        afterBegin,
                         x))
-                .as("REVOKED 감사 시각이 기준 시각보다 늦다")
+                .as("REVOKED 감사 시각이 BEGIN 뒤에 잰 시각보다 늦다")
                 .isTrue();
-        int inserted = runbook.record(y, checkedAt, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
-
-        assertThat(inserted).isZero();
-        assertThat(count("evidence_verifications", artist.getId())).isZero();
     }
 
     /**
