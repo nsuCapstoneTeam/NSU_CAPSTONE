@@ -396,6 +396,46 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
         assertThat(count("evidence_verifications", artist.getId())).isZero();
     }
 
+    /**
+     * ADR 동시성: 잠금 키는 아티스트·항목 단위다. 한 아티스트의 항목 하나가 취소 중이어도(잠금을 쥐고 커밋하기 전) 다른 아티스트의 같은 항목 기록은
+     * 기다리지 않고 바로 끝난다. 기다리면 lock_timeout(5초) 뒤 실패한다.
+     */
+    @Test
+    void 다른_아티스트의_같은_항목_기록은_취소가_쥔_잠금을_기다리지_않는다() throws Exception {
+        User locked = newUser(UserRole.ARTIST, "evidence-key-artist-locked@example.com");
+        User other = newUser(UserRole.ARTIST, "evidence-key-artist-other@example.com");
+        UUID x = uuidV7Generator.generate();
+        runbook.record(x, locked.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+        String revokeSql =
+                EvidenceRunbook.revokeSql(x, locked.getId(), "BUSINESS_REGISTRATION", OPERATOR, "RECORDED_IN_ERROR");
+        try (EvidenceRunbookSession revoker = new EvidenceRunbookSession(jdbcTemplate.getDataSource())) {
+            revoker.begin(revokeSql);
+            revoker.continueUntilCommit(revokeSql);
+
+            int inserted = runbook.record(uuidV7Generator.generate(), other.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+
+            assertThat(inserted).isEqualTo(1);
+        }
+    }
+
+    /** ADR 동시성: 같은 아티스트의 다른 항목은 잠금 키가 달라 취소 중인 항목의 잠금을 기다리지 않는다. */
+    @Test
+    void 같은_아티스트의_다른_항목_기록은_취소가_쥔_잠금을_기다리지_않는다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "evidence-key-item@example.com");
+        UUID x = uuidV7Generator.generate();
+        runbook.record(x, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+        String revokeSql =
+                EvidenceRunbook.revokeSql(x, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR, "RECORDED_IN_ERROR");
+        try (EvidenceRunbookSession revoker = new EvidenceRunbookSession(jdbcTemplate.getDataSource())) {
+            revoker.begin(revokeSql);
+            revoker.continueUntilCommit(revokeSql);
+
+            int inserted = runbook.record(uuidV7Generator.generate(), artist.getId(), "OFFICIAL_ACTIVITY", OPERATOR);
+
+            assertThat(inserted).isEqualTo(1);
+        }
+    }
+
     /** ADR 동시성: X 취소 요청 → 다른 운영자가 X 취소·Y 기록 → X 취소 재시도 뒤에도 Y가 남는다. */
     @Test
     void 취소_요청이_가리킨_기록_ID만_지워서_그_사이_다시_기록된_새_기록은_남는다() {
