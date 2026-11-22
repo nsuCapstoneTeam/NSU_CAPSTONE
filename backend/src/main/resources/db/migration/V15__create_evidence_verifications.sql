@@ -26,5 +26,8 @@ CREATE TABLE evidence_verification_audit_events (
     event_type VARCHAR(32) NOT NULL,
     operator VARCHAR(64) NOT NULL,
     reason VARCHAR(48),
-    occurred_at TIMESTAMP WITH TIME ZONE NOT NULL
+    occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    -- 운영자는 GitHub 아이디다(공개 정보, 영문자·숫자·하이픈 39자 이하). 이름이나 메모가 들어갈 길을 DB가 막는다.
+    -- runbook의 예시 값(CHANGE_ME)은 이 형식을 통과하지 못한다. 바꾸지 않고 실행하면 여기서 거절된다(7번).
+    CONSTRAINT ck_evidence_verification_audit_events_operator CHECK (operator ~ '^[A-Za-z0-9-]{1,39}$')
 );
