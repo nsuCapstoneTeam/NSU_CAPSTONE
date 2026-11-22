@@ -369,6 +369,39 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
     }
 
     /**
+     * ADR 동시성 1(리뷰 회귀): 취소가 잠금을 잡고 항목을 지우고 감사 기록을 쓴 뒤 아직 커밋하지 않았을 때 다른 연결이 기준값을 잡는다. 커밋 전의
+     * 감사 행은 세어지지 않는다. 그 뒤 취소가 커밋되면 사건 수가 늘어, 그 기준값으로 실행한 기록은 아무것도 넣지 않는다. 시각을 기준으로 삼으면 감사
+     * 시각이 기준값을 잡기 전이라 이 취소를 놓친다.
+     */
+    @Test
+    void 취소가_커밋하기_전에_잡은_기준값으로_기록하면_취소가_커밋된_뒤_아무것도_넣지_않는다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "evidence-uncommitted-baseline@example.com");
+        UUID x = uuidV7Generator.generate();
+        UUID y = uuidV7Generator.generate();
+        runbook.record(x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b");
+        String revokeSql = EvidenceRunbook.revokeSql(
+                x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b", "RECORDED_IN_ERROR");
+        long seenEvents;
+        try (EvidenceRunbookSession revoker = new EvidenceRunbookSession(jdbcTemplate.getDataSource())) {
+            revoker.begin(revokeSql);
+            revoker.continueUntilCommit(revokeSql);
+            seenEvents = runbook.seenEvents(artist.getId(), "BUSINESS_REGISTRATION");
+            revoker.commit();
+        }
+
+        int inserted = runbook.record(y, seenEvents, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
+
+        assertThat(seenEvents).as("커밋 전의 REVOKED는 세어지지 않아 GRANTED 하나만 센다").isEqualTo(1);
+        assertThat(inserted).isZero();
+        assertThat(count("evidence_verifications", artist.getId())).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT count(*) FROM evidence_verification_audit_events WHERE event_type = 'GRANTED' AND artist_id = ?",
+                        Integer.class,
+                        artist.getId()))
+                .isEqualTo(1);
+    }
+
+    /**
      * ADR 동시성 3: 취소 트랜잭션을 일찍 BEGIN하고 늦게 지워도 REVOKED 감사 시각은 트랜잭션 시작 시각이 아니라 지운 시점이다. BEGIN 뒤·지우기 앞에
      * 잰 DB 시각보다 감사 시각이 늦으면 트랜잭션 시작 시각({@code now()})이 아니라는 뜻이다.
      */
