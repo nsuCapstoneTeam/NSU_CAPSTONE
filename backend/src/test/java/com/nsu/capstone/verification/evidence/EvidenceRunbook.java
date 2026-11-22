@@ -7,6 +7,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.UUID;
@@ -47,24 +48,34 @@ final class EvidenceRunbook {
 
     /** "기록 SQL"을 주어진 확인 시각으로 실행하고 psql이 {@code INSERT 0 n}으로 알려 주는 n을 돌려준다. */
     int record(UUID verificationId, String checkedAt, UUID artistId, String verificationType, String operator) {
-        String sql = block(RECORD_SQL, "기록 SQL")
+        return run(recordSql(verificationId, checkedAt, artistId, verificationType, operator));
+    }
+
+    /** "취소 SQL"을 실행하고 psql이 {@code INSERT 0 n}으로 알려 주는 n을 돌려준다. */
+    int revoke(UUID verificationId, UUID artistId, String verificationType, String operator, String reason) {
+        return run(revokeSql(verificationId, artistId, verificationType, operator, reason));
+    }
+
+    /** "기록 SQL" 블록에 값을 채운 문장이다. 실행은 {@link #record}나 {@link EvidenceRunbookSession}이 한다. */
+    static String recordSql(
+            UUID verificationId, String checkedAt, UUID artistId, String verificationType, String operator) {
+        return block(RECORD_SQL, "기록 SQL")
                 .replace(":'verification_id'", quoted(verificationId))
                 .replace(":'checked_at'", quoted(checkedAt))
                 .replace(":'artist_id'", quoted(artistId))
                 .replace(":'verification_type'", quoted(verificationType))
                 .replace(":'operator'", quoted(operator));
-        return run(sql);
     }
 
-    /** "취소 SQL"을 실행하고 psql이 {@code INSERT 0 n}으로 알려 주는 n을 돌려준다. */
-    int revoke(UUID verificationId, UUID artistId, String verificationType, String operator, String reason) {
-        String sql = block(REVOKE_SQL, "취소 SQL")
+    /** "취소 SQL" 블록에 값을 채운 문장이다. 실행은 {@link #revoke}나 {@link EvidenceRunbookSession}이 한다. */
+    static String revokeSql(
+            UUID verificationId, UUID artistId, String verificationType, String operator, String reason) {
+        return block(REVOKE_SQL, "취소 SQL")
                 .replace(":'verification_id'", quoted(verificationId))
                 .replace(":'artist_id'", quoted(artistId))
                 .replace(":'verification_type'", quoted(verificationType))
                 .replace(":'operator'", quoted(operator))
                 .replace(":'reason'", quoted(reason));
-        return run(sql);
     }
 
     /** "기록 SQL" 블록의 {@code \set operator} 예시 값이다. 문서가 예시를 바꾸면 이 값도 따라 바뀐다. */
@@ -109,31 +120,34 @@ final class EvidenceRunbook {
     }
 
     private int run(String sql) {
+        return jdbcTemplate.execute((ConnectionCallback<Integer>) connection -> execute(connection, sql));
+    }
+
+    /** 문장을 이 연결에서 실행하고 psql이 알려 주는 갱신 건수의 합을 돌려준다. 실패하면 열린 트랜잭션을 되돌린다. */
+    static int execute(Connection connection, String sql) throws SQLException {
         // 바꾸지 못한 psql 변수가 남으면 문서의 변수 이름이 바뀐 것이다. 엉뚱한 SQL을 돌리지 않고 여기서 멈춘다.
         // 문자열 리터럴 'evidence_verification:'처럼 콜론 뒤에 따옴표가 오는 것은 변수가 아니라서 :'이름' 꼴만 찾는다
         assertThat(sql).as("값으로 바꾸지 못한 psql 변수").doesNotContainPattern(PSQL_VARIABLE);
-        return jdbcTemplate.execute((ConnectionCallback<Integer>) connection -> {
-            try (Statement statement = connection.createStatement()) {
-                boolean isResultSet = statement.execute(sql);
-                int updated = 0;
-                while (true) {
-                    if (!isResultSet) {
-                        int count = statement.getUpdateCount();
-                        if (count == -1) {
-                            break;
-                        }
-                        updated += count;
+        try (Statement statement = connection.createStatement()) {
+            boolean isResultSet = statement.execute(sql);
+            int updated = 0;
+            while (true) {
+                if (!isResultSet) {
+                    int count = statement.getUpdateCount();
+                    if (count == -1) {
+                        break;
                     }
-                    isResultSet = statement.getMoreResults();
+                    updated += count;
                 }
-                return updated;
-            } catch (SQLException e) {
-                // BEGIN 뒤에 실패하면 서버 쪽 트랜잭션이 열린 채라, 풀로 돌려보내기 전에 되돌린다(운영자가 psql에서 하는 ROLLBACK)
-                try (Statement rollback = connection.createStatement()) {
-                    rollback.execute("ROLLBACK");
-                }
-                throw e;
+                isResultSet = statement.getMoreResults();
             }
-        });
+            return updated;
+        } catch (SQLException e) {
+            // BEGIN 뒤에 실패하면 서버 쪽 트랜잭션이 열린 채라, 풀로 돌려보내기 전에 되돌린다(운영자가 psql에서 하는 ROLLBACK)
+            try (Statement rollback = connection.createStatement()) {
+                rollback.execute("ROLLBACK");
+            }
+            throw e;
+        }
     }
 }

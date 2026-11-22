@@ -324,6 +324,45 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
                 .isEqualTo(1);
     }
 
+    /**
+     * ADR 동시성 2: 운영자 A가 증빙을 확인한(T) 뒤 운영자 B의 취소가 잠금을 잡고 항목을 지웠지만 아직 커밋하지 않았다. 이때 A가 다른 기록 ID로
+     * 기록을 시작하면 잠금에서 기다렸다가, B가 커밋한 뒤 아무것도 넣지 않는다. 낡은 확인이 취소된 항목을 되살리지 못한다.
+     */
+    @Test
+    void 취소가_커밋하기_전에_시작한_다른_기록_ID의_기록은_잠금에서_기다렸다가_아무것도_넣지_않는다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "evidence-lock-wait@example.com");
+        UUID x = uuidV7Generator.generate();
+        UUID y = uuidV7Generator.generate();
+        runbook.record(x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b");
+        String checkedAt = runbook.checkedAt();
+        String revokeSql = EvidenceRunbook.revokeSql(
+                x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b", "RECORDED_IN_ERROR");
+        String recordSql =
+                EvidenceRunbook.recordSql(y, checkedAt, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (EvidenceRunbookSession revoker = new EvidenceRunbookSession(jdbcTemplate.getDataSource());
+                EvidenceRunbookSession recorder = new EvidenceRunbookSession(jdbcTemplate.getDataSource())) {
+            revoker.begin(revokeSql);
+            revoker.continueUntilCommit(revokeSql);
+
+            Future<Integer> recording = executor.submit(() -> recorder.run(recordSql));
+            recorder.awaitLockWait(jdbcTemplate);
+            assertThat(recording).as("취소가 커밋하기 전에는 기록이 끝나지 않는다").isNotDone();
+            revoker.commit();
+
+            assertThat(recording.get(10, TimeUnit.SECONDS)).isZero();
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(count("evidence_verifications", artist.getId())).isZero();
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT event_type FROM evidence_verification_audit_events WHERE artist_id = ? ORDER BY event_type",
+                        String.class,
+                        artist.getId()))
+                .containsExactly("GRANTED", "REVOKED");
+    }
+
     /** ADR 동시성: X 취소 요청 → 다른 운영자가 X 취소·Y 기록 → X 취소 재시도 뒤에도 Y가 남는다. */
     @Test
     void 취소_요청이_가리킨_기록_ID만_지워서_그_사이_다시_기록된_새_기록은_남는다() {
