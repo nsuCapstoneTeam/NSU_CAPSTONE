@@ -29,12 +29,14 @@ public class EvidenceVerificationSource implements VerificationSource {
         if (artistIds.isEmpty()) {
             return Map.of();
         }
-        return jdbc.sql("""
+        return jdbc
+                .sql("""
                         SELECT artist_id, verification_type FROM evidence_verifications
                         WHERE artist_id IN (:artistIds)""")
                 .param("artistIds", artistIds)
                 .query((rs, rowNum) -> new Row(
-                        rs.getObject("artist_id", UUID.class), VerificationType.valueOf(rs.getString("verification_type"))))
+                        rs.getObject("artist_id", UUID.class),
+                        VerificationType.valueOf(rs.getString("verification_type"))))
                 .list()
                 .stream()
                 .collect(Collectors.groupingBy(

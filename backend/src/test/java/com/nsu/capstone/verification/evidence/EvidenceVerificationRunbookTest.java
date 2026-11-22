@@ -43,8 +43,7 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
 
         assertThat(inserted).isEqualTo(1);
         assertThat(jdbcTemplate.queryForMap(
-                        "SELECT id, verification_type FROM evidence_verifications WHERE artist_id = ?",
-                        artist.getId()))
+                        "SELECT id, verification_type FROM evidence_verifications WHERE artist_id = ?", artist.getId()))
                 .containsEntry("id", recordId)
                 .containsEntry("verification_type", "BUSINESS_REGISTRATION");
         Map<String, Object> audit = jdbcTemplate.queryForMap(
@@ -93,8 +92,8 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
     void operator가_형식_밖이면_DB가_거절하고_아무것도_바뀌지_않는다(String operator) {
         User artist = newUser(UserRole.ARTIST, "evidence-bad-operator@example.com");
 
-        assertThatThrownBy(() -> runbook.record(
-                        uuidV7Generator.generate(), artist.getId(), "OFFICIAL_ACTIVITY", operator))
+        assertThatThrownBy(
+                        () -> runbook.record(uuidV7Generator.generate(), artist.getId(), "OFFICIAL_ACTIVITY", operator))
                 .hasMessageContaining("ck_evidence_verification_audit_events_operator");
 
         assertThat(count("evidence_verifications", artist.getId())).isZero();
@@ -105,8 +104,7 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
     void operator가_39자_GitHub_아이디면_받는다() {
         User artist = newUser(UserRole.ARTIST, "evidence-long-operator@example.com");
 
-        int inserted = runbook.record(
-                uuidV7Generator.generate(), artist.getId(), "OFFICIAL_ACTIVITY", "a".repeat(39));
+        int inserted = runbook.record(uuidV7Generator.generate(), artist.getId(), "OFFICIAL_ACTIVITY", "a".repeat(39));
 
         assertThat(inserted).isEqualTo(1);
     }
@@ -132,7 +130,8 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
         runbook.record(businessId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
         runbook.record(activityId, artist.getId(), "OFFICIAL_ACTIVITY", OPERATOR);
 
-        int inserted = runbook.revoke(businessId, artist.getId(), "BUSINESS_REGISTRATION", "revoke-operator", "EVIDENCE_INVALID");
+        int inserted = runbook.revoke(
+                businessId, artist.getId(), "BUSINESS_REGISTRATION", "revoke-operator", "EVIDENCE_INVALID");
 
         assertThat(inserted).isEqualTo(1);
         assertThat(jdbcTemplate.queryForList(

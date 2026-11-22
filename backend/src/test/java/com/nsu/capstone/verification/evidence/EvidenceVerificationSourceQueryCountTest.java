@@ -57,7 +57,8 @@ class EvidenceVerificationSourceQueryCountTest extends EvidenceVerificationInteg
     void Trust_Profile_일괄_조회에서도_아티스트_100명이_쿼리_한_번이다() {
         List<UUID> artistIds = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
-            artistIds.add(newUser(UserRole.ARTIST, "evidence-batch-" + i + "@example.com").getId());
+            artistIds.add(newUser(UserRole.ARTIST, "evidence-batch-" + i + "@example.com")
+                    .getId());
         }
         clearInvocations(jdbcClient);
 
