@@ -37,10 +37,22 @@ export function describeVerifications(verifications = []) {
   };
 }
 
+// 이름 목록 경로에서 색을 켜지 않는 이름. describeOne이 같은 항목에 붙이는 이름을 그대로 쓴다
+const LIST_ONLY_LABELS = new Set(
+  [
+    { type: 'BUSINESS_REGISTRATION' },
+    { type: 'PERFORMANCE_PARTICIPATION' },
+    { type: 'OFFICIAL_ACTIVITY' },
+    { type: 'EXTERNAL_ACCOUNT', provider: 'YOUTUBE' },
+    { type: 'EXTERNAL_ACCOUNT' },
+    {}, // 모르는 type에 붙는 기본 이름("확인된 항목")
+  ].map((verification) => describeOne(verification).label),
+);
+
 // 이름 목록만 넘기는 기존 화면용
-// 이름이 있으면 예전부터 파랗게 하던 항목이므로 색과 목록에 같은 이름을 쓴다
+// 위 이름이 아니면 예전부터 파랗게 하던 항목이므로 색과 목록에 같은 이름을 쓴다
 export function itemsFromNames(names = []) {
-  return { badgeItems: names, listItems: names };
+  return { badgeItems: names.filter((name) => !LIST_ONLY_LABELS.has(name)), listItems: names };
 }
 
 // 항목 → 배지가 그릴 값

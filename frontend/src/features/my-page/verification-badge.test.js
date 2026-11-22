@@ -88,6 +88,41 @@ describe('이름 목록만 넘기는 기존 화면(관심 아티스트, 추천 �
   });
 });
 
+// 증빙 확인 기록 ADR 12번은 이름 목록으로 넘어오는 경로에도 같다: 색을 켜지 않는 항목은 목록에만 나온다.
+describe('이름 목록 중 색을 켜지 않는 항목', () => {
+  it('"사업자등록 확인"은 배지를 켜지 않고 목록에만 나온다', () => {
+    const items = itemsFromNames(['사업자등록 확인']);
+    assert.deepEqual(items.badgeItems, []);
+    assert.deepEqual(items.listItems, ['사업자등록 확인']);
+    assert.equal(badgeView(items).isBlue, false);
+  });
+
+  it('"실연 참여 확인"과 "공식 활동 확인"도 목록에만 나온다', () => {
+    const items = itemsFromNames(['실연 참여 확인', '공식 활동 확인']);
+    assert.deepEqual(items.badgeItems, []);
+    assert.deepEqual(items.listItems, ['실연 참여 확인', '공식 활동 확인']);
+  });
+
+  it('외부 계정 이름(YouTube, 그 밖의 플랫폼)도 목록에만 나온다', () => {
+    const names = [YOUTUBE_CONTROL, '외부 계정 제어권 확인'];
+    const items = itemsFromNames(names);
+    assert.deepEqual(items.badgeItems, []);
+    assert.deepEqual(items.listItems, names);
+  });
+
+  it('Trust Profile 항목에서 뽑은 이름을 다시 넘겨도 색과 목록이 같다', () => {
+    const verifications = [
+      { type: 'IDENTITY', provider: null },
+      { type: 'EXTERNAL_ACCOUNT', provider: 'YOUTUBE' },
+      { type: 'COPYRIGHT', provider: null },
+      { type: 'BUSINESS_REGISTRATION', provider: null },
+      { type: 'NEW_KIND', provider: null },
+    ];
+    const described = describeVerifications(verifications);
+    assert.deepEqual(itemsFromNames(described.listItems), described);
+  });
+});
+
 describe('실명 본인확인을 마친 아티스트', () => {
   it('배지가 파랗고, 외부 계정도 목록에 함께 나온다', () => {
     const view = badgeView(
