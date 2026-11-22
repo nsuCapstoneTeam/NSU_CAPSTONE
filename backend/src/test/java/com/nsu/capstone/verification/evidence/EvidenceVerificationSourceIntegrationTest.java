@@ -48,4 +48,10 @@ class EvidenceVerificationSourceIntegrationTest extends EvidenceVerificationInte
         assertThat(items.get(other.getId()))
                 .containsExactly(new VerificationItem(VerificationType.OFFICIAL_ACTIVITY, null));
     }
+
+    /** ADR "읽기": 빈 입력이면 쿼리하지 않는다(SQL의 빈 IN 목록은 문법 오류다). */
+    @Test
+    void 빈_입력은_빈_결과다() {
+        assertThat(source.findVerifiedByArtistIds(List.of())).isEmpty();
+    }
 }

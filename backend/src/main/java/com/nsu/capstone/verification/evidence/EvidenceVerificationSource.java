@@ -25,6 +25,10 @@ public class EvidenceVerificationSource implements VerificationSource {
 
     @Override
     public Map<UUID, List<VerificationItem>> findVerifiedByArtistIds(Collection<UUID> artistIds) {
+        // TrustProfileQueryService가 이미 막지만, 빈 IN 목록은 SQL 문법 오류라 source도 지킨다
+        if (artistIds.isEmpty()) {
+            return Map.of();
+        }
         return jdbc.sql("""
                         SELECT artist_id, verification_type FROM evidence_verifications
                         WHERE artist_id IN (:artistIds)""")
