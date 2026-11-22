@@ -144,7 +144,10 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
         }
     }
 
-    /** 조합: 코드 하나, 시·도 쌍, 같은 시·도의 시·군·구 쌍(이웃한 코드), 시·도와 다른 시·도의 시·군·구. */
+    /**
+     * 조합: 코드 하나, 시·도 쌍, 같은 시·도의 시·군·구 쌍(이웃한 코드), 시·도와 다른 시·도의 시·군·구,
+     * 이웃한 시·도 셋, 같은 시·도의 이웃한 시·군·구 셋(개편이 둘을 합치면 중복이 생기는 경우를 이전 SQL이 다루는지 본다).
+     */
     private static final String COMBINATIONS_CTE = """
             WITH cities AS (
                 SELECT r.code, r.province_code FROM regions r
@@ -161,6 +164,16 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
                     SELECT code, lead(code) OVER (PARTITION BY province_code ORDER BY code) AS next_code
                     FROM cities) pairs
                 WHERE next_code IS NOT NULL
+                UNION ALL
+                SELECT ARRAY[code, next_code, after_next_code] FROM (
+                    SELECT code, lead(code) OVER w AS next_code, lead(code, 2) OVER w AS after_next_code
+                    FROM provinces WINDOW w AS (ORDER BY code)) triples
+                WHERE after_next_code IS NOT NULL
+                UNION ALL
+                SELECT ARRAY[code, next_code, after_next_code] FROM (
+                    SELECT code, lead(code) OVER w AS next_code, lead(code, 2) OVER w AS after_next_code
+                    FROM cities WINDOW w AS (PARTITION BY province_code ORDER BY code)) triples
+                WHERE after_next_code IS NOT NULL
                 UNION ALL
                 SELECT ARRAY(SELECT x FROM unnest(ARRAY[p.code, c.code]) AS x ORDER BY x COLLATE "C")
                 FROM provinces p JOIN cities c ON c.province_code <> p.code
@@ -191,6 +204,19 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
         for (ProfileTable table : ProfileTable.values()) {
             assertThat(migrated.queryForObject(
                             "SELECT count(*) FROM " + table.table + " WHERE cardinality(region_codes) >= 2",
+                            Long.class))
+                    .as(table.label)
+                    .isPositive();
+        }
+    }
+
+    @Test
+    void 시드는_두_표_모두_원소가_세_개_이상인_배열을_담는다() {
+        JdbcTemplate migrated = migrateStepwiseWithProfiles(EnumSet.allOf(ProfileTable.class), NO_MAPPING, MIGRATIONS);
+
+        for (ProfileTable table : ProfileTable.values()) {
+            assertThat(migrated.queryForObject(
+                            "SELECT count(*) FROM " + table.table + " WHERE cardinality(region_codes) >= 3",
                             Long.class))
                     .as(table.label)
                     .isPositive();
