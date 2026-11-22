@@ -34,10 +34,21 @@ final class EvidenceRunbook {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    /** "기록 SQL"을 실행하고 psql이 {@code INSERT 0 n}으로 알려 주는 n을 돌려준다. */
+    /** "기록 절차" 2단계의 {@code SELECT now()}다. 증빙을 확인한 직후의 DB 시각을 문자열로 돌려준다. */
+    String checkedAt() {
+        return jdbcTemplate.queryForObject("SELECT now()::text", String.class);
+    }
+
+    /** 방금 증빙을 확인한 것으로 보고(확인 시각 = 지금) "기록 SQL"을 실행한다. */
     int record(UUID verificationId, UUID artistId, String verificationType, String operator) {
+        return record(verificationId, checkedAt(), artistId, verificationType, operator);
+    }
+
+    /** "기록 SQL"을 주어진 확인 시각으로 실행하고 psql이 {@code INSERT 0 n}으로 알려 주는 n을 돌려준다. */
+    int record(UUID verificationId, String checkedAt, UUID artistId, String verificationType, String operator) {
         String sql = block(RECORD_SQL, "기록 SQL")
                 .replace(":'verification_id'", quoted(verificationId))
+                .replace(":'checked_at'", quoted(checkedAt))
                 .replace(":'artist_id'", quoted(artistId))
                 .replace(":'verification_type'", quoted(verificationType))
                 .replace(":'operator'", quoted(operator));
