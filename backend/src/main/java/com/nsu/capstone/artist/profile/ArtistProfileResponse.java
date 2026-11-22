@@ -7,14 +7,14 @@ import java.util.List;
 
 /** 조회·수정·열람이 함께 쓰는 응답(09 §3). 프로필이 없으면 {@link #empty()}다. */
 record ArtistProfileResponse(
-        String name,
-        String bio,
+        @Schema(types = {"string", "null"}) String name,
+        @Schema(types = {"string", "null"}) String bio,
         List<String> artistTypes,
         List<String> genres,
         List<String> regionCodes,
-        @Schema(types = "integer") Long feeMin,
-        @Schema(types = "integer") Long feeMax,
-        String updatedAt) {
+        @Schema(types = {"integer", "null"}) Long feeMin,
+        @Schema(types = {"integer", "null"}) Long feeMax,
+        @Schema(types = {"string", "null"}) String updatedAt) {
 
     private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssxxx");

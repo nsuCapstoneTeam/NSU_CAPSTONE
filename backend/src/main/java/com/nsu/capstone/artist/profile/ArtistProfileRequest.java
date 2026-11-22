@@ -24,7 +24,7 @@ import tools.jackson.databind.annotation.JsonDeserialize;
  */
 record ArtistProfileRequest(
         @Schema(requiredMode = REQUIRED) String name,
-        String bio,
+        @Schema(types = {"string", "null"}) String bio,
 
         @ArraySchema(
                 arraySchema = @Schema(requiredMode = REQUIRED),
@@ -37,10 +37,10 @@ record ArtistProfileRequest(
         @ArraySchema(arraySchema = @Schema(requiredMode = REQUIRED))
         List<String> regionCodes,
 
-        @JsonDeserialize(using = JsonNumberOnlyDeserializer.class) @Schema(types = "integer")
+        @JsonDeserialize(using = JsonNumberOnlyDeserializer.class) @Schema(types = {"integer", "null"})
         BigDecimal feeMin,
 
-        @JsonDeserialize(using = JsonNumberOnlyDeserializer.class) @Schema(types = "integer")
+        @JsonDeserialize(using = JsonNumberOnlyDeserializer.class) @Schema(types = {"integer", "null"})
         BigDecimal feeMax) {
 
     private static final int NAME_MAX = 40;

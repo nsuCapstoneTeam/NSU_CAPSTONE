@@ -87,6 +87,18 @@ class OpenApiDocsIntegrationTest {
         return type.size() == 1 ? type.path(0).asString("") : type.toString();
     }
 
+    /** OpenAPI 3.1의 type은 문자열이나 배열이다. 둘 다 집합으로 돌려주고, type이 없으면 빈 집합이다. */
+    private static Set<String> types(JsonNode schema) {
+        JsonNode type = schema.path("type");
+        Set<String> types = new TreeSet<>();
+        if (type.isArray()) {
+            type.forEach(element -> types.add(element.asString()));
+        } else if (!type.isMissingNode()) {
+            types.add(type.asString());
+        }
+        return types;
+    }
+
     /** 스키마의 enum 값. $ref면 components에서 찾아 읽는다. */
     private List<String> enumValues(JsonNode docs, JsonNode schema) {
         String ref = schema.path("$ref").asString("");
@@ -409,15 +421,47 @@ class OpenApiDocsIntegrationTest {
     }
 
     @Test
-    @DisplayName("아티스트 프로필 수정 본문의 필수 필드를 계약(09 §2)대로 적고 출연료를 integer로 적는다")
+    @DisplayName("아티스트 프로필 수정 본문의 필수 필드를 계약(09 §2)대로 적는다")
     void documentsArtistProfileRequest() throws Exception {
         Set<String> required = new TreeSet<>();
         schema("ArtistProfileRequest").path("required").forEach(field -> required.add(field.asString()));
-        JsonNode properties = schema("ArtistProfileRequest").path("properties");
 
         assertThat(required).containsExactlyInAnyOrder("name", "artistTypes", "genres", "regionCodes");
-        assertThat(type(properties.path("feeMin"))).isEqualTo("integer");
-        assertThat(type(properties.path("feeMax"))).isEqualTo("integer");
+    }
+
+    @ParameterizedTest(name = "{0}.{1}")
+    @CsvSource({
+        "ArtistProfileResponse, name, string",
+        "ArtistProfileResponse, bio, string",
+        "ArtistProfileResponse, feeMin, integer",
+        "ArtistProfileResponse, feeMax, integer",
+        "ArtistProfileResponse, updatedAt, string",
+        "ArtistProfileRequest, bio, string",
+        "ArtistProfileRequest, feeMin, integer",
+        "ArtistProfileRequest, feeMax, integer"
+    })
+    @DisplayName("null일 수 있는 아티스트 프로필 필드는 스키마 type에 null을 함께 적는다(09 §2, §3)")
+    void documentsNullableArtistProfileFields(String schemaName, String field, String type) throws Exception {
+        JsonNode property = schema(schemaName).path("properties").path(field);
+
+        assertThat(types(property)).as(property.toString()).containsExactlyInAnyOrder(type, "null");
+    }
+
+    @ParameterizedTest(name = "{0}.{1}")
+    @CsvSource({
+        "ArtistProfileResponse, artistTypes",
+        "ArtistProfileResponse, genres",
+        "ArtistProfileResponse, regionCodes",
+        "ArtistProfileRequest, name",
+        "ArtistProfileRequest, artistTypes",
+        "ArtistProfileRequest, genres",
+        "ArtistProfileRequest, regionCodes"
+    })
+    @DisplayName("null이 될 수 없는 아티스트 프로필 필드의 스키마 type에는 null을 적지 않는다")
+    void doesNotDocumentNullForNonNullableArtistProfileFields(String schemaName, String field) throws Exception {
+        JsonNode property = schema(schemaName).path("properties").path(field);
+
+        assertThat(types(property)).as(property.toString()).doesNotContain("null");
     }
 
     @ParameterizedTest
