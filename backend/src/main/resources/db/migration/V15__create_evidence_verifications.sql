@@ -33,6 +33,13 @@ CREATE TABLE evidence_verification_audit_events (
     occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
     CONSTRAINT ck_evidence_verification_audit_events_type CHECK (
         verification_type IN ('BUSINESS_REGISTRATION', 'PERFORMANCE_PARTICIPATION', 'OFFICIAL_ACTIVITY')),
+    -- 확인(GRANTED)은 사유가 없고, 취소(REVOKED)는 사유 코드 네 값 중 하나가 필수다(7번). 반려는 남기지 않는다.
+    -- reason이 NULL이면 IN이 NULL이 되어 CHECK를 통과하므로 IS NOT NULL을 따로 둔다.
+    CONSTRAINT ck_evidence_verification_audit_events_event_reason CHECK (
+        (event_type = 'GRANTED' AND reason IS NULL)
+        OR (event_type = 'REVOKED' AND reason IS NOT NULL
+            AND reason IN ('EVIDENCE_INVALID', 'FACT_CHANGED', 'ARTIST_REQUEST', 'RECORDED_IN_ERROR'))
+    ),
     -- 운영자는 GitHub 아이디다(공개 정보, 영문자·숫자·하이픈 39자 이하). 이름이나 메모가 들어갈 길을 DB가 막는다.
     -- runbook의 예시 값(CHANGE_ME)은 이 형식을 통과하지 못한다. 바꾸지 않고 실행하면 여기서 거절된다(7번).
     CONSTRAINT ck_evidence_verification_audit_events_operator CHECK (operator ~ '^[A-Za-z0-9-]{1,39}$')

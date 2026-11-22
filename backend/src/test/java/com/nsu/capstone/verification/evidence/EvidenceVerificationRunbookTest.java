@@ -117,6 +117,69 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
         assertThat(count("evidence_verification_audit_events", artist.getId())).isZero();
     }
 
+    @Test
+    void 취소_SQL은_기록_ID의_행만_지우고_REVOKED와_사유_코드를_남긴다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-revoke@example.com");
+        UUID businessId = uuidV7Generator.generate();
+        UUID activityId = uuidV7Generator.generate();
+        runbook.record(businessId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+        runbook.record(activityId, artist.getId(), "OFFICIAL_ACTIVITY", OPERATOR);
+
+        int inserted = runbook.revoke(businessId, artist.getId(), "BUSINESS_REGISTRATION", "revoke-operator", "EVIDENCE_INVALID");
+
+        assertThat(inserted).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT id FROM evidence_verifications WHERE artist_id = ?", UUID.class, artist.getId()))
+                .containsExactly(activityId);
+        assertThat(jdbcTemplate.queryForMap(
+                        "SELECT * FROM evidence_verification_audit_events WHERE evidence_verification_id = ? AND event_type = 'REVOKED'",
+                        businessId))
+                .containsEntry("artist_id", artist.getId())
+                .containsEntry("verification_type", "BUSINESS_REGISTRATION")
+                .containsEntry("operator", "revoke-operator")
+                .containsEntry("reason", "EVIDENCE_INVALID");
+    }
+
+    @Test
+    void 지울_기록이_없으면_감사_기록도_남기지_않는다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-revoke-none@example.com");
+
+        int inserted = runbook.revoke(
+                uuidV7Generator.generate(), artist.getId(), "BUSINESS_REGISTRATION", OPERATOR, "RECORDED_IN_ERROR");
+
+        assertThat(inserted).isZero();
+        assertThat(count("evidence_verification_audit_events", artist.getId())).isZero();
+    }
+
+    @Test
+    void 취소_SQL도_runbook의_예시_operator_값이면_DB가_거절하고_기록은_그대로다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-revoke-example@example.com");
+        UUID recordId = uuidV7Generator.generate();
+        runbook.record(recordId, artist.getId(), "PERFORMANCE_PARTICIPATION", OPERATOR);
+
+        assertThatThrownBy(() -> runbook.revoke(
+                        recordId, artist.getId(), "PERFORMANCE_PARTICIPATION", "CHANGE_ME", "FACT_CHANGED"))
+                .hasMessageContaining("ck_evidence_verification_audit_events_operator");
+
+        assertThat(count("evidence_verifications", artist.getId())).isEqualTo(1);
+        assertThat(count("evidence_verification_audit_events", artist.getId())).isEqualTo(1);
+    }
+
+    /** 3·7번: 사유 코드는 네 값뿐이다. 없거나 목록 밖이면 기록도 감사 기록도 바뀌지 않는다. */
+    @ParameterizedTest
+    @ValueSource(strings = {"", "NO_SUCH_REASON", "evidence_invalid"})
+    void 사유_코드가_없거나_목록_밖이면_DB가_거절하고_기록은_그대로다(String reason) {
+        User artist = newUser(UserRole.ARTIST, "evidence-bad-reason@example.com");
+        UUID recordId = uuidV7Generator.generate();
+        runbook.record(recordId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+
+        assertThatThrownBy(() -> runbook.revoke(recordId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR, reason))
+                .hasMessageContaining("ck_evidence_verification_audit_events_event_reason");
+
+        assertThat(count("evidence_verifications", artist.getId())).isEqualTo(1);
+        assertThat(count("evidence_verification_audit_events", artist.getId())).isEqualTo(1);
+    }
+
     private int count(String table, UUID artistId) {
         return jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM " + table + " WHERE artist_id = ?", Integer.class, artistId);
