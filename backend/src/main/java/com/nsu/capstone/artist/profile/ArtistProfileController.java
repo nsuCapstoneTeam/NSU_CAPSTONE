@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -50,8 +51,16 @@ public class ArtistProfileController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     public ArtistProfileResponse view(@PathVariable String artistId, @AuthenticationPrincipal Jwt jwt) {
         UUID target = ArtistReadAccess.parseArtistId(artistId);
-        readAccess.require(UUID.fromString(jwt.getSubject()), UserRole.valueOf(jwt.getClaimAsString("role")), target);
-        return profiles.find(target).map(ArtistProfileResponse::of).orElseGet(ArtistProfileResponse::empty);
+        UUID callerId = UUID.fromString(jwt.getSubject());
+        UserRole callerRole = UserRole.valueOf(jwt.getClaimAsString("role"));
+        readAccess.require(callerId, callerRole, target);
+        Optional<SavedArtistProfile> profile = profiles.find(target);
+        if (profile.isEmpty()) {
+            // 확인과 조회 사이에 탈퇴가 커밋되어 트리거가 프로필을 지웠다면 빈 값(200)이 아니라 404여야 한다(09 §4.2)
+            readAccess.require(callerId, callerRole, target);
+            return ArtistProfileResponse.empty();
+        }
+        return ArtistProfileResponse.of(profile.get());
     }
 
     @GetMapping("/api/v1/me/artist-profile")
