@@ -23,18 +23,20 @@
 ### 기록 절차
 
 1. 기록할 아티스트 ID, 항목, 내 GitHub 아이디를 정한다.
-2. "입력값 확인"을 한다.
-3. "대상 확인"으로 팀 시드 계정인지, 그 항목이 이미 있는지 본다.
-4. "기록 SQL"을 실행한다.
-5. "실행 뒤 확인"을 한다.
+2. 기록 ID를 `SELECT uuidv7();`로 한 번 만들어 작업 메모에 적는다. 결과를 못 받아 다시 실행할 때도 이 값을 그대로 쓴다. 새 기록 ID는 증빙을 새로 확인했을 때만 만든다.
+3. "입력값 확인"을 한다.
+4. "대상 확인"으로 팀 시드 계정인지, 그 항목이 이미 있는지 본다.
+5. "기록 SQL"을 실행한다.
+6. "실행 뒤 확인"을 한다.
 
 ### 취소 절차
 
 1. 취소할 아티스트 ID, 사유 코드, 내 GitHub 아이디를 정한다.
-2. "입력값 확인"을 한다.
-3. "대상 확인"의 기록 조회로 지울 행의 `id`와 `verification_type`을 찾는다. 행이 없으면 이미 취소된 것이다. 끝낸다.
-4. "취소 SQL"을 실행한다.
-5. "실행 뒤 확인"을 한다.
+2. 사유가 `ARTIST_REQUEST`면 요청자가 그 계정의 주인인지 먼저 확인한다. "대상 확인"의 계정 조회로 나온 `email`로 취소 의사를 묻고, 그 주소에서 온 답을 받은 뒤에만 진행한다. 팀 시드 계정이면 그 팀원에게 팀 채널로 확인해도 된다. 확인이 안 되면 취소하지 않는다.
+3. "입력값 확인"을 한다.
+4. "대상 확인"의 기록 조회로 지울 행의 `id`와 `verification_type`을 찾는다. 이 `id`가 이 취소 요청의 기록 ID다. 작업 메모에 적고, 이 요청이 끝날 때까지 바꾸지 않는다. 행이 없으면 이미 취소된 것이다. 끝낸다.
+5. "취소 SQL"을 실행한다.
+6. "실행 뒤 확인"을 한다.
 
 | 취소 이유 | 사유 코드(`reason`) |
 |---|---|
@@ -88,7 +90,7 @@ ORDER BY verification_type;
 ```
 
 - 기록하려는 항목이 이미 있으면 다시 기록하지 않는다. 실행해도 `INSERT 0 0`이고 아무것도 바뀌지 않는다.
-- 취소할 때는 이 결과 줄의 `id`와 `verification_type`을 "취소 SQL"에 넣는다.
+- 취소할 때는 이 결과 줄의 `id`와 `verification_type`을 "취소 SQL"에 넣는다. 취소 요청 하나에 이 조회는 한 번만 쓴다. 다시 조회해서 다른 `id`가 보이면 그것은 새 기록이다. 그 기록에도 같은 사유가 맞는지 따로 확인한 뒤 새 취소 요청으로 처리한다.
 
 ## 기록 SQL
 
@@ -96,27 +98,33 @@ ORDER BY verification_type;
 
 - `users`에서 `role = 'ARTIST'`이고 `status = 'ACTIVE'`인 행만 골라 넣는다.
 - 같은 아티스트·항목의 기록이 이미 있으면 넣지 않고, 감사 기록도 남기지 않는다.
-- 행의 `id`는 PostgreSQL 18의 `uuidv7()`로 만든다.
+- 같은 기록 ID로 이미 실행한 적이 있으면(감사 표에 그 ID가 있으면) 넣지 않는다. 그 사이 다른 운영자가 취소했어도 다시 살아나지 않는다.
+- 행의 `id`는 "기록 절차" 2단계에서 만든 기록 ID다.
 
-`ON_ERROR_STOP` 아래 `\set` 세 줄만 바꿔서 `psql`로 실행한다.
+`ON_ERROR_STOP` 아래 `\set` 네 줄만 바꿔서 `psql`로 실행한다. 예시 `operator` 값은 일부러 형식에 맞지 않게 두었다. 바꾸지 않고 실행하면 DB가 거절한다.
 
 ```sql
 \set ON_ERROR_STOP on
+\set verification_id '00000000-0000-0000-0000-000000000000'
 \set artist_id '00000000-0000-0000-0000-000000000000'
 \set verification_type 'BUSINESS_REGISTRATION'
-\set operator 'github-id'
+\set operator 'CHANGE_ME'
 
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 
 WITH granted AS (
     INSERT INTO evidence_verifications (id, artist_id, verification_type, verified_at)
-    SELECT uuidv7(), u.id, :'verification_type', now()
+    SELECT (:'verification_id')::uuid, u.id, :'verification_type', now()
     FROM users u
     WHERE u.id = (:'artist_id')::uuid
       AND u.role = 'ARTIST'
       AND u.status = 'ACTIVE'
-    ON CONFLICT (artist_id, verification_type) DO NOTHING
+      AND NOT EXISTS (
+          SELECT 1 FROM evidence_verification_audit_events a
+          WHERE a.evidence_verification_id = (:'verification_id')::uuid
+      )
+    ON CONFLICT DO NOTHING
     RETURNING id, artist_id, verification_type, verified_at
 )
 INSERT INTO evidence_verification_audit_events
@@ -127,7 +135,7 @@ COMMIT;
 ```
 
 - `INSERT 0 1`이면 기록하고 감사 기록을 남긴 것이다.
-- `INSERT 0 0`이면 아무것도 바뀌지 않았다. 대상이 `ARTIST`·`ACTIVE`가 아니거나 그 항목이 이미 있는 경우다. 넣을 행이 없으면 DB가 `operator` 형식도 검사하지 않으므로 입력값도 다시 확인한다. "대상 확인"부터 다시 한다.
+- `INSERT 0 0`이면 아무것도 바뀌지 않았다. 대상이 `ARTIST`·`ACTIVE`가 아니거나, 그 항목이 이미 있거나, 이 기록 ID로 이미 실행한 경우다. 앞 실행의 결과를 못 받았으면 "실행 뒤 확인"에서 이 기록 ID의 감사 기록을 본다. 새 기록 ID를 만들어 다시 실행하지 않는다. 넣을 행이 없으면 DB가 `operator` 형식도 검사하지 않으므로 입력값도 다시 확인한다. "대상 확인"부터 다시 한다.
 - `verification_type`이 세 값 밖이거나 `operator`가 형식 밖이면 DB가 거절한다. 이때는 기록도 감사 기록도 바뀌지 않는다.
 - 잠금을 5초 안에 얻지 못하면 실패한다. 다시 실행한다.
 
@@ -135,14 +143,14 @@ COMMIT;
 
 한 문장에서 기록 행을 지우고 `REVOKED` 감사 기록을 남긴다. 지울 행은 기록 ID(`verification_id`)로 정한다. 아티스트와 항목만으로 지우면, 조회한 뒤 다른 운영자가 취소하고 다시 기록했을 때 새 기록을 지운다.
 
-`ON_ERROR_STOP` 아래 `\set` 다섯 줄만 바꿔서 `psql`로 실행한다. `verification_id`와 `verification_type`은 "대상 확인"의 기록 조회 결과 줄이다.
+`ON_ERROR_STOP` 아래 `\set` 다섯 줄만 바꿔서 `psql`로 실행한다. `verification_id`와 `verification_type`은 "취소 절차" 4단계에서 적어 둔 값이다. 다시 실행할 때도 같은 값을 쓴다.
 
 ```sql
 \set ON_ERROR_STOP on
 \set verification_id '00000000-0000-0000-0000-000000000000'
 \set artist_id '00000000-0000-0000-0000-000000000000'
 \set verification_type 'BUSINESS_REGISTRATION'
-\set operator 'github-id'
+\set operator 'CHANGE_ME'
 \set reason 'EVIDENCE_INVALID'
 
 BEGIN;
@@ -163,7 +171,8 @@ COMMIT;
 ```
 
 - `INSERT 0 1`이면 기록을 지우고 감사 기록을 남긴 것이다.
-- `INSERT 0 0`이면 그 기록 ID의 행이 없었던 것이고, 아무것도 바뀌지 않았다. 다른 운영자가 이미 취소했거나 입력값이 틀린 경우다. 지울 행이 없으면 DB가 사유 코드와 `operator`도 검사하지 않으므로 입력값도 다시 확인한다. "대상 확인"부터 다시 한다.
+- `INSERT 0 0`이면 그 기록 ID의 행이 없었던 것이고, 아무것도 바뀌지 않았다. 다른 운영자가 이미 취소했거나 입력값이 틀린 경우다. 지울 행이 없으면 DB가 사유 코드와 `operator`도 검사하지 않으므로 입력값도 다시 확인한다.
+- 이때 "대상 확인"으로 새 `id`를 찾아 다시 지우지 않는다. "실행 뒤 확인"의 기록 ID 조회로 그 ID의 `REVOKED`가 있는지 본다. 있으면 이 요청은 끝난 것이다. 없으면 입력값을 고쳐 같은 기록 ID로 다시 실행한다.
 - 사유 코드가 위 표의 네 값이 아니거나 `operator`가 형식 밖이면 DB가 거절한다. 이때는 기록도 감사 기록도 바뀌지 않는다.
 - 취소한 항목을 다시 넣으려면 증빙을 다시 확인하고 "기록 SQL"을 실행한다.
 
@@ -172,11 +181,22 @@ COMMIT;
 ```sql
 \set artist_id '00000000-0000-0000-0000-000000000000'
 
-SELECT verification_type, event_type, operator, reason, occurred_at
+SELECT evidence_verification_id, verification_type, event_type, operator, reason, occurred_at
 FROM evidence_verification_audit_events
 WHERE artist_id = (:'artist_id')::uuid
 ORDER BY occurred_at DESC
 LIMIT 5;
+```
+
+기록 ID 하나의 이력:
+
+```sql
+\set verification_id '00000000-0000-0000-0000-000000000000'
+
+SELECT event_type, operator, reason, occurred_at
+FROM evidence_verification_audit_events
+WHERE evidence_verification_id = (:'verification_id')::uuid
+ORDER BY occurred_at;
 ```
 
 - 방금 남긴 줄의 `event_type`, 항목, 내 GitHub 아이디, 사유 코드(취소일 때)를 본다.

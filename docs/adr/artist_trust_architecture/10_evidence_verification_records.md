@@ -42,6 +42,7 @@
 | 회차 | 지적 | 바꾼 곳 |
 |---|---|---|
 | 문서 정합성 검사 3축(2026-11-22, 설계 리뷰 전) | `ADMIN-095` v1.17은 권리 서류만이 아니라 관리자 검증 전체를 없앴다. 팀 계정에 지어낸 사업자등록을 기록하면 허위 표시다. 프론트 규칙이 사업자등록으로 배지를 켠다. 탈퇴 파기를 전제했다. 계약이 NSU-145 창구를 막는 문구였다 | `ADMIN-094`·`ADMIN-095` 관계 절과 SSOT 초안, 6번(사실인 항목만), 12번(배지), "Consequences"의 NSU-167, 계약 §4.3, runbook |
+| 설계 리뷰 1회차(Codex, 2026-11-22) | 기록 재시도가 취소된 기록을 되살림, 취소 0건 뒤 재조회가 새 기록을 지움, 표 삭제 롤백이 재배포를 깨뜨림, `ARTIST_REQUEST` 요청자 확인 없음, `operator`가 실행자와 연결되지 않음 | 기록 ID를 실행 전에 한 번 만들고 감사 표 `NOT EXISTS`와 `UNIQUE (evidence_verification_id, event_type)`로 재실행을 막음, 취소 요청의 기록 ID 고정, 롤백 때 표 유지, 계정 이메일로 요청자 확인, `operator`의 신뢰 경계를 적고(고의 위조는 범위 밖) 예시 값을 형식 밖으로 바꿈. 결정 3·5·7번의 뜻은 그대로다 |
 
 ### 범위 밖
 
@@ -123,7 +124,8 @@ identity_verification/00은 "시연 서버는 외부 가입을 받되, 공개되
 
 `AUDIT-099`의 "Artist Verification 승인"을 이 감사 표로 충족한다. 취소도 같은 표에 남긴다.
 
-- 행위자: 앱 계정이 아니라 운영자다. 관리자 계정이 없으므로 운영자의 GitHub 아이디를 적는다. GitHub 아이디는 공개 정보다. DB가 형식(`^[A-Za-z0-9-]{1,39}$`)을 검사해 이름이나 메모가 들어가지 못하게 한다.
+- 행위자: 앱 계정이 아니라 운영자다. 관리자 계정이 없으므로 운영자의 GitHub 아이디를 적는다. GitHub 아이디는 공개 정보다. DB가 형식(`^[A-Za-z0-9-]{1,39}$`)을 검사해 이름이나 메모가 들어가지 못하게 한다. runbook의 예시 값은 이 형식을 통과하지 못하는 문자열로 둔다. 바꾸지 않고 실행하면 DB가 거절한다.
+- 행위자 값의 신뢰 경계: `operator`는 운영자가 적는 값이다. DB 쓰기 권한을 가진 사람은 팀원뿐이고, 이 권한이 있으면 감사 표 자체도 바꿀 수 있다. 그래서 감사 기록은 실수를 추적하는 장치이고, 쓰기 권한을 가진 팀원의 고의 위조는 막지 않는다. 실행자를 DB가 보증하려면 운영자별 DB 계정과 감사 표 INSERT 전용 권한이 필요하다. 이것은 배포 구성이라 운영 단계(실제 아티스트 접수, NSU-145)에서 정한다.
 - 사건: `GRANTED`(기록), `REVOKED`(취소). 반려는 남기지 않는다. 반려는 제출 흐름의 일이고 제출 흐름은 NSU-145에 있다.
 - 취소 사유 코드: `EVIDENCE_INVALID`(증빙이 사실이 아님), `FACT_CHANGED`(폐업처럼 사실이 바뀜), `ARTIST_REQUEST`(아티스트가 표시를 원하지 않음), `RECORDED_IN_ERROR`(운영자가 잘못 기록함). `GRANTED`는 사유가 없다.
 - 남기지 않는 것: 자유 메모, 증빙 사본·파일 이름, 사업자등록번호. 자유 메모는 개인정보가 들어갈 길이 되고, 증빙과 번호의 보관은 NSU-145가 정한다.
@@ -174,8 +176,10 @@ identity_verification/00은 "시연 서버는 외부 가입을 받되, 공개되
 
 앱은 이 표에 쓰지 않는다. 쓰기는 운영자 runbook뿐이라 경합은 운영자 두 명이 같은 아티스트를 동시에 다루는 경우뿐이다.
 
-- 같은 항목을 두 번 기록하면 유니크 제약 `(artist_id, verification_type)`과 `ON CONFLICT DO NOTHING`이 두 번째를 아무 일 없이 끝낸다. 감사 기록도 남지 않는다.
-- 취소는 대상 조회에서 얻은 행 ID로 지운다. 조회한 뒤 다른 운영자가 취소하고 다시 기록했으면 지울 행이 없어 `0`건이 되고, 새 기록은 남는다(external_links/00 runbook의 연결 ID 선례).
+- 기록 ID는 증빙 확인 한 건마다 실행 전에 한 번 만들고(`SELECT uuidv7()`), 재시도에도 같은 값을 쓴다. 상태 행의 `id`가 이 값이다.
+- 같은 기록 ID를 다시 실행하면 아무것도 바뀌지 않는다. 상태 행이 남아 있으면 기본키 충돌로, 그 사이 취소됐으면 감사 표에 그 ID의 기록이 있어서다(기록 SQL의 `NOT EXISTS`). 같은 ID의 두 실행이 동시에 돌면 둘째는 첫째가 끝날 때까지 기본키에서 기다린다. 첫째가 커밋하면 둘째는 아무것도 넣지 않고, 첫째가 실패하면 둘째가 넣는다. 감사 표의 `UNIQUE (evidence_verification_id, event_type)`는 SQL을 잘못 고쳐도 같은 사건이 두 번 남지 않게 하는 마지막 장치다. 그래서 "기록 → 취소 → 원래 기록 재시도" 뒤에도 항목은 빠진 채로 남는다.
+- 같은 항목을 다른 기록 ID로 두 번 기록하면 유니크 제약 `(artist_id, verification_type)`과 `ON CONFLICT DO NOTHING`이 두 번째를 아무 일 없이 끝낸다. 감사 기록도 남지 않는다.
+- 취소는 취소 요청이 가리킨 기록 ID 하나로만 지우고, 그 ID를 끝까지 바꾸지 않는다. 조회한 뒤 다른 운영자가 취소하고 다시 기록했으면 지울 행이 없어 `0`건이 되고, 새 기록은 남는다(external_links/00 runbook의 연결 ID 선례). `0`건이면 그 ID의 감사 이력을 보고 끝낸다. 새 기록은 그 취소 사유가 맞는지 따로 판단한 뒤 새 취소 요청으로 다룬다. 그래서 "X 취소 → Y 재기록 → X 취소 재시도" 뒤에도 Y가 남는다.
 - 상태 변경과 감사 기록은 한 SQL 문장(CTE)으로 함께 커밋된다.
 
 그래서 external_links/00 8번의 아티스트 잠금(advisory lock)은 두지 않는다. 그 잠금은 앱의 여러 쓰기 경로가 같은 행을 바꾸기 때문에 필요했다.
@@ -197,13 +201,13 @@ identity_verification/00은 "시연 서버는 외부 가입을 받되, 공개되
 | 표 | 열과 제약 |
 |---|---|
 | `evidence_verifications` | `id` UUID PK, `artist_id` → `users(id)`, `verification_type`(CHECK `BUSINESS_REGISTRATION`·`PERFORMANCE_PARTICIPATION`·`OFFICIAL_ACTIVITY`), `verified_at` TIMESTAMPTZ. `UNIQUE (artist_id, verification_type)`. 이 유니크 인덱스가 `artist_id` FK와 일괄 읽기를 함께 받친다 |
-| `evidence_verification_audit_events` | `id` UUID PK, `artist_id` → `users(id)`, `evidence_verification_id`(FK 없음), `verification_type`(같은 CHECK), `event_type`(CHECK `GRANTED`·`REVOKED`), `operator`(CHECK `^[A-Za-z0-9-]{1,39}$`), `reason`(`GRANTED`면 `NULL`, `REVOKED`면 `EVIDENCE_INVALID`·`FACT_CHANGED`·`ARTIST_REQUEST`·`RECORDED_IN_ERROR` 중 하나), `occurred_at` TIMESTAMPTZ. 인덱스 `(artist_id, occurred_at)`. 추가만 한다 |
+| `evidence_verification_audit_events` | `id` UUID PK, `artist_id` → `users(id)`, `evidence_verification_id`(FK 없음), `verification_type`(같은 CHECK), `event_type`(CHECK `GRANTED`·`REVOKED`), `operator`(CHECK `^[A-Za-z0-9-]{1,39}$`), `reason`(`GRANTED`면 `NULL`, `REVOKED`면 `EVIDENCE_INVALID`·`FACT_CHANGED`·`ARTIST_REQUEST`·`RECORDED_IN_ERROR` 중 하나), `occurred_at` TIMESTAMPTZ. `UNIQUE (evidence_verification_id, event_type)`(기록 ID마다 `GRANTED`·`REVOKED` 한 번씩, 재시도 방지). 인덱스 `(artist_id, occurred_at)`. 추가만 한다 |
 
 - `users` FK를 거는 DDL 앞에 `SET LOCAL lock_timeout = '3s'`를 둔다(V7·V10 선례).
 - FK에 `ON DELETE`를 두지 않는다. 탈퇴는 `users` 행을 지우지 않고 상태를 바꾼다(NSU-119 ADR `artist_profile/00` 13번). 탈퇴 때 이 두 표를 어떻게 파기할지는 NSU-167이 정한다.
-- `id`는 runbook이 PostgreSQL 18의 `uuidv7()`로 만든다.
+- 상태 행의 `id`(기록 ID)는 운영자가 실행 전에 `uuidv7()`로 한 번 만들어 넘긴다. 감사 행의 `id`는 SQL 안에서 `uuidv7()`로 만든다.
 - 번호 V15는 2026-11-22 지휘 세션 배정이다(V11 #245, V12 NSU-119, V13 NSU-121, V14 NSU-128 예약). 머지 순서가 바뀌면 나중에 머지하는 쪽이 번호와 그 번호를 적은 문서·테스트를 바꾼다.
-- 새 표 두 개만 만들고 기존 표와 데이터를 바꾸지 않는다. 롤백은 두 표를 지우는 것이고, 지워지는 것은 시연 데이터뿐이다.
+- 새 표 두 개만 만들고 기존 표와 데이터를 바꾸지 않는다. 앱을 이전 버전으로 되돌려도 두 표와 감사 이력은 지우지 않는다. 이전 앱은 이 표를 읽지 않으므로 표가 남아도 영향이 없다. 표를 지우면 Flyway에는 V15 적용 기록이 남아 같은 버전을 다시 배포해도 표가 생기지 않고, source가 실패해 Trust Profile 조회 전체가 실패한다(01 §7).
 
 설계 단계 검사(`supabase-postgres-best-practices`) 결과는 다음과 같다.
 
@@ -233,8 +237,8 @@ WHERE artist_id IN (:artistIds)
 
 - 기록 대상: NSU-145 전까지 시연 서버의 팀 시드 계정만(6번). 취소는 대상을 가리지 않는다.
 - 대상 확인: 계정의 `role`·`status`·이메일 가입 여부와, 이메일이 공개 쓰기 허용 목록에 있는지 본다. 허용 목록은 서버 설정에 있고 DB에 없어 SQL이 검사하지 못한다. 그래서 6번의 "팀 계정만"은 운영 절차로 지키고, SQL은 `ARTIST`·`ACTIVE`만 강제한다.
-- 기록 SQL: `users`에서 `role = 'ARTIST'`이고 `status = 'ACTIVE'`인 행만 골라 넣고(`INSERT ... SELECT`), `ON CONFLICT (artist_id, verification_type) DO NOTHING`, 같은 문장에서 `GRANTED` 감사 기록을 남긴다. `INSERT 0 1`이면 기록했고 `INSERT 0 0`이면 대상이 아니거나 이미 있다.
-- 취소 SQL: 대상 조회로 얻은 기록 ID로 지우고, 같은 문장에서 `REVOKED`와 사유 코드를 남긴다.
+- 기록 SQL: `users`에서 `role = 'ARTIST'`이고 `status = 'ACTIVE'`인 행만 골라 넣고(`INSERT ... SELECT`), 운영자가 미리 만든 기록 ID를 쓴다. 감사 표에 그 기록 ID가 이미 있으면 넣지 않고(`NOT EXISTS`), 기본키나 `(artist_id, verification_type)`이 겹치면 `ON CONFLICT DO NOTHING`으로 끝낸다. 같은 문장에서 `GRANTED` 감사 기록을 남긴다. `INSERT 0 1`이면 기록했고 `INSERT 0 0`이면 대상이 아니거나, 이미 있거나, 같은 기록 ID로 이미 실행했다.
+- 취소 SQL: 취소 요청이 가리킨 기록 ID로만 지우고, 같은 문장에서 `REVOKED`와 사유 코드를 남긴다. `ARTIST_REQUEST`는 계정에 등록된 이메일(팀 시드 계정이면 팀 채널)로 계정 주인의 취소 의사를 확인한 뒤에만 실행한다. 아티스트 ID는 믿을 수 없는 메일에서 올 수 있기 때문이다.
 - 값은 `\set` 변수로 넘기고 SQL에 붙여 넣지 않는다. `\set ON_ERROR_STOP on`을 둔다(external_account_takedown 선례).
 - 확인 조회: 감사 기록 최근 줄과, Trust Profile에 다음 조회부터 반영된다는 것.
 
@@ -255,6 +259,9 @@ WHERE artist_id IN (:artistIds)
 | 취소하면 다음 조회에서 빠지고, 다시 기록하면 다시 나온다 | 3번, D45 |
 | 아티스트 1명과 100명에서 이 source의 쿼리 수가 같다(1회) | 8번, 01 §7 |
 | runbook 기록 SQL은 `ARTIST`·`ACTIVE`가 아닌 대상과 이미 있는 항목에서 아무것도 바꾸지 않고, 기록하면 `GRANTED` 감사 기록이 하나 생긴다 | 5·7번 |
+| 기록 → 취소 → 같은 기록 ID로 기록 재시도 뒤 항목이 빠진 채이고 감사 기록이 늘지 않는다. 같은 기록 ID의 두 실행이 동시에 돌아도 상태 행과 `GRANTED`가 하나씩만 남는다 | 동시성 |
+| X 취소 요청 → 다른 운영자가 X 취소·Y 기록 → X 취소 재시도 뒤 Y가 남는다 | 동시성 |
+| runbook의 예시 `operator` 값으로 실행하면 DB가 거절한다 | 7번 |
 | runbook 취소 SQL은 행 ID로만 지우고 `REVOKED`와 사유 코드를 남긴다. 사유 코드가 없거나 목록 밖이면 DB가 거절하고 아무것도 바뀌지 않는다 | 3·7번 |
 | 감사 `operator`에 형식 밖 값(공백, 한글 이름, 40자 이상)을 넣으면 DB가 거절한다 | 7번 |
 | 모듈 밖 `src/main` 파일에 `verification.evidence`·`evidence_verification`이 나오지 않는다(V15 제외). 스캔이 모듈 안에서는 찾아진다 | 9번 |
