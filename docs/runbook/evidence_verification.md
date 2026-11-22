@@ -94,21 +94,22 @@ ORDER BY verification_type;
 ```
 
 - 기록하려는 항목이 이미 있으면 다시 기록하지 않는다. 실행해도 `INSERT 0 0`이고 아무것도 바뀌지 않는다.
-- 항목이 없으면 아래 조회로 그 항목의 마지막 사건을 본다. 아티스트 전체의 최근 사건 목록("실행 뒤 확인")으로 대신하지 않는다. 다른 항목의 사건에 밀려 이 항목의 사건이 보이지 않을 수 있기 때문이다.
+- 항목이 없으면 아래 조회로 그 항목에 사유 `ARTIST_REQUEST`의 취소가 있었는지 본다. 아티스트 전체의 최근 사건 목록("실행 뒤 확인")으로 대신하지 않는다. 다른 항목의 사건에 밀려 이 항목의 사건이 보이지 않을 수 있기 때문이다.
 
   ```sql
   \set artist_id '00000000-0000-0000-0000-000000000000'
   \set verification_type 'BUSINESS_REGISTRATION'
 
-  SELECT evidence_verification_id, event_type, operator, reason, occurred_at
+  SELECT count(*) AS artist_request_revokes
   FROM evidence_verification_audit_events
   WHERE artist_id = (:'artist_id')::uuid
     AND verification_type = :'verification_type'
-  ORDER BY occurred_at DESC
-  LIMIT 1;
+    AND event_type = 'REVOKED'
+    AND reason = 'ARTIST_REQUEST';
   ```
 
-- 마지막 사건이 사유 `ARTIST_REQUEST`의 `REVOKED`면 기록하지 않는다. 아티스트가 표시를 원하지 않는다고 한 항목이다. 그 계정의 등록 이메일(팀 시드 계정이면 팀 채널)로 다시 표시를 원한다는 답을 받은 뒤에만 1단계부터 다시 한다.
+- `artist_request_revokes`가 0보다 크면, 아티스트가 이 항목을 표시하지 않기를 원한 적이 있다. 이번 기록 요청을 위해 그 계정의 등록 이메일(팀 시드 계정이면 팀 채널)로 다시 표시를 원한다는 답을 새로 받은 뒤에만 1단계부터 다시 한다. 예전에 받은 재동의는 쓰지 않는다.
+- 사건의 앞뒤를 `occurred_at`으로 가리지 않는다. `occurred_at`은 표시용 벽시계 시각이라 DB 서버 시계가 뒤로 가면 커밋 순서와 달라질 수 있다. 그래서 "마지막 사건"이 아니라 "그런 취소가 있었는가"로 판단한다.
 - 취소할 때는 이 결과 줄의 `id`와 `verification_type`을 "취소 SQL"에 넣는다. 취소 요청 하나에 이 조회는 한 번만 쓴다. 다시 조회해서 다른 `id`가 보이면 그것은 새 기록이다. 그 기록에도 같은 사유가 맞는지 따로 확인한 뒤 새 취소 요청으로 처리한다.
 
 ## 기준값 확보
