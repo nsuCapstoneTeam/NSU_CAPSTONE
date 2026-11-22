@@ -180,6 +180,43 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
         assertThat(count("evidence_verification_audit_events", artist.getId())).isEqualTo(1);
     }
 
+    /** 동시성: SQL을 잘못 고쳐도 같은 기록 ID에 같은 사건이 두 번 남지 않게 하는 마지막 장치다. */
+    @Test
+    void 같은_기록_ID의_같은_사건은_감사_표에_두_번_들어가지_않는다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-audit-unique@example.com");
+        UUID recordId = uuidV7Generator.generate();
+        runbook.record(recordId, artist.getId(), "BUSINESS_REGISTRATION", OPERATOR);
+
+        assertThatThrownBy(() -> insertAudit(artist.getId(), recordId, "GRANTED", null))
+                .hasMessageContaining("uk_evidence_verification_audit_events_record_event");
+
+        assertThat(count("evidence_verification_audit_events", artist.getId())).isEqualTo(1);
+    }
+
+    @Test
+    void 확인_사건에_사유가_있으면_DB가_거절한다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-granted-reason@example.com");
+
+        assertThatThrownBy(() -> insertAudit(artist.getId(), uuidV7Generator.generate(), "GRANTED", "FACT_CHANGED"))
+                .hasMessageContaining("ck_evidence_verification_audit_events_event_reason");
+    }
+
+    @Test
+    void GRANTED와_REVOKED_밖의_사건은_DB가_거절한다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-bad-event@example.com");
+
+        assertThatThrownBy(() -> insertAudit(artist.getId(), uuidV7Generator.generate(), "REJECTED", null))
+                .hasMessageContaining("ck_evidence_verification_audit_events_event_reason");
+    }
+
+    private void insertAudit(UUID artistId, UUID recordId, String eventType, String reason) {
+        jdbcTemplate.update("""
+                INSERT INTO evidence_verification_audit_events
+                    (id, artist_id, evidence_verification_id, verification_type, event_type, operator, reason, occurred_at)
+                VALUES (?, ?, ?, 'BUSINESS_REGISTRATION', ?, ?, ?, now())
+                """, uuidV7Generator.generate(), artistId, recordId, eventType, OPERATOR, reason);
+    }
+
     private int count(String table, UUID artistId) {
         return jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM " + table + " WHERE artist_id = ?", Integer.class, artistId);

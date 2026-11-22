@@ -42,5 +42,7 @@ CREATE TABLE evidence_verification_audit_events (
     ),
     -- 운영자는 GitHub 아이디다(공개 정보, 영문자·숫자·하이픈 39자 이하). 이름이나 메모가 들어갈 길을 DB가 막는다.
     -- runbook의 예시 값(CHANGE_ME)은 이 형식을 통과하지 못한다. 바꾸지 않고 실행하면 여기서 거절된다(7번).
-    CONSTRAINT ck_evidence_verification_audit_events_operator CHECK (operator ~ '^[A-Za-z0-9-]{1,39}$')
+    CONSTRAINT ck_evidence_verification_audit_events_operator CHECK (operator ~ '^[A-Za-z0-9-]{1,39}$'),
+    -- 기록 ID마다 GRANTED·REVOKED를 한 번씩만 남긴다. runbook SQL을 잘못 고쳐도 같은 사건이 두 번 남지 않는 마지막 장치다.
+    CONSTRAINT uk_evidence_verification_audit_events_record_event UNIQUE (evidence_verification_id, event_type)
 );
