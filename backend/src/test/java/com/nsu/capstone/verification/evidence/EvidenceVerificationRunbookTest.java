@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -353,6 +354,45 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
             Future<Integer> recording = executor.submit(() -> recorder.run(recordSql));
             recorder.awaitLockWait(jdbcTemplate);
             assertThat(recording).as("취소가 커밋하기 전에는 기록이 끝나지 않는다").isNotDone();
+            revoker.commit();
+
+            assertThat(recording.get(10, TimeUnit.SECONDS)).isZero();
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(count("evidence_verifications", artist.getId())).isZero();
+        assertThat(jdbcTemplate.queryForList(
+                        "SELECT event_type FROM evidence_verification_audit_events WHERE artist_id = ? ORDER BY event_type",
+                        String.class,
+                        artist.getId()))
+                .containsExactly("GRANTED", "REVOKED");
+    }
+
+    /**
+     * ADR 동시성 4: 접속의 기본 격리 수준이 REPEATABLE READ여도 기록 SQL은 READ COMMITTED로 돈다. 기록 SQL이 REPEATABLE READ로 열리면 스냅숏이
+     * 잠금을 기다리기 전에 정해져, 기다리는 동안 커밋된 취소를 사건 수 검사가 놓치고 낡은 확인으로 다시 기록한다.
+     */
+    @Test
+    void 접속_기본_격리_수준이_REPEATABLE_READ여도_취소가_커밋되길_기다린_기록은_아무것도_넣지_않는다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "evidence-repeatable-read@example.com");
+        UUID x = uuidV7Generator.generate();
+        UUID y = uuidV7Generator.generate();
+        runbook.record(x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b");
+        long seenEvents = runbook.seenEvents(artist.getId(), "BUSINESS_REGISTRATION");
+        String revokeSql = EvidenceRunbook.revokeSql(
+                x, artist.getId(), "BUSINESS_REGISTRATION", "operator-b", "RECORDED_IN_ERROR");
+        String recordSql =
+                EvidenceRunbook.recordSql(y, seenEvents, artist.getId(), "BUSINESS_REGISTRATION", "operator-a");
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (EvidenceRunbookSession revoker = new EvidenceRunbookSession(jdbcTemplate.getDataSource());
+                EvidenceRunbookSession recorder = new EvidenceRunbookSession(jdbcTemplate.getDataSource())) {
+            recorder.useDefaultIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+            revoker.begin(revokeSql);
+            revoker.continueUntilCommit(revokeSql);
+
+            Future<Integer> recording = executor.submit(() -> recorder.run(recordSql));
+            recorder.awaitLockWait(jdbcTemplate);
             revoker.commit();
 
             assertThat(recording.get(10, TimeUnit.SECONDS)).isZero();

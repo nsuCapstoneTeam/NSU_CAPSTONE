@@ -22,6 +22,7 @@ final class EvidenceRunbookSession implements AutoCloseable {
 
     private final Connection connection;
     private final int pid;
+    private Integer isolationBeforeOverride;
 
     EvidenceRunbookSession(DataSource dataSource) throws SQLException {
         connection = dataSource.getConnection();
@@ -30,6 +31,18 @@ final class EvidenceRunbookSession implements AutoCloseable {
             result.next();
             pid = result.getInt(1);
         }
+    }
+
+    /**
+     * 이 연결의 접속 기본 격리 수준(JDBC {@link Connection} 상수)을 바꾼다. PostgreSQL에서는 {@code SET SESSION CHARACTERISTICS AS
+     * TRANSACTION ISOLATION LEVEL ...}이라서, 이 뒤의 {@code BEGIN;}이 그 수준으로 열린다. runbook이 접속 기본값에 기대지 않는지 보려는
+     * 것이다. {@link #close}가 원래 값으로 되돌린다.
+     */
+    void useDefaultIsolation(int level) throws SQLException {
+        if (isolationBeforeOverride == null) {
+            isolationBeforeOverride = connection.getTransactionIsolation();
+        }
+        connection.setTransactionIsolation(level);
     }
 
     /** 블록 전체를 실행한다. */
@@ -75,6 +88,10 @@ final class EvidenceRunbookSession implements AutoCloseable {
         // 커밋하지 않은 채 끝난 트랜잭션이 잠금을 쥔 채 풀로 돌아가지 않게 한다. 열린 트랜잭션이 없으면 경고만 남는다
         try (Statement statement = connection.createStatement()) {
             statement.execute("ROLLBACK");
+            // 풀로 돌아간 연결에 바꾼 접속 기본 격리 수준이 남아 다른 테스트에 번지지 않게 한다
+            if (isolationBeforeOverride != null) {
+                connection.setTransactionIsolation(isolationBeforeOverride);
+            }
         } finally {
             connection.close();
         }

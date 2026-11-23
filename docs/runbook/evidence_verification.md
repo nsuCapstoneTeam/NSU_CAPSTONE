@@ -152,6 +152,7 @@ WHERE artist_id = (:'artist_id')::uuid
 \set operator 'CHANGE_ME'
 
 BEGIN;
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SET LOCAL lock_timeout = '5s';
 SELECT pg_advisory_xact_lock(hashtextextended(
     'evidence_verification:' || (:'artist_id')::uuid::text || ':' || :'verification_type', 0));
@@ -198,6 +199,7 @@ COMMIT;
 \set reason 'EVIDENCE_INVALID'
 
 BEGIN;
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SET LOCAL lock_timeout = '5s';
 SELECT pg_advisory_xact_lock(hashtextextended(
     'evidence_verification:' || (:'artist_id')::uuid::text || ':' || :'verification_type', 0));
