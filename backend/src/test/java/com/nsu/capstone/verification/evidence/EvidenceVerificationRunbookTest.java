@@ -554,6 +554,17 @@ class EvidenceVerificationRunbookTest extends EvidenceVerificationIntegrationTes
                 .hasMessageContaining("ck_evidence_verification_audit_events_event_reason");
     }
 
+    /** 사유가 SQL NULL이면 {@code IN} 검사가 NULL이 되어 통과하므로, CHECK의 {@code reason IS NOT NULL}이 따로 막는다. */
+    @Test
+    void 취소_사건에_사유가_SQL_NULL이면_DB가_거절한다() {
+        User artist = newUser(UserRole.ARTIST, "evidence-revoked-null-reason@example.com");
+
+        assertThatThrownBy(() -> insertAudit(artist.getId(), uuidV7Generator.generate(), "REVOKED", null))
+                .hasMessageContaining("ck_evidence_verification_audit_events_event_reason");
+
+        assertThat(count("evidence_verification_audit_events", artist.getId())).isZero();
+    }
+
     @Test
     void GRANTED와_REVOKED_밖의_사건은_DB가_거절한다() {
         User artist = newUser(UserRole.ARTIST, "evidence-bad-event@example.com");
