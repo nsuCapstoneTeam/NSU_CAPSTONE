@@ -22,11 +22,11 @@ public record SignupVerificationProperties(
         @DefaultValue("10") int destinationIpDailyAttempts) {
 
     public SignupVerificationProperties {
-        Objects.requireNonNull(otpTtl, "auth.signup-verification.otp-ttl must be configured");
-        Objects.requireNonNull(resendCooldown, "auth.signup-verification.resend-cooldown must be configured");
-        Objects.requireNonNull(hmacSecret, "auth.signup-verification.hmac-secret must be configured");
+        Objects.requireNonNull(otpTtl, "인증 코드 TTL(auth.signup-verification.otp-ttl)을 설정해야 합니다");
+        Objects.requireNonNull(resendCooldown, "인증 코드 재발송 대기 시간(auth.signup-verification.resend-cooldown)을 설정해야 합니다");
+        Objects.requireNonNull(hmacSecret, "인증 코드 HMAC 비밀키(auth.signup-verification.hmac-secret)를 설정해야 합니다");
         requiredTerms = List.copyOf(
-                Objects.requireNonNull(requiredTerms, "auth.signup-verification.required-terms must be configured"));
+                Objects.requireNonNull(requiredTerms, "필수 약관(auth.signup-verification.required-terms)을 설정해야 합니다"));
         if (otpTtl.isZero() || otpTtl.isNegative()) {
             throw new IllegalArgumentException("인증 코드 TTL은 양수여야 합니다");
         }
