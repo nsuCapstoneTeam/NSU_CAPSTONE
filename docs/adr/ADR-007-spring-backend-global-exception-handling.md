@@ -112,6 +112,8 @@ malformed JSON, 지원하지 않는 HTTP Method 등 Spring MVC가 원래 4xx로 
 
 전역 예외 처리기는 `ResponseEntityExceptionHandler`를 상속하고 DTO validation 처리만 공통 응답으로 재정의한다. 그 밖의 Spring MVC 표준 예외는 상위 클래스의 구체적인 처리 경로를 사용하므로 일반 `Exception` fallback에 의해 임의로 HTTP 500으로 변경되지 않는다.
 
+Spring MVC가 5xx로 처리하는 표준 예외(응답 직렬화 실패 등)는 이 절이 아니라 §4.3을 따른다. `500 INTERNAL_SERVER_ERROR`로 답하고 내부 정보를 담지 않는다(2026-11-24, NSU-156, [logging/01](logging/01_server_error_exception_log.md) Decision 5).
+
 ---
 
 ## 5. 이유
