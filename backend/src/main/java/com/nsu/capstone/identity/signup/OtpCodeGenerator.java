@@ -22,7 +22,7 @@ public class OtpCodeGenerator {
 
     private int powerOfTen(int exponent) {
         if (exponent > 9) {
-            throw new IllegalArgumentException("OTP length must not exceed 9 digits");
+            throw new IllegalArgumentException("인증 코드 길이는 9자리를 넘을 수 없습니다");
         }
         int result = 1;
         for (int i = 0; i < exponent; i++) {
