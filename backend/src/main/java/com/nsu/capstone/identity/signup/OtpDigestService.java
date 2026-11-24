@@ -53,7 +53,7 @@ public class OtpDigestService {
             mac.init(secretKey);
             return HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
         } catch (GeneralSecurityException exception) {
-            throw new IllegalStateException("인증 코드 digest를 계산하지 못했습니다", exception);
+            throw new IllegalStateException("HMAC 다이제스트를 계산하지 못했습니다", exception);
         }
     }
 }
