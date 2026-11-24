@@ -28,13 +28,13 @@ public record SignupVerificationProperties(
         requiredTerms = List.copyOf(
                 Objects.requireNonNull(requiredTerms, "auth.signup-verification.required-terms must be configured"));
         if (otpTtl.isZero() || otpTtl.isNegative()) {
-            throw new IllegalArgumentException("OTP TTL must be positive");
+            throw new IllegalArgumentException("인증 코드 TTL은 양수여야 합니다");
         }
         if (resendCooldown.isNegative()) {
-            throw new IllegalArgumentException("OTP resend cooldown must not be negative");
+            throw new IllegalArgumentException("인증 코드 재발송 대기 시간은 음수일 수 없습니다");
         }
         if (maxAttempts <= 0 || otpLength <= 0) {
-            throw new IllegalArgumentException("OTP attempts and length must be positive");
+            throw new IllegalArgumentException("인증 코드 시도 횟수와 길이는 양수여야 합니다");
         }
         if (destinationDailyLimit <= 0
                 || ipHourlyLimit <= 0
@@ -45,10 +45,10 @@ public record SignupVerificationProperties(
             throw new IllegalArgumentException("가입 인증 한도는 양수여야 합니다");
         }
         if (hmacSecret.isBlank()) {
-            throw new IllegalArgumentException("OTP HMAC secret must not be blank");
+            throw new IllegalArgumentException("인증 코드 HMAC 비밀키가 비어 있으면 안 됩니다");
         }
         if (requiredTerms.isEmpty()) {
-            throw new IllegalArgumentException("At least one required term must be configured");
+            throw new IllegalArgumentException("필수 약관을 하나 이상 설정해야 합니다");
         }
     }
 }

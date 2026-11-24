@@ -18,7 +18,7 @@ enum SignupRejection {
 
     /** Throws for any rejection status and returns the script result when it was accepted. */
     static List<?> accepted(List<?> result) {
-        if (result == null || result.isEmpty()) throw new IllegalStateException("Missing signup result");
+        if (result == null || result.isEmpty()) throw new IllegalStateException("가입 세션 스크립트 결과가 없습니다");
         int status = ((Number) result.getFirst()).intValue();
         if (status != ACCEPTED) throw new BusinessException(of(status).errorCode());
         return result;
@@ -33,7 +33,7 @@ enum SignupRejection {
             case 5 -> ADULT_CONFIRMATION_REQUIRED;
             case 6 -> CLAIM_IN_PROGRESS;
             case 7 -> INVALID_INPUT;
-            default -> throw new IllegalStateException("Unknown signup result: " + status);
+            default -> throw new IllegalStateException("알 수 없는 가입 세션 스크립트 결과입니다: " + status);
         };
     }
 

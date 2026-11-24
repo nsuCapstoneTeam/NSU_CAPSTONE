@@ -29,7 +29,7 @@ final class SignupSessionLua {
         local function signupVerifiedField(channel)
             if channel == 'email' then return 'emailVerified' end
             if channel == 'phone' then return 'phoneVerified' end
-            return error('unknown signup verification channel')
+            return error('알 수 없는 가입 인증 채널입니다')
         end
         """;
 }

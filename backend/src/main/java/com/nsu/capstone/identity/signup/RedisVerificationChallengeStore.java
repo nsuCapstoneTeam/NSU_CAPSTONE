@@ -668,7 +668,7 @@ class RedisVerificationChallengeStore implements VerificationChallengeStore {
             return new ClassPathResource("redis/recover-unsent-signup-reservation.lua")
                     .getContentAsString(StandardCharsets.UTF_8);
         } catch (IOException exception) {
-            throw new IllegalStateException("Cannot load signup reservation recovery script", exception);
+            throw new IllegalStateException("가입 인증 예약 복구 스크립트를 불러오지 못했습니다", exception);
         }
     }
 
