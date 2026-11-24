@@ -16,8 +16,8 @@
 2. **레벨은 5xx이면 모두 ERROR다.** 500과 503을 나누지 않는다.
 3. **클라이언트가 연결을 끊어 난 예외는 남기지 않는다.**
    - Spring `DisconnectedClientHelper.isClientDisconnectedException`으로 가린다. `RequestIdFilter`와 같은 기준이다(logging/00 Decision 6).
-   - 응답 본문을 쓰는 중에 클라이언트가 끊으면 Spring의 Jackson 변환기가 그 예외를 `HttpMessageNotWritableException`(500)으로 바꾼다. 가리지 않으면 요청자가 연결을 끊는 것만으로 ERROR를 만들 수 있다.
-   - 이 결정은 끊김 예외가 5xx 분기에 도달했을 때의 동작이다. 테스트도 `ClientAbortException`을 원인으로 가진 `HttpMessageNotWritableException`을 던져 이 분기를 확인한다. 비동기 요청에서 응답 쓰기가 끊기면 Spring이 `AsyncRequestNotUsableException`으로 감싸고, `ResponseEntityExceptionHandler`가 이 분기를 거치지 않고 null로 끝낸다(Spring 7.0.9, PR #259 리뷰).
+   - 연결 끊김 예외가 `HttpMessageNotWritableException`으로 감싸져 5xx 분기에 도달하면 ERROR 로그를 생략한다. 가리지 않으면 요청자가 연결을 끊는 것만으로 ERROR를 만들 수 있다. 테스트는 `ClientAbortException`을 원인으로 가진 `HttpMessageNotWritableException`을 직접 던져 이 분기를 확인한다.
+   - Servlet 응답 스트림의 쓰기나 flush 중 발생한 `IOException`은 동기·비동기 요청 모두에서 `AsyncRequestNotUsableException`으로 감싸질 수 있다(Spring 7.0.9 `RequestMappingHandlerAdapter`가 모든 요청에 같은 응답 래퍼를 쓴다). 이 예외가 그대로 올라오면 Spring은 5xx 분기로 넘기지 않고 처리를 끝낸다(PR #259 리뷰).
 4. **응답을 이미 보낸 뒤의 예외는 지금처럼 WARN에 예외 클래스 이름만 남긴다**(logging/00 Decision 7-6). 이 결정은 그 분기를 바꾸지 않는다.
 5. **응답은 `500 INTERNAL_SERVER_ERROR`(`{code, message}`)로 바꾼다.**
    - 예상하지 못한 서버 오류(`handleUnexpectedException`)와 같은 응답이다. ADR-007 §4.3과 `docs/api/00_conventions.md` §8의 500 행(내부 정보를 담지 않는다)을 지킨다.
