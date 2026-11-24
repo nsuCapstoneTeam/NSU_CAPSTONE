@@ -165,7 +165,7 @@ class ServerErrorExceptionLogTest {
             throw new AsyncRequestTimeoutException();
         }
 
-        /** 응답 본문을 쓰는 중에 클라이언트가 끊으면 Jackson 변환기가 IOException을 이 예외로 감싼다. */
+        /** ClientAbortException을 원인으로 가진 HttpMessageNotWritableException을 직접 던져 5xx 분기의 ERROR 로그 생략을 확인한다. */
         @GetMapping("/test/client-disconnected")
         void clientDisconnected() {
             throw new HttpMessageNotWritableException(
