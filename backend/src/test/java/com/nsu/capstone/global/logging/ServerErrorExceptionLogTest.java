@@ -120,6 +120,14 @@ class ServerErrorExceptionLogTest {
     }
 
     @Test
+    void JSON을_받지_않는_요청에도_표준_5xx는_JSON_공통_오류_본문으로_답한다() throws Exception {
+        mockMvc.perform(get("/test/missing-path-variable").accept(MediaType.TEXT_HTML))
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
+    }
+
+    @Test
     void Spring이_503으로_정하는_표준_예외도_원인_예외가_스택으로_실린_ERROR_한_줄이_남는다() throws Exception {
         mockMvc.perform(get("/test/async-timeout")).andExpect(status().isInternalServerError());
 

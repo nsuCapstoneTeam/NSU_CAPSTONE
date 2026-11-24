@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.web.firewall.RequestRejectedException;
@@ -60,7 +61,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 log.error("Spring 표준 예외를 서버 오류(5xx)로 처리했다", exception);
             }
             ErrorCode errorCode = ErrorCode.INTERNAL_SERVER_ERROR;
-            return ResponseEntity.status(errorCode.getHttpStatus()).body(ErrorResponse.from(errorCode));
+            // ProblemDetail과 달리 ErrorResponse에는 대체 미디어 타입이 없어, 요청이 JSON을 받지 않으면 본문을 쓰지 못한다
+            return ResponseEntity.status(errorCode.getHttpStatus())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(ErrorResponse.from(errorCode));
         }
         return super.handleExceptionInternal(exception, body, headers, statusCode, request);
     }

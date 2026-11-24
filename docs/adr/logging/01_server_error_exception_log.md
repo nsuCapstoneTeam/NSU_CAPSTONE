@@ -131,6 +131,7 @@ A를 고른 이유:
 
 - 표준 예외가 500으로 처리되면 ERROR 한 줄이 남고, 예외가 스택으로 실리며, 문장에 예외 메시지가 없다.
 - 표준 예외의 5xx(500·503) 응답은 `500`, `{code: "INTERNAL_SERVER_ERROR", message}`이고 본문에 경로 변수 이름이나 `detail`이 없다.
+- 요청이 JSON을 받지 않아도(`Accept: text/html`) 표준 5xx는 `application/json` 공통 오류 본문으로 답한다. `ErrorResponse`에는 ProblemDetail 같은 대체 미디어 타입이 없어 콘텐츠 타입을 정해 준다(PR #259 리뷰).
 - 배포 설정의 인코더 출력(`LogCapture`)에서 새 줄은 ERROR이고 `stack_trace`에 예외 클래스가 있으며, 예외 메시지(경로 변수 이름)는 줄 어디에도 없다.
 - Spring이 503으로 정하는 표준 예외도 ERROR 한 줄이 남는다.
 - 표준 예외가 4xx로 처리되면 남기지 않고, 응답은 `application/problem+json` 그대로다.
