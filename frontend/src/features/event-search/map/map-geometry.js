@@ -97,21 +97,25 @@ export function placePins(items) {
 // 번호 핀끼리 겹치면 비켜 세움 (원래 자리에는 점을 남김). 화면 px 기준
 // spots: [{ x, y, ... }] 앞에 있는 핀(목록 번호가 빠른 핀)이 먼저 자리를 차지함, size: 핀 지름
 // bounds: { width, height } 지도 칸 크기. 주면 핀 전체(동그라미와 심)가 칸 안에 들어오는 자리만 씀
+// lift: 조각이 떠오를 때 핀이 올라가는 높이(px). 지역(code)이 다른 핀은 한쪽만 떠올라도 겹치지 않게
+//   위아래 간격을 lift만큼 더 두고, 떠오른 핀도 칸 위로 나가지 않게 함 (떠오름 상태와 상관없이 배치는 같음)
 // 자리 찾는 순서: 같은 줄 옆자리(오른쪽, 왼쪽 순, 3칸까지) → 위·아래 한 줄과 옆 3칸 → 6칸·두 줄 … 로 넓혀 감
 // 칸 안에 빈자리가 하나도 없으면 원래 자리를 칸 안으로 당겨 겹쳐 두고 crowded로 표시
 //   (겹친 핀의 행사도 옆 목록에서 고를 수 있음)
 // 결과: 같은 순서로 [{ ...spot, x, y: 핀 자리, ox, oy: 원래 자리, moved, crowded }]
-export function spreadMarkers(spots, size = 26, bounds = null) {
+export function spreadMarkers(spots, size = 26, bounds = null, lift = 0) {
   const step = size + 2;
+  // 위아래 후보 간격: 다른 지역 핀이 한쪽만 떠올라도 겹치지 않을 만큼
+  const rowStep = step + lift;
   const half = size / 2;
-  // 동그라미는 기준점 위 6px부터 size만큼 (region-map.css .rm-marker)
-  const top = size + 6;
+  // 동그라미는 기준점 위 6px부터 size만큼 (region-map.css .rm-marker). 떠올라도 칸 안에 있게 lift만큼 더
+  const top = size + 6 + lift;
   const inside = (x, y) =>
     !bounds || (x >= half && x <= bounds.width - half && y >= top && y <= bounds.height);
   const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), Math.max(lo, hi));
   // 후보 칸: bounds가 있으면 칸 전체를 덮을 만큼, 없으면 핀 수만큼 넓히면 늘 빈자리가 있음
   const cols = bounds ? Math.ceil(bounds.width / step) + 1 : 3 * spots.length;
-  const rows = bounds ? Math.ceil(bounds.height / step) + 1 : spots.length;
+  const rows = bounds ? Math.ceil(bounds.height / rowStep) + 1 : spots.length;
   const offsets = [];
   for (let r = -rows; r <= rows; r += 1) for (let c = -cols; c <= cols; c += 1) offsets.push([c, r]);
   const ring = ([c, r]) => Math.max(Math.ceil(Math.abs(c) / 3), Math.abs(r));
@@ -125,11 +129,15 @@ export function spreadMarkers(spots, size = 26, bounds = null) {
   );
   const placed = [];
   return spots.map((m) => {
-    const free = (x, y) => !placed.some((p) => Math.abs(p.x - x) < size && Math.abs(p.y - y) < size);
+    // 같은 지역 핀은 함께 떠오르므로 size만, 다른 지역 핀은 size + lift만큼 위아래로 떨어져야 함
+    const free = (x, y) =>
+      !placed.some(
+        (p) => Math.abs(p.x - x) < size && Math.abs(p.y - y) < size + (p.code === m.code ? 0 : lift),
+      );
     let hit = null;
     for (const [c, r] of offsets) {
       const x = m.x + c * step;
-      const y = m.y + r * step;
+      const y = m.y + r * rowStep;
       if (inside(x, y) && free(x, y)) {
         hit = [x, y];
         break;
@@ -139,7 +147,7 @@ export function spreadMarkers(spots, size = 26, bounds = null) {
       bounds ? clamp(m.x, half, bounds.width - half) : m.x,
       bounds ? clamp(m.y, top, bounds.height) : m.y,
     ];
-    placed.push({ x, y });
+    placed.push({ x, y, code: m.code });
     return { ...m, x, y, ox: m.x, oy: m.y, moved: x !== m.x || y !== m.y, crowded: !hit };
   });
 }

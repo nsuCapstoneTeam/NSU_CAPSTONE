@@ -243,3 +243,26 @@ test('insideRings: 테두리 위의 점은 안으로 보지 않는다 (바깥 �
   assert.equal(insideRings(rings, [20, 50]), true, '칠해진 곳');
   assert.equal(insideRings(rings, [99.9, 50]), true, '변 바로 안쪽');
 });
+
+test('spreadMarkers: 다른 지역 핀은 한쪽만 떠올라도(lift) 겹치지 않는다', () => {
+  // 마포구 핀 위아래로 가까운 다른 구 핀들 (위아래 27px: 떠오름 10px이 없으면 겹치지 않는 거리)
+  const spots = [
+    { id: 'a', code: '11440', x: 150, y: 100 },
+    { id: 'b', code: '11410', x: 152, y: 127 },
+    { id: 'c', code: '11440', x: 150, y: 73 },
+    { id: 'd', code: '11470', x: 148, y: 100 },
+  ];
+  const lift = 10;
+  const out = spreadMarkers(spots, 26, { width: 400, height: 300 }, lift);
+  // 각 핀이 떠오르거나(-lift) 그대로인 모든 경우에 서로 겹치지 않는지
+  for (let i = 0; i < out.length; i++) {
+    assert.ok(out[i].y - lift >= 32, `${i}번째 핀이 떠오르면 칸 위로 나감`);
+    for (let j = 0; j < i; j++) {
+      const sameCode = out[i].code === out[j].code;
+      for (const [ui, uj] of sameCode ? [[0, 0], [lift, lift]] : [[0, 0], [lift, 0], [0, lift], [lift, lift]]) {
+        const apart = Math.abs(out[i].x - out[j].x) >= 26 || Math.abs(out[i].y - ui - (out[j].y - uj)) >= 26;
+        assert.ok(apart, `${out[i].id}·${out[j].id} 겹침 (떠오름 ${ui}, ${uj})`);
+      }
+    }
+  }
+});

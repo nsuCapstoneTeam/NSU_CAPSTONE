@@ -196,6 +196,7 @@ function MapStage({
       }),
     26,
     stageWidth ? { width: stageWidth, height: H * scale } : null,
+    LIFT * scale,
   ).map((m) => {
     const up = lifted.includes(m.code) ? LIFT * scale : 0;
     return { ...m, y: m.y - up, oy: m.oy - up, up };
