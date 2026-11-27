@@ -79,7 +79,17 @@ final class LogSafetyChecker {
             // 발송 대상(이메일·전화번호 원문), 가입 세션 ID(그 값만으로 가입을 이어 갈 수 있다), 쿠키. recipient는 HMAC 다이제스트라 뺀다.
             "destination",
             "session",
-            "cookie");
+            "cookie",
+            // NSU-105 실명 본인확인: CI·DI, 성별, PortOne 응답에서 이름·생년월일·CI·DI를 담는 verifiedCustomer·requestedCustomer(customer),
+            // 제공자 원문 응답 pgRawResponse(rawresponse). 실명은 name만으로는 너무 넓어 이어진 두 단어(realName·fullName·identityName)로 잡는다.
+            "ci",
+            "di",
+            "gender",
+            "customer",
+            "realname",
+            "fullname",
+            "identityname",
+            "rawresponse");
 
     private static final Set<String> LOG_METHODS = Set.of("trace", "debug", "info", "warn", "error");
 

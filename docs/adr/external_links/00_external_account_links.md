@@ -609,7 +609,7 @@ NSU-37이 함께 하는 정리(2026-11-17 지휘 결정, NSU-105와 겹치지 �
 - `VerificationType.IDENTITY`를 enum의 **첫 상수**로 넣는다. 선언 순서가 응답 정렬 순서이고(01 §4.3), 합치기 정렬 테스트가 `IDENTITY` → `EXTERNAL_ACCOUNT` → `COPYRIGHT` 순서를 기대하기 때문이다. `IDENTITY` source는 NSU-105가 나중에 더한다.
 - 합치는 reader와 불변식 8(`COPYRIGHT`가 있으면 `IDENTITY`도 있다)을 들이므로, 기존 Trust Profile 테스트 고정값을 고친다. 대상은 `TrustProfileApiIntegrationTest.showsEachVerifiedItemOnceInContractOrder`, `TrustProfileBatchQueryIntegrationTest.verificationsDoNotChangeReliabilityEvidenceOrRiskSignals`, `TrustProfileAssemblerTest.example62HistoryGivesExample62Response`다. `IDENTITY` 없이 `COPYRIGHT`를 넣던 곳에 `IDENTITY`를 더하고, 01 §6.2 기대 JSON(맨 앞 `IDENTITY`)과 맞춘다. 01 §6.2 문서는 이미 `IDENTITY`를 맨 앞에 두므로 문서는 바꾸지 않는다.
 - `EmptyVerificationReader`를 지우고, `backend/src/test/resources/lombok-style-files.txt`의 그 행을 지운다. lombok 목록은 공유 파일이라 마지막 단계에서 한다.
-- 계약 번호: NSU-37은 `docs/api/06_external_accounts.md`를 그대로 쓰고, NSU-105가 `07_identity_verification.md`를 쓴다.
+- 계약 번호: NSU-37은 `docs/api/06_external_accounts.md`를 그대로 쓰고, NSU-105는 `08_identity_verification.md`를 쓴다(`07`은 NSU-74 `07_auth_tokens.md`, 2026-11-20).
 
 합치는 규칙은 01 §7을 그대로 따르고, 모두 테스트로 강제한다. `IDENTITY`·`COPYRIGHT` source가 아직 없어도 테스트용 가짜 source로 시험한다.
 

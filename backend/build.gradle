@@ -85,3 +85,36 @@ spotless {
 		palantirJavaFormat()
 	}
 }
+
+// 실명 본인확인 Mock 제공자와 시드 진입점은 서버 jar에 들어가면 안 되어 별도 소스 세트에 둔다(ADR identity_verification/01).
+// test는 이 출력을 classpath에 더해 같은 Mock을 쓴다. 서버 jar(bootJar)는 main 출력만 담는다.
+sourceSets {
+	seed {
+		java.srcDir 'src/seed/java'
+		compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+		runtimeClasspath += output + compileClasspath + sourceSets.main.runtimeClasspath
+	}
+	test {
+		compileClasspath += sourceSets.seed.output
+		runtimeClasspath += sourceSets.seed.output
+	}
+}
+
+// 시드 jar: 서버와 같은 빌드(같은 커밋)에서 만든다. 서버 코드와 seed 소스 세트를 함께 담고, 진입점이 다르다.
+tasks.register('seedJar', org.springframework.boot.gradle.tasks.bundling.BootJar) {
+	group = 'build'
+	description = '실명 본인확인 Mock 시드 jar(서버 jar와 같은 빌드, 시연 서버 안에서 실행한다)'
+	archiveClassifier = 'seed'
+	targetJavaVersion = JavaVersion.toVersion(java.toolchain.languageVersion.get().asInt())
+	mainClass = 'com.nsu.capstone.verification.identity.IdentitySeed'
+	// bootJar와 같이 개발용 라이브러리(devtools, docker-compose)는 담지 않는다.
+	classpath = sourceSets.seed.output + sourceSets.main.output + configurations.productionRuntimeClasspath
+}
+
+tasks.named('test') {
+	// 서버 jar에 seed 클래스가 없는지 빌드 결과를 열어 보고(ServerJarContentsTest), 시드 jar를 실제로 실행해 본다.
+	dependsOn tasks.named('bootJar'), tasks.named('seedJar')
+	systemProperty 'server.jar.path', tasks.named('bootJar').get().archiveFile.get().asFile.absolutePath
+	systemProperty 'seed.jar.path', tasks.named('seedJar').get().archiveFile.get().asFile.absolutePath
+	systemProperty 'seed.classes.dir', sourceSets.seed.java.classesDirectory.get().asFile.absolutePath
+}

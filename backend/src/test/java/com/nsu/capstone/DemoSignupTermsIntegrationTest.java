@@ -14,10 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
-@ActiveProfiles("demo")
 @Import(TestcontainersConfiguration.class)
 class DemoSignupTermsIntegrationTest {
     @Autowired
@@ -44,7 +42,7 @@ class DemoSignupTermsIntegrationTest {
         assertEquals(4, agreements.size());
         for (UserRole role : List.of(UserRole.ARTIST, UserRole.EVENT_PARTNER)) {
             for (var invalid : List.of(
-                    SignupTestTerms.agreements(),
+                    List.of(new TermVersion("service", "v1"), new TermVersion("privacy", "v1")),
                     agreements.stream()
                             .map(t -> new TermVersion(t.id(), "wrong-version"))
                             .toList())) {

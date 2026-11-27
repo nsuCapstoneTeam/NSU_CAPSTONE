@@ -34,6 +34,17 @@ class LogStartupPrivacyTest {
     private static final String FAKE_JWT_SECRET = Base64.getEncoder()
             .encodeToString("fake-jwt-secret-for-startup-log-test-7a1".getBytes(StandardCharsets.UTF_8));
 
+    /** 실명 본인확인의 PortOne API secret과 이름 암호화 키(AES-256, Base64 32바이트)로 쓴 가짜 값. 이 문자열이 출력에 나오면 안 된다. */
+    private static final String FAKE_PORTONE_SECRET = "fake-portone-api-secret-for-startup-log-test-3c9";
+
+    private static final String FAKE_NAME_KEY = fakeNameKey();
+
+    private static String fakeNameKey() {
+        byte[] key = new byte[32];
+        java.util.Arrays.fill(key, (byte) 0x37);
+        return Base64.getEncoder().encodeToString(key);
+    }
+
     /** 양성 대조. 하한이 없는 로컬 모드에서는 같은 시나리오가 값을 흘린다. 이게 없으면 아래 테스트가 헛돌 수 있다. */
     @Test
     void 하한이_없는_로컬_모드에서는_루트_TRACE로_시작하면_비밀키가_출력된다() throws Exception {
@@ -56,7 +67,11 @@ class LogStartupPrivacyTest {
         assertThat(result.exitCode())
                 .as("종료 코드. 출력 끝: %s", tail(result.output()))
                 .isZero();
-        assertThat(result.output()).contains(ForkedMain.STARTED).doesNotContain(FAKE_JWT_SECRET);
+        assertThat(result.output())
+                .contains(ForkedMain.STARTED)
+                .doesNotContain(FAKE_JWT_SECRET)
+                .doesNotContain(FAKE_PORTONE_SECRET)
+                .doesNotContain(FAKE_NAME_KEY);
     }
 
     /**
@@ -101,8 +116,17 @@ class LogStartupPrivacyTest {
     private static Map<String, String> appEnvironment() {
         Map<String, String> env = new HashMap<>();
         env.put("SIGNUP_VERIFICATION_HMAC_SECRET", "test-only-signup-verification-hmac-secret");
-        // #219가 필수 약관 ID 형식을 바꿨다. TestcontainersConfiguration의 값과 같게 둔다
-        env.put("SIGNUP_REQUIRED_TERMS", "service:v1,privacy:v1");
+        // 필수 약관은 모든 환경에서 4종이고 환경은 APP_ENVIRONMENT=DEMO 하나로 정한다(NSU-105). TestcontainersConfiguration의 값과 같게 둔다
+        env.put("APP_ENVIRONMENT", "DEMO");
+        env.put("SIGNUP_REQUIRED_TERMS", "service:v1,privacy:v1,demo-notice:v1,overseas-transfer:v1");
+        // 실명 본인확인 필수 설정(NSU-105). 비밀 값처럼 보이는 두 값은 아래 시험이 출력에 없음을 본다
+        env.put("IDENTITY_VERIFICATION_PROVIDER", "PORTONE_TEST");
+        env.put("IDENTITY_NAME_ENCRYPTION_KEY", FAKE_NAME_KEY);
+        env.put("PORTONE_API_SECRET", FAKE_PORTONE_SECRET);
+        env.put("PORTONE_STORE_ID", "test-store-id");
+        env.put("PORTONE_CHANNEL_KEY", "test-channel-key");
+        env.put("PORTONE_TEST_CHANNEL_PG_PROVIDER", "kcp");
+        env.put("PORTONE_TEST_CHANNEL_PG_MERCHANT_ID", "AO6R1");
         env.put("POSTGRES_HOST", POSTGRES.getHost());
         env.put("POSTGRES_PORT", String.valueOf(POSTGRES.getMappedPort(5432)));
         env.put("POSTGRES_DB", POSTGRES.getDatabaseName());

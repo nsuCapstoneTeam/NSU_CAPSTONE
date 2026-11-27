@@ -30,7 +30,7 @@ class ArtistOAuthSignupControllerTest {
                         new Prepared("session", "verified@example.com", true, true),
                         new Prepared("session", "verified@example.com", true, false));
         String body = """
-            {"oauthSignupSessionId":"session","phone":"01012345678","agreements":[{"id":"service","version":"v1"},{"id":"privacy","version":"v1"}]}
+            {"oauthSignupSessionId":"session","phone":"01012345678","agreements":[{"id":"service","version":"v1"},{"id":"privacy","version":"v1"},{"id":"demo-notice","version":"v1"},{"id":"overseas-transfer","version":"v1"}]}
             """;
         mvc.perform(post(BASE + "/session")
                         .contentType(MediaType.APPLICATION_JSON)

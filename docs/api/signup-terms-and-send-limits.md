@@ -42,7 +42,7 @@
 | `demo-notice` | 시연 서버 안내(실제 섭외에 쓰지 않음, 초기화 날짜, 테스트 본인확인) | `DEMO`만 |
 | `overseas-transfer` | 개인정보 국외 이전(Resend, 미국) | 국외 이전이 있는 환경. 지금은 `DEMO` |
 
-- 기본 환경은 위 2종만, `SPRING_PROFILES_ACTIVE=demo`로 명시적으로 켠 `demo` Spring 프로필은 위 4종을 `SIGNUP_REQUIRED_TERMS`에 설정한다. 버전 기본값은 없고 환경별 필수 ID 누락·중복·알 수 없는 ID는 기동 실패다.
+- 환경은 서버 설정 `app.environment`(환경 변수 `APP_ENVIRONMENT`) 하나가 정한다. 값은 `DEMO` 하나이고 기본값이 없다(ADR [identity_verification/01](../adr/identity_verification/01_identity_verification_attempt_and_record.md) "환경"). 서버는 `DEMO`에서만 뜨므로 로컬 개발을 포함한 모든 서버가 위 4종을 `SIGNUP_REQUIRED_TERMS`에 설정한다. 버전 기본값은 없고 필수 ID 누락·중복·알 수 없는 ID는 기동 실패다. `DEMO`가 아닌 약관 집합은 운영 단계 ADR이 운영 환경을 정할 때 다시 둔다.
 - 서버 설정의 필수 약관이 하나라도 빠지거나 버전이 다르면 `400 REQUIRED_TERMS_NOT_AGREED`이고, 세션을 만들지 않고 메일·문자를 보내지 않는다. 같은 `id`가 두 번 오거나 모르는 `id`가 오면 기존 `400 TERMS_AGREEMENT_INVALID`다.
 - 서버는 동의를 받은 시각(세션 생성 요청을 처리한 시각)을 약관 ID·버전과 함께 가입 세션(Redis)에 둔다. OAuth 가입은 OAuth 가입 세션에 같은 값을 둔다. 최종 가입(`POST /api/v1/auth/signup/{역할}`, `POST /api/v1/auth/signup/artist/oauth`)이 성공할 때 그 값을 그대로 회원과 함께 DB에 저장한다. 동의 시각은 가입 완료 시각이 아니다.
 - 중간에 그만둔 세션은 세션 TTL(30분)이 지나면 Redis에서 사라지고 DB에 동의 기록이 생기지 않는다.
@@ -257,8 +257,8 @@ Redis 카운터와 Lua 스크립트의 원자성은 Testcontainers Redis로 시�
 | 복구 시 두 후보 모두 오답 | 각 challenge +1, 하루 카운터 +2 |
 | 복구 시 하루 한 번만 남고 활성 코드 오답·대기 코드 정답 | 대기 코드는 검사하지 않고 `429`·`Retry-After`, 대기 코드 오답 횟수는 그대로 |
 | 복구 시 하루 두 번 이상 남고 활성 코드 오답·대기 코드 정답 | 활성 코드와 하루 오답 +1 뒤 확인 성공 |
-| `demo` 프로필에 필수 약관 2종만 설정 | 기동 실패 |
-| 기본 2종 / `demo` 4종 설정으로 기동·가입 | 성공, 누락·버전 불일치는 기존 오류 계약으로 거절 |
+| `app.environment=DEMO`에 필수 약관 2종만 설정(Spring 프로필 값과 상관없이) | 기동 실패 |
+| `app.environment=DEMO`와 약관 4종 설정으로 기동·가입 | 성공, 누락·버전 불일치는 기존 오류 계약으로 거절 |
 | 예약 직후 격리 Testcontainers Redis를 멈춤 | 발송 API 1초 이내 `503 VERIFICATION_DELIVERY_FAILED`, 제공자 호출 0건. 재개 후 늦은 응답도 발송하지 않음 |
 | 발송을 시도한 뒤 결과 기록 없이 15초가 지남 | 대기 코드가 기존 코드를 덮지 않는다. 실제로 도착한 대기 코드가 일치하면 확인에 성공한다 |
 | 재전송이 보냄·결과 모름이 된 뒤 이전 코드 A로 확인 | `VERIFICATION_CODE_INVALID`. 새 코드만 유효하다 |
