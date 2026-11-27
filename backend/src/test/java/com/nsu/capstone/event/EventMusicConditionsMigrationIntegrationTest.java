@@ -27,14 +27,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 /**
- * V13이 데이터가 있는 DB에서 하는 일(ADR event_management/05 결정 6): 새 장르 모양 제약을 어기는 옛 행만 같은 장르
- * 집합으로 고치고, 다른 열은 건드리지 않는다. 같은 컨테이너에 별도 데이터베이스를 만들어 V13 직전(V12 이하)까지 적용하고
- * 행을 넣은 뒤 V13을 적용한다. 앱 컨텍스트의 DB는 이미 V13이 적용돼 있어 쓸 수 없다. 이 브랜치에는 V11·V12가 없지만
- * target을 12로 두면 V13 직전 상태가 만들어지고, 머지 뒤에도 같다.
+ * 음악 조건 마이그레이션이 데이터가 있는 DB에서 하는 일(ADR event_management/05 결정 6): 새 장르 모양 제약을 어기는 옛
+ * 행만 같은 장르 집합으로 고치고, 다른 열은 건드리지 않는다. 같은 컨테이너에 별도 데이터베이스를 만들어 이 마이그레이션
+ * 직전 버전까지 적용하고 행을 넣은 뒤 이 마이그레이션을 적용한다. 앱 컨텍스트의 DB는 이미 적용돼 있어 쓸 수 없다. 번호는
+ * 머지 직전에 main의 최대 번호 다음으로 바뀌므로, 번호가 아니라 설명({@value #MIGRATION_DESCRIPTION})으로 찾는다.
  */
-@DisplayName("V13: 음악 조건 열과 장르 제약 마이그레이션")
+@DisplayName("음악 조건 열과 장르 제약 마이그레이션")
 class EventMusicConditionsMigrationIntegrationTest extends EventIntegrationTestBase {
 
+    private static final String MIGRATION_DESCRIPTION = "add event music conditions";
     private static final String DATABASE = "event_music_conditions_migration_check";
     private static final String CREATED_AT = "2026-10-18T01:00:00Z";
     private static final String UPDATED_AT = "2026-10-19T02:03:04Z";
@@ -57,7 +58,7 @@ class EventMusicConditionsMigrationIntegrationTest extends EventIntegrationTestB
     @DisplayName("제약을 어기는 장르 행만 같은 집합으로 고치고, 정상 행과 updated_at·request_hash는 그대로다")
     void repairsOnlyTheGenresThatBreakTheNewShape() {
         DataSource target = databaseDataSource();
-        migrate(target, versionBeforeV13(target));
+        migrate(target, versionBeforeMusicConditions(target));
         JdbcTemplate jdbc = new JdbcTemplate(target);
         UUID owner = insertPartner(jdbc);
         // 첫 등장 순서를 지키며 중복을 지우고, 1차원·하한 1로 편다
@@ -95,7 +96,7 @@ class EventMusicConditionsMigrationIntegrationTest extends EventIntegrationTestB
     @DisplayName("다른 트랜잭션이 events를 잡고 있으면 무기한 기다리지 않고 3초 안에 실패하며 아무것도 바뀌지 않는다")
     void failsWithinTheLockTimeoutWhenAnotherTransactionHoldsTheTable() throws Exception {
         DataSource target = databaseDataSource();
-        migrate(target, versionBeforeV13(target));
+        migrate(target, versionBeforeMusicConditions(target));
         JdbcTemplate jdbc = new JdbcTemplate(target);
         UUID owner = insertPartner(jdbc);
         insertEvent(jdbc, owner, "{POP,POP}");
@@ -118,7 +119,9 @@ class EventMusicConditionsMigrationIntegrationTest extends EventIntegrationTestB
                         Integer.class))
                 .isZero();
         assertThat(jdbc.queryForObject(
-                        "SELECT count(*) FROM flyway_schema_history WHERE version = '13'", Integer.class))
+                        "SELECT count(*) FROM flyway_schema_history WHERE version = ?",
+                        Integer.class,
+                        musicConditionsVersion(target).getVersion()))
                 .isZero();
     }
 
@@ -131,22 +134,32 @@ class EventMusicConditionsMigrationIntegrationTest extends EventIntegrationTestB
         configuration.load().migrate();
     }
 
-    /**
-     * V13 바로 앞 버전. 번호(12)를 적지 않고 찾는 이유: 이 브랜치에는 V11·V12가 없어 Flyway가 target 12를 "없는 버전"
-     * 오류로 거절한다. V11·V12가 머지된 뒤에는 12가 된다.
-     */
-    private static MigrationVersion versionBeforeV13(DataSource target) {
-        MigrationVersion v13 = MigrationVersion.fromVersion("13");
-        return Arrays.stream(Flyway.configure()
-                        .dataSource(target)
-                        .locations("classpath:db/migration")
-                        .load()
-                        .info()
-                        .all())
+    /** 음악 조건 마이그레이션의 버전. 번호는 머지 직전에 바뀌므로 설명으로 찾는다. */
+    private static MigrationVersion musicConditionsVersion(DataSource target) {
+        return Arrays.stream(allMigrations(target))
+                .filter(info -> MIGRATION_DESCRIPTION.equals(info.getDescription()))
                 .map(MigrationInfo::getVersion)
-                .filter(version -> version != null && version.compareTo(v13) < 0)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("마이그레이션을 찾지 못했다: " + MIGRATION_DESCRIPTION));
+    }
+
+    /** 음악 조건 마이그레이션 바로 앞 버전. 번호를 적지 않아 번호가 바뀌어도, 중간 번호가 비어 있어도 맞다. */
+    private static MigrationVersion versionBeforeMusicConditions(DataSource target) {
+        MigrationVersion musicConditions = musicConditionsVersion(target);
+        return Arrays.stream(allMigrations(target))
+                .map(MigrationInfo::getVersion)
+                .filter(version -> version != null && version.compareTo(musicConditions) < 0)
                 .max(Comparator.naturalOrder())
                 .orElseThrow();
+    }
+
+    private static MigrationInfo[] allMigrations(DataSource target) {
+        return Flyway.configure()
+                .dataSource(target)
+                .locations("classpath:db/migration")
+                .load()
+                .info()
+                .all();
     }
 
     private static UUID insertPartner(JdbcTemplate jdbc) {

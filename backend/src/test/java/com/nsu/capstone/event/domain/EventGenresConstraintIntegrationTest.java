@@ -12,9 +12,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 
 /**
- * V13이 events.genres에 더한 모양 제약 {@code ck_events_genres_distinct}(ADR event_management/05 결정 6). 개수와
- * 허용 값은 V5의 {@code ck_events_genres}가 본다. API로는 이 모양이 들어올 수 없지만(EventContent가 막는다) 손으로 넣은 행은
- * 막아야 한다. 중복 장르 행은 MusicConditions 생성자에서 400을 내 읽기 전용 추천 입력을 막기 때문이다.
+ * 음악 조건 마이그레이션이 events.genres에 더한 모양 제약 {@code ck_events_genres_distinct}(ADR
+ * event_management/05 결정 6). 개수와 허용 값은 V5의 {@code ck_events_genres}가 본다. API로는 이 모양이 들어올 수 없지만
+ * (EventContent가 막는다) 손으로 넣은 행은 막아야 한다. 중복 장르 행은 MusicConditions 생성자에서 400을 내 읽기 전용
+ * 추천 입력을 막기 때문이다.
  */
 @DisplayName("events.genres 모양 제약")
 class EventGenresConstraintIntegrationTest extends EventIntegrationTestBase {
