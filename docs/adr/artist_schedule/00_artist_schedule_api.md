@@ -12,15 +12,15 @@
 
 ARTIST가 자기 공연 가능 일정을 조회·추가·수정·삭제하는 API를 둔다. 같은 저장 값을 추천 Eligibility의 일정 조건(`SCHEDULE_AVAILABLE`)이 읽는다.
 
-1. **경로**: `GET`·`POST /api/v1/me/artist-schedules`, `PUT`·`DELETE /api/v1/me/artist-schedules/{scheduleId}`. 호출 주체는 ARTIST뿐이다. 다른 사용자의 일정을 보는 경로는 두지 않는다.
-2. **일정 한 건**: 시작·끝, 상태, 선택 메모(`title`, 30자 이하)다. 시작·끝은 행사 시간대와 같은 표현(`startDate`·`startTime`·`endDate`·`endTime`, `Asia/Seoul` 벽시계)이다. 분은 `00`·`30`만 받는다. 길이는 24시간 이하이고 자정을 넘길 수 있다. `24:00`은 받지 않는다(다음 날 `00:00`으로 적는다). 날짜는 `2000-01-01`부터 `2099-12-31`까지다.
+1. **경로**: `GET`·`POST /api/v1/me/artist-schedules`, `PUT`·`DELETE /api/v1/me/artist-schedules/{artistScheduleId}`. 호출 주체는 ARTIST뿐이다. 다른 사용자의 일정을 보는 경로는 두지 않는다.
+2. **일정 한 건**: 시작·끝, 상태, 선택 일정 이름(`title`, 30자 이하)다. 시작·끝은 행사 시간대와 같은 표현(`startDate`·`startTime`·`endDate`·`endTime`, `Asia/Seoul` 벽시계)이다. 분은 `00`·`30`만 받는다. 길이는 24시간 이하이고 자정을 넘길 수 있다. `24:00`은 받지 않는다(다음 날 `00:00`으로 적는다). 날짜는 `2000-01-01`부터 `2099-12-31`까지다.
 3. **상태**: 저장 값은 `ART-029`의 4개(`AVAILABLE`·`HOLD`·`BOOKED`·`UNAVAILABLE`)다. 요청은 `BOOKED`를 받지 않는다(`400`). `BOOKED`는 섭외 성사 기능이 쓸 값이다.
 4. **겹침 금지**: 같은 아티스트의 일정끼리는 상태와 관계없이 겹치지 않는다. 끝과 시작이 맞닿는 것은 겹침이 아니다(`[시작, 끝)`). DB 배제 제약(`EXCLUDE USING gist`, 확장 `btree_gist`)이 지키고, 어기면 `409 ARTIST_SCHEDULE_OVERLAP`이다.
 5. **추가·수정·삭제**: `POST`는 1~7개를 한 트랜잭션으로 모두 저장하거나 하나도 저장하지 않는다. `PUT`은 한 건 전체 교체다. 없거나 다른 사용자의 일정에 대한 `PUT`은 `404 ARTIST_SCHEDULE_NOT_FOUND`다. `DELETE`는 `204`이고, 없거나 다른 사용자의 일정이어도 `204`다(지우지 않는다).
 6. **조회**: `from`·`to`(날짜, 둘 다 포함, 42일 이하)와 겹치는 자기 일정을 시작 순으로 돌려준다. 페이지네이션은 없다.
 7. **쓰기의 계정 상태와 잠금**: `POST`·`PUT`은 `ArtistWriteAccess`(NSU-119)로 `users` 행을 `FOR SHARE`로 잠그며 `ACTIVE` ARTIST인지 확인한다. 확인은 본문 검증보다 먼저다. `DELETE`는 계정 상태를 보지 않는다. 쓰기 트랜잭션은 잠금 하나를 3초까지만 기다린다(`SET LOCAL lock_timeout = '3s'`). 넘기거나 교착으로 끊기면 `503 ARTIST_SCHEDULE_BUSY`다.
-8. **저장**: 새 테이블 `artist_schedules`(Flyway 번호는 머지 직전 main 최대 + 1)다. 한 행이 일정 한 건이다. ID는 서버가 만드는 UUIDv7이다. 시각은 `timestamptz`로 저장한다. DB가 `NOT NULL`, 시간 범위 `CHECK`(시작 < 끝, 24시간 이하), 상태 `CHECK`, 메모 `CHECK`, 배제 제약을 지킨다. 저장 기술은 `JdbcClient`다.
-9. **모듈**: `com.nsu.capstone.artist.schedule` 하나의 패키지다(하위 패키지 없음). 다른 모듈에 여는 것은 일괄 조회 `ArtistSchedules.findByArtistIds(Collection<UUID>, LocalDateTime, LocalDateTime)`와 값 타입 `SavedArtistSchedule`·`ArtistScheduleStatus`뿐이다. 메모는 공개 값에 넣지 않는다.
+8. **저장**: 새 테이블 `artist_schedules`(Flyway 번호는 머지 직전 main 최대 + 1)다. 한 행이 일정 한 건이다. ID는 서버가 만드는 UUIDv7이다. 시각은 `timestamptz`로 저장한다. DB가 `NOT NULL`, 시간 범위 `CHECK`(시작 < 끝, 24시간 이하), 상태 `CHECK`, 일정 이름 `CHECK`, 배제 제약을 지킨다. 저장 기술은 `JdbcClient`다.
+9. **모듈**: `com.nsu.capstone.artist.schedule` 하나의 패키지다(하위 패키지 없음). 다른 모듈에 여는 것은 일괄 조회 `ArtistSchedules.findByArtistIds(Collection<UUID>, LocalDateTime, LocalDateTime)`와 값 타입 `SavedArtistSchedule`·`ArtistScheduleStatus`뿐이다. 일정 이름은 공개 값에 넣지 않는다.
 10. **Eligibility 연결**: `EmptyArtistScheduleReader`를 지우고 `eligibility.infrastructure.SavedArtistScheduleReader`가 일괄 조회를 읽어 `ScheduleSlot`으로 바꾼다. 상태는 빠짐없는 `switch` 식으로 바꾼다. Eligibility ADR의 "NSU-12·34" 전제를 모두 지킨다(아래 "Eligibility 전제").
 11. **탈퇴 시 파기**: 트리거와 공개 삭제 메서드를 두지 않는다. NSU-167 D4대로 탈퇴 절차가 `READ COMMITTED` 트랜잭션에서 `users.status`를 `WITHDRAWN`으로 바꾼 다음 `DELETE FROM artist_schedules WHERE user_id = :id`를 실행한다. 운영자 runbook도 같은 순서다.
 12. **이름**: SSOT의 도메인 이름 `ArtistAvailability`(`ART-029` Artist Availability)를 코드와 경로에서는 "schedule"(`artist.schedule`, `artist-schedules`)로, 한국어로는 "공연 가능 일정"으로 쓴다. Eligibility 창구 이름(`ArtistScheduleReader`)이 이미 schedule이라 맞췄다. Scalar 태그는 `공연 가능 일정`이다.
@@ -125,9 +125,9 @@ Eligibility ADR Consequences의 "NSU-12·34" 전제와 이 ADR이 지키는 방�
 
 ### 없는 일정과 다른 사용자의 일정
 
-- `PUT`은 `UPDATE … WHERE id = :scheduleId AND user_id = :me` 한 문장이다. 0행이면 `404 ARTIST_SCHEDULE_NOT_FOUND`다. 다른 사용자의 일정과 없는 일정이 같은 응답이라 다른 사람의 일정 ID가 있는지 드러나지 않는다(00 §8 `{대상}_NOT_FOUND`).
-- `DELETE`는 `DELETE … WHERE id = :scheduleId AND user_id = :me` 한 문장이고 늘 `204`다. 프로필 삭제(09 §1)와 같이 멱등이다. 이미 지운 일정을 다시 지우는 재시도도 `204`다.
-- 형식이 틀린 `scheduleId`는 `400 INVALID_SCHEDULE_ID`다(00 §8 `INVALID_{대상}`). 컨트롤러가 문자열로 받아 검사한다. 정규식은 Trust Profile·외부 계정 컨트롤러의 정규형 UUID 검사와 같다.
+- `PUT`은 `UPDATE … WHERE id = :artistScheduleId AND user_id = :me` 한 문장이다. 0행이면 `404 ARTIST_SCHEDULE_NOT_FOUND`다. 다른 사용자의 일정과 없는 일정이 같은 응답이라 다른 사람의 일정 ID가 있는지 드러나지 않는다(00 §8 `{대상}_NOT_FOUND`).
+- `DELETE`는 `DELETE … WHERE id = :artistScheduleId AND user_id = :me` 한 문장이고 늘 `204`다. 프로필 삭제(09 §1)와 같이 멱등이다. 이미 지운 일정을 다시 지우는 재시도도 `204`다.
+- 형식이 틀린 `artistScheduleId`는 `400 INVALID_ARTIST_SCHEDULE_ID`다(00 §8 `INVALID_{대상}`). 컨트롤러가 문자열로 받아 검사한다. 정규식은 Trust Profile·외부 계정 컨트롤러의 정규형 UUID 검사와 같다.
 
 ### 쓰기의 계정 상태와 잠금
 
@@ -164,7 +164,7 @@ D4가 방식을 정했다. 트리거는 프로필(V12)에만 두고, 나머지 �
 
 - 모양은 NSU-119와 같다(그 ADR "모듈 모양과 공개 표면" 비교표). 다른 모듈은 일괄 조회 하나만 부른다. 쓰기와 본인 조회는 package-private이라 접근 검사를 건너뛴 쓰기가 다른 모듈에서 컴파일되지 않는다.
 - 상태 enum은 일정 모듈이 갖는다(`ArtistScheduleStatus`). Eligibility의 `ScheduleStatus`를 재사용하면 일정 모듈이 추천 모듈에 기대어 의존이 양방향이 된다. 어댑터는 default 없는 `switch` 식으로 바꾼다. 그래서 일정 쪽에 상태를 더하면 어댑터의 컴파일이 깨진다.
-- 메모는 공개 값(`SavedArtistSchedule`)에 넣지 않는다. 판정에 쓰지 않고 본인만 보는 값이다(`SEC-120`).
+- 일정 이름은 공개 값(`SavedArtistSchedule`)에 넣지 않는다. 판정에 쓰지 않고 본인만 보는 값이다(`SEC-120`).
 - 시간대는 `Event.ZONE`을 쓴다. 전역 시간대 상수는 없고, 모듈마다 private 상수를 둔 곳도 있다(`EventPartnerProfileResponse`, `ExternalAccountResponse`). 일정은 행사 시간대와 같은 벽시계여야 판정이 맞으므로, 두 값이 갈라지지 않게 같은 상수를 쓴다. Eligibility ADR도 `Event.ZONE`을 적었다.
 
 ### 멱등 키를 두지 않는 이유
@@ -191,8 +191,8 @@ Eligibility ADR은 두 가지를 남겼다. "창구 쪽 조회 오류·건수 �
 ```text
 주간 화면을 열 때     GET  /api/v1/me/artist-schedules?from=2026-11-30&to=2026-12-06
 주간 폼으로 추가      POST /api/v1/me/artist-schedules            {"items": [토, 일]}
-한 건 수정            PUT  /api/v1/me/artist-schedules/{scheduleId}  {한 건}
-한 건 삭제            DELETE /api/v1/me/artist-schedules/{scheduleId}
+한 건 수정            PUT  /api/v1/me/artist-schedules/{artistScheduleId}  {한 건}
+한 건 삭제            DELETE /api/v1/me/artist-schedules/{artistScheduleId}
 ```
 
 Eligibility 어댑터가 공개 일괄 조회를 쓰는 모습이다.
@@ -248,8 +248,8 @@ public class ArtistSchedules {
     // 아래는 컨트롤러만 부른다(package-private).
     ArtistScheduleListResponse findMine(UUID me, String from, String to);
     ArtistScheduleListResponse add(UUID me, ArtistScheduleBatchRequest request);
-    ArtistScheduleResponse replace(UUID me, UUID scheduleId, ArtistScheduleRequest request);
-    void delete(UUID me, UUID scheduleId);
+    ArtistScheduleResponse replace(UUID me, UUID artistScheduleId, ArtistScheduleRequest request);
+    void delete(UUID me, UUID artistScheduleId);
 }
 
 public record SavedArtistSchedule(LocalDateTime start, LocalDateTime end, ArtistScheduleStatus status) {}
@@ -267,9 +267,9 @@ public enum ArtistScheduleStatus { AVAILABLE, HOLD, BOOKED, UNAVAILABLE }
 ```text
 artist/schedule/
   ArtistSchedules.java            public @Service. 일괄 조회(public), 본인 조회·추가·수정·삭제(package-private)
-  SavedArtistSchedule.java        public record. 다른 모듈이 보는 일정(메모 없음)
+  SavedArtistSchedule.java        public record. 다른 모듈이 보는 일정(일정 이름 없음)
   ArtistScheduleStatus.java       public enum
-  ArtistScheduleController.java   /api/v1/me/artist-schedules. scheduleId 형식 검사
+  ArtistScheduleController.java   /api/v1/me/artist-schedules. artistScheduleId 형식 검사
   ArtistScheduleRequest.java      일정 한 건 본문(문자열 필드)
   ArtistScheduleBatchRequest.java 추가 본문 {items}
   ArtistScheduleResponse.java     일정 한 건 응답
@@ -316,7 +316,7 @@ CREATE INDEX ix_artist_schedules_user_start ON artist_schedules (user_id, start_
 ```
 
 - `REFERENCES users`는 `users`에 잠금을 건다. `lock_timeout` 3초로, `users`가 바쁘면 기다리지 않고 실패한다(NSU-119 V12와 같다). 실패하면 배포를 다시 한다.
-- 메모 `CHECK`는 공백만인 값을 막는 마지막 방어선이다. 앱은 더 넓은 규칙(05 §2)으로 그런 값을 `null`로 바꾼다.
+- 일정 이름 `CHECK`는 공백만인 값을 막는 마지막 방어선이다. 앱은 더 넓은 규칙(05 §2)으로 그런 값을 `null`로 바꾼다.
 - 롤백 계획: `DROP TABLE artist_schedules;`다. `btree_gist` 확장은 남겨도 된다(다른 객체가 쓰지 않으면 `DROP EXTENSION btree_gist;`).
 
 ### SQL 스케치
@@ -367,7 +367,7 @@ DELETE FROM artist_schedules WHERE id = ? AND user_id = ?;                      
 - 저장된 추천 결과는 일정이 바뀌어도 다시 판정하지 않는다. 다시 볼 때는 계정 상태·AI 추천 상태·저작권 조건·곡 삭제만 다시 확인한다(02 §4.1). 섭외 요청 때 일정을 다시 확인할지는 Offer 설계가 정한다.
 - NSU-127(PRIVATE 행사 열람, `EVT-044`의 `availability == true`)은 공개 일괄 조회를 쓴다.
 - 탈퇴(NSU-167): 결정 11의 순서로 `artist_schedules`를 지운다.
-- 처리방침(NSU-165): 수집 항목에 공연 가능 일정(시간, 상태, 메모)을 더하고 지난 일정의 보유 기간을 정한다. 실사용자에게 열기 전에 끝낸다.
+- 처리방침(NSU-165): 수집 항목에 공연 가능 일정(시간, 상태, 일정 이름)을 더하고 지난 일정의 보유 기간을 정한다. 실사용자에게 열기 전에 끝낸다.
 - 요청 제한(NSU-100): 이 쓰기 API를 대상에 넣는다. 그 전에는 로그인한 ARTIST가 `POST`를 되풀이해 일정 행을 대량으로 만들 수 있다(알려진 위험, 03 §5.3의 행사 등록과 같다). 조회는 42일로, 판정 조회는 행사 시간대 근처로 크기가 묶여 있어 응답은 커지지 않는다.
 - 시연 서버: 전역 시연 쓰기 필터(NSU-158)가 생기기 전에는 이 쓰기 API를 외부에서 접속할 수 있는 시연 서버에 배포하지 않는다(09 §4.1과 같다).
 - 배포 DB: `btree_gist` 확장이 있어야 하고, 마이그레이션 계정이 확장을 만들 수 있어야 한다. 신뢰 확장이라 그 데이터베이스에 `CREATE` 권한이 있으면 슈퍼유저가 아니어도 된다. V1의 `vector` 확장을 만든 계정이면 된다.
@@ -379,7 +379,7 @@ DELETE FROM artist_schedules WHERE id = ? AND user_id = ?;                      
 |---|---|---|
 | 다른 사용자(EVENT_PARTNER)의 일정 열람 | AC 밖이다. `ART-029`는 Artist가 자기 일정을 관리한다고만 정한다. 판정은 모듈 안의 일괄 조회로 읽는다 | 섭외 화면이 아티스트의 빈 시간을 보여 줄 때 |
 | 반복 일정(매주 같은 시간) | 화면에 없다. 주간 폼이 한 주의 여러 요일을 한 번에 더한다 | 화면이 반복을 넣을 때 |
-| 일정 한 건 조회 `GET …/{scheduleId}` | 화면은 기간으로 읽는다 | 화면이 한 건을 따로 열 때 |
+| 일정 한 건 조회 `GET …/{artistScheduleId}` | 화면은 기간으로 읽는다 | 화면이 한 건을 따로 열 때 |
 | `allDay` 저장 | `00:00` ~ 다음 날 `00:00`에서 계산된다 | |
 | `created_at`·`updated_at` | 쓰는 곳이 없다. 지난 일정의 보유 기간은 일정의 끝 시각으로 정할 수 있다 | 처리방침(NSU-165)이 생성 시각 기준을 요구할 때 |
 | 멱등 키 | 배제 제약이 재시도 중복을 막는다(Rationale) | |
@@ -393,7 +393,7 @@ DELETE FROM artist_schedules WHERE id = ? AND user_id = ?;                      
 | 재사용 | 출처 |
 |---|---|
 | `ArtistWriteAccess`(쓰기 계정 확인, `users` 행 `FOR SHARE`) | NSU-119(#254) |
-| `UserText`(메모 정리와 길이 규칙) | NSU-119(#254). 규칙은 05 §2 |
+| `UserText`(일정 이름 정리와 길이 규칙) | NSU-119(#254). 규칙은 05 §2 |
 | 문장 계수기(DataSource 수준) | NSU-119(#254) `EligibilityFilterIntegrationTest` |
 | `UuidV7Generator` | 행사 등록(`EventRegistrationService`) |
 | `Event.ZONE` | 행사, Eligibility |
