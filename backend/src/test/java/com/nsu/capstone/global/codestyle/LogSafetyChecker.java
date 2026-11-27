@@ -393,7 +393,7 @@ final class LogSafetyChecker {
                 String name = bare.getName().toString();
                 if (EXECUTOR_FACTORY_METHODS.contains(name) || THREAD_HANDOFF_METHODS.contains(name)) {
                     report(node, "S5", name + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
-                } else if (isStaticImportOf("java.util.concurrent.CompletableFuture", name)
+                } else if (isStaticImportOf("java.util.concurrent.CompletableFuture", node)
                         && isAsyncWithoutExecutor(name, node)) {
                     // *Async는 흔한 이름이라 이름만으로 잡지 않고 정적 import의 소유자를 확인한다
                     report(node, "S5", name + "()에 실행기를 넘긴다. 실행기가 없으면 공용 풀로 넘어가 요청 ID가 끊긴다");
@@ -424,10 +424,11 @@ final class LogSafetyChecker {
         }
 
         /**
-         * 소유자 없는 호출 member가 정규화된 이름 owner의 정적 import로 해석되는지(import static owner.member 또는 owner.*). 호출 위치를
+         * 소유자 없는 호출 call이 정규화된 이름 owner의 정적 import로 해석되는지(import static owner.member 또는 owner.*). 호출 위치를
          * 둘러싼 클래스가 같은 이름의 메서드를 선언했으면 Java가 그 메서드로 해석하므로 아니다.
          */
-        private boolean isStaticImportOf(String owner, String member) {
+        private boolean isStaticImportOf(String owner, MethodInvocationTree call) {
+            String member = ((IdentifierTree) call.getMethodSelect()).getName().toString();
             boolean declaredByEnclosingClass = enclosingMethods.stream().anyMatch(methods -> methods.contains(member));
             // shortcut: 상위 클래스에서 물려받은 같은 이름의 메서드는 구문만으로 알 수 없어 정적 import로 본다, 그런 오탐이 나오면 다시 본다
             if (declaredByEnclosingClass) {
@@ -442,15 +443,18 @@ final class LogSafetyChecker {
                     staticImports.stream().anyMatch(imported -> imported.endsWith("." + member));
             return !shadowedBySingleImport
                     && staticImports.contains(owner + ".*")
-                    && declaresStaticMethod(owner, member);
+                    && declaresStaticMethod(owner, member, call.getArguments().size());
         }
 
-        /** 와일드카드는 소유자가 가진 이름만 가져온다. owner는 org.slf4j.MDC처럼 테스트 클래스패스에 있는 클래스다. */
-        private static boolean declaresStaticMethod(String owner, String member) {
+        // 와일드카드는 소유자가 가진 이름만 가져오고, 와일드카드끼리는 인자 수가 맞는 메서드가 골라진다.
+        // owner는 org.slf4j.MDC처럼 테스트 클래스패스에 있는 클래스다
+        private static boolean declaresStaticMethod(String owner, String member, int argumentCount) {
             try {
                 return Arrays.stream(Class.forName(owner).getMethods())
-                        .anyMatch(
-                                method -> method.getName().equals(member) && Modifier.isStatic(method.getModifiers()));
+                        .anyMatch(method -> method.getName().equals(member)
+                                && Modifier.isStatic(method.getModifiers())
+                                && (method.getParameterCount() == argumentCount
+                                        || method.isVarArgs() && argumentCount >= method.getParameterCount() - 1));
             } catch (ClassNotFoundException e) {
                 throw new IllegalStateException("검사 대상 소유자 클래스가 클래스패스에 없다: " + owner, e);
             }
@@ -468,7 +472,7 @@ final class LogSafetyChecker {
                     && lastSegment(select.getExpression().toString()).equals("MDC")) {
                 method = select.getIdentifier().toString();
             } else if (node.getMethodSelect() instanceof IdentifierTree bare
-                    && isStaticImportOf("org.slf4j.MDC", bare.getName().toString())) {
+                    && isStaticImportOf("org.slf4j.MDC", node)) {
                 // clear()·put(..)은 흔한 이름이라 정적 import의 소유자가 MDC일 때만 본다
                 method = bare.getName().toString();
             } else {

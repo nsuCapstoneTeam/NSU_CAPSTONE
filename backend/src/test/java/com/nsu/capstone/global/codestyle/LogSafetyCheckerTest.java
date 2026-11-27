@@ -884,6 +884,17 @@ class LogSafetyCheckerTest {
                 .containsExactly("S4");
     }
 
+    // 와일드카드끼리는 인자 수가 맞는 메서드가 골라진다. MDC에는 인자 하나를 받는 clear가 없다(PR #249 리뷰)
+    @Test
+    void 와일드카드_MDC는_인자_수가_맞는_MDC_메서드만_가져온다() {
+        String imports = "import static org.slf4j.MDC.*;\nimport static com.nsu.capstone.identity.support.Cache.*;";
+
+        assertThat(checkWithImport(imports, "clear(\"sessions\");")).isEmpty();
+        assertThat(checkWithImport(imports, "clear();"))
+                .extracting(LogSafetyChecker.Violation::rule)
+                .containsExactly("S4");
+    }
+
     /** 와일드카드 MDC.*는 MDC가 가진 정적 메서드만 가져온다. of(..)는 Map.*의 Map.of다(PR #249 리뷰). */
     @Test
     void 와일드카드_MDC는_MDC에_없는_메서드_이름을_가져오지_않는다() {
