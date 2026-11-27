@@ -59,7 +59,10 @@ class ArtistProfileTable {
                 .map(Map.Entry::getValue);
     }
 
-    /** 첫 저장이 동시에 와도 PK 충돌 없이 나중에 실행된 문장의 값이 남도록 한 문장으로 쓴다(09 §5). */
+    /**
+     * 첫 저장이 동시에 와도 PK 충돌 없이 나중에 실행된 문장의 내용이 남도록 한 문장으로 쓴다(09 §5). 시각은 저장 전에 정한 값이라, 갱신할 때는
+     * 행에 있던 시각보다 이르지 않게 {@code GREATEST}로 고른다.
+     */
     SavedArtistProfile upsert(UUID artistId, ArtistProfileDraft draft, List<String> regionCodes, Instant now) {
         FeeRange fee = draft.fee();
         return jdbc.sql("""
@@ -74,7 +77,7 @@ class ArtistProfileTable {
                             region_codes = EXCLUDED.region_codes,
                             fee_min = EXCLUDED.fee_min,
                             fee_max = EXCLUDED.fee_max,
-                            updated_at = EXCLUDED.updated_at
+                            updated_at = GREATEST(EXCLUDED.updated_at, artist_profiles.updated_at)
                         RETURNING """ + " " + COLUMNS)
                 .param("userId", artistId)
                 .param("name", draft.name())

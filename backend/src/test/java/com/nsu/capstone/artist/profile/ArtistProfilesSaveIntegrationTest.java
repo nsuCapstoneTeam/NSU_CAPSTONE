@@ -11,6 +11,7 @@ import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,6 +69,24 @@ class ArtistProfilesSaveIntegrationTest extends ArtistProfileIntegrationTestBase
         assertThat(replaced.fee()).isNull();
         assertThat(replaced.updatedAt()).isEqualTo(NOW.plusSeconds(60));
         assertThat(profiles.find(artist.getId())).contains(replaced);
+    }
+
+    @Test
+    void 이른_시각으로_나중에_저장하면_내용은_나중_값이고_updatedAt은_앞선_늦은_시각이다() {
+        Instant later = NOW.plusSeconds(60);
+        clock.set(later);
+        profiles.save(
+                artist.getId(),
+                new ArtistProfileRequest("먼저 끝난 저장", null, List.of(), List.of(), List.of(), null, null));
+        clock.set(NOW);
+
+        SavedArtistProfile saved = profiles.save(
+                artist.getId(),
+                new ArtistProfileRequest("나중에 끝난 저장", null, List.of(), List.of(), List.of(), null, null));
+
+        assertThat(saved.name()).isEqualTo("나중에 끝난 저장");
+        assertThat(saved.updatedAt()).isEqualTo(later);
+        assertThat(profiles.find(artist.getId())).contains(saved);
     }
 
     @Test
