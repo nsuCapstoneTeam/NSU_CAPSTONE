@@ -87,7 +87,7 @@ def secret_input(label):
 def selection(args):
     start = window_start(args.kind, args.window_start)
     account = getattr(args, "account", None)
-    if account and args.kind != "identity-verification":
+    if account is not None and args.kind != "identity-verification":
         raise ValueError("--account는 본인확인 한도에서만 사용합니다")
     if args.kind.startswith("total-"):
         if args.recipient or args.ip or args.channel:
@@ -96,7 +96,7 @@ def selection(args):
     elif args.kind == "identity-verification":
         if args.recipient or args.ip or args.channel:
             raise ValueError("본인확인 한도는 --account로만 계정을 지정합니다")
-        suffix = account_id(account) if account else "*"
+        suffix = account_id(account) if account is not None else "*"
     else:
         needs_pair = args.kind in ("attempt", "login-failure")
         if needs_pair and args.recipient != args.ip:
