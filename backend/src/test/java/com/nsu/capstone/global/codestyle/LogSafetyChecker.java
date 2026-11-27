@@ -11,12 +11,14 @@ import com.sun.source.tree.EnhancedForLoopTree;
 import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.ForLoopTree;
 import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.ImportTree;
 import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.source.tree.LiteralTree;
 import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.ParenthesizedTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import com.sun.source.util.JavacTask;
@@ -25,6 +27,7 @@ import com.sun.source.util.TreeScanner;
 import com.sun.source.util.Trees;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -222,6 +225,12 @@ final class LogSafetyChecker {
         /** 이 파일에서 선언한 record 이름. 다른 파일의 record는 접미사로 추정한다. */
         private final Set<String> localRecords = new HashSet<>();
 
+        /** 정적 import한 이름. "소유자의 정규화된 이름.멤버"로 담고, 와일드카드는 "소유자.*"다. */
+        private final Set<String> staticImports = new HashSet<>();
+
+        /** 호출 위치를 둘러싼 클래스마다 그 클래스가 선언한 메서드 이름. Java는 소유자 없는 호출을 정적 import보다 이 메서드로 먼저 해석한다. */
+        private final Deque<Set<String>> enclosingMethods = new ArrayDeque<>();
+
         /** S1을 적용하지 않는 파일(시뮬레이터 CLI) */
         private final boolean s1Allowed;
 
@@ -243,6 +252,11 @@ final class LogSafetyChecker {
             this.positions = positions;
             this.violations = violations;
             this.localRecords.addAll(knownRecords);
+            for (ImportTree imported : unit.getImports()) {
+                if (imported.isStatic() && imported.getQualifiedIdentifier() instanceof MemberSelectTree member) {
+                    staticImports.add(member.getExpression() + "." + member.getIdentifier());
+                }
+            }
         }
 
         @Override
@@ -251,18 +265,23 @@ final class LogSafetyChecker {
                 localRecords.add(node.getSimpleName().toString());
             }
             Map<String, String> fields = new HashMap<>();
+            Set<String> methods = new HashSet<>();
             for (Tree member : node.getMembers()) {
                 if (member instanceof VariableTree field) {
                     fields.put(field.getName().toString(), simpleTypeName(field.getType()));
+                } else if (member instanceof MethodTree method) {
+                    methods.add(method.getName().toString());
                 } else if (member instanceof ClassTree nested && nested.getKind() == Tree.Kind.RECORD) {
                     localRecords.add(nested.getSimpleName().toString());
                 }
             }
             scopes.push(fields);
             classFields.push(fields);
+            enclosingMethods.push(methods);
             try {
                 return super.visitClass(node, unused);
             } finally {
+                enclosingMethods.pop();
                 classFields.pop();
                 scopes.pop();
             }
@@ -384,6 +403,10 @@ final class LogSafetyChecker {
                 String name = bare.getName().toString();
                 if (EXECUTOR_FACTORY_METHODS.contains(name) || THREAD_HANDOFF_METHODS.contains(name)) {
                     report(node, "S5", name + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
+                } else if (isStaticImportOf("java.util.concurrent.CompletableFuture", node)
+                        && isAsyncWithoutExecutor(name, node)) {
+                    // *Async는 흔한 이름이라 이름만으로 잡지 않고 정적 import의 소유자를 확인한다
+                    report(node, "S5", name + "()에 실행기를 넘긴다. 실행기가 없으면 공용 풀로 넘어가 요청 ID가 끊긴다");
                 }
                 return;
             }
@@ -400,9 +423,50 @@ final class LogSafetyChecker {
                 report(node, "S5", "Executors." + method + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
             } else if (owner.equals("Thread") && THREAD_HANDOFF_METHODS.contains(method)) {
                 report(node, "S5", "Thread." + method + "()를 래퍼 밖에서 쓰지 않는다. RequestIdExecutors.wrap(..) 인자 안에서 만든다");
-            } else if (ASYNC_WITHOUT_EXECUTOR_ARITY.getOrDefault(method, -1)
-                    == node.getArguments().size()) {
+            } else if (isAsyncWithoutExecutor(method, node)) {
                 report(node, "S5", method + "()에 실행기를 넘긴다. 실행기가 없으면 공용 풀로 넘어가 요청 ID가 끊긴다");
+            }
+        }
+
+        private static boolean isAsyncWithoutExecutor(String method, MethodInvocationTree node) {
+            return ASYNC_WITHOUT_EXECUTOR_ARITY.getOrDefault(method, -1)
+                    == node.getArguments().size();
+        }
+
+        /**
+         * 소유자 없는 호출 call이 정규화된 이름 owner의 정적 import로 해석되는지(import static owner.member 또는 owner.*). 호출 위치를
+         * 둘러싼 클래스가 같은 이름의 메서드를 선언했으면 Java가 그 메서드로 해석하므로 아니다.
+         */
+        private boolean isStaticImportOf(String owner, MethodInvocationTree call) {
+            String member = ((IdentifierTree) call.getMethodSelect()).getName().toString();
+            boolean declaredByEnclosingClass = enclosingMethods.stream().anyMatch(methods -> methods.contains(member));
+            // shortcut: 상위 클래스에서 물려받은 같은 이름의 메서드는 구문만으로 알 수 없어 정적 import로 본다, 그런 오탐이 나오면 다시 본다
+            if (declaredByEnclosingClass) {
+                return false;
+            }
+            if (staticImports.contains(owner + "." + member)) {
+                return true;
+            }
+            // 이름을 하나씩 가져온 다른 소유자의 정적 import는 와일드카드의 같은 이름을 가린다. 그 import가 메서드인지 필드인지,
+            // 시그니처가 무엇인지는 구문만으로 모르므로 이름으로만 본다
+            boolean shadowedBySingleImport =
+                    staticImports.stream().anyMatch(imported -> imported.endsWith("." + member));
+            return !shadowedBySingleImport
+                    && staticImports.contains(owner + ".*")
+                    && declaresStaticMethod(owner, member, call.getArguments().size());
+        }
+
+        // 와일드카드는 소유자가 가진 이름만 가져오고, 와일드카드끼리는 인자 수가 맞는 메서드가 골라진다.
+        // owner는 org.slf4j.MDC처럼 테스트 클래스패스에 있는 클래스다
+        private static boolean declaresStaticMethod(String owner, String member, int argumentCount) {
+            try {
+                return Arrays.stream(Class.forName(owner).getMethods())
+                        .anyMatch(method -> method.getName().equals(member)
+                                && Modifier.isStatic(method.getModifiers())
+                                && (method.getParameterCount() == argumentCount
+                                        || method.isVarArgs() && argumentCount >= method.getParameterCount() - 1));
+            } catch (ClassNotFoundException e) {
+                throw new IllegalStateException("검사 대상 소유자 클래스가 클래스패스에 없다: " + owner, e);
             }
         }
 
@@ -413,11 +477,17 @@ final class LogSafetyChecker {
 
         /** S4: 요청 ID의 MDC 키는 global.logging이 주인이다. 다른 곳이 MDC를 통째로 지우거나 갈아 끼우면 요청 ID가 사라진다. */
         private void checkMdcUse(MethodInvocationTree node) {
-            if (!(node.getMethodSelect() instanceof MemberSelectTree select)
-                    || !lastSegment(select.getExpression().toString()).equals("MDC")) {
+            String method;
+            if (node.getMethodSelect() instanceof MemberSelectTree select
+                    && lastSegment(select.getExpression().toString()).equals("MDC")) {
+                method = select.getIdentifier().toString();
+            } else if (node.getMethodSelect() instanceof IdentifierTree bare
+                    && isStaticImportOf("org.slf4j.MDC", node)) {
+                // clear()·put(..)은 흔한 이름이라 정적 import의 소유자가 MDC일 때만 본다
+                method = bare.getName().toString();
+            } else {
                 return;
             }
-            String method = select.getIdentifier().toString();
             if (method.equals("clear") || method.equals("setContextMap")) {
                 report(node, "S4", "MDC." + method + "()는 global.logging만 쓴다. 키별 MDC.putCloseable을 쓴다");
             } else if (!node.getArguments().isEmpty()
@@ -541,6 +611,8 @@ final class LogSafetyChecker {
                 public Void visitBinary(BinaryTree node, Void unused) {
                     if (node.getKind() == Tree.Kind.PLUS) {
                         for (ExpressionTree operand : List.of(node.getLeftOperand(), node.getRightOperand())) {
+                            // 문자열 연결은 피연산자의 toString()을 부른다. 통째로 넘긴 것과 같다
+                            checkWholeObject(operand);
                             if (isExceptionOperand(operand)) {
                                 report(node, "S6", "예외 '" + operand + "'를 문자열에 이어 붙이지 않는다. 예외를 마지막 인자로 통째로 넘긴다");
                             }
@@ -602,10 +674,11 @@ final class LogSafetyChecker {
             }
         }
 
-        /** 호출·필드 접근 체인의 시작 변수(또는 this.필드)가 예외로 보이는지. */
+        /** 호출·필드 접근 체인의 시작 변수(또는 this.필드)가 예외로 보이는지. 체인 중간의 괄호도 벗긴다. */
         private boolean isExceptionExpression(ExpressionTree expression) {
             ExpressionTree current = expression;
             while (true) {
+                current = unparenthesized(current);
                 if (current instanceof MethodInvocationTree invocation
                         && invocation.getMethodSelect() instanceof MemberSelectTree inner) {
                     current = inner.getExpression();
@@ -618,16 +691,25 @@ final class LogSafetyChecker {
             return isExceptionOperand(current);
         }
 
-        /** 변수 하나(x) 또는 this.필드(this.x)가 예외로 보이는지. */
+        /** 변수 하나(x) 또는 this.필드(this.x)가 예외로 보이는지. 괄호로 감싼 것((x))도 같은 식이다. */
         private boolean isExceptionOperand(ExpressionTree expression) {
-            if (expression instanceof IdentifierTree identifier) {
+            ExpressionTree operand = unparenthesized(expression);
+            if (operand instanceof IdentifierTree identifier) {
                 return isExceptionVariable(identifier.getName().toString());
             }
-            return expression instanceof MemberSelectTree select
+            return operand instanceof MemberSelectTree select
                     && isThis(select.getExpression())
                     && isExceptionNamed(
                             fieldType(select.getIdentifier().toString()),
                             select.getIdentifier().toString());
+        }
+
+        private static ExpressionTree unparenthesized(ExpressionTree expression) {
+            ExpressionTree current = expression;
+            while (current instanceof ParenthesizedTree parenthesized) {
+                current = parenthesized.getExpression();
+            }
+            return current;
         }
 
         private boolean isExceptionVariable(String name) {
@@ -642,8 +724,12 @@ final class LogSafetyChecker {
             return EXCEPTION_NAMES.contains(name);
         }
 
-        /** S2b: record·DTO를 통째로 넘기면 toString이 모든 필드를 찍는다. 변수·필드(this.x)·new 식 자체인 인자만 본다. */
-        private void checkWholeObject(ExpressionTree argument) {
+        /**
+         * S2b: record·DTO를 통째로 넘기면 toString이 모든 필드를 찍는다. 변수·필드(this.x)·new 식 자체인 인자와 문자열 연결의
+         * 피연산자만 본다. 괄호로 감싼 것도 같은 식이다.
+         */
+        private void checkWholeObject(ExpressionTree expression) {
+            ExpressionTree argument = unparenthesized(expression);
             String typeName = null;
             String shown = null;
             if (argument instanceof IdentifierTree identifier) {

@@ -9,11 +9,13 @@ public interface SignupSessionStore {
 
     Optional<SignupSession> findById(String signupSessionId);
 
-    boolean markEmailVerified(String signupSessionId, UserRole expectedRole);
-
-    boolean markPhoneVerified(String signupSessionId, UserRole expectedRole);
-
     boolean markAdultConfirmed(String signupSessionId, UserRole expectedRole);
+
+    /**
+     * Returns a LOCAL session that meets every signup condition, or throws the first unmet condition's
+     * {@code BusinessException}.
+     */
+    SignupSession completeLocal(String signupSessionId, UserRole expectedRole);
 
     void deleteById(String signupSessionId);
 }

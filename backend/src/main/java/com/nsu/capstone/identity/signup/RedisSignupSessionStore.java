@@ -9,7 +9,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public class RedisSignupSessionStore implements SignupSessionStore {
+class RedisSignupSessionStore implements SignupSessionStore {
 
     private static final DefaultRedisScript<Long> SAVE_SCRIPT = new DefaultRedisScript<>("""
         redis.call('HSET', KEYS[1],
@@ -20,21 +20,28 @@ public class RedisSignupSessionStore implements SignupSessionStore {
         return redis.call('PEXPIRE', KEYS[1], ARGV[10])
         """, Long.class);
 
-    private static final DefaultRedisScript<Long> MARK_VERIFIED_SCRIPT = new DefaultRedisScript<>("""
+    private static final DefaultRedisScript<Long> MARK_ADULT_SCRIPT = new DefaultRedisScript<>("""
         if redis.call('EXISTS', KEYS[1]) == 0 then
             return 0
         end
         if redis.call('HGET', KEYS[1], 'role') ~= ARGV[1] then
             return 0
         end
-        redis.call('HSET', KEYS[1], ARGV[2], 'true')
+        redis.call('HSET', KEYS[1], 'adultConfirmed', 'true')
         return 1
         """, Long.class);
+
+    private static final DefaultRedisScript<List> COMPLETE_LOCAL_SCRIPT =
+            new DefaultRedisScript<>(SignupSessionLua.COMPLETION + """
+        local failure = signupCompletionFailure(KEYS[1], ARGV[1], 'LOCAL', true)
+        if failure ~= 0 then return {failure} end
+        return {0, unpack(redis.call('HMGET', KEYS[1], 'signupSessionId', 'email', 'phone', 'agreements', 'agreedAt'))}
+        """, List.class);
 
     private final StringRedisTemplate redisTemplate;
     private final SignupSessionProperties properties;
 
-    public RedisSignupSessionStore(StringRedisTemplate redisTemplate, SignupSessionProperties properties) {
+    RedisSignupSessionStore(StringRedisTemplate redisTemplate, SignupSessionProperties properties) {
         this.redisTemplate = redisTemplate;
         this.properties = properties;
     }
@@ -84,29 +91,32 @@ public class RedisSignupSessionStore implements SignupSessionStore {
     }
 
     @Override
-    public boolean markEmailVerified(String signupSessionId, UserRole expectedRole) {
-        return mark(signupSessionId, expectedRole, "emailVerified");
-    }
-
-    @Override
-    public boolean markPhoneVerified(String signupSessionId, UserRole expectedRole) {
-        return mark(signupSessionId, expectedRole, "phoneVerified");
-    }
-
-    @Override
     public boolean markAdultConfirmed(String signupSessionId, UserRole expectedRole) {
-        return mark(signupSessionId, expectedRole, "adultConfirmed");
+        Long result = redisTemplate.execute(
+                MARK_ADULT_SCRIPT, List.of(SignupRedisKeys.session(signupSessionId)), expectedRole.name());
+        return Long.valueOf(1L).equals(result);
+    }
+
+    @Override
+    public SignupSession completeLocal(String signupSessionId, UserRole expectedRole) {
+        List<?> result = SignupRejection.accepted(redisTemplate.execute(
+                COMPLETE_LOCAL_SCRIPT, List.of(SignupRedisKeys.session(signupSessionId)), expectedRole.name()));
+        return new SignupSession(
+                (String) result.get(1),
+                (String) result.get(2),
+                (String) result.get(3),
+                true,
+                true,
+                true,
+                true,
+                expectedRole,
+                SignupMethod.LOCAL,
+                SignupTermsConsent.decode((String) result.get(4), (String) result.get(5)));
     }
 
     @Override
     public void deleteById(String signupSessionId) {
         redisTemplate.delete(SignupRedisKeys.session(signupSessionId));
-    }
-
-    private boolean mark(String signupSessionId, UserRole expectedRole, String field) {
-        Long result = redisTemplate.execute(
-                MARK_VERIFIED_SCRIPT, List.of(SignupRedisKeys.session(signupSessionId)), expectedRole.name(), field);
-        return Long.valueOf(1L).equals(result);
     }
 
     private String value(Map<Object, Object> values, String field) {

@@ -27,7 +27,7 @@
 | 로그인 | 아티스트(아이디·비밀번호) / 행사 관계자(휴대폰 인증) 로그인. 왼쪽 **CD를 누르면 회전하며 역할이 전환**됩니다. | `src/features/auth/components/` |
 | 회원가입 | 역할 선택 → 역할별 가입 → 가입 완료 | `src/features/auth/pages/` |
 | 아티스트 매칭 (행사 관계자 전용) | 행사 조건(날짜·지역·예산·장르·분위기 등)을 입력하면 조건에 맞는 아티스트를 점수순으로 TOP 5 추천 | `src/features/matching/` |
-| 행사 찾기 (아티스트용) | 지역별 공개 행사 수와 목록, 행사를 누르면 장소(예시 지도)와 상세 내용. 지금은 예시 행사로 보여 줌 | `src/features/event-search/` |
+| 행사 찾기 (아티스트용) | 전국 시·도 지도와 지역별 공개 행사 수. 시·도를 누르면 시·군·구 지도와 그 지역 목록(목록 번호와 지도 핀이 함께 강조), 행사를 누르면 장소(시·군·구 작은 지도와 공연장 핀)와 상세 내용. 지금은 예시 행사로 보여 줌 | `src/features/event-search/` |
 | 자유게시판 | 모집·자유 글 작성, 검색, 수정, 삭제 | `src/features/board/` |
 | 마이페이지 | 역할별 프로필, 일정, 관심 아티스트 (로그인 필요) | `src/features/my-page/` |
 
@@ -76,6 +76,7 @@ npm run dev
 | `npm run preview` | 빌드 결과를 로컬에서 미리 보기 |
 | `npm run lint` | ESLint 코드 검사 |
 | `node --test src/features/matching/matching.test.js` | 매칭 로직 테스트 |
+| `node scripts/build-region-map.mjs <GeoJSON 경로>` | 행사 찾기 지도 데이터 다시 만들기 (아래 '지도 데이터' 참고) |
 
 > 체험 데이터를 처음 상태로 되돌리려면 브라우저 개발자 도구 → Application → Local Storage에서 `hm-mvp-`로 시작하는 항목과 `hallaemallae-theme`를 지우세요.
 
@@ -125,9 +126,23 @@ frontend/
       │  └─ pages/            # 회원가입, 가입 완료, 로그인 필요 안내
       ├─ matching/            # 매칭 화면, 계산 로직, 테스트
       ├─ event-search/        # 행사 찾기 (지역별 행사, 장소, 상세)
+      │  └─ map/              # 지역 지도 (map-data/는 스크립트로 만든 경계 데이터)
       ├─ board/
       └─ my-page/
 ```
+
+### 지도 데이터
+
+행사 찾기 지도의 시·도·시·군·구 경계는 `src/features/event-search/map/map-data/`에 있고, `scripts/build-region-map.mjs`가 만듭니다. 손으로 고치지 마세요.
+
+- 원본: [vuski/admdongkor](https://github.com/vuski/admdongkor) `ver20260701` 행정동 경계 (통계청 SGIS 자료, 공공누리 제1유형 → CC BY 4.0). 화면 아래에 출처를 표시합니다.
+- 행정구역이 바뀌면 이 순서로 다시 만듭니다.
+  1. `src/data/regions.js`를 새 시·군·구 코드에 맞춥니다. 스크립트는 목록에 없는 코드를 만나면 멈춥니다.
+  2. 시·도 코드가 바뀌었으면 `src/features/event-search/map/map-loaders.js`의 `LOADERS`도 고칩니다. 지도 테스트는 생성 파일을 직접 불러와서 이 목록이 빠진 것은 잡지 못합니다.
+  3. 새 판 GeoJSON을 받은 파일 이름 그대로(`HangJeongDong_verYYYYMMDD.geojson`) 두고 `node scripts/build-region-map.mjs <파일 경로>`로 다시 만듭니다. 판은 파일 이름에서 읽어 생성 파일 머리말에 적습니다.
+  4. `node --test src/features/event-search/map/map-geometry.test.js`로 지역 목록과 지도 조각이 맞는지 확인합니다.
+- 스크립트는 임시 폴더에 모든 파일을 만든 뒤 한 번에 바꿔 넣습니다. 중간에 실패해도 기존 지도 데이터는 그대로입니다. 바꿔 넣는 동안은 `map-data.lock` 폴더로 한 번에 한 실행만 바꿔 넣고, 실행 중인 게 없는데 이 폴더가 남아 있으면 지우고 다시 실행하세요.
+- 원본 GeoJSON(약 35MB)은 저장소에 넣지 않습니다.
 
 새 기능은 `src/features/<기능-이름>/` 폴더를 만들고 그 안에 화면(`*-page.jsx`), 전용 컴포넌트, CSS를 함께 두세요. 두 개 이상의 기능에서 쓰는 것만 `src/components/common/`으로 옮깁니다.
 

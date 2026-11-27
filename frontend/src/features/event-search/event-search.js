@@ -1,6 +1,6 @@
-// 행사 찾기 도우미 (NSU-116): 공개 행사를 시·도별로 세고, 고른 시·도의 행사를 날짜순으로 고릅니다.
+// 행사 찾기 도우미 (NSU-116, 지도 NSU-117): 공개 행사를 시·도·시·군·구별로 세고, 고른 지역의 행사를 날짜순으로 고릅니다.
 // 화면 없이 값만 다루는 순수 함수 (실행 테스트: node --test src/features/event-search/event-search.test.js)
-import { PROVINCES } from '../../data/regions.js';
+import { DISTRICTS, PROVINCES } from '../../data/regions.js';
 import { WEEKDAYS, fromDateKey } from '../my-page/availability.js';
 import { regionLabel } from '../my-page/event-place.js';
 import { sortEvents } from '../my-page/organizer-events.js';
@@ -11,21 +11,28 @@ export const provinceOf = (event) => String(event.regionCode ?? '').slice(0, 2);
 // 시·도 이름: '11' → '서울특별시', 모르는 코드면 ''
 export const provinceName = (code) => PROVINCES.find((p) => p.code === code)?.name ?? '';
 
+// 시·군·구 이름: '11440' → '마포구', 모르는 코드면 ''
+export const districtName = (code) => DISTRICTS.find((d) => d.code === code)?.name ?? '';
+
 // 아티스트에게 보여 줄 행사: 공개 행사만 (비공개 행사 규칙은 docs/api/03 §4, 팀 확정 필요)
 export const publicEvents = (events) => events.filter((e) => e.visibility === 'PUBLIC');
 
-// 시·도별 행사 수 [{ code, name, short, count }]. 많은 순, 같으면 시·도 목록 순서
-export function regionCounts(events) {
-  const counts = new Map();
-  for (const e of events) counts.set(provinceOf(e), (counts.get(provinceOf(e)) ?? 0) + 1);
-  return PROVINCES.map((p) => ({ ...p, count: counts.get(p.code) ?? 0 })).sort(
-    (a, b) => b.count - a.count,
-  );
+// 지도에 쓸 행사 수 { 코드: 수 }. provinceCode가 ''이면 시·도별, 있으면 그 시·도의 시·군·구별
+export function countMap(events, provinceCode = '') {
+  const counts = {};
+  for (const e of events) {
+    if (provinceCode && provinceOf(e) !== provinceCode) continue;
+    const code = provinceCode ? String(e.regionCode) : provinceOf(e);
+    counts[code] = (counts[code] ?? 0) + 1;
+  }
+  return counts;
 }
 
-// 고른 시·도의 행사를 가까운 날짜순으로. provinceCode가 ''이면 전체
-export function eventsIn(events, provinceCode = '') {
-  const list = provinceCode ? events.filter((e) => provinceOf(e) === provinceCode) : events;
+// 고른 지역의 행사를 가까운 날짜순으로. provinceCode가 ''이면 전체, districtCode가 있으면 그 시·군·구만
+export function eventsIn(events, provinceCode = '', districtCode = '') {
+  let list = events;
+  if (districtCode) list = events.filter((e) => String(e.regionCode) === districtCode);
+  else if (provinceCode) list = events.filter((e) => provinceOf(e) === provinceCode);
   return sortEvents(list);
 }
 
@@ -44,4 +51,19 @@ export function shortRegion(event) {
   if (!province) return label;
   if (label === province.name) return province.short;
   return label.replace(province.name, province.short);
+}
+
+// 공연장 좌표 [경도, 위도]. 없거나 숫자가 아니거나 한국 밖이면 null (지도에 핀을 찍지 않음)
+// 행사의 venueLat·venueLng를 읽습니다. 카카오 로컬 API처럼 좌표를 문자열로 주는 경우도 받습니다.
+// (API 필드 이름은 팀 확정 필요. 바뀌면 이 함수만 고치면 됩니다)
+// 숫자나 비어 있지 않은 문자열만 숫자로 바꿈 (배열·객체 같은 다른 값은 좌표로 보지 않음)
+const coordinate = (v) =>
+  typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : Number.NaN;
+
+export function venuePoint(event) {
+  const lat = coordinate(event?.venueLat);
+  const lng = coordinate(event?.venueLng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < 33 || lat > 39 || lng < 124 || lng > 132) return null;
+  return [lng, lat];
 }

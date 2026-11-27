@@ -705,4 +705,256 @@ class LogSafetyCheckerTest {
                         }
                         """)).extracting("rule").containsExactly("S6");
     }
+
+    /** 괄호로 감싸도 같은 예외다. 괄호만 붙이면 S6을 빠져나가던 틈이다(NSU-162, CodeRabbit PR #231 4차 지적). */
+    @Test
+    void 괄호로_감싼_예외도_S6_위반이다() {
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (RuntimeException failure) { log.warn("실패: " + (failure)); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        void run(String channel) {
+                            try { work(); } catch (Exception e) { log.warn("실패 {} {}", ((e)), channel); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (Exception e) { log.warn("실패 {}", (e).getMessage()); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+    }
+
+    /** 호출 체인 중간의 괄호도 벗긴다. (e.getCause()).getMessage()는 e.getCause().getMessage()와 같다(PR #249 리뷰). */
+    @Test
+    void 호출_체인_중간을_괄호로_감싼_예외_메시지도_S6_위반이다() {
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (Exception e) { log.warn("실패 {}", (e.getCause()).getMessage()); }
+                        }
+                        """)).extracting("rule").containsExactly("S6");
+    }
+
+    @Test
+    void 괄호로_감싼_마지막_예외_인자와_예외가_아닌_값은_통과한다() {
+        assertThat(checkClassBody("""
+                        void run() {
+                            try { work(); } catch (Exception e) { log.error("처리 실패", (e)); }
+                        }
+                        """)).isEmpty();
+        assertThat(checkClassBody("""
+                        void run(String channel) { log.warn("채널: " + (channel)); }
+                        """)).isEmpty();
+    }
+
+    /** 문자열 연결은 피연산자의 toString()을 부른다. record·DTO를 이어 붙이면 통째로 넘긴 것과 같다(NSU-162). */
+    @Test
+    void record와_DTO를_문자열에_이어_붙여도_S2b_위반이다() {
+        assertThat(checkClassBody("""
+                        record Profile(String name) {}
+                        void run(Profile profile) { log.info("사용자: " + profile); }
+                        """)).extracting("rule").containsExactly("S2b");
+        assertThat(checkClassBody("""
+                        void run(LoginRequest request) { log.warn("로그인 " + request + " 실패"); }
+                        """)).extracting("rule").containsExactly("S2b");
+        assertThat(checkClassBody("""
+                        private final UserDto user = null;
+                        void run() { log.warn("사용자 " + this.user); }
+                        """)).extracting("rule").containsExactly("S2b");
+        assertThat(checkClassBody("""
+                        void run() { log.warn("요청 " + new LoginRequest("a")); }
+                        """)).extracting("rule").containsExactly("S2b");
+        assertThat(checkClassBody("""
+                        void run(LoginRequest request) { throw new IllegalStateException("잘못된 요청: " + request); }
+                        """)).extracting("rule").containsExactly("S2b");
+    }
+
+    @Test
+    void 괄호로_감싼_record와_DTO도_S2b_위반이다() {
+        assertThat(checkClassBody("""
+                        void run(LoginRequest request) { log.warn("로그인 " + (request)); }
+                        """)).extracting("rule").containsExactly("S2b");
+        assertThat(checkClassBody("""
+                        void run(LoginRequest request) { log.warn("로그인 {}", (request)); }
+                        """)).extracting("rule").containsExactly("S2b");
+    }
+
+    @Test
+    void 이어_붙인_DTO의_단일_값과_DTO가_아닌_값은_통과한다() {
+        assertThat(checkClassBody("""
+                        void run(LoginRequest request) { log.warn("요청 " + request.id()); }
+                        """)).isEmpty();
+        assertThat(checkClassBody("""
+                        void run(String request, int count) { log.warn("요청 " + request + " " + (count + 1)); }
+                        """)).isEmpty();
+    }
+
+    private static List<LogSafetyChecker.Violation> checkWithImport(String importLine, String body) {
+        String source = """
+                package com.nsu.capstone.identity.application;
+
+                %s
+
+                class Sample {
+                    void run(String id) {
+                %s
+                    }
+                }
+                """.formatted(importLine, body.indent(8));
+        return LogSafetyChecker.check(PATH, source);
+    }
+
+    /** CompletableFuture.runAsync·supplyAsync를 정적 import해 소유자 없이 불러도 공용 풀로 넘어간다(NSU-162). */
+    @Test
+    void 정적_import로_부른_실행기_없는_비동기_제출도_S5_위반이다() {
+        assertThat(checkWithImport(
+                        "import static java.util.concurrent.CompletableFuture.runAsync;", "runAsync(() -> work());"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(checkWithImport(
+                        "import static java.util.concurrent.CompletableFuture.supplyAsync;",
+                        "var future = supplyAsync(() -> 1);"))
+                .extracting("rule")
+                .containsExactly("S5");
+        assertThat(checkWithImport(
+                        "import static java.util.concurrent.CompletableFuture.*;", "runAsync(() -> work());"))
+                .extracting("rule")
+                .containsExactly("S5");
+    }
+
+    @Test
+    void 정적_import로_불러도_실행기를_넘기면_통과하고_CompletableFuture가_아닌_같은_이름의_메서드는_대상이_아니다() {
+        assertThat(checkWithImport(
+                        "import static java.util.concurrent.CompletableFuture.runAsync;",
+                        "runAsync(() -> work(), executor);"))
+                .isEmpty();
+        assertThat(checkWithImport("import java.util.List;", "runAsync(() -> work());"))
+                .isEmpty();
+        assertThat(checkWithImport(
+                        "import static com.nsu.capstone.identity.support.Tasks.runAsync;", "runAsync(() -> work());"))
+                .isEmpty();
+    }
+
+    /** MDC의 메서드를 정적 import해 소유자 없이 불러도 요청 ID가 지워진다(NSU-162). */
+    @Test
+    void 정적_import로_부른_MDC_변경도_S4_위반이다() {
+        assertThat(checkWithImport("import static org.slf4j.MDC.clear;", "clear();"))
+                .extracting("rule")
+                .containsExactly("S4");
+        assertThat(checkWithImport("import static org.slf4j.MDC.setContextMap;", "setContextMap(map);"))
+                .extracting("rule")
+                .containsExactly("S4");
+        assertThat(checkWithImport("import static org.slf4j.MDC.put;", "put(\"requestId\", id);"))
+                .extracting("rule")
+                .containsExactly("S4");
+        assertThat(checkWithImport("import static org.slf4j.MDC.*;", "remove(\"requestId\");"))
+                .extracting("rule")
+                .containsExactly("S4");
+    }
+
+    @Test
+    void MDC가_아닌_같은_이름의_메서드와_정적_import한_다른_MDC_키는_통과한다() {
+        assertThat(checkWithImport("import java.util.List;", "clear();")).isEmpty();
+        assertThat(checkWithImport("import static com.nsu.capstone.identity.support.Cache.clear;", "clear();"))
+                .isEmpty();
+        assertThat(checkWithImport("import static org.slf4j.MDC.put;", "put(\"eventId\", id);"))
+                .isEmpty();
+    }
+
+    /**
+     * Java는 클래스가 선언한 메서드를 정적 import보다 먼저 찾는다. 와일드카드로 MDC·CompletableFuture를 가져와도 자기 clear()·runAsync(..)는
+     * 그 메서드다. 이름이 같은 다른 패키지의 MDC·CompletableFuture도 대상이 아니다(PR #249 리뷰).
+     */
+    @Test
+    void 자기_메서드와_다른_패키지의_같은_이름_클래스는_S4_S5_대상이_아니다() {
+        String source = """
+                package com.nsu.capstone.identity.application;
+
+                import static org.slf4j.MDC.*;
+                import static java.util.concurrent.CompletableFuture.*;
+
+                class Sample {
+                    void run(String id) {
+                        put("eventId", id);
+                        clear();
+                        runAsync(() -> work());
+                    }
+
+                    void clear() {}
+
+                    void runAsync(Runnable task) {}
+
+                    void work() {}
+                }
+                """;
+        assertThat(LogSafetyChecker.check(PATH, source)).isEmpty();
+        assertThat(checkWithImport("import static com.example.logging.MDC.clear;", "clear();"))
+                .isEmpty();
+        assertThat(checkWithImport("import static com.example.async.CompletableFuture.*;", "runAsync(() -> work());"))
+                .isEmpty();
+    }
+
+    /** 다른 클래스의 clear()는 그 클래스 안에서만 보인다. Sample 안의 clear()는 정적 import한 MDC.clear()다(PR #249 리뷰). */
+    @Test
+    void 같은_파일의_다른_클래스에_같은_이름_메서드가_있어도_정적_import_호출은_위반이다() {
+        String source = """
+                package com.nsu.capstone.identity.application;
+
+                import static org.slf4j.MDC.clear;
+
+                class Sample {
+                    void run() {
+                        clear();
+                    }
+                }
+
+                class Helper {
+                    void clear() {}
+                }
+                """;
+        assertThat(LogSafetyChecker.check(PATH, source))
+                .extracting(LogSafetyChecker.Violation::rule)
+                .containsExactly("S4");
+    }
+
+    /**
+     * 이름을 하나씩 가져온 정적 import는 와일드카드 정적 import의 같은 이름을 가린다. MDC.*와 Cache.clear를 함께 가져오면 clear()는
+     * Cache.clear()다(PR #249 리뷰). 검사기는 시그니처를 모르므로 이름이 같으면 가린 것으로 본다.
+     */
+    @Test
+    void 이름을_하나씩_가져온_다른_정적_import가_있으면_와일드카드_MDC로_보지_않는다() {
+        assertThat(checkWithImport(
+                        "import static org.slf4j.MDC.*;\nimport static com.nsu.capstone.identity.support.Cache.clear;",
+                        "clear();"))
+                .isEmpty();
+        assertThat(checkWithImport(
+                        "import static org.slf4j.MDC.*;\nimport static com.nsu.capstone.identity.support.Cache.clear;",
+                        "setContextMap(map);"))
+                .extracting(LogSafetyChecker.Violation::rule)
+                .containsExactly("S4");
+    }
+
+    // 와일드카드끼리는 인자 수가 맞는 메서드가 골라진다. MDC에는 인자 하나를 받는 clear가 없다(PR #249 리뷰)
+    @Test
+    void 와일드카드_MDC는_인자_수가_맞는_MDC_메서드만_가져온다() {
+        String imports = "import static org.slf4j.MDC.*;\nimport static com.nsu.capstone.identity.support.Cache.*;";
+
+        assertThat(checkWithImport(imports, "clear(\"sessions\");")).isEmpty();
+        assertThat(checkWithImport(imports, "clear();"))
+                .extracting(LogSafetyChecker.Violation::rule)
+                .containsExactly("S4");
+    }
+
+    /** 와일드카드 MDC.*는 MDC가 가진 정적 메서드만 가져온다. of(..)는 Map.*의 Map.of다(PR #249 리뷰). */
+    @Test
+    void 와일드카드_MDC는_MDC에_없는_메서드_이름을_가져오지_않는다() {
+        assertThat(checkWithImport(
+                        "import static org.slf4j.MDC.*;\nimport static java.util.Map.*;", "of(\"requestId\", id);"))
+                .isEmpty();
+        assertThat(checkWithImport(
+                        "import static org.slf4j.MDC.*;\nimport static java.util.Map.*;", "remove(\"requestId\");"))
+                .extracting(LogSafetyChecker.Violation::rule)
+                .containsExactly("S4");
+    }
 }
