@@ -9,9 +9,9 @@ import static org.mockito.Mockito.when;
 
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
+import com.nsu.capstone.identity.signup.OtpDigestService;
 import com.nsu.capstone.identity.signup.PublicRequestLimitProperties;
 import com.nsu.capstone.identity.signup.RedisPublicRequestLimitStore;
-import com.nsu.capstone.identity.verification.OtpDigestService;
 import java.time.Clock;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
