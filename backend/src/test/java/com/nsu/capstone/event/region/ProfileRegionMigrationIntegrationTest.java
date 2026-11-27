@@ -297,6 +297,15 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
                 .hasMessageContaining("41110");
     }
 
+    @ParameterizedTest
+    @EnumSource(ProfileTable.class)
+    void 개편_뒤에도_목록에_남은_시군구_코드를_시도_코드로_넓힌_이전은_실패한다(ProfileTable table) {
+        assertThatThrownBy(() -> migrateStepwiseWithProfiles(
+                        EnumSet.of(table), NO_MAPPING, MIGRATIONS, fixture("widen-remaining-code")))
+                .hasMessageContaining(table.label)
+                .hasMessageContaining("기대 배열");
+    }
+
     @ParameterizedTest(name = "{0} - {2}")
     @MethodSource("failureFixturesPerTable")
     void 점검_함수는_표마다_개편_누락을_잡는다(String fixture, String message, ProfileTable table) {
@@ -554,11 +563,12 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
     }
 
     /**
-     * 점검 함수는 남은 코드의 존재와 정규형만 보므로 이전 SQL이 원소를 떨어뜨려도 통과한다. 그래서 시드한 배열과 비교한다.
+     * 점검 함수는 남은 코드의 존재와 정규형만 보므로 이전 SQL이 원소를 떨어뜨리거나 시·도 코드로 넓혀도 통과한다. 그래서 시드한
+     * 배열과 비교한다. 기대 배열은 시드 배열에 대응표를 적용하고 개편 뒤 지역 목록으로 05 §2 정규화를 다시 한 값이다.
      * <ul>
-     *   <li>개편 뒤에도 regions에 남은 코드는 배열에 그대로 있거나 그 시·도 코드로 덮여 있어야 한다.
+     *   <li>모든 행의 배열이 기대 배열과 정확히 같아야 한다. 대응표 없이 사라진 코드가 있으면 실패한다.
+     *   <li>개편 뒤에도 regions에 남은 코드가 배열에서 빠졌으면, 기대 배열과 비교하기 전에 그 코드를 짚어 실패한다.
      *   <li>비어 있지 않던 배열은 비지 않아야 한다.
-     *   <li>사라진 코드는 대응표로 기대 배열을 계산해 같은지 본다. 대응표 없이 사라진 코드가 있으면 실패한다.
      * </ul>
      */
     private static void assertCodesPreserved(
@@ -572,7 +582,6 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
             List<String> before = entry.getValue();
             List<String> after = migrated.get(entry.getKey());
             List<String> expectedBeforeNormalize = new ArrayList<>();
-            boolean anyVanished = false;
             for (String code : before) {
                 if (regions.exists(code)) {
                     if (!regions.covers(after, code)) {
@@ -586,18 +595,15 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
                 if (replacement == null) {
                     throw new AssertionError(table.label + ": 대응표 없이 사라진 코드: " + code);
                 }
-                anyVanished = true;
                 expectedBeforeNormalize.addAll(replacement);
             }
             if (!before.isEmpty() && after.isEmpty()) {
                 throw new AssertionError(table.label + ": 비어 있지 않던 지역 배열이 비었다: " + before);
             }
-            if (anyVanished) {
-                List<String> expected = regions.normalize(expectedBeforeNormalize);
-                if (!expected.equals(after)) {
-                    throw new AssertionError(table.label + ": 이전한 지역 배열이 대응표로 계산한 기대값과 다르다: 기대 " + expected + ", 실제 "
-                            + after + " (이전 " + before + ")");
-                }
+            List<String> expected = regions.normalize(expectedBeforeNormalize);
+            if (!expected.equals(after)) {
+                throw new AssertionError(table.label + ": 이전한 지역 배열이 기대 배열(시드에 대응표를 적용하고 새 지역 목록으로 정규화한 값)과 다르다: 기대 "
+                        + expected + ", 실제 " + after + " (이전 " + before + ")");
             }
         }
     }
