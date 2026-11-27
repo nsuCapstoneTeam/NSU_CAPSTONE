@@ -10,10 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.nsu.capstone.TestcontainersConfiguration;
 import com.nsu.capstone.event.application.EventPeriod;
-import com.nsu.capstone.event.domain.ArtistType;
-import com.nsu.capstone.event.domain.EventType;
+import com.nsu.capstone.event.domain.EventContent;
 import com.nsu.capstone.event.domain.Genre;
-import com.nsu.capstone.event.domain.Visibility;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -87,14 +85,18 @@ class OpenApiDocsIntegrationTest {
         return type.size() == 1 ? type.path(0).asString("") : type.toString();
     }
 
-    /** 스키마의 enum 값. $ref면 components에서 찾아 읽는다. */
+    /** 스키마의 enum 코드값. $ref면 components에서 찾아 읽는다. null 허용은 {@link #allowsNull}이 따로 본다. */
     private List<String> enumValues(JsonNode docs, JsonNode schema) {
         String ref = schema.path("$ref").asString("");
         JsonNode resolved = ref.isEmpty()
                 ? schema
                 : docs.path("components").path("schemas").path(ref.substring(ref.lastIndexOf('/') + 1));
         List<String> values = new ArrayList<>();
-        resolved.path("enum").forEach(value -> values.add(value.asString()));
+        resolved.path("enum").forEach(value -> {
+            if (!value.isNull()) {
+                values.add(value.asString());
+            }
+        });
         return values;
     }
 
@@ -404,11 +406,14 @@ class OpenApiDocsIntegrationTest {
         assertThat(type(property)).as(property.toString()).isEqualTo("integer");
     }
 
+    /**
+     * EventContent의 enum 컴포넌트에서 뽑는다. 요청 본문 필드 이름은 컴포넌트 이름과 같다. 새 enum 필드의 @Schema를
+     * 빠뜨리면 이 목록에 자동으로 들어와 허용 값이 문서에 없다는 이유로 실패한다.
+     */
     static Stream<Arguments> codeFields() {
-        return Stream.of(
-                Arguments.of("eventType", EventType.class),
-                Arguments.of("artistType", ArtistType.class),
-                Arguments.of("visibility", Visibility.class));
+        return Arrays.stream(EventContent.class.getRecordComponents())
+                .filter(component -> component.getType().isEnum())
+                .map(component -> Arguments.of(component.getName(), component.getType()));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -423,6 +428,67 @@ class OpenApiDocsIntegrationTest {
                 .path(field);
 
         assertThat(enumValues(docs, property)).as(property.toString()).isEqualTo(names(type));
+    }
+
+    /**
+     * 스키마가 null을 허용하는지. 기준(ADR event_management/05): type에 "null"이 있고 enum이 있으면 enum에도 null이
+     * 있거나, anyOf·oneOf에 {"type": "null"}이 있다. $ref만 있는 속성은 null을 적을 수 없어 허용하지 않는 것으로 본다.
+     */
+    private static boolean allowsNull(JsonNode property) {
+        boolean typeAllowsNull = typeNames(property).contains("null");
+        boolean hasEnum = property.has("enum");
+        boolean enumAllowsNull = false;
+        for (JsonNode value : property.path("enum")) {
+            enumAllowsNull |= value.isNull();
+        }
+        if (typeAllowsNull && (!hasEnum || enumAllowsNull)) {
+            return true;
+        }
+        for (String combinator : List.of("anyOf", "oneOf")) {
+            for (JsonNode branch : property.path(combinator)) {
+                if (typeNames(branch).contains("null")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static List<String> typeNames(JsonNode schema) {
+        JsonNode type = schema.path("type");
+        List<String> names = new ArrayList<>();
+        if (type.isArray()) {
+            type.forEach(name -> names.add(name.asString("")));
+        } else if (type.isString()) {
+            names.add(type.asString());
+        }
+        return names;
+    }
+
+    @ParameterizedTest(name = "{0}.{1}")
+    @CsvSource({
+        "EventRequest,artistType", "EventRequest,mood", "EventRequest,tempo", "EventRequest,vocal",
+        "EventResponse,artistType", "EventResponse,mood", "EventResponse,tempo", "EventResponse,vocal"
+    })
+    @DisplayName("고르지 않을 수 있는 코드값 필드는 문서에서 null을 허용한다")
+    void nullableCodeFieldsAcceptNull(String schemaName, String field) throws Exception {
+        JsonNode property = schema(schemaName).path("properties").path(field);
+
+        assertThat(allowsNull(property)).as(property.toString()).isTrue();
+    }
+
+    @ParameterizedTest(name = "{0}.{1}")
+    @CsvSource({
+        "EventRequest,eventType",
+        "EventRequest,visibility",
+        "EventResponse,eventType",
+        "EventResponse,visibility"
+    })
+    @DisplayName("필수 코드값 필드는 문서에서 null을 허용하지 않는다")
+    void requiredCodeFieldsRejectNull(String schemaName, String field) throws Exception {
+        JsonNode property = schema(schemaName).path("properties").path(field);
+
+        assertThat(allowsNull(property)).as(property.toString()).isFalse();
     }
 
     @Test

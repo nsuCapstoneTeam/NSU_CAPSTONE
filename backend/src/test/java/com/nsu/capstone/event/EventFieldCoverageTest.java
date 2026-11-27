@@ -52,23 +52,42 @@ class EventFieldCoverageTest {
             assertThat(changed.requestHash()).as("%s이 해시에 들어 있다", component).isNotEqualTo(base.requestHash());
         }
         for (String field : names(EventDetails.class)) {
-            EventDetails mixed = rebuildWith(EventDetails.class, base.details(), field, value(alternate().details(), field));
+            EventDetails mixed = rebuildWith(
+                    EventDetails.class, base.details(), field, value(alternate().details(), field));
             EventContent changed = rebuildWith(EventContent.class, base, "details", mixed);
             assertThat(changed.requestHash()).as("details.%s가 해시에 들어 있다", field).isNotEqualTo(base.requestHash());
         }
     }
 
     @Test
+    @DisplayName("alternate()의 컴포넌트는 모두 null이 아니다(null == null로 대입 누락이 통과하는 구멍을 막는다)")
+    void alternateHasNoNullComponent() throws Exception {
+        EventContent alternate = alternate();
+        for (String component : names(EventContent.class)) {
+            assertThat(value(alternate, component))
+                    .as("alternate().%s", component)
+                    .isNotNull();
+        }
+        for (String field : names(EventDetails.class)) {
+            assertThat(value(alternate.details(), field))
+                    .as("alternate().details.%s", field)
+                    .isNotNull();
+        }
+    }
+
+    @Test
     @DisplayName("Event는 EventContent의 모든 컴포넌트를 그대로 저장한다")
     void entityStoresEveryComponent() throws Exception {
-        EventContent content = sampleWithDetails();
+        EventContent content = alternate();
         Event event = event(content);
         for (String component : names(EventContent.class)) {
             Object actual = switch (component) {
                 case "start" -> LocalDateTime.ofInstant(event.getStartAt(), Event.ZONE);
                 case "end" -> LocalDateTime.ofInstant(event.getEndAt(), Event.ZONE);
-                default -> Event.class.getMethod("get" + Character.toUpperCase(component.charAt(0))
-                    + component.substring(1)).invoke(event);
+                default ->
+                    Event.class
+                            .getMethod("get" + Character.toUpperCase(component.charAt(0)) + component.substring(1))
+                            .invoke(event);
             };
             assertThat(actual).as("Event.%s", component).isEqualTo(value(content, component));
         }
@@ -83,8 +102,12 @@ class EventFieldCoverageTest {
                 case "end" -> List.of("endDate", "endTime");
                 default -> List.of(component);
             };
-            assertThat(names(EventRequest.class)).as("EventRequest.%s", component).containsAll(wireNames);
-            assertThat(names(EventResponse.class)).as("EventResponse.%s", component).containsAll(wireNames);
+            assertThat(names(EventRequest.class))
+                    .as("EventRequest.%s", component)
+                    .containsAll(wireNames);
+            assertThat(names(EventResponse.class))
+                    .as("EventResponse.%s", component)
+                    .containsAll(wireNames);
         }
     }
 }

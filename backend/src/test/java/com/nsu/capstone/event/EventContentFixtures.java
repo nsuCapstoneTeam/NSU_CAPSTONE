@@ -5,19 +5,22 @@ import com.nsu.capstone.event.domain.EventContent;
 import com.nsu.capstone.event.domain.EventDetails;
 import com.nsu.capstone.event.domain.EventType;
 import com.nsu.capstone.event.domain.Genre;
+import com.nsu.capstone.event.domain.Mood;
+import com.nsu.capstone.event.domain.Tempo;
 import com.nsu.capstone.event.domain.Visibility;
+import com.nsu.capstone.event.domain.Vocal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 테스트가 EventContent를 만드는 유일한 곳이다. 컴포넌트를 더하면(NSU-121) 여기 한 곳에서만 컴파일이 깨져
- * 값을 정한다. 기본값은 03 행사 API §10.1의 예시다.
+ * 테스트가 EventContent를 만드는 유일한 곳이다. 컴포넌트를 더하면 여기 한 곳에서만 컴파일이 깨져 값을 정한다.
+ * 기본값은 03 행사 API §10.1의 예시다. 다만 음악 조건 세 축(mood·tempo·vocal)은 NSU-121 전 본문과 해시가
+ * 같도록 기본값이 null(고르지 않음)이다(ADR event_management/05).
  */
 public final class EventContentFixtures {
 
-    private EventContentFixtures() {
-    }
+    private EventContentFixtures() {}
 
     /** 값을 하나씩 바꿔 가며 쓰는 가변 builder. 필드는 일부러 공개했다(테스트 전용). */
     public static final class Builder {
@@ -30,6 +33,9 @@ public final class EventContentFixtures {
         public String regionCode = "11680";
         public ArtistType artistType = ArtistType.BAND;
         public List<Genre> genres = List.of(Genre.POP, Genre.ROCK);
+        public Mood mood = null;
+        public Tempo tempo = null;
+        public Vocal vocal = null;
         public long budgetMin = 300000;
         public long budgetMax = 500000;
         public int expectedAudience = 800;
@@ -38,9 +44,25 @@ public final class EventContentFixtures {
         public EventDetails details = EventDetails.empty();
 
         public EventContent build() {
-            return new EventContent(name, eventType, start, end, performanceMinutes, venue,
-                regionCode, artistType, genres, budgetMin, budgetMax, expectedAudience,
-                description, visibility, details);
+            return new EventContent(
+                    name,
+                    eventType,
+                    start,
+                    end,
+                    performanceMinutes,
+                    venue,
+                    regionCode,
+                    artistType,
+                    genres,
+                    mood,
+                    tempo,
+                    vocal,
+                    budgetMin,
+                    budgetMax,
+                    expectedAudience,
+                    description,
+                    visibility,
+                    details);
         }
     }
 
@@ -49,10 +71,27 @@ public final class EventContentFixtures {
         return new Builder().build();
     }
 
-    /** EventIntegrationTestBase.validBody()와 같은 내용(details 포함). */
+    /**
+     * 음악 조건이 없는 전체 본문(details 포함). NSU-121 전에 저장된 값을 고정한 golden의 입력이다. 이 본문의
+     * 해시·지문은 NSU-121 전과 같아야 한다.
+     */
+    public static EventContent sampleWithDetailsNoMusic() {
+        return with(b -> b.details = fullDetails());
+    }
+
+    /** EventIntegrationTestBase.validBody()와 같은 내용(details와 세 음악 조건 포함). */
     public static EventContent sampleWithDetails() {
-        return with(b -> b.details = new EventDetails("공연 2시간 전 30분", "8m × 6m", true,
-            "무선 2개, 유선 4개", "드럼 세트, 베이스 앰프", true, true, false, null, null));
+        return with(b -> {
+            b.details = fullDetails();
+            b.mood = Mood.ENERGETIC;
+            b.tempo = Tempo.FAST;
+            b.vocal = Vocal.WITH_VOCALS;
+        });
+    }
+
+    private static EventDetails fullDetails() {
+        return new EventDetails(
+                "공연 2시간 전 30분", "8m × 6m", true, "무선 2개, 유선 4개", "드럼 세트, 베이스 앰프", true, true, false, null, null);
     }
 
     public static EventContent with(Consumer<Builder> change) {
@@ -68,11 +107,24 @@ public final class EventContentFixtures {
      * 걸리지 않는다. 컴포넌트를 하나씩 바꿔 끼우는 안전망 테스트가 쓴다.
      */
     public static EventContent alternate() {
-        return new EventContent("다른 이름", EventType.WEDDING,
-            LocalDateTime.of(2026, 11, 6, 17, 50), LocalDateTime.of(2026, 11, 6, 19, 10), 41,
-            "다른 장소", "11650", ArtistType.DJ, List.of(Genre.POP, Genre.JAZZ),
-            300001, 500001, 801, "다른 설명", Visibility.PRIVATE,
-            new EventDetails("다른 리허설", "다른 무대", false, "다른 마이크", "다른 악기", false, false, true, true,
-                "다른 조건"));
+        return new EventContent(
+                "다른 이름",
+                EventType.WEDDING,
+                LocalDateTime.of(2026, 11, 6, 17, 50),
+                LocalDateTime.of(2026, 11, 6, 19, 10),
+                41,
+                "다른 장소",
+                "11650",
+                ArtistType.DJ,
+                List.of(Genre.POP, Genre.JAZZ),
+                Mood.CALM,
+                Tempo.SLOW,
+                Vocal.INSTRUMENTAL,
+                300001,
+                500001,
+                801,
+                "다른 설명",
+                Visibility.PRIVATE,
+                new EventDetails("다른 리허설", "다른 무대", false, "다른 마이크", "다른 악기", false, false, true, true, "다른 조건"));
     }
 }

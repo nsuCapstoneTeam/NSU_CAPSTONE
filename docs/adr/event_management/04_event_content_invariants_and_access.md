@@ -3,6 +3,7 @@
 - 상태: **Proposed** (PR 리뷰에서 확정)
 - 결정일: **2026-11-06** (NSU-138 설계 세션)
 - 후속 변경: [recommendation_search_input/00](../recommendation_search_input/00_canonical_keyphrase.md)(NSU-11, 2026-11-10)이 지문에서 `description`을 빼고(9개 값), snapshot의 `aiSource`를 `conditions`(음악 조건)로 바꿨다. 아래의 지문 값 수(10개)와 `aiSource` 표현은 그 전 상태다.
+- 후속 변경: [event_management/05](./05_event_music_conditions.md)(NSU-121, 2026-11-22)이 `EventContent`·`Event`에 `mood`·`tempo`·`vocal`을 더하고, 해시·지문에 필드를 더하는 규칙(위치 구역 동결, 이름표 구역 R1~R5)을 정했다. 아래 Consequences의 NSU-121 후속 항목은 05에서 닫힌다.
 - 관련: [03 행사 API §3·§4·§5.2·§5.5·§8.1·§8.3·§9](../../api/03_events.md), [02 추천 API §4.3](../../api/02_recommendation_trust_and_new_artist.md), [ADR 03 행사 등록 멱등 키](./03_event_registration_idempotency_key.md), [ADR-007 공통 예외 처리](../ADR-007-spring-backend-global-exception-handling.md), NSU-138, NSU-121(음악 조건 필드), NSU-127(`CanViewPrivateEvent`), NSU-63(지문 저장), NSU-106(패키지 개편)
 
 ---

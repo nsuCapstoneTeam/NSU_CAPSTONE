@@ -2,6 +2,7 @@
 
 - 상태: **Proposed** (PR 리뷰에서 확정)
 - 결정일: **2026-11-10** (NSU-11 설계 세션)
+- 후속 변경: [event_management/05](../event_management/05_event_music_conditions.md)(NSU-121, 2026-11-22)이 행사에 세 축을 선택 항목으로 저장하고 snapshot의 세 축을 `Event.musicConditions()`로 채웠다. NSU-121로 넘긴 두 가지(지문의 null·빈 목록 표기, enum ↔ DB `CHECK` 테스트)는 05에서 닫힌다.
 - 관련: 서버 협의 016(Accepted)·017(Accepted 2026-11-10, 필드 wire type 등 TBD는 남음), SSOT `AI-MATCH-050`·`EVT-042` v1.17, [02 추천 API §1·§1.0·§2.4·§4.1·§4.3](../../api/02_recommendation_trust_and_new_artist.md), [03 행사 API §3.3·§8](../../api/03_events.md), [ADR event_management/04](../event_management/04_event_content_invariants_and_access.md), AI 저장소 ADR-0009, [Slack AI 담당 답변 2026-11-10](https://nsu-capstone.slack.com/archives/C0C6ZQCHBV0/p1794238184808299), NSU-11, NSU-121, NSU-122, NSU-63
 
 ---

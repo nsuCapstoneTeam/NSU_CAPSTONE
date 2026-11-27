@@ -2,6 +2,7 @@ package com.nsu.capstone.event.domain;
 
 import static com.nsu.capstone.event.EventContentFixtures.sample;
 import static com.nsu.capstone.event.EventContentFixtures.sampleWithDetails;
+import static com.nsu.capstone.event.EventContentFixtures.sampleWithDetailsNoMusic;
 import static com.nsu.capstone.event.EventContentFixtures.with;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,32 +27,59 @@ class EventContentRequestHashTest {
 
     static Stream<Arguments> golden() {
         return Stream.of(
-            Arguments.of("03 §10.1 기본값, details 없음", sample(),
-                "d630350efbf192897b58adc50615bb0a6c609f9a8c1c1716fb5072ca4e10a84a"),
-            Arguments.of("validBody()와 같은 내용(details 포함)", sampleWithDetails(),
-                "e15358b78af180c845c0701352126e8e69109d70a64b70c35c342a3c0922371f"),
-            Arguments.of("artistType null은 -1;", with(b -> b.artistType = null),
-                "5045d036aa9564a570b4b005152f00347d5b37def447c2cdcc6601bcd2f07ff1"),
-            Arguments.of("장르 [ROCK, POP]은 [POP, ROCK]과 같다",
-                with(b -> b.genres = List.of(Genre.ROCK, Genre.POP)),
-                "d630350efbf192897b58adc50615bb0a6c609f9a8c1c1716fb5072ca4e10a84a"),
-            Arguments.of("장르 3개, 입력 순서 [TROT, ROCK, POP]",
-                with(b -> b.genres = List.of(Genre.TROT, Genre.ROCK, Genre.POP)),
-                "2c70f80230daf218341cbe32d50f30d7f4665fa87f2bae44fce4d0cea4a2c82a"),
-            Arguments.of("장르 1개 [JAZZ]는 앞쉼표", with(b -> b.genres = List.of(Genre.JAZZ)),
-                "0f670330f47d2ab0d74c260a5eaef635aaaca966c1e4c92b4484847faebcc285"),
-            Arguments.of("설명에 이모지(UTF-16 길이)", with(b -> b.description = "무대 🎵 공연"),
-                "a5c0ee2dbef2ec9d30c8b16500e5f86dd28569a48128ca876af59e929597f501"),
-            Arguments.of("선택정보 값에 구분자 ';'", with(b -> b.details =
-                    new EventDetails("가;나", "다", null, null, null, null, null, null, null, null)),
-                "3fb7e5ca2da2be09b849c135f5cf924ee17f42225655437dfc0cadd6350dcd7f"),
-            Arguments.of("불리언 true/false/null 섞음", with(b -> {
-                    b.artistType = ArtistType.DJ;
-                    b.genres = List.of(Genre.ELECTRONIC);
-                    b.details = new EventDetails(null, null, true, null, null, false, true, false, true, null);
-                }),
-                "db385ec2c7cef8ce614f1b25b1094b26e80697c20bc01404537807a2dbc9fc3a")
-        );
+                Arguments.of(
+                        "03 §10.1 기본값, details 없음",
+                        sample(),
+                        "d630350efbf192897b58adc50615bb0a6c609f9a8c1c1716fb5072ca4e10a84a"),
+                Arguments.of(
+                        "validBody()에서 음악 조건만 뺀 내용(details 포함)",
+                        sampleWithDetailsNoMusic(),
+                        "e15358b78af180c845c0701352126e8e69109d70a64b70c35c342a3c0922371f"),
+                Arguments.of(
+                        "세 음악 조건을 모두 고른 validBody()",
+                        sampleWithDetails(),
+                        "beaae69ee0953047fb7b88ee0c8436847d244f9cf81efb5df403c3da761e4e10"),
+                Arguments.of(
+                        "mood만 CALM",
+                        with(b -> b.mood = Mood.CALM),
+                        "dfada37c10337bf732f5d5014901819e3abd3791d93442aa111942606fec13ea"),
+                Arguments.of(
+                        "vocal만 INSTRUMENTAL",
+                        with(b -> b.vocal = Vocal.INSTRUMENTAL),
+                        "3a8e268f9c05f5d351e40c47ab028d64d03a13999f66987542ce62f62d72fd22"),
+                Arguments.of(
+                        "artistType null은 -1;",
+                        with(b -> b.artistType = null),
+                        "5045d036aa9564a570b4b005152f00347d5b37def447c2cdcc6601bcd2f07ff1"),
+                Arguments.of(
+                        "장르 [ROCK, POP]은 [POP, ROCK]과 같다",
+                        with(b -> b.genres = List.of(Genre.ROCK, Genre.POP)),
+                        "d630350efbf192897b58adc50615bb0a6c609f9a8c1c1716fb5072ca4e10a84a"),
+                Arguments.of(
+                        "장르 3개, 입력 순서 [TROT, ROCK, POP]",
+                        with(b -> b.genres = List.of(Genre.TROT, Genre.ROCK, Genre.POP)),
+                        "2c70f80230daf218341cbe32d50f30d7f4665fa87f2bae44fce4d0cea4a2c82a"),
+                Arguments.of(
+                        "장르 1개 [JAZZ]는 앞쉼표",
+                        with(b -> b.genres = List.of(Genre.JAZZ)),
+                        "0f670330f47d2ab0d74c260a5eaef635aaaca966c1e4c92b4484847faebcc285"),
+                Arguments.of(
+                        "설명에 이모지(UTF-16 길이)",
+                        with(b -> b.description = "무대 🎵 공연"),
+                        "a5c0ee2dbef2ec9d30c8b16500e5f86dd28569a48128ca876af59e929597f501"),
+                Arguments.of(
+                        "선택정보 값에 구분자 ';'",
+                        with(b -> b.details =
+                                new EventDetails("가;나", "다", null, null, null, null, null, null, null, null)),
+                        "3fb7e5ca2da2be09b849c135f5cf924ee17f42225655437dfc0cadd6350dcd7f"),
+                Arguments.of(
+                        "불리언 true/false/null 섞음",
+                        with(b -> {
+                            b.artistType = ArtistType.DJ;
+                            b.genres = List.of(Genre.ELECTRONIC);
+                            b.details = new EventDetails(null, null, true, null, null, false, true, false, true, null);
+                        }),
+                        "db385ec2c7cef8ce614f1b25b1094b26e80697c20bc01404537807a2dbc9fc3a"));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -69,32 +97,54 @@ class EventContentRequestHashTest {
 
     static Stream<Arguments> everyField() {
         return Stream.of(
-            Arguments.of("name", (Consumer<Builder>) b -> b.name = "다른 이름"),
-            Arguments.of("eventType", (Consumer<Builder>) b -> b.eventType = EventType.WEDDING),
-            Arguments.of("start", (Consumer<Builder>) b -> b.start = LocalDateTime.of(2026, 11, 6, 17, 59)),
-            Arguments.of("end", (Consumer<Builder>) b -> b.end = LocalDateTime.of(2026, 11, 6, 19, 1)),
-            Arguments.of("performanceMinutes", (Consumer<Builder>) b -> b.performanceMinutes = 41),
-            Arguments.of("venue", (Consumer<Builder>) b -> b.venue = "다른 장소"),
-            Arguments.of("regionCode", (Consumer<Builder>) b -> b.regionCode = "11650"),
-            Arguments.of("artistType", (Consumer<Builder>) b -> b.artistType = ArtistType.DJ),
-            Arguments.of("artistType을 상관없음으로", (Consumer<Builder>) b -> b.artistType = null),
-            Arguments.of("genres", (Consumer<Builder>) b -> b.genres = List.of(Genre.POP, Genre.JAZZ)),
-            Arguments.of("budgetMin", (Consumer<Builder>) b -> b.budgetMin = 300001),
-            Arguments.of("budgetMax", (Consumer<Builder>) b -> b.budgetMax = 500001),
-            Arguments.of("expectedAudience", (Consumer<Builder>) b -> b.expectedAudience = 801),
-            Arguments.of("description", (Consumer<Builder>) b -> b.description = "다른 설명"),
-            Arguments.of("visibility", (Consumer<Builder>) b -> b.visibility = Visibility.PRIVATE),
-            Arguments.of("rehearsal", detail(new EventDetails("가", null, null, null, null, null, null, null, null, null))),
-            Arguments.of("stageSize", detail(new EventDetails(null, "가", null, null, null, null, null, null, null, null))),
-            Arguments.of("paProvided", detail(new EventDetails(null, null, true, null, null, null, null, null, null, null))),
-            Arguments.of("microphones", detail(new EventDetails(null, null, null, "가", null, null, null, null, null, null))),
-            Arguments.of("instruments", detail(new EventDetails(null, null, null, null, "가", null, null, null, null, null))),
-            Arguments.of("waitingRoomProvided", detail(new EventDetails(null, null, null, null, null, true, null, null, null, null))),
-            Arguments.of("mealProvided", detail(new EventDetails(null, null, null, null, null, null, true, null, null, null))),
-            Arguments.of("transportationFeeProvided", detail(new EventDetails(null, null, null, null, null, null, null, true, null, null))),
-            Arguments.of("accommodationProvided", detail(new EventDetails(null, null, null, null, null, null, null, null, true, null))),
-            Arguments.of("otherConditions", detail(new EventDetails(null, null, null, null, null, null, null, null, null, "가")))
-        );
+                Arguments.of("name", (Consumer<Builder>) b -> b.name = "다른 이름"),
+                Arguments.of("eventType", (Consumer<Builder>) b -> b.eventType = EventType.WEDDING),
+                Arguments.of("start", (Consumer<Builder>) b -> b.start = LocalDateTime.of(2026, 11, 6, 17, 59)),
+                Arguments.of("end", (Consumer<Builder>) b -> b.end = LocalDateTime.of(2026, 11, 6, 19, 1)),
+                Arguments.of("performanceMinutes", (Consumer<Builder>) b -> b.performanceMinutes = 41),
+                Arguments.of("venue", (Consumer<Builder>) b -> b.venue = "다른 장소"),
+                Arguments.of("regionCode", (Consumer<Builder>) b -> b.regionCode = "11650"),
+                Arguments.of("artistType", (Consumer<Builder>) b -> b.artistType = ArtistType.DJ),
+                Arguments.of("artistType을 상관없음으로", (Consumer<Builder>) b -> b.artistType = null),
+                Arguments.of("genres", (Consumer<Builder>) b -> b.genres = List.of(Genre.POP, Genre.JAZZ)),
+                Arguments.of("mood", (Consumer<Builder>) b -> b.mood = Mood.ENERGETIC),
+                Arguments.of("tempo", (Consumer<Builder>) b -> b.tempo = Tempo.FAST),
+                Arguments.of("vocal", (Consumer<Builder>) b -> b.vocal = Vocal.WITH_VOCALS),
+                Arguments.of("budgetMin", (Consumer<Builder>) b -> b.budgetMin = 300001),
+                Arguments.of("budgetMax", (Consumer<Builder>) b -> b.budgetMax = 500001),
+                Arguments.of("expectedAudience", (Consumer<Builder>) b -> b.expectedAudience = 801),
+                Arguments.of("description", (Consumer<Builder>) b -> b.description = "다른 설명"),
+                Arguments.of("visibility", (Consumer<Builder>) b -> b.visibility = Visibility.PRIVATE),
+                Arguments.of(
+                        "rehearsal",
+                        detail(new EventDetails("가", null, null, null, null, null, null, null, null, null))),
+                Arguments.of(
+                        "stageSize",
+                        detail(new EventDetails(null, "가", null, null, null, null, null, null, null, null))),
+                Arguments.of(
+                        "paProvided",
+                        detail(new EventDetails(null, null, true, null, null, null, null, null, null, null))),
+                Arguments.of(
+                        "microphones",
+                        detail(new EventDetails(null, null, null, "가", null, null, null, null, null, null))),
+                Arguments.of(
+                        "instruments",
+                        detail(new EventDetails(null, null, null, null, "가", null, null, null, null, null))),
+                Arguments.of(
+                        "waitingRoomProvided",
+                        detail(new EventDetails(null, null, null, null, null, true, null, null, null, null))),
+                Arguments.of(
+                        "mealProvided",
+                        detail(new EventDetails(null, null, null, null, null, null, true, null, null, null))),
+                Arguments.of(
+                        "transportationFeeProvided",
+                        detail(new EventDetails(null, null, null, null, null, null, null, true, null, null))),
+                Arguments.of(
+                        "accommodationProvided",
+                        detail(new EventDetails(null, null, null, null, null, null, null, null, true, null))),
+                Arguments.of(
+                        "otherConditions",
+                        detail(new EventDetails(null, null, null, null, null, null, null, null, null, "가"))));
     }
 
     static Consumer<Builder> detail(EventDetails details) {
@@ -111,10 +161,10 @@ class EventContentRequestHashTest {
     @Test
     @DisplayName("값이 필드 경계를 넘어도 충돌하지 않는다")
     void valueSplitsAcrossFieldsDoNotCollide() {
-        EventContent first = with(b -> b.details =
-            new EventDetails("가;나", "다", null, null, null, null, null, null, null, null));
-        EventContent second = with(b -> b.details =
-            new EventDetails("가", "나;다", null, null, null, null, null, null, null, null));
+        EventContent first =
+                with(b -> b.details = new EventDetails("가;나", "다", null, null, null, null, null, null, null, null));
+        EventContent second =
+                with(b -> b.details = new EventDetails("가", "나;다", null, null, null, null, null, null, null, null));
 
         assertThat(first.requestHash()).isNotEqualTo(second.requestHash());
     }
@@ -122,8 +172,8 @@ class EventContentRequestHashTest {
     @Test
     @DisplayName("빈 문자열 선택정보는 정규화로 null이 되므로 해시에 0:; 가 나타나지 않는다")
     void emptyOptionalTextNormalizesToNullBeforeHashing() {
-        EventContent withEmpty = with(b -> b.details =
-            new EventDetails("", null, null, null, null, null, null, null, null, null));
+        EventContent withEmpty =
+                with(b -> b.details = new EventDetails("", null, null, null, null, null, null, null, null, null));
 
         assertThat(withEmpty.requestHash()).isEqualTo(sample().requestHash());
     }

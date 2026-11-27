@@ -71,7 +71,7 @@
 
 ### 1.0 검색 문구
 
-Spring은 0의 snapshot에 담긴 음악 조건(행사 종류·장르, NSU-121 이후 분위기·템포·보컬)으로 짧은 영문 검색 문구를 만들어 AI에 보낸다. AI는 이 문구를 그대로 CLAP 검색 입력으로 쓰고, 번역하거나 다시 해석하지 않는다(서버 협의 016, [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)).
+Spring은 0의 snapshot에 담긴 음악 조건(행사 종류·장르·분위기·템포·보컬, [03 §3.3](./03_events.md#33-분류-값))으로 짧은 영문 검색 문구를 만들어 AI에 보낸다. AI는 이 문구를 그대로 CLAP 검색 입력으로 쓰고, 번역하거나 다시 해석하지 않는다(서버 협의 016, [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)).
 
 - 행사 설명은 검색 문구에 넣지 않는다(SSOT `EVT-042` v1.17).
 - 문장 꼴과 매핑표는 위 ADR을 따른다. 예: `energetic fast-tempo electronic music with vocals for a university festival`.
@@ -337,7 +337,7 @@ Authorization: Bearer {accessToken}
 - 다시 볼 때 AI를 호출하지 않는다.
 - 생성 응답도 방금 저장한 결과에 이 표의 규칙을 그대로 적용해 만든다. 그래서 생성하는 동안 바뀐 상태(행사 수정, 아티스트 정지·AI 추천 해제)가 생성 응답에도 나타난다(2026-10-07 결정, Codex 설계 리뷰).
 - 섭외 판단에 쓰는 신뢰 정보가 낡지 않도록 `trustProfile`은 현재 값으로 계산한다.
-- 다시 볼 때 Eligibility 전체(일정·예산·지역 등)를 다시 검사하지 않는다. 계정 상태(정지·탈퇴), AI 추천 상태(`AI_RECOMMENDATION_ENABLED`), 곡의 저작권 조건, 곡 삭제만 다시 확인해 뺀다(§4.2). 최신 조건을 반영하려면 새로 추천을 받는다.
+- 다시 볼 때 Eligibility 전체(일정·예산·지역 등)를 다시 검사하지 않는다. §4.2 "빼는 곡" 표의 조건(계정 상태, AI 추천 상태, 곡의 저작권 조건, 곡 삭제, 아티스트 프로필 삭제)만 다시 확인해 뺀다. 최신 조건을 반영하려면 새로 추천을 받는다.
 - 추천 응답은 캐시하지 않는다. 최대 100명의 Trust Profile 일괄 조회 시간을 측정하고, 느릴 때만 Trust Profile 캐시를 도입한다(서버 협의 012).
 
 ### 4.2 다시 볼 때 빼는 곡과 `availability`
@@ -350,6 +350,7 @@ Authorization: Bearer {accessToken}
 | 곡 아티스트가 `AI_RECOMMENDATION_ENABLED`가 아니다(AI 추천을 껐거나 AI 분석 동의를 철회한 경우 등, SSOT `AI-031`) | 뺀다. 재생 주소도 발급하지 않는다(§2.5) |
 | 곡이 저작권 조건(SSOT `AI-MATCH-051`의 `COPYRIGHT_SATISFIED`)을 더 이상 충족하지 않는다. 권리 신고로 재생이 중단된 경우다(NSU-104) | 뺀다. 재생 주소도 발급하지 않는다(§2.5) |
 | 곡이 삭제되었다 | 뺀다 |
+| 곡 아티스트의 프로필이 없다(삭제함) | 뺀다 |
 | 곡의 현재 ACTIVE revision이 저장한 revision과 다르다 | 남기고 `availability = MUSIC_REVISED`. 추천 당시와 다른 음원이다. 재생은 현재 음원으로 한다(§2.5) |
 | 그 밖의 경우 | 남기고 `availability = AVAILABLE` |
 
@@ -365,7 +366,7 @@ Authorization: Bearer {accessToken}
 | 바뀌면 `true` (추천에 쓰인 정보) | 바뀌어도 `false` |
 |---|---|
 | Eligibility 입력: 시간대(`startDate`·`startTime`·`endDate`·`endTime`), `performanceMinutes`, `regionCode`, `budgetMin`·`budgetMax`, `artistType` | `name`, `venue`, `expectedAudience`, `visibility`, `details`(선택정보) |
-| 검색 문구의 재료(음악 조건, §1.0): `eventType`, `genres` (NSU-121 이후 분위기·템포·보컬) | `description`(행사 설명. 검색 문구에 쓰지 않는다) |
+| 검색 문구의 재료(음악 조건, §1.0): `eventType`, `genres`, `mood`, `tempo`, `vocal`. 고르지 않음 ↔ 값 변경도 `true`, 매핑 버전(문구)만 바뀌면 `false` | `description`(행사 설명. 검색 문구에 쓰지 않는다) |
 
 - 필드 이름은 [03 §3](./03_events.md#3-행사-표현)의 행사 필드다. `genres`는 순서와 관계없이 같은 집합이면 같은 값이다([03 §8.3](./03_events.md#83-iseventchanged-지문)).
 - 값을 바꿨다가 원래대로 되돌리면 `false`다.
@@ -491,7 +492,7 @@ Authorization: Bearer {accessToken}
 | 생성하는 동안 행사가 삭제되면 결과는 저장되고 `404 EVENT_NOT_FOUND`를 받는다. 이 생성은 하루 횟수에 들어가서, 다섯 번 반복하면 여섯 번째 요청은 `429`다. 잠금이 저장 전에 만료돼 다른 요청이 먼저 한도를 채웠다면, 행사가 삭제됐어도 결과를 저장하지 않고 `429`다 | §5.2, 03 §8.4 |
 | 하루 4회 성공한 사용자가 서로 다른 두 행사로 동시에 요청하면 AI 호출은 1번이고, 하루 성공 횟수는 5를 넘지 않는다. 결과 저장이 커밋된 뒤에 잠금이 풀린다 | §5.1·§5.2 |
 | 저장 전에 잠금이 만료돼 다른 요청이 들어와도, 저장 트랜잭션에서 다시 세어 1분 간격이나 하루 5회를 넘는 결과는 저장하지 않고 `429`와 `Retry-After`를 준다. 이 경우는 AI를 호출한 뒤의 거절이다 | §5.2 |
-| 다시 볼 때 활동 정지·탈퇴한 아티스트의 곡, `AI_RECOMMENDATION_ENABLED`가 아니게 된 아티스트의 곡, 삭제된 곡은 빠지고, 남은 곡의 `rank`가 1부터 다시 매겨지며, `excludedCount`가 뺀 곡 수와 같다. revision이 바뀐 곡은 남고 `availability = MUSIC_REVISED`다 | §4.2 |
+| 다시 볼 때 활동 정지·탈퇴한 아티스트의 곡, `AI_RECOMMENDATION_ENABLED`가 아니게 된 아티스트의 곡, 계정은 `ACTIVE`지만 프로필을 삭제한 아티스트의 곡, 삭제된 곡은 빠지고, 남은 곡의 `rank`가 1부터 다시 매겨지며, `excludedCount`가 뺀 곡 수와 같다. revision이 바뀐 곡은 남고 `availability = MUSIC_REVISED`다 | §4.2 |
 | 추천 뒤 곡 아티스트가 AI 추천을 끄거나 AI 분석 동의를 철회하면 그 곡의 재생 주소 발급은 `404 MUSIC_NOT_FOUND`다. 철회 전에 발급한 주소는 `expiresAt`까지만 쓸 수 있다 | §2.5·§4.2 |
 | 추천 뒤 곡이 권리 신고로 중단되면 다시 보기에서 빠지고(`excludedCount`에 포함) 재생 주소 발급은 `404 MUSIC_NOT_FOUND`다. 같은 아티스트의 다른 곡은 남는다 | §2.5·§4.2 |
 | 곡이 권리 신고로 중단되면, 중단 전에 발급해 아직 만료되지 않은 그 곡의 재생 주소로 요청해도 음원을 받을 수 없다(NSU-104) | §2.5 |

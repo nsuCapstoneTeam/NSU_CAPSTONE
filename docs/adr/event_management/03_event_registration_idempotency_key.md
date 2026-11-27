@@ -2,6 +2,7 @@
 
 - 상태: **Proposed** (PR 리뷰에서 확정)
 - 결정일: **2026-10-18** (NSU-99 설계 세션)
+- 후속 변경: [event_management/05](./05_event_music_conditions.md)(NSU-121, 2026-11-22)이 본문 해시 끝에 이름표 구역을 더했다. 값이 있는 선택 필드만 `이름표 + 값`으로 붙여, 음악 조건이 없는 본문의 해시는 그대로다. 아래 Consequences의 "해시에 들어가는 필드가 바뀌면 `422`"는 05의 두 경우(NSU-121 전 키 + 음악 조건을 담은 본문, R5가 막는 구간)로 좁혀진다.
 - 관련: [03 행사 API §5.3.1·§9·§12.1](../../api/03_events.md), [00 공통 규칙 §2·§8](../../api/00_conventions.md), [02 행사 소프트 삭제](./02_event_soft_delete.md), NSU-99, NSU-100(요청 제한), NSU-97(삭제한 행사의 보관), [IETF `Idempotency-Key` 헤더 초안 draft-07](https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-idempotency-key-header-07)
 
 ---

@@ -2,14 +2,14 @@
 
 EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 저장된 행사를 추천 요청의 입력으로 쓰는 규칙이다.
 
-- 구현 이슈: NSU-54 (행사 일정·행사 정보 CRUD), NSU-58 (행사 정보와 추천 요청 연동), NSU-99 (등록 멱등 키, 선택정보 불리언 이름)
-- 요구사항: SSOT v1.16(2026-10-18 문서 전체 최종 승인) `EVT-041`~`EVT-044`, `SEC-100`, `DOMAIN-108`, `AI-MATCH-050`·`051`, `ART-028`·`029`
-- 결정 기록: [00 행사 단위와 시간대](../adr/event_management/00_event_unit_and_time_window.md), [01 지역 코드 표준](../adr/event_management/01_region_code_standard.md), [02 행사 소프트 삭제](../adr/event_management/02_event_soft_delete.md), [03 행사 등록 멱등 키](../adr/event_management/03_event_registration_idempotency_key.md)
+- 구현 이슈: NSU-54 (행사 일정·행사 정보 CRUD), NSU-58 (행사 정보와 추천 요청 연동), NSU-99 (등록 멱등 키, 선택정보 불리언 이름), NSU-121 (음악 조건 선택값 저장)
+- 요구사항: SSOT v1.16(2026-10-18 문서 전체 최종 승인) `EVT-041`~`EVT-044`, `SEC-100`, `DOMAIN-108`, `AI-MATCH-050`·`051`, `ART-028`·`029`. 음악 조건(§3.1·§3.3)은 `EVT-042` v1.17(승인)과 v1.20(초안)을 따른다. 지금 문서 전체 최종 승인 리비전은 v1.17.1이다
+- 결정 기록: [00 행사 단위와 시간대](../adr/event_management/00_event_unit_and_time_window.md), [01 지역 코드 표준](../adr/event_management/01_region_code_standard.md), [02 행사 소프트 삭제](../adr/event_management/02_event_soft_delete.md), [03 행사 등록 멱등 키](../adr/event_management/03_event_registration_idempotency_key.md), [05 행사 음악 조건](../adr/event_management/05_event_music_conditions.md)
 - 관련 계약: [02 추천 응답](./02_recommendation_trust_and_new_artist.md), 서버 협의 [012](https://linear.app/nsu-capstone/document/012-clap-음악-유사도-기반-곡-추천-흐름-c7c809f92cba)·[014](https://linear.app/nsu-capstone/document/014-추천-생성-잠금재생-동의-확인행사-snapshot-f9e2dfcf426f)·[016](https://linear.app/nsu-capstone/document/016-spring-canonical-검색-입력-생성-및-ai-입력-책임-분리-29ac49c33ada)·[017](https://linear.app/nsu-capstone/document/017-spring-canonical-검색-입력-기반-ai-recommend-server-요청응답-계약-f96a57425124). 검색 문구의 재료(§8.2)와 지문(§8.3)은 SSOT v1.17(2026-11-05 승인) `AI-MATCH-050`·`EVT-042`와 [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)을 따른다
 - 용어: [용어집 (CONTEXT)](https://linear.app/nsu-capstone/document/용어집-context-475370673105)
 - 공통 규칙: [00_conventions.md](./00_conventions.md). 에러 형식과 공통 `code`는 [ADR-007](../adr/ADR-007-spring-backend-global-exception-handling.md)을 따른다
 
-> 상태: 2026-10-18 NSU-54·58 설계 세션에서 정했다. 같은 날 Codex 설계 리뷰의 지적 4건(PRIVATE 열람, 동시 수정, 생성 중 행사 변경, 오류 형식)을 반영했다(§4, §5.4, §8.4, §12). PR 리뷰의 지적 2건(취소 검사 순서, 수정·취소 동시 요청)도 반영했다(§5.4, §9). 같은 날 NSU-99 설계 세션에서 이 문서의 검토 지적 4건을 반영해 등록 멱등 키(§5.3.1), 선택정보 불리언 이름(§3.4), 다시 보낸 삭제(§5.6), 지역 목록의 페이지네이션 예외(§7)를 더했다. 이름 변경과 키 필수화는 breaking change다(§12.1).
+> 상태: 2026-10-18 NSU-54·58 설계 세션에서 정했다. 같은 날 Codex 설계 리뷰의 지적 4건(PRIVATE 열람, 동시 수정, 생성 중 행사 변경, 오류 형식)을 반영했다(§4, §5.4, §8.4, §12). PR 리뷰의 지적 2건(취소 검사 순서, 수정·취소 동시 요청)도 반영했다(§5.4, §9). 같은 날 NSU-99 설계 세션에서 이 문서의 검토 지적 4건을 반영해 등록 멱등 키(§5.3.1), 선택정보 불리언 이름(§3.4), 다시 보낸 삭제(§5.6), 지역 목록의 페이지네이션 예외(§7)를 더했다. 이름 변경과 키 필수화는 breaking change다(§12.1). 2026-11-22 NSU-121 설계 세션에서 음악 조건 선택 필드 `mood`·`tempo`·`vocal`을 더했다(§3.1·§3.3·§3.5·§5.3.1·§8). 선택 필드 추가라 breaking change가 아니다.
 
 ---
 
@@ -67,6 +67,9 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 | `regionCode` | 문자열 | O | 지역 목록(§7)에 있는 시·군·구 코드 5자리 | 지역 |
 | `artistType` | enum \| `null` | | §3.3 공연 형태. `null`이거나 빠지면 "상관없음" | 희망 Artist Type |
 | `genres` | enum 배열 | O | §3.3 장르. 1~3개, 중복 불가 | 희망 Genre |
+| `mood` | enum \| `null` | | §3.3 분위기. 하나만. `null`이거나 빠지면 "고르지 않음" | 분위기 (v1.20 초안) |
+| `tempo` | enum \| `null` | | §3.3 템포. 하나만. `null`이거나 빠지면 "고르지 않음" | 템포 (v1.20 초안) |
+| `vocal` | enum \| `null` | | §3.3 보컬. 하나만. `null`이거나 빠지면 "고르지 않음" | 보컬 (v1.20 초안) |
 | `budgetMin` | 정수 | O | 원 단위. 0 이상 | 예산 Min |
 | `budgetMax` | 정수 | O | 원 단위. `budgetMin` 이상, 1,000,000,000 이하 | 예산 Max |
 | `expectedAudience` | 정수 | O | 1~1,000,000 | 예상 관객수 |
@@ -82,6 +85,9 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 - 서버가 정하는 필드(`id`, `eventPartnerId`, `status`, `createdAt`, `updatedAt`)를 본문에 넣으면 무시한다. 상태는 취소 API로만 바뀐다.
 - 예산이 0~0이면 무보수 행사다. 아티스트 설문(2026-10-17)에서 출연료를 받지 않은 공연이 많아, 무보수 여부를 예산으로 표현한다.
 - 예산의 단위는 아티스트 출연료(`ART-028`)·Offer 금액(`BOOKING-059`)과 같은 원이다. 화면이 만 원 단위로 입력받으면 10,000을 곱해 보낸다.
+- 분위기·템포·보컬은 행사에서 선택 항목이다([ADR 05](../adr/event_management/05_event_music_conditions.md)). "상관없음"을 나타내는 코드는 없고, 고르지 않으면 필드를 빼거나 `null`로 보낸다. 고르지 않은 칸은 검색 문구에서 빠진다([ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md) 결정 4).
+- 세 값은 §3.3의 코드와 대소문자까지 같아야 한다. 빈 문자열 `""`, 소문자(`"energetic"`), 앞뒤 공백이 있는 값(`" CALM"`), 목록에 없는 값은 `400 VALIDATION_ERROR`다. 빈 문자열은 "고르지 않음"이 아니다. 숫자·불리언은 Jackson이 문자열로 바꾼 뒤 목록에 없는 값이라 같은 `400 VALIDATION_ERROR`다.
+- 세 필드에는 값 하나만 보낸다. 배열·객체를 보내면 필드 타입으로 바꿀 수 없어 Spring 표준 400(`ProblemDetail`)이다(위 역직렬화 규칙).
 
 ### 3.2 시간대
 
@@ -123,7 +129,7 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 | `WEDDING` | 결혼식 |
 | `OTHER` | 기타 |
 
-**공연 형태** `artistType` — 아티스트 프로필의 공연 형태와 같은 목록이다.
+**공연 형태** `artistType` — 아티스트 프로필의 공연 형태와 같은 목록이다. 값을 더할 때는 `artist_profiles`의 `CHECK`도 같은 마이그레이션에서 고친다.
 
 | 코드 | 이름 |
 |---|---|
@@ -134,7 +140,7 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 
 - 행사의 `artistType = null`은 "상관없음"이다. 이때 Eligibility는 공연 형태를 평가하지 않는다(`AI-MATCH-051`). 형태를 지정하면 아티스트 프로필의 공연 형태와 일치해야 하고, 형태를 입력하지 않은 아티스트는 통과하지 못한다.
 
-**장르** `genres` — 아티스트 프로필의 장르와 같은 목록이다.
+**장르** `genres` — 아티스트 프로필의 장르와 같은 목록이다. 값을 더할 때는 `artist_profiles`의 `CHECK`도 같은 마이그레이션에서 고친다.
 
 | 코드 | 이름 |
 |---|---|
@@ -152,6 +158,39 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 - 행사는 1~3개를 고른다. 순서에는 뜻이 없다. 응답은 위 표의 순서로 돌려준다(요청 `["ROCK", "POP"]` → 응답 `["POP", "ROCK"]`).
 
 **지역** `regionCode` — 시·군·구 코드다. 목록과 규칙은 §7에 있다.
+
+**음악 조건** `mood`·`tempo`·`vocal` — 추천 검색 문구의 재료다(§8.2). 축마다 하나만 고르거나 고르지 않는다. 화면 이름과 검색 문구는 [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md) 결정 3이 정한다. 화면은 아래 코드를 보내고, 영어 문구는 서버 안에서만 쓴다(SSOT `AI-MATCH-050` v1.20 초안).
+
+분위기 `mood`
+
+| 코드 | 이름 |
+|---|---|
+| `ENERGETIC` | 신나는 |
+| `CHEERFUL` | 밝은 |
+| `EMOTIONAL` | 감성적인 |
+| `CALM` | 차분한 |
+| `ROMANTIC` | 로맨틱한 |
+| `GRAND` | 웅장한 |
+
+템포 `tempo`
+
+| 코드 | 이름 |
+|---|---|
+| `SLOW` | 느림 |
+| `MEDIUM` | 보통 |
+| `FAST` | 빠름 |
+
+보컬 `vocal` — 곡에 들리는 목소리를 고르는 값이다. 아티스트의 성별을 고르는 값이 아니다. 화면 문구도 이 뜻이 드러나게 쓴다.
+
+| 코드 | 이름 |
+|---|---|
+| `INSTRUMENTAL` | 연주곡 |
+| `WITH_VOCALS` | 보컬 있음 |
+| `MALE_VOCALS` | 남성 보컬 |
+| `FEMALE_VOCALS` | 여성 보컬 |
+
+- 고르지 않으면 `null`이다. NSU-121 전에 등록한 행사는 세 값이 모두 `null`이다.
+- 값을 더할 때는 enum과 `events`의 `CHECK`(`ck_events_mood`·`ck_events_tempo`·`ck_events_vocal`)를 같은 마이그레이션에서 고친다. 값 삭제와 의미 변경은 breaking change다(위 머리 문단). 절차는 [ADR 05](../adr/event_management/05_event_music_conditions.md) 결정 7에 있다.
 
 ### 3.4 선택정보 `details`
 
@@ -181,13 +220,14 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 | `id` | UUID 문자열 | 행사 식별자 |
 | `eventPartnerId` | UUID 문자열 | 등록한 EVENT_PARTNER의 `users.id` |
 | `status` | enum | `OPEN` / `CANCELLED`(§5.1) |
-| 요청 필드 전부 | §3.1 | `details`는 항상 객체다 |
+| 요청 필드 전부 | §3.1 | `details`는 항상 객체다. `artistType`·`mood`·`tempo`·`vocal`은 고르지 않았으면 `null`이다(필드를 생략하지 않는다) |
 | `createdAt` | 시각(00 §4) | 등록 시각 |
 | `updatedAt` | 시각(00 §4) | 마지막으로 수정·취소한 시각 |
 
 - 응답 모양은 보는 사람과 관계없이 같다.
 - PUBLIC 행사는 다른 사용자에게도 예산을 포함해 모두 보인다. 아티스트의 행사 검색(`SEARCH-049`)이 Price를 검색 조건으로 쓰기 때문이다.
 - 삭제 정보(`deletedAt` 등)는 내보내지 않는다.
+- 음악 조건은 코드로만 내보낸다. 검색 문구와 매핑 버전은 내보내지 않는다.
 
 ### 3.6 불변식
 
@@ -195,11 +235,12 @@ EVENT_PARTNER가 행사를 등록·조회·수정·취소·삭제하는 API와, 
 
 1. `0 < 종료 − 시작 ≤ 24시간`, `1 ≤ performanceMinutes ≤ (종료 − 시작)의 분`.
 2. `0 ≤ budgetMin ≤ budgetMax ≤ 1,000,000,000`.
-3. `1 ≤ genres의 개수 ≤ 3`, 중복이 없고 §3.3 표의 순서다.
+3. `1 ≤ genres의 개수 ≤ 3`, 중복이 없고 §3.3 표의 순서다. DB도 개수·허용 값(`ck_events_genres`)과 1차원·중복 없음(`ck_events_genres_distinct`)을 막는다.
 4. `artistType = null` ⇔ 공연 형태 "상관없음".
 5. `details`는 객체이고 `null`이 아니다. 하위 필드는 `null`일 수 있다.
 6. `status`는 v1에서 `OPEN`·`CANCELLED`이며 값이 추가될 수 있다(00 §3). 클라이언트는 모르는 값을 받아도 실패하지 않는다.
 7. `updatedAt ≥ createdAt`.
+8. `mood`·`tempo`·`vocal`은 각각 `null`이거나 §3.3 목록의 코드 하나다. `null` ⇔ 고르지 않음.
 
 ## 4. 열람 권한
 
@@ -291,9 +332,13 @@ Content-Type: application/json
 - 등록의 SQL 문장마다 잠금 대기와 실행 시간에 상한(설정값, 기본 3초)이 있다. 같은 키의 처리 중인 요청을 기다리는 INSERT도 여기에 든다. 넘으면 행사를 저장하지 않고 `503 EVENT_REGISTRATION_UNAVAILABLE`이다. 먼저 보낸 요청이 멈춰도 기다리는 요청들이 DB 연결을 붙잡고 있지 않게 하기 위해서다.
 - 상한은 트랜잭션 전체가 아니라 문장마다 걸린다. 등록에서 오래 기다릴 수 있는 문장은 같은 키의 INSERT 하나라서, 실제 대기는 상한 남짓이다.
 - `503`에는 `Retry-After`를 붙이지 않는다. 서버도 언제 풀릴지 모르기 때문이다. 화면은 다른 `5xx`처럼 아래 간격 규칙에 따라 같은 키로 다시 보낸다.
-- 본문은 검증과 정규화(§3.1·§3.3·§3.4)를 마친 값으로 비교한다. 앞뒤 공백, 필드 순서, `genres`의 순서, `artistType`이나 `details`를 뺐는지 `null`로 보냈는지, 선택정보의 빈 문자열과 `null`만 다른 본문은 같은 본문이다. 서버가 무시하는 필드(§3.1)는 비교하지 않는다.
+- 본문은 검증과 정규화(§3.1·§3.3·§3.4)를 마친 값으로 비교한다. 앞뒤 공백, 필드 순서, `genres`의 순서, `artistType`·`mood`·`tempo`·`vocal`이나 `details`를 뺐는지 `null`로 보냈는지, 선택정보의 빈 문자열과 `null`만 다른 본문은 같은 본문이다. 서버가 무시하는 필드(§3.1)는 비교하지 않는다.
 - 시작 시각 검사(`EVENT_START_IN_PAST`)는 같은 키의 요청을 정리한 뒤, 행사를 새로 만드는 요청에만 한다(§9). 먼저 보낸 요청이 이미 저장했거나 아직 처리 중이면 다시 보낸 요청은 그 결과를 받으므로, 그사이 시작 시각이 지나도 `201`이다.
 - 본문 해시는 §8.3의 `isEventChanged` 지문과 다르다. 지문은 추천 입력 필드만 담고, 본문 해시는 본문 전체를 담는다.
+- 본문 해시는 필드가 늘어도 이미 저장된 값과 맞게 만든다([ADR 05](../adr/event_management/05_event_music_conditions.md) 결정 4·5). 음악 조건처럼 나중에 더한 선택 필드는 고른 값만 해시에 들어간다.
+  - NSU-121 전에 저장된 키로 음악 조건 없이 같은 본문을 다시 보내면 `201`이다.
+  - NSU-121 전에는 `mood` 등이 모르는 필드로 무시됐다. 그때의 키로 음악 조건을 담아 다시 보내면 저장된 행사와 본문이 달라 `422 IDEMPOTENCY_KEY_REUSED`다. 배포 전에 저장된 키라면 처음과 똑같은 JSON이어도 그렇다.
+  - NSU-121 전 서버는 음악 조건을 모르는 필드로 버린다. 그 서버가 음악 조건을 담은 등록·수정을 받으면 값을 저장하지 않고 `201`·`200`을 돌려줄 수 있고, 새 서버가 저장한 키에는 `422`를 돌려줄 수 있다. 화면이 아니어도 Scalar나 다른 클라이언트가 음악 조건을 보낼 수 있다. 그래서 NSU-121 서버를 배포한 뒤에는 서버를 NSU-121 전으로 되돌리지 않고, 음악 조건을 보내는 화면은 모든 서버가 NSU-121 이상일 때만 연다(ADR 05 R5).
 
 **화면이 할 일**
 
@@ -307,10 +352,10 @@ Content-Type: application/json
 
 ### 5.4 수정
 
-- `PUT`으로 전체를 교체한다. 등록과 같은 본문을 보내며, 선택정보를 빼거나 `null`로 보내면 지운다.
+- `PUT`으로 전체를 교체한다. 등록과 같은 본문을 보내며, 선택정보, `artistType`, `mood`·`tempo`·`vocal`을 빼거나 `null`로 보내면 지운다.
 - 잠금(버전 비교)은 두지 않는다. 같은 행사를 두 화면에서 고치면 나중 저장이 이긴다. 행사는 등록자 한 사람만 고치므로 충돌이 드물다. 추천에 쓴 값이 바뀐 것은 지문(§8.3)이 알려 준다.
 - 수정·취소·삭제는 행을 잠근 뒤(`SELECT … FOR UPDATE`) 상태를 검사하고 바꾼다. 수정과 취소가 동시에 들어오면 먼저 잠근 요청이 끝난 뒤 다른 요청이 바뀐 상태를 본다. 취소가 먼저 끝나면 수정은 `409 EVENT_CANCELLED`이고, 수정이 취소된 행사를 덮어쓰거나 `OPEN`으로 되돌리지 못한다. 이 행 잠금은 동시에 처리되는 요청만 차례로 세우며, 오래된 화면이 보낸 본문은 막지 못한다(아래 공개 범위 항목).
-- 나중에 필드를 더하면, 그 필드를 모르는 이전 화면이 저장할 때 새 필드가 지워질 수 있다. 화면과 서버를 함께 배포한다. 필요해지면 버전 비교를 선택 필드로 더해 호환을 유지한다.
+- 나중에 필드를 더하면, 그 필드를 모르는 이전 화면이 저장할 때 새 필드가 지워질 수 있다. 예를 들어 음악 조건(NSU-121)을 모르는 화면이 저장하면 고른 분위기·템포·보컬이 지워진다. 화면과 서버를 함께 배포한다. 필요해지면 버전 비교를 선택 필드로 더해 호환을 유지한다.
 - 공개 범위도 같다. 한 화면에서 PRIVATE으로 바꾼 뒤 이를 모르는 다른 화면에서 저장하면 PUBLIC으로 돌아가, 숨기려던 행사가 다른 사용자에게 보인다. 지금은 아티스트가 행사를 찾아보는 기능이 없어 드러나는 범위가 행사 주소를 아는 로그인 사용자로 한정되므로 이 위험을 받아들인다. 아티스트의 행사 검색(`SEARCH-049`)이나 PRIVATE 판정(§4)을 열 때 버전 비교(`version` 또는 `If-Match`, 충돌 시 `409`)를 함께 도입한다.
 
 ### 5.5 취소
@@ -373,7 +418,7 @@ Authorization: Bearer {accessToken}
 - 단위는 자치구·시·군, 세종특별자치시, 제주의 행정시(제주시·서귀포시)다. 일반구가 있는 시(수원시 등)는 시 하나로 본다. 약 230개다.
 - 코드의 앞 2자리가 시·도다. 예: `11680`(강남구)의 시·도는 `11`(서울특별시)이다.
 - 행사의 `regionCode`는 이 목록의 시·군·구 코드만 받는다. 시·도 코드(2자리)만으로는 등록할 수 없다. 목록에 없으면 `400 VALIDATION_ERROR`다.
-- 아티스트 프로필의 이동 가능 지역도 이 목록을 쓴다. "서울 전체" 같은 시·도 단위 선택과 판정 규칙(`REGION_REACHABLE`)은 NSU-12·48에서 정한다.
+- 아티스트 프로필의 이동 가능 지역도 이 목록을 쓴다. "서울 전체" 같은 시·도 단위 선택은 09 아티스트 프로필 API §2(NSU-119)가 받고, 판정 규칙(`REGION_REACHABLE`)은 [ADR recommendation_eligibility/00](../adr/recommendation_eligibility/00_eligibility_rules.md)이 정했다.
 - EVENT_PARTNER 프로필의 주요 활동 지역도 이 목록을 쓴다. 시·군·구 코드와 함께 시·도 코드(2자리, "그 시·도 전체")도 받고, 서버가 정규화해 저장한다([05 §2](./05_event_partner_profile.md#2-요청-본문-수정)). FK가 없는 배열이라, 개편 때 코드 이전과 점검을 05 §5대로 한다.
 - 목록은 법정동코드 전체자료로 만들고, 그 기준일을 목록과 함께 기록한다. 행정구역이 개편되면 목록 변경과 저장된 코드 이전을 마이그레이션 하나로 처리한다([ADR 01](../adr/event_management/01_region_code_standard.md)). 한 지역이 둘 이상으로 나뉠 때 기존 코드를 어느 코드로 옮길지는 그런 개편이 생길 때 정한다.
 - 이 코드는 UPPER_SNAKE가 아닌 숫자 문자열이다. 00 §2의 enum 규칙에 대한 예외다.
@@ -429,7 +474,7 @@ Authorization: Bearer {accessToken}
 ```
 
 - NSU-58의 "매칭 요청"은 이 추천 요청이다. 문서에서는 "추천 요청"으로 쓴다. "매칭"은 Offer 수락(매칭 성사)과 헷갈리기 때문이다.
-- 조건을 바꿔 추천받으려면 행사를 고친 뒤 다시 요청한다. 행사 설명은 추천 검색 입력에 쓰지 않는다(SSOT `EVT-042` v1.17). 분위기·템포·보컬 같은 음악 조건은 NSU-121에서 행사 필드로 받는다(서버 협의 016).
+- 조건을 바꿔 추천받으려면 행사를 고친 뒤 다시 요청한다. 행사 설명은 추천 검색 입력에 쓰지 않는다(SSOT `EVT-042` v1.17). 음악 조건은 행사 필드 `eventType`·`genres`·`mood`·`tempo`·`vocal`이다(§3.3, 서버 협의 016). 화면은 선택지 코드를 보내고, Spring이 그 코드로 영문 검색 문구를 만든다.
 - 추천 결과 응답, 다시 보기, 재생 주소, 잠금과 생성 횟수 제한은 02를 따른다.
 
 ### 8.1 추천을 만들 수 있는 조건
@@ -450,10 +495,20 @@ Authorization: Bearer {accessToken}
 | 용도 | 행사 필드 |
 |---|---|
 | Eligibility 입력(`AI-MATCH-051`) | 시간대(`startDate`·`startTime`·`endDate`·`endTime`), `performanceMinutes`, `regionCode`, `budgetMin`·`budgetMax`, `artistType` |
-| 검색 문구의 재료(서버 협의 016) | `eventType`, `genres` (NSU-121 이후 분위기·템포·보컬) |
+| 검색 문구의 재료(서버 협의 016) | `eventType`, `genres`, `mood`, `tempo`, `vocal` (음악 조건) |
 
 - Spring은 이 값으로 영문 검색 문구를 만들어 AI에 보낸다(02 §1.0, [ADR recommendation_search_input/00](../adr/recommendation_search_input/00_canonical_keyphrase.md)). AI 요청의 필드는 서버 협의 017(Accepted)을 따르고, 구현은 NSU-63이 한다.
 - 예산을 어떻게 판정할지(범위가 겹치는지, 출연료 최소가 예산 최대 이하인지)는 NSU-48에서 정한다.
+- 검색 문구는 행사에 저장하지 않는다. 행사를 고치면 다음 추천 요청이 새 snapshot으로 검색 문구를 다시 만든다. 저장된 추천 결과의 검색 문구는 다시 계산하지 않는다(서버 협의 016이 넘긴 "수정 시 재계산 시점", ADR 05).
+- 행사의 미선택 정책(서버 협의 016 후속): 장르는 1~3개 필수다. 분위기·템포·보컬은 고르지 않을 수 있고, 고르지 않은 칸은 문장에서 빠진다.
+
+```text
+화면 선택      →  행사 등록·수정 본문의 코드(mood: "ENERGETIC" …)
+              →  Spring이 코드를 검증해 events에 저장(목록 밖 값은 400)
+추천 생성 시작  →  행사를 한 번 읽어 snapshot 고정: Eligibility 입력, 음악 조건, 지문
+              →  Spring이 음악 조건으로 영문 검색 문구를 만든다(매핑 버전 함께)
+              →  AI 요청(서버 협의 017). 검색 문구·매핑 버전·음악 조건은 결과와 함께 저장(NSU-63)
+```
 
 ### 8.3 `isEventChanged` 지문
 
@@ -461,10 +516,13 @@ Authorization: Bearer {accessToken}
 
 | 바뀌면 `true` | 바뀌어도 `false` |
 |---|---|
-| `startDate`, `startTime`, `endDate`, `endTime`, `performanceMinutes`, `regionCode`, `budgetMin`, `budgetMax`, `artistType`, `eventType`, `genres` | `name`, `venue`, `expectedAudience`, `visibility`, `details`, `description` |
+| `startDate`, `startTime`, `endDate`, `endTime`, `performanceMinutes`, `regionCode`, `budgetMin`, `budgetMax`, `artistType`, `eventType`, `genres`, `mood`, `tempo`, `vocal` | `name`, `venue`, `expectedAudience`, `visibility`, `details`, `description` |
 
 - `genres`는 순서와 관계없이 같은 집합이면 같은 값이다.
 - 값을 바꿨다가 원래대로 되돌리면 `false`다(02 §4.3).
+- `mood`·`tempo`·`vocal`을 고르지 않음에서 값으로 바꾸거나, 값을 지우거나, 다른 값으로 바꾸면 `true`다.
+- 지문에는 검색 문구가 아니라 고른 코드가 들어간다. 매핑 버전(문구)만 바뀌면 `false`다.
+- 음악 조건을 하나도 고르지 않은 행사의 지문은 NSU-121 전과 같다. 지문에 선택 필드를 더할 때는 그 필드를 고르지 않은 행사의 지문이 바뀌지 않게 더한다([ADR 05](../adr/event_management/05_event_music_conditions.md) 결정 5).
 
 ### 8.4 생성하는 동안 행사가 바뀔 때
 
@@ -491,7 +549,7 @@ AI 서버의 응답을 기다리는 동안 등록자가 행사를 고치거나 �
 |---|---|---|
 | 토큰 없음·만료·서명 오류 | 401 | `AUTHENTICATION_REQUIRED` |
 | `eventId`가 UUID 형식이 아님 | 400 | `INVALID_EVENT_ID` |
-| 본문·파라미터 검증 실패. 형식·필수·길이·범위, 목록에 없는 코드, 종료 ≤ 시작, 24시간 초과, 공연시간 초과, 예산 최소 > 최대, 장르 0개·4개 이상·중복, 정수 필드의 소수. 등록의 `Idempotency-Key`가 없거나 형식이 틀림(따옴표로 감싼 값 포함) | 400 | `VALIDATION_ERROR` |
+| 본문·파라미터 검증 실패. 형식·필수·길이·범위, 목록에 없는 코드(`mood`·`tempo`·`vocal`의 빈 문자열·소문자 포함), 종료 ≤ 시작, 24시간 초과, 공연시간 초과, 예산 최소 > 최대, 장르 0개·4개 이상·중복, 정수 필드의 소수. 등록의 `Idempotency-Key`가 없거나 형식이 틀림(따옴표로 감싼 값 포함) | 400 | `VALIDATION_ERROR` |
 | JSON 문법 오류, 필드 타입으로 바꿀 수 없는 값(정수 필드에 `"abc"` 등)이라 역직렬화가 실패함 | 400 | 없음. Spring 표준 `ProblemDetail`(ADR-007 §4.4) |
 | 등록·수정한 값의 시작이 지금과 같거나 지금보다 앞섬(시작 ≤ 지금) | 400 | `EVENT_START_IN_PAST` |
 | ARTIST의 등록·내 행사 목록. 볼 수 있는 행사를 등록자가 아닌 사람이 수정·취소·삭제 | 403 | `ACCESS_DENIED` |
@@ -548,6 +606,9 @@ Content-Type: application/json
   "regionCode": "11680",
   "artistType": "BAND",
   "genres": ["ROCK", "POP"],
+  "mood": "ENERGETIC",
+  "tempo": "FAST",
+  "vocal": "WITH_VOCALS",
   "budgetMin": 300000,
   "budgetMax": 500000,
   "expectedAudience": 800,
@@ -589,6 +650,9 @@ Location: /api/v1/events/0192f3a4-7b1c-7d2e-8f00-1a2b3c4d5e6f
   "regionCode": "11680",
   "artistType": "BAND",
   "genres": ["POP", "ROCK"],
+  "mood": "ENERGETIC",
+  "tempo": "FAST",
+  "vocal": "WITH_VOCALS",
   "budgetMin": 300000,
   "budgetMax": 500000,
   "expectedAudience": 800,
@@ -635,6 +699,32 @@ HTTP/1.1 422 Unprocessable Content
 }
 ```
 
+### 10.4 음악 조건을 고르지 않은 등록
+
+§10.1의 본문에서 `mood`·`tempo`·`vocal`을 빼고 보내면 `201`이고, 응답에는 세 필드가 `null`로 있다. 응답의 다른 필드는 §10.1과 같아 줄였다.
+
+```json
+{
+  "genres": ["POP", "ROCK"],
+  "mood": null,
+  "tempo": null,
+  "vocal": null
+}
+```
+
+소문자로 보내면(`"mood": "energetic"`) 다음과 같다.
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+```json
+{
+  "code": "VALIDATION_ERROR",
+  "message": "요청 값이 올바르지 않습니다."
+}
+```
+
 ## 11. 테스트 기준
 
 | 대상 | 경우 |
@@ -652,11 +742,14 @@ HTTP/1.1 422 Unprocessable Content
 | 열람 | 다른 사용자의 PUBLIC 조회 `200`, PRIVATE 조회 `404`. 다른 사용자의 PUBLIC 수정 `403`, PRIVATE 수정 `404` |
 | 역할 | ARTIST의 등록·내 행사 목록은 `403`. ARTIST가 멱등 키 없이 등록해도 `403`(역할을 키보다 먼저 검사) |
 | 목록 | 시작 = 지금인 행사는 `PAST`. `UPCOMING` 오름차순, `PAST` 내림차순. `size = 101`은 `400`, 끝을 넘은 `page`는 `items: []` |
-| 지문 | `name`·`details`·`description` 수정은 `isEventChanged = false`, `endDate`·`regionCode` 수정은 `true`. `genres` 순서만 바꾸면 `false` |
+| 지문 | `name`·`details`·`description` 수정은 `isEventChanged = false`, `endDate`·`regionCode` 수정은 `true`. `genres` 순서만 바꾸면 `false`. `mood`만 바꾸면 `true`, 고르지 않음 → 값도 `true`. 음악 조건을 고르지 않은 행사의 지문은 NSU-121 전 값과 같다 |
+| 음악 조건 | 세 값을 보내면 같은 값으로 저장·응답한다(상세·내 행사 목록 포함). 빼거나 `null`이면 응답에 `null`. `""`, `"energetic"`, `" CALM"`, `"NOISE"`는 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다. `["CALM"]`은 `ProblemDetail` 400. `PUT`에서 빼면 지워진다. 생성된 OpenAPI 스키마에서 `mood`·`tempo`·`vocal`·`artistType`은 요청·응답 모두 enum 값과 `null`을 허용한다 |
+| 음악 조건 추천 입력 | 저장한 세 값이 snapshot의 음악 조건과 검색 문구에 들어간다(DB를 거쳐 확인) |
+| DB 제약 | `mood`·`tempo`·`vocal`에 목록 밖 값·빈 문자열·소문자를 SQL로 넣으면 DB가 거절한다. 장르의 중복·2차원·하한이 1이 아닌 배열도 거절한다. `Event`의 enum 열마다 `CHECK`의 허용 값이 enum 값 전체와 같다 |
 | 생성 중 변경 | AI 응답을 기다리는 동안 행사를 취소하면 결과가 저장되고 `201`. 삭제하면 결과가 저장되고 `404`이며, 그 결과가 하루 5회 계산에 들어간다. `name`만 고치면 생성 응답의 `isEventChanged = false`, `endDate`를 고치면 `true`. 저장 직전 횟수 재확인에서 한도를 넘으면 행사를 지웠어도 `429`이고 저장하지 않는다 |
 | 비공개 | PRIVATE으로 등록할 수 있다. 등록자는 `200`, 다른 사용자는 `404`. 오래된 화면의 PUT으로 PUBLIC으로 되돌아가는 것은 알려진 위험이다(§5.4) |
 | 멱등 키 형식 | 키가 없으면 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다. 따옴표로 감싼 값, 대문자 UUID, UUID가 아닌 값도 `VALIDATION_ERROR`다. UUIDv4와 UUIDv7은 통과 |
-| 다시 보낸 등록 | 같은 키·같은 본문이면 `201`, 같은 `id`와 `Location`이며 행사는 1건이다. 앞뒤 공백·`genres` 순서·`details` 생략만 다른 본문도 같은 본문이다 |
+| 다시 보낸 등록 | 같은 키·같은 본문이면 `201`, 같은 `id`와 `Location`이며 행사는 1건이다. 앞뒤 공백·`genres` 순서·`details` 생략만 다른 본문도 같은 본문이다. `mood`·`tempo`·`vocal`을 뺀 본문과 `null`로 보낸 본문도 같은 본문이다. NSU-121 전에 저장한 키로 음악 조건 없이 다시 보내면 `201`, 음악 조건을 더해 보내면 `422`다 |
 | 키 재사용 | 같은 키로 `name`만 바꿔 보내면 `422 IDEMPOTENCY_KEY_REUSED`이고 행사는 바뀌지 않는다. 다른 사용자가 같은 키로 등록하면 각자 `201`이다 |
 | 다시 보낸 시점 | 등록 뒤 수정했으면 수정된 행사로 `201`, 취소했으면 `status = CANCELLED`인 행사로 `201`. 삭제했으면 본문이 달라도 `404`. 시작 시각이 지난 뒤 다시 보내도 `201`(시계를 고정해 테스트). `400`으로 실패한 요청의 키로 고친 본문을 보내면 `201` |
 | 동시 등록 | 같은 키·같은 본문의 등록 두 개를 동시에 보내면 행사는 1건이고, 두 응답 모두 `201`과 같은 `id`다. 같은 키에 본문이 다른 등록 두 개를 동시에 보내면 하나는 `201`, 다른 하나는 `422`다. 어느 경우도 `500`이 아니다 |
@@ -672,7 +765,8 @@ HTTP/1.1 422 Unprocessable Content
 | [02 추천 응답](./02_recommendation_trust_and_new_artist.md) | §0의 미정 항목 2개(요청 본문, 취소·삭제된 행사)를 이 문서 §5.2·§8로 넘기고, §0.1·§1·§4.3·§5·§5.2에 행사 상태, 필드 이름, 검사 순서, 생성 중 변경(§8.4)을 반영한다 | 이 변경에 포함 |
 | [00 공통 규칙](./00_conventions.md) | `/me` 경로, 상태 전이용 1:1 하위 자원, 지역 코드 예외, 날짜·시:분 형식, 페이지네이션 | 이 변경에 포함 |
 | 용어집 (Linear) | 행사, 행사 시간대·공연시간, 행사 취소·행사 삭제, 추천 요청(피할 표현: 매칭 요청) | 설계 리뷰 뒤 반영 |
-| 프런트 | `date`를 시작·종료 날짜로 나누고 예산을 원 단위로 바꾼다. 한국어 값을 코드로, 지역을 두 단계 선택으로 바꾸고 선택정보 칸을 더한다. PRIVATE 안내 문구를 지금의 동작("등록한 사람만 볼 수 있어요")으로 바꾼다. localStorage 대신 API를 쓴다. 매칭 화면의 분위기·템포·리듬 입력은 음악 조건 선택(분위기·템포·보컬, NSU-121·125)으로 바꾼다 | 프런트 담당과 협의 |
+| 프런트 | `date`를 시작·종료 날짜로 나누고 예산을 원 단위로 바꾼다. 한국어 값을 코드로, 지역을 두 단계 선택으로 바꾸고 선택정보 칸을 더한다. PRIVATE 안내 문구를 지금의 동작("등록한 사람만 볼 수 있어요")으로 바꾼다. localStorage 대신 API를 쓴다. 행사 등록·수정 화면에 음악 조건 선택(분위기·템포·보컬, 각 하나 또는 고르지 않음, §3.3)을 더하고 코드로 보낸다. "무관"·"상관없음"은 필드를 빼서 보낸다. 매칭 화면 체험판의 리듬 입력은 v1에 없다(NSU-125) | 프런트 담당과 협의 |
+| SSOT `EVT-042` | "행사에서 필수인지는 NSU-121이 정한다"를 "행사에서 선택 항목이며, 고르지 않으면 검색 문구에서 빠진다"로 바꾼다(NSU-121). v1.20을 고치지 않고 새 minor 초안 리비전으로 올린다(리비전 규칙 0.4절) | 지휘 세션이 반영 |
 
 ### 12.1 등록 멱등 키와 불리언 이름 (NSU-99, 2026-10-18)
 
