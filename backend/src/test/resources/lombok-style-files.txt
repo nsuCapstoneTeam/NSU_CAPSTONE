@@ -43,6 +43,7 @@ src/main/java/com/nsu/capstone/global/config/AppEnvironment.java
 src/main/java/com/nsu/capstone/global/config/AppEnvironmentConfig.java
 src/main/java/com/nsu/capstone/global/config/AppProperties.java
 src/main/java/com/nsu/capstone/global/config/OpenApiConfig.java
+src/main/java/com/nsu/capstone/global/config/SchedulingConfig.java
 src/main/java/com/nsu/capstone/global/logging/LogDeviceCheck.java
 src/main/java/com/nsu/capstone/global/logging/LogDeviceReadyListener.java
 src/main/java/com/nsu/capstone/global/logging/LogSafetyListener.java

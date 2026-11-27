@@ -21,6 +21,7 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.scheduling.config.ScheduledTaskHolder;
 
 /**
  * Mock 본인확인 시드 진입점. 서버 jar에는 들어가지 않고, 같은 빌드의 시드 jar로 시연 서버 안에서 실행한다(ADR identity_verification/01).
@@ -76,8 +77,12 @@ public final class IdentitySeed {
         });
         // 명령행 인수는 환경 변수(SERVER_PORT, MANAGEMENT_SERVER_PORT)와 application.properties의 spring.flyway.enabled보다
         // 우선한다. setDefaultProperties는 우선순위가 가장 낮아 이들에 밀린다.
-        try (ConfigurableApplicationContext context =
-                application.run("--server.port=-1", "--management.server.port=-1", "--spring.flyway.enabled=false")) {
+        // --app.scheduling.enabled=false는 예약 작업(@Scheduled)을 하나도 등록하지 않게 한다. 등록되면 시드 프로세스가 서버와 같은 시각에 그 작업을 돌린다.
+        try (ConfigurableApplicationContext context = application.run(
+                "--server.port=-1",
+                "--management.server.port=-1",
+                "--spring.flyway.enabled=false",
+                "--app.scheduling.enabled=false")) {
             return seed(context, email.strip().toLowerCase(Locale.ROOT), openedPorts);
         }
     }
@@ -124,6 +129,15 @@ public final class IdentitySeed {
             return 4;
         }
         log.info("HTTP 포트를 열지 않았다(server.port=-1, management.server.port=-1)");
+
+        long scheduledTasks = context.getBeansOfType(ScheduledTaskHolder.class).values().stream()
+                .mapToLong(holder -> holder.getScheduledTasks().size())
+                .sum();
+        if (scheduledTasks > 0) {
+            log.error("예약 작업이 {}개 등록돼 있다. 시드는 어떤 예약 작업도 등록하지 않아야 한다", scheduledTasks);
+            return 5;
+        }
+        log.info("예약 작업을 등록하지 않았다");
 
         UUID userId = context.getBean(JdbcClient.class)
                 .sql("SELECT id FROM users WHERE email = :email AND role = 'ARTIST'")

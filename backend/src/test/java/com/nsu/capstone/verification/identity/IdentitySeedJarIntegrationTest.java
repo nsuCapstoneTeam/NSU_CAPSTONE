@@ -158,6 +158,27 @@ class IdentitySeedJarIntegrationTest extends IdentityVerificationIntegrationTest
         assertThat(run.output()).doesNotContain("started on port " + port);
     }
 
+    /**
+     * 시드는 서버 전체 컨텍스트를 띄우므로, 예약 작업이 등록되면 시드 안에서 서버와 같은 시각에 돈다(예: 04:30 외부 계정 확인 작업이 시드 프로세스에서 다른 계정의 링크를 갱신·삭제한다).
+     * 지금 있는 작업 하나가 아니라 앞으로 생길 작업까지 하나도 등록되지 않아야 한다.
+     */
+    @Test
+    void 시드_jar는_예약_작업을_하나도_등록하지_않는다() throws Exception {
+        SeedRun run = runSeed(artist.getEmail(), SEED_NAME);
+
+        assertThat(run.exitCode()).as(run.output()).isZero();
+        assertThat(run.output()).contains("예약 작업을 등록하지 않았다");
+    }
+
+    /** 시드는 명령행 인수로 스케줄링을 끄므로 환경 변수로 다시 켤 수 없다(server.port와 같은 방식). */
+    @Test
+    void 환경에_APP_SCHEDULING_ENABLED가_있어도_시드_jar는_예약_작업을_등록하지_않는다() throws Exception {
+        SeedRun run = runSeed(artist.getEmail(), SEED_NAME, Map.of("APP_SCHEDULING_ENABLED", "true"));
+
+        assertThat(run.exitCode()).as(run.output()).isZero();
+        assertThat(run.output()).contains("예약 작업을 등록하지 않았다");
+    }
+
     /** EMAIL은 시험 대상 아티스트의 이메일로 바꾼다. 입력 값은 어느 경우에도 출력에 없어야 한다. */
     static Stream<Arguments> invalidInputs() {
         return Stream.of(
