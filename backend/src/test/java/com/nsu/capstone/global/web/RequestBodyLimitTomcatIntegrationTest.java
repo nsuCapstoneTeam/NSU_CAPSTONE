@@ -365,8 +365,8 @@ class RequestBodyLimitTomcatIntegrationTest extends EventIntegrationTestBase {
     }
 
     /**
-     * 앞에 공백을 채워 JSON 값이 맨 끝에 오게 한다. 뒤에 채우면 Jackson이 값을 다 읽은 뒤 멈추므로, 앱이 나머지 바이트를 읽지 않아 상한에
-     * 걸리지 않는다.
+     * 앞에 공백을 채워 JSON 값이 맨 끝에 오게 한다. 앞에 채우면 Jackson 설정과 상관없이 값을 읽으려고 끝까지 읽는다. 뒤에 채우면 Jackson 3의
+     * FAIL_ON_TRAILING_TOKENS(기본값 true)가 꺼진 설정에서는 값을 다 읽은 뒤 멈추므로 상한에 걸리지 않는다.
      */
     private static byte[] loginJsonOfSize(int size) {
         byte[] json =
