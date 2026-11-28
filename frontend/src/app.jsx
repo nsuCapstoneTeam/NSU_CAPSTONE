@@ -63,7 +63,8 @@ export default function App() {
     profileValue,
   );
   // 로그인 세션 (NSU-94): 토큰 보관·만료·역할 이름은 auth-session.js가 맡음
-  const { session, login, logout: endSession, startDemo, storageError: sessionError } = useAuthSession();
+  const { session, login, logout: endSession, startDemo, cancelPendingLogin, storageError: sessionError } =
+    useAuthSession();
   const [posts, setPosts, postsError] = useStoredState(
     'hm-mvp-posts-v1',
     INITIAL_POSTS,
@@ -114,6 +115,8 @@ export default function App() {
   // 화면만 바꿈: 로그인 흐름 밖으로 나가면 돌아갈 화면을 잊고, 맨 위로 스크롤 후 본문에 포커스
   function showPage(next) {
     if (!LOGIN_FLOW_PAGES.includes(next)) setReturnTo(null);
+    // 로그인 화면을 벗어나면 아직 오지 않은 로그인 응답은 버림 (auth-session.js 로그인 세대)
+    if (next !== 'artist-login' && next !== 'organizer-login') cancelPendingLogin();
     setMyPageTab('profile');
     setPage(next);
     setNotice('');
@@ -123,7 +126,7 @@ export default function App() {
   }
   // 화면 전환: 화면을 바꾸고 주소도 함께 바꿈 (브라우저 방문 기록에 한 칸 추가)
   // replace: 지금 기록을 바꿔 끼움 (로그인을 마친 뒤 뒤로 가기로 로그인 폼에 돌아가지 않게)
-  // 화면만 바꾸고 로그인 상태는 건드리지 않음 (가입을 마치면 그때 새 계정으로 바뀜: startAfterSignUp)
+  // 화면만 바꾸고 로그인 상태는 건드리지 않음 (가입을 마치면 그때 예전 로그인이 끝남: profileAfterSignUp)
   function navigate(next, { replace = false } = {}) {
     showPage(next);
     const path = pathOf(next);
@@ -188,7 +191,13 @@ export default function App() {
   function quickLogin(next) {
     if (startDemo(next)) finishLogin(next);
   }
-  // 가입 완료 → '프로필 채우러 가기': 예전 로그인은 끝내고 새 계정으로 시작
+  // 가입 성공: 프로필이 새 계정 값으로 바뀌므로 예전 로그인을 같이 끝냄.
+  // (세션과 프로필이 다른 계정을 가리키지 않게. 가입 화면은 프로필만 바꾸고 가입 완료 화면으로 감)
+  function profileAfterSignUp(next) {
+    endSession();
+    setProfile(next);
+  }
+  // 가입 완료 → '프로필 채우러 가기': 새 계정으로 시작
   // 체험 모드는 바로 시작, 서버 모드는 가입한 이메일로 로그인해야 토큰을 받으므로 로그인 화면으로
   function startAfterSignUp() {
     const next = { role: profile.role, name: profile.name };
@@ -412,7 +421,7 @@ export default function App() {
         {page === 'artist-signup' && (
           <ArtistSignUp
             profile={profile}
-            setProfile={setProfile}
+            setProfile={profileAfterSignUp}
             notify={setNotice}
             navigate={navigate}
           />
@@ -420,7 +429,7 @@ export default function App() {
         {page === 'organizer-signup' && (
           <OrganizerSignUp
             profile={profile}
-            setProfile={setProfile}
+            setProfile={profileAfterSignUp}
             notify={setNotice}
             navigate={navigate}
           />

@@ -42,14 +42,19 @@ export function displayName(email, profile, role) {
 
 // api·토큰 보관함·모드를 바꿔 끼울 수 있게 만든 공장 함수 (테스트에서 사용)
 export function createAuthSession({ api = authApi, tokens = tokenStore, mode = AUTH_API_MODE } = {}) {
+  // 로그인 세대: 로그인 시작·로그아웃·로그인 화면 이탈 때 올림.
+  // 응답이 오기 전에 세대가 바뀌었으면 그 응답은 버림 (늦게 온 예전 로그인이 지금 상태를 덮어쓰지 않게)
+  let generation = 0;
   return {
     mode,
     // 이메일 로그인. 성공하면 { session, roleChanged }
     //   roleChanged: 로그인한 화면의 역할(roleHint)과 계정 역할이 달라 계정 역할로 들어갔는지 (화면에서 안내)
     // 실패하면 AuthApiError(오류 문구는 error.message)를 던지고, 토큰·세션을 남기지 않음
     async login(email, password, { roleHint, profile } = {}) {
+      const mine = ++generation;
       tokens.clear();
       const result = await api.login(email, password, { roleHint });
+      if (mine !== generation) throw new AuthApiError('LOGIN_CANCELLED');
       const role = normalizeRole(result?.role);
       if (!role) throw new AuthApiError('UNKNOWN_ERROR');
       // 서버 모드는 토큰이 있어야 API를 부를 수 있으므로, 저장하지 못하면 로그인하지 않음
@@ -60,15 +65,24 @@ export function createAuthSession({ api = authApi, tokens = tokenStore, mode = A
       const session = { name: displayName(email, profile, role), role, userId: result.userId };
       return { session, roleChanged: Boolean(roleHint) && normalizeRole(roleHint) !== role };
     },
-    // 저장된 세션을 쓸 수 있는지 확인. 서버 모드에서 토큰이 없거나 만료됐으면 null
+    // 저장된 세션을 쓸 수 있는지 확인.
+    // 서버 모드: 토큰이 없거나 만료됐으면 null. 세션은 탭끼리 같이 쓰는 localStorage, 토큰은 탭마다 따로인
+    // sessionStorage라서, 다른 탭에서 다른 계정으로 로그인했으면 이 탭의 토큰과 계정이 다를 수 있음 → 다르면 null
     restore(saved) {
       if (!isSession(saved) || saved === null) return null;
-      if (mode === 'server' && !tokens.read()) return null;
+      if (mode !== 'server') return saved;
+      const token = tokens.read();
+      if (!token || token.userId !== saved.userId || normalizeRole(token.role) !== saved.role) return null;
       return saved;
     },
-    // 로그아웃: 토큰을 지움 (세션은 화면 상태라 훅에서 지움)
+    // 로그아웃: 토큰을 지우고, 진행 중인 로그인 응답은 버림 (세션은 화면 상태라 훅에서 지움)
     logout() {
+      generation += 1;
       tokens.clear();
+    },
+    // 로그인 화면을 벗어남: 진행 중인 로그인 응답은 버림
+    cancelPendingLogin() {
+      generation += 1;
     },
     // 토큰 없이 들어가는 체험 세션(개발용 빠른 로그인·가입 완료 뒤 바로 시작)은 체험 모드에서만 허용
     canStartWithoutLogin: mode !== 'server',

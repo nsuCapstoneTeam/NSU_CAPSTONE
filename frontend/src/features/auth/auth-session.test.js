@@ -125,6 +125,52 @@ describe('로그인', () => {
   });
 });
 
+describe('늦게 온 로그인 응답', () => {
+  // 응답을 손으로 풀어 주는 가짜 API
+  function deferredApi() {
+    const pending = [];
+    return {
+      pending,
+      login: () => new Promise((resolve) => pending.push(resolve)),
+    };
+  }
+
+  it('응답 전에 로그아웃하면 그 응답은 버리고 토큰도 남기지 않는다', async () => {
+    const storage = memoryStorage();
+    const api = deferredApi();
+    const auth = createAuthSession({ api, tokens: createTokenStore(() => storage, () => 0), mode: 'server' });
+    const first = auth.login('a@example.com', 'password1');
+    auth.logout();
+    api.pending[0](OK);
+    await assert.rejects(first, { code: 'LOGIN_CANCELLED' });
+    assert.equal(storage.getItem(TOKEN_KEY), null);
+  });
+
+  it('응답 전에 로그인 화면을 벗어나면 그 응답은 버린다', async () => {
+    const storage = memoryStorage();
+    const api = deferredApi();
+    const auth = createAuthSession({ api, tokens: createTokenStore(() => storage, () => 0), mode: 'server' });
+    const first = auth.login('a@example.com', 'password1');
+    auth.cancelPendingLogin();
+    api.pending[0](OK);
+    await assert.rejects(first, { code: 'LOGIN_CANCELLED' });
+    assert.equal(storage.getItem(TOKEN_KEY), null);
+  });
+
+  it('먼저 시작한 로그인이 늦게 오면 나중 로그인만 남는다', async () => {
+    const storage = memoryStorage();
+    const api = deferredApi();
+    const auth = createAuthSession({ api, tokens: createTokenStore(() => storage, () => 0), mode: 'server' });
+    const first = auth.login('a@example.com', 'password1');
+    const second = auth.login('b@example.com', 'password1');
+    api.pending[1]({ ...OK, accessToken: 'jwt-b', userId: 'u-b' });
+    assert.equal((await second).session.userId, 'u-b');
+    api.pending[0]({ ...OK, accessToken: 'jwt-a', userId: 'u-a' });
+    await assert.rejects(first, { code: 'LOGIN_CANCELLED' });
+    assert.equal(JSON.parse(storage.getItem(TOKEN_KEY)).accessToken, 'jwt-b');
+  });
+});
+
 describe('저장된 세션 확인과 로그아웃', () => {
   const saved = { name: 'kim', role: 'organizer', userId: 'u1' };
 
@@ -136,6 +182,14 @@ describe('저장된 세션 확인과 로그아웃', () => {
     assert.deepEqual(auth.restore(saved), saved);
     time = 1800 * 1000;
     assert.equal(auth.restore(saved), null);
+  });
+
+  it('서버 모드: 다른 탭에서 바뀐 세션처럼 토큰과 계정이 다르면 null', () => {
+    const { auth, tokens } = setup();
+    tokens.save(OK);
+    assert.equal(auth.restore({ ...saved, userId: 'u2' }), null);
+    assert.equal(auth.restore({ ...saved, role: 'artist' }), null);
+    assert.equal(auth.restore({ name: 'kim', role: 'organizer' }), null);
   });
 
   it('체험 모드: 토큰이 없어도 저장된 세션을 쓴다', () => {
