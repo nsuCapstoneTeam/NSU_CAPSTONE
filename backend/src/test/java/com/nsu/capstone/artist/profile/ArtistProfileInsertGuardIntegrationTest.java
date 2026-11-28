@@ -9,6 +9,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -27,6 +28,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 class ArtistProfileInsertGuardIntegrationTest extends ArtistProfileIntegrationTestBase {
 
     private static final String CHECK_VIOLATION = "23514";
+    private static final String SERIALIZATION_FAILURE = "40001";
+    private static final String FOREIGN_KEY_VIOLATION = "23503";
+    private static final String GUARD_TRIGGER = "trg_artist_profiles_require_active_artist";
     private static final long WAIT_SECONDS = 10;
 
     @Autowired
@@ -154,8 +158,8 @@ class ArtistProfileInsertGuardIntegrationTest extends ArtistProfileIntegrationTe
         insertProfile(artist);
 
         assertGuardRejects(
-                () -> jdbcTemplate.update("UPDATE artist_profiles SET user_id = ? WHERE user_id = ?",
-                        other.getId(), artist.getId()),
+                () -> jdbcTemplate.update(
+                        "UPDATE artist_profiles SET user_id = ? WHERE user_id = ?", other.getId(), artist.getId()),
                 artist);
 
         assertThat(profileRows(artist)).isOne();
@@ -176,8 +180,103 @@ class ArtistProfileInsertGuardIntegrationTest extends ArtistProfileIntegrationTe
     }
 
     @Test
-    void 탈퇴_연결이_users_행을_잡은_채_SET에_같은_user_id를_넣은_UPDATE는_기다리지_않고_탈퇴는_교착_없이_끝난다()
-            throws Exception {
+    void 정지된_ARTIST의_행에서_region_codes만_바꾸는_UPDATE는_성공한다() {
+        insertProfile(artist);
+        changeStatus(artist, "SUSPENDED");
+
+        int updated = jdbcTemplate.update(
+                "UPDATE artist_profiles SET region_codes = ARRAY['11']::varchar[] WHERE user_id = ?", artist.getId());
+
+        assertThat(updated).isOne();
+        assertThat(regionCodes(artist)).containsExactly("11");
+    }
+
+    @Test
+    void REPEATABLE_READ_트랜잭션이_스냅숏을_잡은_뒤_다른_연결이_탈퇴시키면_INSERT는_40001이고_행이_없다() throws Exception {
+        try (Connection insert = dataSource.getConnection()) {
+            insert.setAutoCommit(false);
+            insert.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+            try {
+                try (Statement snapshot = insert.createStatement()) {
+                    snapshot.execute("SELECT 1");
+                }
+                changeStatus(artist, "WITHDRAWN");
+
+                assertThatThrownBy(() -> execute(insert, insertSql(artist)))
+                        .isInstanceOfSatisfying(
+                                SQLException.class,
+                                exception -> assertThat(exception.getSQLState()).isEqualTo(SERIALIZATION_FAILURE));
+            } finally {
+                insert.rollback();
+            }
+        }
+
+        assertThat(profileRows(artist)).isZero();
+    }
+
+    @Test
+    void 복원_절차대로_가드_트리거만_끄고_정지된_ARTIST의_행을_넣고_다시_켜면_행이_있고_가드가_켜져_있다() throws Exception {
+        changeStatus(artist, "SUSPENDED");
+
+        try (Connection restore = dataSource.getConnection()) {
+            restore.setAutoCommit(false);
+            try {
+                lockUsersRow(restore, artist, "FOR SHARE");
+                execute(restore, "ALTER TABLE artist_profiles DISABLE TRIGGER " + GUARD_TRIGGER);
+                execute(restore, insertSql(artist));
+                execute(restore, "ALTER TABLE artist_profiles ENABLE TRIGGER " + GUARD_TRIGGER);
+                restore.commit();
+            } finally {
+                restore.rollback();
+            }
+        }
+
+        assertThat(profileRows(artist)).isOne();
+        assertThat(guardTriggerState()).isEqualTo("O");
+    }
+
+    @Test
+    void 복원_절차가_중간에_실패해_롤백하면_가드가_켜진_상태이고_행이_없다() throws Exception {
+        changeStatus(artist, "SUSPENDED");
+
+        try (Connection restore = dataSource.getConnection()) {
+            restore.setAutoCommit(false);
+            try {
+                execute(restore, "ALTER TABLE artist_profiles DISABLE TRIGGER " + GUARD_TRIGGER);
+                execute(restore, insertSql(artist));
+                assertThatThrownBy(() -> execute(restore, "SELECT 1/0")).isInstanceOf(SQLException.class);
+            } finally {
+                restore.rollback();
+            }
+        }
+
+        assertThat(profileRows(artist)).isZero();
+        assertThat(guardTriggerState()).isEqualTo("O");
+    }
+
+    @Test
+    void 복원_절차에서_가드를_끈_동안에도_없는_사용자의_행은_FK로_거절된다() throws Exception {
+        UUID missingUserId = UUID.randomUUID();
+
+        try (Connection restore = dataSource.getConnection()) {
+            restore.setAutoCommit(false);
+            try {
+                execute(restore, "ALTER TABLE artist_profiles DISABLE TRIGGER " + GUARD_TRIGGER);
+
+                assertThatThrownBy(() -> execute(restore, insertSql(missingUserId)))
+                        .isInstanceOfSatisfying(
+                                SQLException.class,
+                                exception -> assertThat(exception.getSQLState()).isEqualTo(FOREIGN_KEY_VIOLATION));
+            } finally {
+                restore.rollback();
+            }
+        }
+
+        assertThat(guardTriggerState()).isEqualTo("O");
+    }
+
+    @Test
+    void 탈퇴_연결이_users_행을_잡은_채_SET에_같은_user_id를_넣은_UPDATE는_기다리지_않고_탈퇴는_교착_없이_끝난다() throws Exception {
         insertProfile(artist);
 
         try (Connection withdrawal = dataSource.getConnection();
@@ -185,12 +284,12 @@ class ArtistProfileInsertGuardIntegrationTest extends ArtistProfileIntegrationTe
             withdrawal.setAutoCommit(false);
             profileUpdate.setAutoCommit(false);
             try {
-                lockUsersRow(withdrawal, artist);
+                lockUsersRow(withdrawal, artist, "FOR NO KEY UPDATE");
 
                 Future<Integer> update = executor.submit(() -> execute(
                         profileUpdate,
-                        "UPDATE artist_profiles SET user_id = user_id, bio = '새 소개' WHERE user_id = '"
-                                + artist.getId() + "'"));
+                        "UPDATE artist_profiles SET user_id = user_id, bio = '새 소개' WHERE user_id = '" + artist.getId()
+                                + "'"));
                 assertThat(update.get(WAIT_SECONDS, TimeUnit.SECONDS))
                         .as("users 행 잠금을 기다리지 않고 끝난다")
                         .isOne();
@@ -225,11 +324,15 @@ class ArtistProfileInsertGuardIntegrationTest extends ArtistProfileIntegrationTe
     }
 
     private String insertSql(User owner) {
+        return insertSql(owner.getId());
+    }
+
+    private String insertSql(UUID userId) {
         return """
                 INSERT INTO artist_profiles
                     (user_id, name, artist_types, genres, region_codes, updated_at)
                 VALUES ('%s', '이름', ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], now())
-                """.formatted(owner.getId());
+                """.formatted(userId);
     }
 
     private void insertProfile(User owner) {
@@ -263,11 +366,18 @@ class ArtistProfileInsertGuardIntegrationTest extends ArtistProfileIntegrationTe
         }
     }
 
-    /** 탈퇴 UPDATE가 users 행에 거는 것과 같은 잠금을 먼저 잡는다. */
-    private static void lockUsersRow(Connection connection, User user) throws SQLException {
+    /** users 행을 주어진 잠금(FOR NO KEY UPDATE는 탈퇴 UPDATE, FOR SHARE는 삽입 가드가 거는 것)으로 먼저 잡는다. */
+    private static void lockUsersRow(Connection connection, User user, String lock) throws SQLException {
         try (Statement statement = connection.createStatement()) {
-            statement.execute("SELECT 1 FROM users WHERE id = '" + user.getId() + "' FOR NO KEY UPDATE");
+            statement.execute("SELECT 1 FROM users WHERE id = '" + user.getId() + "' " + lock);
         }
+    }
+
+    private String guardTriggerState() {
+        return jdbcTemplate.queryForObject(
+                "SELECT tgenabled::text FROM pg_trigger WHERE tgrelid = 'artist_profiles'::regclass AND tgname = ?",
+                String.class,
+                GUARD_TRIGGER);
     }
 
     /** 이 문장 조각을 가진 연결이 잠금을 기다리는 상태가 될 때까지 기다린다. 잠깐 자는 것으로 순서를 가정하지 않는다. */
