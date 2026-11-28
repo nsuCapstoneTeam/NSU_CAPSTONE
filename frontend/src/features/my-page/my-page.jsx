@@ -46,8 +46,7 @@ export default function MyPage({
   setProfile,
   schedules,
   setSchedules,
-  events,
-  setEvents,
+  myEvents,
   saved,
   toggleSaved,
   notify,
@@ -108,8 +107,7 @@ export default function MyPage({
     requests: <BookingRequestsTab />,
     events: (
       <EventsTab
-        events={events}
-        setEvents={setEvents}
+        myEvents={myEvents}
         notify={notify}
       />
     ),
