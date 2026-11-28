@@ -6,6 +6,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import org.springdoc.core.customizers.OperationCustomizer;
 import org.springframework.aop.Advisor;
 import org.springframework.aop.support.DefaultPointcutAdvisor;
 import org.springframework.aop.support.annotation.AnnotationMatchingPointcut;
@@ -43,6 +44,12 @@ public class UserRequestLimitConfig {
                 new UserRequestLimitAdvice(ledger));
         advisor.setOrder(AuthorizationInterceptorsOrder.PRE_AUTHORIZE.getOrder() + 1);
         return advisor;
+    }
+
+    /** springdoc이 모든 API 문서에 적용한다. 한도가 붙은 핸들러에 {@code 429}(와 {@code REJECT} 한도의 {@code 503})를 적는다. */
+    @Bean
+    OperationCustomizer userRequestLimitOperationCustomizer() {
+        return new UserRequestLimitOperationCustomizer();
     }
 
     /**

@@ -73,10 +73,6 @@ public class ExternalAccountController {
             description = "EXTERNAL_ACCOUNT_CONNECTION_CHANGED",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(
-            responseCode = "429",
-            description = "TOO_MANY_REQUESTS",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(
             responseCode = "503",
             description = "EXTERNAL_PROVIDER_DISABLED, RATE_LIMIT_UNAVAILABLE",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -110,10 +106,6 @@ public class ExternalAccountController {
     @ApiResponse(
             responseCode = "422",
             description = "YOUTUBE_CHANNEL_NOT_FOUND, SPOTIFY_ARTIST_NOT_FOUND",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(
-            responseCode = "429",
-            description = "TOO_MANY_REQUESTS",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(
             responseCode = "503",
@@ -153,10 +145,6 @@ public class ExternalAccountController {
             description = "EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(
-            responseCode = "429",
-            description = "TOO_MANY_REQUESTS",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(
             responseCode = "503",
             description = "EXTERNAL_PROVIDER_UNAVAILABLE, EXTERNAL_PROVIDER_DISABLED, RATE_LIMIT_UNAVAILABLE",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -187,10 +175,6 @@ public class ExternalAccountController {
             description = "EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(
-            responseCode = "429",
-            description = "TOO_MANY_REQUESTS",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(
             responseCode = "503",
             description =
                     "EXTERNAL_PROVIDER_UNAVAILABLE, EXTERNAL_PROVIDER_DISABLED, RATE_LIMIT_UNAVAILABLE, EXTERNAL_ACCOUNT_BUSY",
@@ -217,10 +201,6 @@ public class ExternalAccountController {
     @ApiResponse(
             responseCode = "404",
             description = "EXTERNAL_ACCOUNT_NOT_FOUND",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(
-            responseCode = "429",
-            description = "TOO_MANY_REQUESTS",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(
             responseCode = "503",

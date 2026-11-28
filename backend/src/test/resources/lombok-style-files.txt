@@ -67,6 +67,7 @@ src/main/java/com/nsu/capstone/global/requestlimit/RequestBudget.java
 src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimit.java
 src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimitAdvice.java
 src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimitConfig.java
+src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimitOperationCustomizer.java
 src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimitProperties.java
 src/main/java/com/nsu/capstone/global/text/UserText.java
 src/main/java/com/nsu/capstone/identity/application/ArtistReadAccess.java

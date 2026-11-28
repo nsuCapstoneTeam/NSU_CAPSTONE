@@ -315,11 +315,11 @@ class OpenApiDocsIntegrationTest {
     /** 기대 오류는 "상태=설명에 들어갈 낱말,…;상태=…" 형식이다. 03 행사 API §9의 표와 검사 순서를 옮겼다. */
     @ParameterizedTest(name = "{0} {1}")
     @CsvSource(delimiter = '|', textBlock = """
-        post   | /api/v1/events                        | 400=VALIDATION_ERROR,EVENT_START_IN_PAST,ProblemDetail;403=ACCESS_DENIED;404=EVENT_NOT_FOUND;422=IDEMPOTENCY_KEY_REUSED;503=EVENT_REGISTRATION_UNAVAILABLE
+        post   | /api/v1/events                        | 400=VALIDATION_ERROR,EVENT_START_IN_PAST,ProblemDetail;403=ACCESS_DENIED;404=EVENT_NOT_FOUND;422=IDEMPOTENCY_KEY_REUSED;429=TOO_MANY_REQUESTS;503=EVENT_REGISTRATION_UNAVAILABLE
         get    | /api/v1/events/{eventId}              | 400=INVALID_EVENT_ID;404=EVENT_NOT_FOUND
-        put    | /api/v1/events/{eventId}              | 400=INVALID_EVENT_ID,VALIDATION_ERROR,EVENT_START_IN_PAST,ProblemDetail;403=ACCESS_DENIED;404=EVENT_NOT_FOUND;409=EVENT_ALREADY_STARTED,EVENT_CANCELLED
-        put    | /api/v1/events/{eventId}/cancellation | 400=INVALID_EVENT_ID;403=ACCESS_DENIED;404=EVENT_NOT_FOUND;409=EVENT_ALREADY_STARTED
-        delete | /api/v1/events/{eventId}              | 400=INVALID_EVENT_ID;403=ACCESS_DENIED;404=EVENT_NOT_FOUND
+        put    | /api/v1/events/{eventId}              | 400=INVALID_EVENT_ID,VALIDATION_ERROR,EVENT_START_IN_PAST,ProblemDetail;403=ACCESS_DENIED;404=EVENT_NOT_FOUND;409=EVENT_ALREADY_STARTED,EVENT_CANCELLED;429=TOO_MANY_REQUESTS
+        put    | /api/v1/events/{eventId}/cancellation | 400=INVALID_EVENT_ID;403=ACCESS_DENIED;404=EVENT_NOT_FOUND;409=EVENT_ALREADY_STARTED;429=TOO_MANY_REQUESTS
+        delete | /api/v1/events/{eventId}              | 400=INVALID_EVENT_ID;403=ACCESS_DENIED;404=EVENT_NOT_FOUND;429=TOO_MANY_REQUESTS
         get    | /api/v1/me/events                     | 400=VALIDATION_ERROR;403=ACCESS_DENIED
         get    | /api/v1/regions                       | ''
         post   | /api/v1/me/external-accounts/authorizations | 400=VALIDATION_ERROR,ProblemDetail;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;409=EXTERNAL_ACCOUNT_CONNECTION_CHANGED;429=TOO_MANY_REQUESTS;503=EXTERNAL_PROVIDER_DISABLED,RATE_LIMIT_UNAVAILABLE
@@ -328,8 +328,10 @@ class OpenApiDocsIntegrationTest {
         put    | /api/v1/me/external-accounts/{externalAccountId}/works | 400=INVALID_EXTERNAL_ACCOUNT_ID,VALIDATION_ERROR,EXTERNAL_ACCOUNT_WORK_NOT_CANDIDATE,ProblemDetail;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;404=EXTERNAL_ACCOUNT_NOT_FOUND;409=EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED;429=TOO_MANY_REQUESTS;503=EXTERNAL_PROVIDER_UNAVAILABLE,EXTERNAL_PROVIDER_DISABLED,RATE_LIMIT_UNAVAILABLE,EXTERNAL_ACCOUNT_BUSY
         delete | /api/v1/me/external-accounts/{externalAccountId} | 400=INVALID_EXTERNAL_ACCOUNT_ID;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;404=EXTERNAL_ACCOUNT_NOT_FOUND;429=TOO_MANY_REQUESTS;503=RATE_LIMIT_UNAVAILABLE,EXTERNAL_ACCOUNT_BUSY
         get    | /api/v1/artists/{artistId}/external-accounts | 400=INVALID_ARTIST_ID;403=ACCESS_DENIED;404=ARTIST_NOT_FOUND
-        put    | /api/v1/me/artist-profile             | 400=VALIDATION_ERROR,ProblemDetail;403=ACCESS_DENIED;503=ARTIST_PROFILE_BUSY
-        delete | /api/v1/me/artist-profile             | 403=ACCESS_DENIED;503=ARTIST_PROFILE_BUSY
+        put    | /api/v1/me/artist-profile             | 400=VALIDATION_ERROR,ProblemDetail;403=ACCESS_DENIED;429=TOO_MANY_REQUESTS;503=ARTIST_PROFILE_BUSY
+        delete | /api/v1/me/artist-profile             | 403=ACCESS_DENIED;429=TOO_MANY_REQUESTS;503=ARTIST_PROFILE_BUSY
+        put    | /api/v1/me/event-partner-profile      | 400=VALIDATION_ERROR,ProblemDetail;403=ACCESS_DENIED;429=TOO_MANY_REQUESTS
+        delete | /api/v1/me/event-partner-profile      | 403=ACCESS_DENIED;429=TOO_MANY_REQUESTS
         """)
     @DisplayName("행사·지역·외부 계정·아티스트 프로필 쓰기 API의 오류 상태와 code를 계약(03 §9, 06 §10, 09 §4.1)대로 적는다")
     void documentsErrorResponsesFromContract(String method, String path, String errors) throws Exception {
@@ -518,5 +520,19 @@ class OpenApiDocsIntegrationTest {
         assertThat(enumValues(docs, period)).as(period.toString()).isEqualTo(names(EventPeriod.class));
         assertThat(type(parameter(operation, "page").path("schema"))).isEqualTo("integer");
         assertThat(type(parameter(operation, "size").path("schema"))).isEqualTo("integer");
+    }
+
+    @ParameterizedTest(name = "{0} {1}")
+    @CsvSource(delimiter = '|', textBlock = """
+        post   | /api/v1/events
+        put    | /api/v1/me/event-partner-profile
+        delete | /api/v1/me/external-accounts/{externalAccountId}
+        """)
+    @DisplayName("요청 한도의 429에 Retry-After 헤더를 정수로 적는다")
+    void documentsRetryAfterHeaderOnTooManyRequests(String method, String path) throws Exception {
+        JsonNode tooManyRequests = operation(method, path).path("responses").path("429");
+
+        assertThat(type(tooManyRequests.path("headers").path("Retry-After").path("schema")))
+                .isEqualTo("integer");
     }
 }
