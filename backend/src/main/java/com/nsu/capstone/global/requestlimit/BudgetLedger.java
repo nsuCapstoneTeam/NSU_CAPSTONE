@@ -48,6 +48,7 @@ final class BudgetLedger implements AutoCloseable {
     private final AtomicReference<RedisState> state;
     private final AtomicLong lastOverloadWarnMillis = new AtomicLong(NEVER_WARNED);
     private final AtomicBoolean memoryFullWarned = new AtomicBoolean();
+    private final AtomicBoolean startupFailureUnlogged = new AtomicBoolean(true);
 
     /** Redis를 쓸 수 있는지, 없으면 언제 다시 볼지. */
     private record RedisState(boolean up, long retryAtMillis) {
@@ -110,8 +111,9 @@ final class BudgetLedger implements AutoCloseable {
      * @throws BusinessException TOO_MANY_REQUESTS(retryAfterSeconds 포함): 한도를 다 썼다
      */
     void spend(UUID accountId, RequestBudget budget) {
-        long now = clock.millis();
+        // 상태를 먼저 읽는다. 시계를 먼저 읽으면, 그 사이 다른 요청이 더 늦은 시각으로 탐침에 이긴 뒤의 상태를 이른 시각으로 읽어 탐침이 두 건 나갈 수 있다
         RedisState current = state.get();
+        long now = clock.millis();
         boolean probe = !current.up();
         if (probe && !wonProbe(current, now)) {
             spendWithoutRedis(accountId, budget);
@@ -218,9 +220,14 @@ final class BudgetLedger implements AutoCloseable {
         return new RedisState(false, now + retryIntervalMillis);
     }
 
+    /**
+     * 장애 시작 WARN은 "Redis 있음"에서 "없음"으로 바뀔 때 한 번 남긴다. 기동 상태("없음")로 들어갈 때는 남기지 않으므로, 기동 뒤 첫 탐침이 실패하면 그때 한 번
+     * 남긴다. 주소·비밀번호를 잘못 넣은 배포를 로그로 알아채게 하기 위해서다.
+     */
     private void markDown(Exception cause) {
         RedisState previous = state.getAndSet(down(clock.millis()));
-        if (previous.up()) {
+        boolean firstFailureSinceStartup = startupFailureUnlogged.getAndSet(false);
+        if (previous.up() || firstFailureSinceStartup) {
             memoryFullWarned.set(false);
             log.warn(
                     "요청 한도 확인용 Redis를 쓸 수 없어 장애 동작으로 바꾼다. 예외: {}",

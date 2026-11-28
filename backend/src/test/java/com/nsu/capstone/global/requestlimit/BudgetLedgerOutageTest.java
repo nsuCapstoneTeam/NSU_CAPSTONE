@@ -7,7 +7,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import ch.qos.logback.classic.Level;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -129,6 +132,31 @@ class BudgetLedgerOutageTest {
 
         // 기동 직후 탐침(실패), 시계가 되돌아간 뒤 탐침 간격이 지나 나간 탐침(성공)
         assertThat(redis.probeFlags()).containsExactly("1", "1");
+    }
+
+    @Test
+    void 시계를_읽고_상태를_읽는_사이에_다른_요청이_탐침에_이겨도_탐침은_한_건만_나간다() throws Exception {
+        redis.failWith(() -> new RedisConnectionFailureException("연결 실패"));
+        StallingClock stalling = new StallingClock(clock);
+        BudgetLedger ledger = new BudgetLedger(
+                redis,
+                stalling,
+                RedisFixture.properties(1, 10_000, Duration.ofSeconds(10), Duration.ofSeconds(1)),
+                executor,
+                RedisFixture.CALL_LIMIT);
+
+        // 요청 A는 시계를 읽은 직후 멈추고, 그동안 요청 B가 1ms 늦은 시각으로 탐침에 이긴다
+        Future<?> stalled = callers.submit(() -> {
+            stalling.stallNextRead();
+            ledger.spend(UUID.randomUUID(), RequestBudget.EVENT_REGISTRATION);
+        });
+        stalling.awaitRead();
+        clock.advance(Duration.ofMillis(1));
+        ledger.spend(UUID.randomUUID(), RequestBudget.EVENT_REGISTRATION);
+        stalling.resume();
+        stalled.get(5, TimeUnit.SECONDS);
+
+        assertThat(redis.probeFlags()).containsExactly("1");
     }
 
     @Test
@@ -280,9 +308,47 @@ class BudgetLedgerOutageTest {
     }
 
     @Test
+    void 기동_뒤_첫_탐침이_실패하면_장애_시작_WARN을_한_번_남기고_그_뒤_탐침_실패는_남기지_않는다() {
+        redis.failWith(() -> new RedisConnectionFailureException("secret-host:6379 연결 실패"));
+        BudgetLedger ledger = ledgerWith(1);
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+
+        try (LedgerLogs logs = new LedgerLogs()) {
+            ledger.spend(first, RequestBudget.EVENT_REGISTRATION);
+            clock.advance(Duration.ofSeconds(10));
+            ledger.spend(second, RequestBudget.EVENT_REGISTRATION);
+
+            // 기동 직후 첫 탐침과 다음 탐침이 모두 실패했다. 상태가 바뀐 것은 앞의 한 번뿐이다
+            assertThat(redis.probeFlags()).containsExactly("1", "1");
+            assertThat(logs.messages(Level.WARN)).hasSize(1);
+            assertThat(logs.messages(Level.WARN).getFirst()).contains("RedisConnectionFailureException");
+            assertThat(logs.allMessages())
+                    .noneMatch(message -> message.contains(first.toString())
+                            || message.contains(second.toString())
+                            || message.contains("secret-host"));
+        }
+    }
+
+    @Test
+    void 기동_뒤_첫_탐침이_성공했으면_장애_시작_WARN은_한_번이고_다음_탐침_실패는_남기지_않는다() {
+        BudgetLedger ledger = ledgerWith(1);
+        ledger.spend(UUID.randomUUID(), RequestBudget.PROFILE);
+        redis.failWith(() -> new RedisConnectionFailureException("연결 실패"));
+
+        try (LedgerLogs logs = new LedgerLogs()) {
+            ledger.spend(UUID.randomUUID(), RequestBudget.PROFILE);
+            clock.advance(Duration.ofSeconds(10));
+            ledger.spend(UUID.randomUUID(), RequestBudget.PROFILE);
+
+            assertThat(logs.messages(Level.WARN)).hasSize(1);
+        }
+    }
+
+    @Test
     void 장애_시작_회복_상한_로그에는_계정_ID와_예외_메시지가_없고_예외_클래스_이름만_있다() {
         BudgetLedger ledger = ledgerWithMemoryLimit(1);
-        // 기동 직후 첫 요청(탐침)이 성공해 "Redis 있음"이 된 뒤에 장애를 낸다. 처음부터 없음이던 상태는 로그가 없다
+        // 기동 직후 첫 요청(탐침)이 성공해 "Redis 있음"이 된 뒤에 장애를 낸다
         ledger.spend(UUID.randomUUID(), RequestBudget.PROFILE);
         redis.failWith(() -> new RedisConnectionFailureException("secret-host:6379 연결 실패"));
         UUID first = UUID.randomUUID();
@@ -316,5 +382,61 @@ class BudgetLedgerOutageTest {
         assertThatThrownBy(() -> ledger.spend(UUID.randomUUID(), RequestBudget.EVENT_REGISTRATION))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("버그");
+    }
+
+    /** 지정한 스레드의 다음 시계 읽기를 읽은 직후에 멈춘다. 시계를 읽고 상태를 읽는 사이에 선점된 요청을 흉내 낸다. */
+    private static final class StallingClock extends Clock {
+
+        private final Clock base;
+        private final CountDownLatch read = new CountDownLatch(1);
+        private final CountDownLatch resume = new CountDownLatch(1);
+        private volatile Thread stalled;
+
+        StallingClock(Clock base) {
+            this.base = base;
+        }
+
+        void stallNextRead() {
+            stalled = Thread.currentThread();
+        }
+
+        void awaitRead() throws InterruptedException {
+            assertThat(read.await(5, TimeUnit.SECONDS)).as("멈출 요청이 시계를 읽었다").isTrue();
+        }
+
+        void resume() {
+            resume.countDown();
+        }
+
+        @Override
+        public long millis() {
+            long value = base.millis();
+            if (Thread.currentThread() == stalled) {
+                stalled = null;
+                read.countDown();
+                try {
+                    resume.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("테스트 대기가 끊겼다", e);
+                }
+            }
+            return value;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return base.getZone();
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return base.instant();
+        }
     }
 }
