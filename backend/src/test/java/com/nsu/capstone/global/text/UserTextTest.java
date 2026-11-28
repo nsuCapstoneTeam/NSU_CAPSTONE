@@ -45,6 +45,29 @@ class UserTextTest {
     }
 
     @Test
+    void tidyTrimsSpacingAndKeepsVisibleText() {
+        assertThat(UserText.tidy("  가나\u00A0\u200B")).isEqualTo("가나");
+        assertThat(UserText.tidy("가 나")).isEqualTo("가 나");
+        assertThat(UserText.tidy(null)).isNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   ", "\u200B", "\u3164", "\u2800", "\u0301"})
+    void tidyReturnsNullWhenNothingIsVisible(String blank) {
+        assertThat(UserText.tidy(blank)).isNull();
+    }
+
+    /** 저장된 값을 읽을 때 쓰므로 optional이 거절하는 값(NUL, 짝 없는 서로게이트, 길이 초과)도 예외 없이 돌려준다. */
+    @Test
+    void tidyNeverThrowsOnValuesThatOptionalRejects() {
+        String tooLong = "가".repeat(41);
+
+        assertThat(UserText.tidy("가\u0000나")).isEqualTo("가\u0000나");
+        assertThat(UserText.tidy("가\uD83D나")).isEqualTo("가\uD83D나");
+        assertThat(UserText.tidy(tooLong)).isEqualTo(tooLong);
+    }
+
+    @Test
     void requiredReturnsTrimmedText() {
         assertThat(UserText.required("  노을밴드 ", 40)).isEqualTo("노을밴드");
     }

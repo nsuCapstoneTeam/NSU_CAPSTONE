@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.TestcontainersConfiguration;
+import com.nsu.capstone.artist.schedule.ArtistScheduleStatus;
 import com.nsu.capstone.event.application.EventPeriod;
 import com.nsu.capstone.event.domain.ArtistType;
 import com.nsu.capstone.event.domain.EventType;
@@ -199,7 +200,7 @@ class OpenApiDocsIntegrationTest {
 
         assertThat(publicApis).hasSize(21);
         assertThat(publicApisWithAuth).isEmpty();
-        assertThat(otherApis).hasSize(21);
+        assertThat(otherApis).hasSize(25);
         assertThat(otherApisWithOverride).isEmpty();
     }
 
@@ -244,6 +245,9 @@ class OpenApiDocsIntegrationTest {
         if (path.startsWith("/api/v1/me/artist-profile") || path.equals("/api/v1/artists/{artistId}/profile")) {
             return "아티스트 프로필";
         }
+        if (path.startsWith("/api/v1/me/artist-schedules")) {
+            return "공연 가능 일정";
+        }
         if (path.contains("external-accounts")) {
             return "외부 계정";
         }
@@ -273,8 +277,12 @@ class OpenApiDocsIntegrationTest {
         put    | /api/v1/me/artist-profile              | 200 | ArtistProfileResponse
         delete | /api/v1/me/artist-profile              | 204 | ''
         get    | /api/v1/artists/{artistId}/profile     | 200 | ArtistProfileResponse
+        get    | /api/v1/me/artist-schedules            | 200 | ArtistScheduleListResponse
+        post   | /api/v1/me/artist-schedules            | 201 | ArtistScheduleListResponse
+        put    | /api/v1/me/artist-schedules/{artistScheduleId} | 200 | ArtistScheduleResponse
+        delete | /api/v1/me/artist-schedules/{artistScheduleId} | 204 | ''
         """)
-    @DisplayName("행사·지역·외부 계정·아티스트 프로필 API의 성공 상태와 응답 스키마를 적는다")
+    @DisplayName("행사·지역·외부 계정·아티스트 프로필·공연 가능 일정 API의 성공 상태와 응답 스키마를 적는다")
     void documentsSuccessStatusAndSchema(String method, String path, String status, String schema) throws Exception {
         JsonNode responses = operation(method, path).path("responses");
 
@@ -303,6 +311,10 @@ class OpenApiDocsIntegrationTest {
         put    | /api/v1/me/artist-profile
         delete | /api/v1/me/artist-profile
         get    | /api/v1/artists/{artistId}/profile
+        get    | /api/v1/me/artist-schedules
+        post   | /api/v1/me/artist-schedules
+        put    | /api/v1/me/artist-schedules/{artistScheduleId}
+        delete | /api/v1/me/artist-schedules/{artistScheduleId}
         """)
     @DisplayName("인증이 필요한 API에 401 AUTHENTICATION_REQUIRED를 적는다")
     void documentsUnauthorizedResponse(String method, String path) throws Exception {
@@ -330,8 +342,12 @@ class OpenApiDocsIntegrationTest {
         get    | /api/v1/artists/{artistId}/external-accounts | 400=INVALID_ARTIST_ID;403=ACCESS_DENIED;404=ARTIST_NOT_FOUND
         put    | /api/v1/me/artist-profile             | 400=VALIDATION_ERROR,ProblemDetail;403=ACCESS_DENIED;503=ARTIST_PROFILE_BUSY
         delete | /api/v1/me/artist-profile             | 403=ACCESS_DENIED;503=ARTIST_PROFILE_BUSY
+        get    | /api/v1/me/artist-schedules          | 400=VALIDATION_ERROR;403=ACCESS_DENIED
+        post   | /api/v1/me/artist-schedules          | 400=VALIDATION_ERROR,ProblemDetail;403=ACCESS_DENIED;409=ARTIST_SCHEDULE_OVERLAP,ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED;503=ARTIST_SCHEDULE_BUSY
+        put    | /api/v1/me/artist-schedules/{artistScheduleId} | 400=INVALID_ARTIST_SCHEDULE_ID,VALIDATION_ERROR,ProblemDetail;403=ACCESS_DENIED;404=ARTIST_SCHEDULE_NOT_FOUND;409=ARTIST_SCHEDULE_OVERLAP,ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED;503=ARTIST_SCHEDULE_BUSY
+        delete | /api/v1/me/artist-schedules/{artistScheduleId} | 400=INVALID_ARTIST_SCHEDULE_ID;403=ACCESS_DENIED;503=ARTIST_SCHEDULE_BUSY
         """)
-    @DisplayName("행사·지역·외부 계정·아티스트 프로필 쓰기 API의 오류 상태와 code를 계약(03 §9, 06 §10, 09 §4.1)대로 적는다")
+    @DisplayName("행사·지역·외부 계정·아티스트 프로필·공연 가능 일정 쓰기 API의 오류 상태와 code를 계약(03 §9, 06 §10, 09 §4.1, 11 §4)대로 적는다")
     void documentsErrorResponsesFromContract(String method, String path, String errors) throws Exception {
         Map<String, List<String>> expected = new TreeMap<>();
         for (String entry : errors.split(";")) {
@@ -462,6 +478,60 @@ class OpenApiDocsIntegrationTest {
         JsonNode property = schema(schemaName).path("properties").path(field);
 
         assertThat(types(property)).as(property.toString()).doesNotContain("null");
+    }
+
+    @Test
+    @DisplayName("공연 가능 일정 본문의 필수 필드를 계약(11 §2.2)대로 적는다")
+    void documentsArtistScheduleRequestFields() throws Exception {
+        Set<String> itemRequired = new TreeSet<>();
+        schema("ArtistScheduleRequest").path("required").forEach(field -> itemRequired.add(field.asString()));
+        Set<String> batchRequired = new TreeSet<>();
+        schema("ArtistScheduleBatchRequest").path("required").forEach(field -> batchRequired.add(field.asString()));
+
+        assertThat(itemRequired).containsExactlyInAnyOrder("startDate", "startTime", "endDate", "endTime", "status");
+        assertThat(batchRequired).containsExactly("items");
+    }
+
+    @ParameterizedTest(name = "{0}.title")
+    @CsvSource({"ArtistScheduleRequest", "ArtistScheduleResponse"})
+    @DisplayName("공연 가능 일정의 일정 이름은 스키마 type에 null을 함께 적는다(11 §3)")
+    void documentsNullableArtistScheduleTitle(String schemaName) throws Exception {
+        JsonNode property = schema(schemaName).path("properties").path("title");
+
+        assertThat(types(property)).as(property.toString()).containsExactlyInAnyOrder("string", "null");
+    }
+
+    @Test
+    @DisplayName("공연 가능 일정 요청의 상태는 BOOKED를 뺀 세 값만, 응답의 상태는 네 값을 적는다(11 §2.2)")
+    void documentsArtistScheduleStatusValues() throws Exception {
+        JsonNode docs = apiDocs();
+        List<String> requestable = names(ArtistScheduleStatus.class).stream()
+                .filter(name -> !name.equals("BOOKED"))
+                .toList();
+
+        assertThat(enumValues(
+                        docs, schema("ArtistScheduleRequest").path("properties").path("status")))
+                .isEqualTo(requestable);
+        assertThat(enumValues(
+                        docs,
+                        schema("ArtistScheduleResponse").path("properties").path("status")))
+                .isEqualTo(names(ArtistScheduleStatus.class));
+    }
+
+    @Test
+    @DisplayName("공연 가능 일정 조회의 from·to는 필수이고, 수정·삭제의 경로 변수 이름은 artistScheduleId다")
+    void documentsArtistScheduleParameters() throws Exception {
+        JsonNode list = operation("get", "/api/v1/me/artist-schedules");
+        for (String name : List.of("from", "to")) {
+            assertThat(parameter(list, name).path("required").asBoolean(false))
+                    .as(name)
+                    .isTrue();
+        }
+        for (String method : List.of("put", "delete")) {
+            JsonNode id =
+                    parameter(operation(method, "/api/v1/me/artist-schedules/{artistScheduleId}"), "artistScheduleId");
+            assertThat(id.path("in").asString("")).as(method).isEqualTo("path");
+        }
     }
 
     @ParameterizedTest

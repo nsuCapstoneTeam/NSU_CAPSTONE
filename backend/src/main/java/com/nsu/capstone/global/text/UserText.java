@@ -40,16 +40,28 @@ public final class UserText {
         if (value.codePoints().anyMatch(cp -> cp <= Character.MAX_VALUE && Character.isSurrogate((char) cp))) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
-        String trimmed = trimSpacing(value);
-        // 보이는 글자(글자·숫자·문장부호·기호)가 하나도 없으면 빈 값이다. 공백·서식 문자·결합 표식만 있는 값이
-        // 그렇다. 길이보다 먼저 본다(보이지 않는 글자가 길이를 넘어도 빈 값이다)
-        if (trimmed.codePoints().noneMatch(UserText::visible)) {
+        // 길이보다 먼저 본다(보이지 않는 글자가 길이를 넘어도 빈 값이다)
+        String trimmed = tidy(value);
+        if (trimmed == null) {
             return null;
         }
         if (trimmed.codePointCount(0, trimmed.length()) > max) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
         return trimmed;
+    }
+
+    /**
+     * 앞뒤 공백을 지우고, 보이는 글자(글자·숫자·문장부호·기호)가 하나도 없으면 null이다. 공백·서식 문자·결합 표식만 있는 값이 그렇다.
+     * {@link #optional}과 달리 NUL·짝 없는 서로게이트·길이로 예외를 던지지 않는다. 이미 저장된 값을 읽을 때 쓴다. 저장은 {@code optional}이 검사한
+     * 값이거나 DB 제약을 지난 값이어서 그 검사를 다시 하지 않고, 읽기가 오류로 끝나지 않게 한다.
+     */
+    public static String tidy(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = trimSpacing(value);
+        return trimmed.codePoints().noneMatch(UserText::visible) ? null : trimmed;
     }
 
     /**

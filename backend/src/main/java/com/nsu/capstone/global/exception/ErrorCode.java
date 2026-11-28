@@ -74,6 +74,12 @@ public enum ErrorCode {
     EXTERNAL_ACCOUNT_BUSY(
             "EXTERNAL_ACCOUNT_BUSY", HttpStatus.SERVICE_UNAVAILABLE, "다른 변경을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."),
     ARTIST_PROFILE_BUSY("ARTIST_PROFILE_BUSY", HttpStatus.SERVICE_UNAVAILABLE, "다른 변경을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."),
+    INVALID_ARTIST_SCHEDULE_ID("INVALID_ARTIST_SCHEDULE_ID", HttpStatus.BAD_REQUEST, "일정 ID 형식이 올바르지 않습니다."),
+    ARTIST_SCHEDULE_NOT_FOUND("ARTIST_SCHEDULE_NOT_FOUND", HttpStatus.NOT_FOUND, "일정을 찾을 수 없습니다."),
+    ARTIST_SCHEDULE_OVERLAP("ARTIST_SCHEDULE_OVERLAP", HttpStatus.CONFLICT, "다른 일정과 시간이 겹칩니다."),
+    ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED(
+            "ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED", HttpStatus.CONFLICT, "하루에 시작할 수 있는 일정 수를 넘었습니다."),
+    ARTIST_SCHEDULE_BUSY("ARTIST_SCHEDULE_BUSY", HttpStatus.SERVICE_UNAVAILABLE, "다른 변경을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."),
     INTERNAL_SERVER_ERROR("INTERNAL_SERVER_ERROR", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
     private final String code;
