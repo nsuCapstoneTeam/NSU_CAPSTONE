@@ -15,6 +15,7 @@ import MainNav from './components/common/main-nav.jsx';
 import PageLoading from './components/common/page-loading.jsx';
 import PageLoadBoundary from './components/common/page-load-boundary.jsx';
 import Home from './features/home/home-page.jsx';
+import SignUpComplete from './features/auth/pages/sign-up-complete-page.jsx';
 import { STATUS_VALUES as SCHEDULE_STATUSES } from './features/my-page/availability.js';
 import useMyEvents from './features/events/use-my-events.js';
 import { AUTH_API_MODE } from './features/auth/api/auth-api.js';
@@ -41,6 +42,8 @@ const LOGIN_FLOW_PAGES = [
 
 // 앱 전체: 현재 화면(page) 전환, 공유 상태(테마·프로필·로그인·게시글·일정·관심 목록), 공통 헤더·푸터
 // 화면별로 나눠 불러오기 (NSU-182): 홈은 첫 화면이라 바로 넣고, 나머지는 처음 열 때 코드를 받아 옴
+// 가입 완료(SignUpComplete)는 바로 넣음: 새로고침하면 홈으로 가는 화면이라(routes.js NOT_ON_LOAD)
+// 코드를 받지 못했을 때 [다시 시도]로 돌아올 수 없음
 const Matching = lazy(() => import('./features/matching/matching-page.jsx'));
 const EventSearch = lazy(() => import('./features/event-search/event-search-page.jsx'));
 const Board = lazy(() => import('./features/board/board-page.jsx'));
@@ -50,7 +53,6 @@ const OrganizerLogin = lazy(() => import('./features/auth/components/organizer-l
 const SignupRoleSelect = lazy(() => import('./features/auth/components/signup-role-select.jsx'));
 const ArtistSignUp = lazy(() => import('./features/auth/pages/artist-sign-up-page.jsx'));
 const OrganizerSignUp = lazy(() => import('./features/auth/pages/organizer-sign-up-page.jsx'));
-const SignUpComplete = lazy(() => import('./features/auth/pages/sign-up-complete-page.jsx'));
 const AuthRequired = lazy(() => import('./features/auth/pages/auth-required-page.jsx'));
 
 // 주 메뉴 [화면 key, 이름]
