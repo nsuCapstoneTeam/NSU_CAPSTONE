@@ -159,9 +159,11 @@ BEGIN
 END;
 $$;
 
--- 새 행과 user_id 변경만 본다. 기존 행의 다른 열을 고치는 UPDATE(지역 개편 포함)는 걸리지 않는다.
+-- 새 행(upsert 포함)만 본다. UPDATE에는 걸지 않는다. PostgreSQL은 UPDATE에서 대상 행을 먼저 잠근 뒤 트리거를 부르므로,
+-- 여기서 users를 잠그면 순서가 artist_profiles → users로 뒤집혀 users → 프로필 DELETE 순서인 탈퇴와 교착한다.
+-- 기존 행의 UPDATE(지역 개편 포함)는 걸리지 않고, 사용자를 바꾸는 UPDATE는 아래 소유자 고정 트리거가 막는다.
 CREATE TRIGGER trg_artist_profiles_require_active_artist
-    BEFORE INSERT OR UPDATE OF user_id ON artist_profiles
+    BEFORE INSERT ON artist_profiles
     FOR EACH ROW
     EXECUTE FUNCTION require_active_artist_for_profile();
 

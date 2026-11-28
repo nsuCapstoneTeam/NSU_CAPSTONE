@@ -8,6 +8,7 @@ import com.nsu.capstone.identity.domain.UserRole;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -161,6 +162,51 @@ class ArtistProfileInsertGuardIntegrationTest extends ArtistProfileIntegrationTe
         assertThat(profileRows(other)).isZero();
     }
 
+    @Test
+    void 정지된_ARTIST의_행에서_SET에_같은_user_id를_넣은_UPDATE는_성공한다() {
+        insertProfile(artist);
+        changeStatus(artist, "SUSPENDED");
+
+        int updated = jdbcTemplate.update(
+                "UPDATE artist_profiles SET user_id = user_id, region_codes = ARRAY['11']::varchar[] WHERE user_id = ?",
+                artist.getId());
+
+        assertThat(updated).isOne();
+        assertThat(regionCodes(artist)).containsExactly("11");
+    }
+
+    @Test
+    void 탈퇴_연결이_users_행을_잡은_채_SET에_같은_user_id를_넣은_UPDATE는_기다리지_않고_탈퇴는_교착_없이_끝난다()
+            throws Exception {
+        insertProfile(artist);
+
+        try (Connection withdrawal = dataSource.getConnection();
+                Connection profileUpdate = dataSource.getConnection()) {
+            withdrawal.setAutoCommit(false);
+            profileUpdate.setAutoCommit(false);
+            try {
+                lockUsersRow(withdrawal, artist);
+
+                Future<Integer> update = executor.submit(() -> execute(
+                        profileUpdate,
+                        "UPDATE artist_profiles SET user_id = user_id, bio = '새 소개' WHERE user_id = '"
+                                + artist.getId() + "'"));
+                assertThat(update.get(WAIT_SECONDS, TimeUnit.SECONDS))
+                        .as("users 행 잠금을 기다리지 않고 끝난다")
+                        .isOne();
+                profileUpdate.commit();
+
+                execute(withdrawal, "UPDATE users SET status = 'WITHDRAWN' WHERE id = '" + artist.getId() + "'");
+                withdrawal.commit();
+            } finally {
+                withdrawal.rollback();
+                profileUpdate.rollback();
+            }
+        }
+
+        assertThat(profileRows(artist)).as("탈퇴 트리거가 프로필을 지웠다").isZero();
+    }
+
     private void assertInsertRejected(User owner) {
         assertGuardRejects(() -> insertProfile(owner), owner);
 
@@ -204,9 +250,23 @@ class ArtistProfileInsertGuardIntegrationTest extends ArtistProfileIntegrationTe
                 "SELECT name FROM artist_profiles WHERE user_id = ?", String.class, owner.getId());
     }
 
-    private static void execute(Connection connection, String sql) throws SQLException {
+    private List<String> regionCodes(User owner) {
+        return jdbcTemplate.queryForObject(
+                "SELECT array_to_string(region_codes, ',') FROM artist_profiles WHERE user_id = ?",
+                (resultSet, rowNumber) -> List.of(resultSet.getString(1).split(",")),
+                owner.getId());
+    }
+
+    private static int execute(Connection connection, String sql) throws SQLException {
         try (Statement statement = connection.createStatement()) {
-            statement.executeUpdate(sql);
+            return statement.executeUpdate(sql);
+        }
+    }
+
+    /** 탈퇴 UPDATE가 users 행에 거는 것과 같은 잠금을 먼저 잡는다. */
+    private static void lockUsersRow(Connection connection, User user) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("SELECT 1 FROM users WHERE id = '" + user.getId() + "' FOR NO KEY UPDATE");
         }
     }
 
