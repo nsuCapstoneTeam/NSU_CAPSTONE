@@ -89,6 +89,46 @@ test('서버 등록: 3번 다시 보내도 안 되면 실패를 알리고, 4xx�
   assert.equal(noticeFor(new EventsApiError('EVENT_START_IN_PAST')).action, 'date');
 });
 
+test('서버 등록: 본문을 읽다 끊기면 빈 응답이 아니라 연결 실패로 보고 다시 보낸다', async () => {
+  let n = 0;
+  const api = createEventsApi({
+    mode: 'server',
+    authHeader: () => ({ Authorization: 'Bearer t' }),
+    sleep: async () => {},
+    fetchImpl: async () => {
+      n += 1;
+      const text =
+        n === 1
+          ? async () => {
+              throw new TypeError('network');
+            }
+          : async () => JSON.stringify(SERVER_EVENT);
+      return { ok: true, status: 201, text };
+    },
+  });
+  const saved = await api.create(EVENT, { key: 'k' });
+  assert.equal(saved.id, 'evt-1');
+  assert.equal(n, 2);
+});
+
+test('서버 등록: 다시 보내기를 기다리는 동안 계정이 바뀌면 멈추고, 보낸 요청은 처음 계정의 토큰을 쓴다', async () => {
+  let token = 'A';
+  const sent = [];
+  const api = createEventsApi({
+    mode: 'server',
+    authHeader: () => ({ Authorization: `Bearer ${token}` }),
+    sleep: async () => {
+      token = 'B';
+    },
+    fetchImpl: async (url, init) => {
+      sent.push(init.headers.Authorization);
+      return { ok: false, status: 503, text: async () => JSON.stringify({ code: 'EVENT_REGISTRATION_UNAVAILABLE' }) };
+    },
+  });
+  await assert.rejects(api.create(EVENT, { key: 'k' }), (e) => e.code === 'ACCOUNT_CHANGED');
+  assert.deepEqual(sent, ['Bearer A']);
+});
+
 test('서버 오류 코드가 없으면 400은 입력 오류, 401은 로그인 만료로 본다', async () => {
   const bad = server([{ status: 400, body: { title: 'Bad Request' } }]);
   await assert.rejects(bad.api.update('evt-1', EVENT), (e) => e.code === 'VALIDATION_ERROR');
@@ -103,6 +143,26 @@ test('서버 삭제: 이미 지워져 404가 와도 성공으로 본다', async 
   assert.equal(calls[0].url, '/api/v1/events/evt-1');
   const denied = server([{ status: 403, body: { code: 'ACCESS_DENIED' } }]);
   await assert.rejects(denied.api.remove('evt-1'), (e) => e.code === 'ACCESS_DENIED');
+});
+
+test('서버 목록: 10쪽이 넘어도 마지막 쪽까지 받는다', async () => {
+  let pages = 0;
+  const api = createEventsApi({
+    mode: 'server',
+    authHeader: () => ({}),
+    fetchImpl: async (url) => {
+      const page = Number(new URL(url, 'http://x').searchParams.get('page'));
+      const upcoming = url.includes('UPCOMING');
+      if (upcoming) pages += 1;
+      const body = upcoming
+        ? { items: [{ ...SERVER_EVENT, id: `evt-${page}` }], totalPages: 12 }
+        : { items: [], totalPages: 0 };
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+    },
+  });
+  const list = await api.list();
+  assert.equal(pages, 12);
+  assert.equal(list.length, 12);
 });
 
 test('서버 목록: 다가오는 행사와 지난 행사를 쪽마다 모두 받아 합친다', async () => {

@@ -111,8 +111,8 @@ export default function EventForm({ initial, isEdit, onSave, onCancel, onShowLis
     }
   }
 
-  function submit(e) {
-    e.preventDefault();
+  // 저장과 '다시 시도'가 같은 길: 지금 입력을 먼저 확인하고, 문제가 없을 때만 보냄
+  function validateAndSend() {
     setTried(true);
     if (problems.length) {
       setFailure(null);
@@ -123,11 +123,16 @@ export default function EventForm({ initial, isEdit, onSave, onCancel, onShowLis
     send();
   }
 
+  function submit(e) {
+    e.preventDefault();
+    validateAndSend();
+  }
+
   // 실패 안내의 버튼: 날짜 칸으로, 내 행사 보기, 다시 시도
   function runFailureAction() {
     if (failure?.action === 'date') goTo('date');
     else if (failure?.action === 'list') onShowList?.();
-    else if (failure?.action === 'retry') send();
+    else if (failure?.action === 'retry') validateAndSend();
   }
   const failureActionLabel = FAILURE_ACTION_LABELS[failure?.action];
 
@@ -398,6 +403,7 @@ export default function EventForm({ initial, isEdit, onSave, onCancel, onShowLis
             <input
               id="event-budgetMin"
               type="number"
+              step="any"
               inputMode="numeric"
               min="1"
               required
@@ -414,6 +420,7 @@ export default function EventForm({ initial, isEdit, onSave, onCancel, onShowLis
             <input
               id="event-budgetMax"
               type="number"
+              step="any"
               inputMode="numeric"
               min="1"
               required

@@ -122,6 +122,8 @@ const isBlank = (value) =>
 
 // 숫자 칸: 빈칸이 아니고 0보다 큰 정수인지
 const isPositiveInt = (value) => /^\d+$/.test(String(value).trim()) && Number(value) > 0;
+// 예산(만 원): 1만 원 이상. 서버는 원 단위라 소수 넷째 자리(1원)까지 받아, 저장된 금액을 고치지 않고 다시 저장할 수 있게 함
+const isBudget = (value) => /^\d+(\.\d{1,4})?$/.test(String(value).trim()) && Number(value) >= 1;
 
 // 저장하기 전에 고쳐야 할 항목 목록 [{ id, label }]
 // 1) 빈 필수 항목 → '행사명' 2) 형식·규칙 오류 → '예산 최대 (최소보다 크거나 같게)'
@@ -136,17 +138,20 @@ export function eventProblems(event) {
     if (!blank.has(id)) problems.push({ id, label });
   };
 
+  for (const id of ['budgetMin', 'budgetMax']) {
+    if (!isBlank(event[id]) && !isBudget(event[id])) {
+      add(id, `${id === 'budgetMin' ? '예산 최소' : '예산 최대'} (1만 원 이상 숫자)`);
+    }
+  }
   for (const [id, label, unit] of [
-    ['budgetMin', '예산 최소', '만 원'],
-    ['budgetMax', '예산 최대', '만 원'],
     ['audience', '예상 관객 수', '명'],
     ['performanceMinutes', '공연 시간', '분'],
   ]) {
     if (!isBlank(event[id]) && !isPositiveInt(event[id])) add(id, `${label} (1${unit} 이상 숫자)`);
   }
   if (
-    isPositiveInt(event.budgetMin) &&
-    isPositiveInt(event.budgetMax) &&
+    isBudget(event.budgetMin) &&
+    isBudget(event.budgetMax) &&
     Number(event.budgetMin) > Number(event.budgetMax)
   ) {
     add('budgetMax', '예산 최대 (최소보다 크거나 같게)');

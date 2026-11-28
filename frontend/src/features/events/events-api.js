@@ -37,6 +37,11 @@ export const EVENT_ERRORS = {
   EVENT_REGISTRATION_UNAVAILABLE: NETWORK,
   INTERNAL_SERVER_ERROR: NETWORK,
   NETWORK_ERROR: NETWORK,
+  ACCOUNT_CHANGED: {
+    title: '로그인한 계정이 바뀌어 등록을 멈췄어요.',
+    body: '다시 보내는 동안 계정이 바뀌었어요. 등록할 계정으로 로그인한 뒤 내 행사에서 확인해 주세요.',
+    action: 'list',
+  },
   STORAGE_FAILED: { title: '브라우저에 저장하지 못했어요.', body: '시크릿 창이라면 일반 창에서 다시 시도해 주세요.' },
   UNKNOWN_ERROR: { title: '알 수 없는 문제가 생겼어요.', body: '잠시 뒤 다시 시도해 주세요.' },
 };
@@ -72,18 +77,22 @@ function parseJson(text) {
 // ── 서버 모드 ──────────────────────────────────────────────
 // retryDelays: 자동 재시도 간격(ms). 3번까지, 그 뒤에는 화면의 [다시 시도] (행사 API §5.3.1)
 function createServerApi({ fetchImpl, authHeader, sleep, retryDelays }) {
-  async function request(method, path, { body, headers = {} } = {}) {
+  // auth: 이 요청에 붙일 로그인 헤더 (등록 재시도는 처음 보낼 때의 헤더를 계속 씀)
+  async function request(method, path, { body, headers = {}, auth = authHeader() } = {}) {
     let response;
+    let text;
     try {
       response = await fetchImpl(path, {
         method,
-        headers: { ...authHeader(), ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
+        headers: { ...auth, ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
         body: body ? JSON.stringify(body) : undefined,
       });
+      // 본문을 읽다 끊겨도 응답을 못 받은 것으로 봄 (빈 응답으로 숨기지 않음)
+      text = await response.text();
     } catch {
       throw new EventsApiError('NETWORK_ERROR');
     }
-    const data = parseJson(await response.text().catch(() => ''));
+    const data = parseJson(text);
     if (!response.ok) {
       // code 없는 400(Spring ProblemDetail)은 입력 오류, 401은 로그인 만료로 봄
       const code =
@@ -94,13 +103,13 @@ function createServerApi({ fetchImpl, authHeader, sleep, retryDelays }) {
     return data;
   }
 
-  // 내 행사 목록: 다가오는 행사·지난 행사를 모두 받아 하나로 (페이지당 100개, 최대 10쪽)
+  // 내 행사 목록: 다가오는 행사·지난 행사를 마지막 쪽(totalPages)까지 모두 받아 하나로 (페이지당 100개)
   async function listPeriod(period) {
     const items = [];
-    for (let page = 0; page < 10; page += 1) {
+    for (let page = 0, totalPages = 1; page < totalPages; page += 1) {
       const data = await request('GET', `/api/v1/me/events?period=${period}&page=${page}&size=100`);
       items.push(...(data?.items ?? []));
-      if (page + 1 >= (data?.totalPages ?? 0)) break;
+      totalPages = Number(data?.totalPages) || 0;
     }
     return items;
   }
@@ -113,15 +122,19 @@ function createServerApi({ fetchImpl, authHeader, sleep, retryDelays }) {
     },
     // 등록: 같은 등록 키로 보내고, 응답을 못 받거나 5xx면 간격을 늘려 가며 다시 보냄
     // onRetry(n, total): n번째로 다시 보낼 때 (화면 표시용)
+    // 기다리는 동안 로그인 계정이 바뀌면 남은 재시도를 멈춤 (다른 계정으로 등록되지 않게)
     async create(event, { key, onRetry = () => {} } = {}) {
       const body = toRequestBody(event);
+      const auth = authHeader();
+      const sameAccount = () => JSON.stringify(authHeader()) === JSON.stringify(auth);
       for (let attempt = 0; ; attempt += 1) {
         try {
-          return fromResponse(await request('POST', '/api/v1/events', { body, headers: { 'Idempotency-Key': key } }));
+          return fromResponse(await request('POST', '/api/v1/events', { body, auth, headers: { 'Idempotency-Key': key } }));
         } catch (error) {
           if (!retryable(error) || attempt >= retryDelays.length) throw error;
           onRetry(attempt + 1, retryDelays.length);
           await sleep(retryDelays[attempt]);
+          if (!sameAccount()) throw new EventsApiError('ACCOUNT_CHANGED');
         }
       }
     },

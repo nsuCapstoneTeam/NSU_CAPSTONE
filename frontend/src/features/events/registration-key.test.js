@@ -46,3 +46,16 @@ test('저장소를 못 써도 이 탭에서는 같은 키를 쓰고, 깨진 값�
   storage.setItem(REGISTRATION_KEY, 'not-a-uuid');
   assert.equal(createRegistrationKey(() => storage, () => ID_B).current(), ID_B);
 });
+
+test('새로고침 뒤 되살린 키는 그 뒤 저장소가 막혀도 계속 쓴다', () => {
+  const storage = memoryStorage();
+  storage.setItem(REGISTRATION_KEY, ID_A);
+  let blocked = false;
+  const key = createRegistrationKey(() => {
+    if (blocked) throw new Error('blocked');
+    return storage;
+  }, () => ID_B);
+  assert.equal(key.current(), ID_A);
+  blocked = true;
+  assert.equal(key.current(), ID_A);
+});

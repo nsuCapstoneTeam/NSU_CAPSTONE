@@ -39,6 +39,7 @@ export default function EventsTab({ myEvents, notify }) {
   // 보고 있는 목록: 'upcoming' | 'past'
   const [period, setPeriod] = useState('upcoming');
   // 삭제를 한 번 더 확인 중인 행사 id, 삭제 중인 행사 id
+  // 삭제는 한 번에 하나만: 삭제 중에는 다른 행사의 삭제 버튼을 막아 진행 표시가 섞이지 않게 함
   const [confirmId, setConfirmId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
   // 폼을 닫은 뒤 포커스를 돌려줄 대상 id ('new' = 새 행사 등록 버튼)
@@ -318,6 +319,7 @@ export default function EventsTab({ myEvents, notify }) {
                           className="text-button danger"
                           onClick={() => setConfirmId(event.id)}
                           aria-label={`${event.name} 삭제`}
+                          disabled={removingId !== null}
                         >
                           삭제
                         </button>

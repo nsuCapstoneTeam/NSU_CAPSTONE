@@ -28,7 +28,11 @@ export function createRegistrationKey(getStorage, newId = () => crypto.randomUUI
     // 지금 키. 없으면 새로 만들어 기억
     current() {
       const key = read();
-      if (key && UUID.test(key)) return key;
+      if (key && UUID.test(key)) {
+        // 새로고침 뒤 되살린 키도 기억 (이후 저장소가 막혀도 같은 등록은 같은 키로)
+        memory = key;
+        return key;
+      }
       if (memory) return memory;
       memory = String(newId()).toLowerCase();
       try {

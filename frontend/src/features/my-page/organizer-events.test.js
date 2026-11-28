@@ -79,6 +79,13 @@ test('다음 날 끝나는 행사: 종료 날짜와 시간대 길이', () => {
   assert.equal(normalizeEvent({ ...FULL, startTime: '22:00', endTime: '02:00', performanceMinutes: '' }).endDate, '2026-10-31');
 });
 
+test('예산은 서버에 저장된 원 단위 금액(30.5만 원)도 그대로 다시 저장할 수 있다', () => {
+  assert.deepEqual(ids(eventProblems({ ...FULL, budgetMin: '30.5', budgetMax: '50.0001' })), []);
+  assert.deepEqual(ids(eventProblems({ ...FULL, budgetMin: '0.5' })), ['budgetMin']);
+  assert.deepEqual(ids(eventProblems({ ...FULL, budgetMin: '30.12345' })), ['budgetMin']);
+  assert.deepEqual(ids(eventProblems({ ...FULL, budgetMin: '50.5', budgetMax: '50' })), ['budgetMax']);
+});
+
 test('희망 장르는 3개까지, 현장 정보 글 칸은 100자까지', () => {
   assert.deepEqual(ids(eventProblems({ ...FULL, genres: ['록', '재즈', '발라드'] })), []);
   assert.deepEqual(ids(eventProblems({ ...FULL, genres: ['록', '재즈', '발라드', '팝·대중가요'] })), ['genres']);
