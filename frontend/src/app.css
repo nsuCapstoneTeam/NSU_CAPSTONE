@@ -251,19 +251,10 @@ svg {
   white-space: nowrap;
 }
 .header-inner nav .nav-active {
-  color: var(--blue);
+  color: var(--ink);
   font-weight: 800;
 }
-/* 현재 메뉴 아래 강조 밑줄 */
-.header-inner nav .nav-active:after {
-  content: '';
-  position: absolute;
-  bottom: 3px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--blue);
-}
+/* 지금 메뉴 표시는 밑줄 대신 스포트라이트 (components/common/main-nav.css, NSU-181) */
 .header-actions {
   display: flex;
   gap: 10px;
