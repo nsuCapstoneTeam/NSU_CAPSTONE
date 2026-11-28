@@ -37,4 +37,39 @@ class RequestBodyTooLargeExceptionTest {
                         new ServletException("바깥", new IllegalStateException("안쪽"))))
                 .isFalse();
     }
+
+    @Test
+    void 원인이_자기_자신인_예외도_끝없이_돌지_않고_초과가_아니라고_답한다() {
+        CyclicException selfCaused = new CyclicException();
+        selfCaused.next = selfCaused;
+
+        assertThat(RequestBodyTooLargeException.isBodyTooLarge(selfCaused)).isFalse();
+    }
+
+    @Test
+    void 원인이_서로를_가리키는_순환도_끝없이_돌지_않고_초과가_아니라고_답한다() {
+        CyclicException first = new CyclicException();
+        CyclicException second = new CyclicException();
+        first.next = second;
+        second.next = first;
+
+        assertThat(RequestBodyTooLargeException.isBodyTooLarge(first)).isFalse();
+    }
+
+    /** getCause()가 순환하는 예외. 판정이 끝나지 않으면 테스트 JVM이 멈추지 않도록 호출 횟수가 넘으면 실패한다. */
+    private static final class CyclicException extends RuntimeException {
+
+        private static final int MAX_CALLS = 1000;
+
+        private Throwable next;
+        private int calls;
+
+        @Override
+        public synchronized Throwable getCause() {
+            if (++calls > MAX_CALLS) {
+                throw new AssertionError("원인 사슬을 끝없이 돈다");
+            }
+            return next;
+        }
+    }
 }

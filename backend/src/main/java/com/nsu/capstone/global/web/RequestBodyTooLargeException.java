@@ -1,6 +1,9 @@
 package com.nsu.capstone.global.web;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import org.apache.tomcat.util.http.InvalidParameterException;
 import org.springframework.http.HttpStatus;
 
@@ -16,7 +19,9 @@ public final class RequestBodyTooLargeException extends IOException {
      * (max-http-form-post-size)으로 거절하기 때문이다.
      */
     public static boolean isBodyTooLarge(Throwable throwable) {
-        for (Throwable cause = throwable; cause != null; cause = cause.getCause()) {
+        // 원인이 자신이나 앞의 예외를 다시 가리키는 사슬에서 끝없이 돌지 않게, 이미 본 예외를 기억한다
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable cause = throwable; cause != null && seen.add(cause); cause = cause.getCause()) {
             if (cause instanceof RequestBodyTooLargeException
                     || (cause instanceof InvalidParameterException invalid
                             && invalid.getErrorCode() == HttpStatus.CONTENT_TOO_LARGE.value())) {

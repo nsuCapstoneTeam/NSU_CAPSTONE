@@ -64,6 +64,13 @@ class BodyLimitedRequestTest {
     }
 
     @Test
+    void available은_원래_스트림이_읽을_수_있는_바이트_수를_그대로_돌려준다() throws IOException {
+        BodyLimitedRequest request = new BodyLimitedRequest(requestOf(10), LIMIT);
+
+        assertThat(request.getInputStream().available()).isEqualTo(10);
+    }
+
+    @Test
     void getInputStream을_부른_뒤_getReader는_서블릿_규약대로_예외다() throws IOException {
         BodyLimitedRequest request = new BodyLimitedRequest(requestOf(10), LIMIT);
         request.getInputStream();

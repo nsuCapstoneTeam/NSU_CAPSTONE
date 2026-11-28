@@ -80,6 +80,11 @@ final class BodyLimitedRequest extends HttpServletRequestWrapper {
             return read;
         }
 
+        @Override
+        public int available() throws IOException {
+            return delegate.available();
+        }
+
         private void add(int bytes) throws RequestBodyTooLargeException {
             count += bytes;
             if (count > limit) {
@@ -97,7 +102,7 @@ final class BodyLimitedRequest extends HttpServletRequestWrapper {
             return delegate.isReady();
         }
 
-        /** shortcut: 비동기 읽기는 세지 못해 거절한다. 지금 본문을 비동기로 읽는 곳이 없다. 쓰는 곳이 생기면 리스너를 감싸 센다. */
+        // shortcut: 비동기 읽기는 세지 못해 거절한다. 지금 본문을 비동기로 읽는 곳이 없다. 쓰는 곳이 생기면 리스너를 감싸 센다
         @Override
         public void setReadListener(ReadListener readListener) {
             throw new UnsupportedOperationException("본문 상한을 지키려고 비동기 읽기를 지원하지 않는다");
