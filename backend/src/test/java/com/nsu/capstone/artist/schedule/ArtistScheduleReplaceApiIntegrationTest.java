@@ -72,7 +72,9 @@ class ArtistScheduleReplaceApiIntegrationTest extends ArtistScheduleIntegrationT
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("ARTIST_SCHEDULE_OVERLAP"));
         assertThat(jdbcTemplate.queryForObject(
-                        "SELECT end_at FROM artist_schedules WHERE id = ?", String.class, target))
+                        "SELECT (end_at AT TIME ZONE 'Asia/Seoul')::text FROM artist_schedules WHERE id = ?",
+                        String.class,
+                        target))
                 .contains("22:00");
 
         putSchedule(artist, target.toString(), item("2026-12-12", "20:00", "23:00", "AVAILABLE"))
