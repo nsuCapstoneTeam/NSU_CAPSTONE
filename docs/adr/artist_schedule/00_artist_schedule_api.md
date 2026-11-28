@@ -24,7 +24,7 @@ ARTIST가 자기 공연 가능 일정을 조회·추가·수정·삭제하는 AP
 10. **Eligibility 연결**: `EmptyArtistScheduleReader`를 지우고 `eligibility.infrastructure.SavedArtistScheduleReader`가 일괄 조회를 읽어 `ScheduleSlot`으로 바꾼다. 상태는 빠짐없는 `switch` 식으로 바꾼다. Eligibility ADR의 "NSU-12·34" 전제를 모두 지킨다(아래 "Eligibility 전제").
 11. **탈퇴 시 파기**: 파기 트리거와 공개 삭제 메서드를 두지 않는다. NSU-167 D4대로 탈퇴 절차가 `READ COMMITTED` 트랜잭션에서 `users.status`를 `WITHDRAWN`으로 바꾼 다음 `DELETE FROM artist_schedules WHERE user_id = :id`를 실행한다. 운영자 runbook도 같은 순서다. 새 행은 삽입 가드 트리거(`BEFORE INSERT`)가 같은 트랜잭션에서 `users` 행을 `FOR SHARE`로 잠그고 `ACTIVE` ARTIST일 때만 받는다. 그래서 어느 작성 경로(API, 운영자 SQL, 뒤의 섭외 성사)로 넣어도 탈퇴 뒤에 일정이 남지 않는다.
 12. **이름**: SSOT의 도메인 이름 `ArtistAvailability`(`ART-029` Artist Availability)를 코드와 경로에서는 "schedule"(`artist.schedule`, `artist-schedules`)로, 한국어로는 "공연 가능 일정"으로 쓴다. Eligibility 창구 이름(`ArtistScheduleReader`)이 이미 schedule이라 맞췄다. Scalar 태그는 `공연 가능 일정`이다.
-13. **하루 일정 수 상한과 아티스트별 잠금**: 한 아티스트가 같은 날(`Asia/Seoul` 날짜, 시작 시각 기준)에 시작하는 일정은 96개까지다. 넘으면 `409 ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED`다. DB 트리거(`BEFORE INSERT`, 시작 날짜를 바꾸는 `UPDATE`)가 아티스트별 트랜잭션 잠금(`pg_advisory_xact_lock(hashtextextended('artist_schedules:' || user_id, 0))`)을 잡은 뒤 그날의 행을 세어 지킨다. 그래서 어느 작성 경로(API, 운영자 SQL, 뒤의 섭외 성사)로 넣어도 상한을 넘지 않는다. API의 `POST`·`PUT`은 저장 문장 전에 같은 잠금을 먼저 잡아, 같은 아티스트의 쓰기가 줄을 선다. 42일 조회는 많아야 4,033건이다(42일 × 96 + 범위 앞에 걸친 1건).
+13. **하루 일정 수 상한과 아티스트별 잠금**: 한 아티스트가 같은 날(`Asia/Seoul` 날짜, 시작 시각 기준)에 시작하는 일정은 96개까지다. 넘으면 `409 ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED`다. DB 트리거(`BEFORE INSERT`, 시작 날짜를 바꾸는 `UPDATE`)가 아티스트별 트랜잭션 잠금(`pg_advisory_xact_lock(hashtextextended('artist_schedules:' || user_id, 0))`)을 잡은 뒤 그날의 행을 세어 지킨다. 세기가 잠금 뒤의 새 스냅숏에 기대므로 트리거는 `READ COMMITTED`가 아닌 트랜잭션의 이 쓰기를 거절한다. 그래서 어느 작성 경로(API, 운영자 SQL, 뒤의 섭외 성사)로 넣어도 상한을 넘지 않는다. API의 `POST`·`PUT`은 저장 문장 전에 같은 잠금을 먼저 잡아, 같은 아티스트의 쓰기가 줄을 선다. 42일 조회는 많아야 4,033건이다(42일 × 96 + 범위 앞에 걸친 1건).
 
 ## Context
 
@@ -150,6 +150,7 @@ Eligibility ADR Consequences의 "NSU-12·34" 전제와 이 ADR이 지키는 방�
 - 잠금은 PostgreSQL 트랜잭션 advisory 잠금이다. 키는 `hashtextextended('artist_schedules:' || user_id, 0)`다. 외부 계정(06 §11.3, `ExternalAccountRepository`)과 같은 방식이고 접두어만 다르다. 다른 키와 해시가 겹치면 두 아티스트의 쓰기가 줄을 설 뿐 결과는 같다. 트랜잭션이 끝나면 풀린다.
 - 상한은 트리거 둘이 같은 함수(`enforce_artist_schedule_daily_limit`)로 검사한다. `trg_artist_schedules_before_insert`(`BEFORE INSERT`)와 `trg_artist_schedules_start_day_change`(`BEFORE UPDATE OF start_at`, `Asia/Seoul` 시작 날짜가 바뀔 때만 도는 `WHEN` 조건)다. 잠금을 잡은 뒤 그날 시작하는 같은 아티스트의 행을 자기 행을 빼고 센다. 96개 이상이면 SQLState `23514`, 제약 이름 `ck_artist_schedules_daily_limit`으로 거절한다.
   - `READ COMMITTED`에서 트리거 안의 세기 문장은 잠금을 잡은 뒤 새 스냅숏을 쓴다. 그래서 앞에서 잠금을 쥐었던 트랜잭션이 커밋한 행까지 센다.
+  - `REPEATABLE READ`·`SERIALIZABLE`에서는 세기 문장이 트랜잭션 스냅숏을 써서, 잠금을 기다리는 동안 커밋된 행을 놓친다(`SERIALIZABLE`도 상대가 `READ COMMITTED`인 API면 충돌을 잡지 못한다). 그래서 상한 함수는 이 두 격리 수준의 쓰기를 먼저 거절한다(SQLState `25000`). 앱과 탈퇴 절차는 `READ COMMITTED`(기본값)라 걸리지 않는다. 운영자 SQL도 기본값이면 걸리지 않고, 격리 수준을 올린 트랜잭션은 `INSERT`와 시작 날짜를 바꾸는 `UPDATE`만 거절된다. 상한이 작성자의 격리 수준 설정에 기대지 않게 하려는 것이다.
   - 행 단위 `BEFORE` 트리거는 같은 문장이 앞서 넣은 행을 본다(PostgreSQL "Visibility of Data Changes"). 그래서 한 번에 7행을 넣어도 앞 행까지 센다.
   - 시작 날짜를 바꾸지 않는 `UPDATE`는 그날의 개수를 바꾸지 않으므로 잠금도 세기도 하지 않는다. 운영자의 상태 수정이 탈퇴(`users` → 일정 `DELETE`)나 다른 쓰기와 엮일 일을 줄인다.
 - 삽입 가드(결정 11)와 한 함수로 합친다. `INSERT`에서는 `users` `FOR SHARE` → advisory 잠금 → 세기 순서다. API도 `ArtistWriteAccess`(`users`) → advisory 잠금 → 저장 문장 순서라, 모든 `INSERT` 경로의 잠금 순서가 `users` → advisory → `artist_schedules`로 같다. 트리거 두 개로 나누면 실행 순서가 트리거 이름의 알파벳 순서에 기대게 된다.
@@ -382,6 +383,12 @@ LANGUAGE plpgsql AS $$
 DECLARE
     day_start TIMESTAMPTZ := date_trunc('day', p_start_at AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul';
 BEGIN
+    -- 세기는 잠금 뒤의 새 스냅숏에 기댄다(READ COMMITTED). 그보다 높은 격리 수준은 트랜잭션 스냅숏으로 세어
+    -- 앞에서 잠금을 쥐었던 트랜잭션의 행을 놓치므로 거절한다.
+    IF current_setting('transaction_isolation') IN ('repeatable read', 'serializable') THEN
+        RAISE EXCEPTION '공연 가능 일정은 READ COMMITTED 트랜잭션에서만 넣거나 시작 날짜를 바꿀 수 있다'
+            USING ERRCODE = 'invalid_transaction_state';
+    END IF;
     PERFORM pg_advisory_xact_lock(hashtextextended('artist_schedules:' || p_user_id, 0));
     IF (SELECT count(*) FROM artist_schedules
         WHERE user_id = p_user_id
@@ -447,7 +454,7 @@ CREATE TRIGGER trg_artist_schedules_fixed_owner
 
 - `REFERENCES users`는 `users`에 잠금을 건다. `lock_timeout` 3초로, `users`가 바쁘면 기다리지 않고 실패한다(NSU-119 V12와 같다). 실패하면 배포를 다시 한다.
 - 일정 이름 `CHECK`는 공백만인 값을 막는 마지막 방어선이다. 앱은 더 넓은 규칙(05 §2)으로 그런 값을 `null`로 바꾼다.
-- 트리거 예외의 SQLState는 둘 다 `23514`(`check_violation`)다. 앱은 제약 이름으로 나눈다. `ck_artist_schedules_daily_limit`이면 `409 ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED`다. 이름이 없는 삽입 가드 예외는 API에서 나오지 않고(앞의 `ArtistWriteAccess`가 막는다), 나오면 `500`이다. 메시지에는 사용자 ID만 넣고 일정 값은 넣지 않는다.
+- 트리거 예외의 SQLState는 둘 다 `23514`(`check_violation`)다. 앱은 제약 이름으로 나눈다. `ck_artist_schedules_daily_limit`이면 `409 ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED`다. 이름이 없는 삽입 가드 예외는 API에서 나오지 않고(앞의 `ArtistWriteAccess`가 막는다), 나오면 `500`이다. 격리 수준 거절(`25000`)도 API에서 나오지 않고(앱은 `READ COMMITTED`), 나오면 `500`이다. 메시지에는 사용자 ID만 넣고 일정 값은 넣지 않는다.
 - 세기 문장은 `ix_artist_schedules_user_start`(`user_id`, `start_at`)의 범위 조회다. 하루 96행 이하라 비용은 넣는 행마다 작은 인덱스 범위 하나다.
 - 트리거 함수는 `SECURITY DEFINER`가 아니다. 쓰는 계정의 권한으로 `users`와 일정 표를 읽는다.
 - 롤백 계획(NSU-119 F6와 같은 방식):
