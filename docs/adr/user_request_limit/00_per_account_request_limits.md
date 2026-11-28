@@ -174,10 +174,11 @@ GCRA는 토큰 버킷과 같은 결과를 숫자 하나로 계산한다. `T` = `
   - 그 시각 전에는 Redis를 부르지 않는다. `MEMORY_FALLBACK`은 메모리로 세고, `REJECT`는 바로 `503`이다.
   - 그 시각이 지나면 compare-and-set에 이긴 요청 하나만 Redis를 부른다(탐침). 나머지는 계속 Redis를 건너뛴다. 회복은 쓰기가 성공했을 때만 판정한다. 탐침 호출에서는 Lua가 계정 판정 전에 탐침 키(`user-request-limit:probe`, `PX` 10초)를 먼저 쓴다. 스크립트가 오류 없이 끝나면(받음이든 거절이든) 쓰기가 된 것이므로 "Redis 있음"으로 바꾸고 `INFO` 로그를 남긴다. 그 요청의 결과는 스크립트의 판정대로다(거절이면 `429`). `maxmemory`에 닿은 Redis는 탐침 키 `SET`에서 OOM 오류를 내므로 회복으로 보지 않는다. 계정의 한도와 상관없이 판정하므로, 한도를 다 쓴 계정이 탐침을 잡아도 회복을 막지 못한다(설계 리뷰 1·2회차 지적). 탐침이 실패하면 다시 볼 시각을 미룬다.
   - 전체 기한: 한도 확인의 Redis 호출은 `redis-total-timeout`(기본 1초) 안에 끝나야 한다. 가입 발송의 `SignupSendRedisConfig`·`SignupSendPreflight`를 본떠, 한도 확인 전용 Lettuce 연결(연결 timeout `redis-connect-timeout` 200ms, 명령 timeout `redis-command-timeout` 250ms, 주소·TLS·client resources는 공유 연결 설정을 재사용)과 가상 스레드 실행기(`RequestIdExecutors.wrap`)에서 호출하고 기한까지만 기다린다. 기한을 넘기면 `DataAccessException`과 같이 장애로 본다(위 상태 전환).
-  - 전용 연결의 Lettuce 명령 큐(`requestQueueSize`)는 실행기 최대 크기와 같게 둔다. 동시에 보내는 명령은 실행기 작업 수를 넘지 않으므로, 정상 Redis에서 큐가 먼저 차서 거절(`RedisSystemException`, 장애로 판정)하는 일이 없다. `SignupSendRedisConfig`의 큐 크기 32는 가져오지 않는다(설계 리뷰 4회차 지적: 32를 그대로 쓰면 응답이 겹친 33번째 명령이 정상 Redis를 10초 장애로 만든다). 연결이 끊긴 동안 명령은 큐에 쌓지 않고 바로 거절한다(`disconnectedBehavior(REJECT_COMMANDS)`). Lettuce는 뒤에서 재연결을 계속한다.
-  - 연결을 만드는 Redis 호출은 탐침 한 건뿐이다. 서버가 뜰 때 상태는 "Redis 없음, 다시 볼 시각 = 기동 시각"이다(로그 없음). 그래서 첫 요청이 탐침이 되어 전용 연결을 만들고, 그 탐침이 성공한 뒤에만 다른 요청이 Redis를 부른다. Spring Data Redis는 한 번 만든 공유 연결을 `stop`·`initConnection` 때만 버리고, 끊기면 Lettuce가 같은 연결 안에서 재연결한다. 따라서 탐침이 아닌 작업은 연결 생성 잠금(SDR 4.1.1 `SharedConnection.getConnection`)에서 연결을 기다리지 않는다. 첫 연결이 실패해도 다음 탐침 시각 전에는 아무 작업도 연결을 다시 시도하지 않는다(설계 리뷰 4회차 지적: 연결이 없을 때 기한이 지난 작업들이 잠금 줄에서 차례로 연결을 다시 시도하며 실행기 자리를 잡는다).
+  - 전용 연결의 Lettuce 명령 큐(`requestQueueSize`)는 동시 호출 상한(`server.tomcat.threads.max`)과 같게 둔다. 동시에 보내는 명령은 그 상한을 넘지 않으므로, 정상 Redis에서 큐가 먼저 차서 거절(`RedisSystemException`, 장애로 판정)하는 일이 없다. `SignupSendRedisConfig`의 큐 크기 32는 가져오지 않는다(설계 리뷰 4회차 지적: 32를 그대로 쓰면 응답이 겹친 33번째 명령이 정상 Redis를 10초 장애로 만든다). 연결이 끊긴 동안 명령은 큐에 쌓지 않고 바로 거절한다(`disconnectedBehavior(REJECT_COMMANDS)`). Lettuce는 뒤에서 재연결을 계속한다.
+  - 연결을 만드는 Redis 호출은 탐침 한 건뿐이다. 서버가 뜰 때 상태는 "Redis 없음, 다시 볼 시각 = 기동 시각"이다. 이 상태로 들어갈 때는 로그를 남기지 않고, 기동 뒤 첫 탐침이 실패하면 장애 시작과 같은 `WARN`(예외 클래스 이름만)을 한 번 남긴다. 주소·비밀번호를 잘못 넣은 배포나 Redis 장애 중 배포를 로그로 알아채게 하기 위해서다(구현 중 감사 지적). 그래서 첫 요청이 탐침이 되어 전용 연결을 만들고, 그 탐침이 성공한 뒤에만 다른 요청이 Redis를 부른다. Spring Data Redis는 한 번 만든 공유 연결을 `stop`·`initConnection` 때만 버리고, 끊기면 Lettuce가 같은 연결 안에서 재연결한다. 따라서 탐침이 아닌 작업은 연결 생성 잠금(SDR 4.1.1 `SharedConnection.getConnection`)에서 연결을 기다리지 않는다. 첫 연결이 실패해도 다음 탐침 시각 전에는 아무 작업도 연결을 다시 시도하지 않는다(설계 리뷰 4회차 지적: 연결이 없을 때 기한이 지난 작업들이 잠금 줄에서 차례로 연결을 다시 시도하며 실행기 자리를 잡는다).
   - 기동 직후 첫 탐침이 끝날 때까지(Redis가 정상이면 수 ms) 다른 요청은 장애 때와 같이 정책대로 처리한다. `REJECT` 한도는 그동안 `503`이다. 첫 탐침 결과를 기다리게 하지 않은 것은 탐침 결과를 나눠 받는 장치가 하나 더 생기기 때문이다.
-  - 실행기 거절은 Redis 장애가 아니라 이 서버의 과부하다. 그 요청 하나만 정책대로 처리하고(`MEMORY_FALLBACK`은 메모리로 세고, `REJECT`는 `503`), "Redis 있음" 상태는 바꾸지 않는다. 로그는 1분에 `WARN` 1번까지, 계정 ID 없이 남긴다. 실행기 최대 크기는 `server.tomcat.threads.max`(기본 200)와 같게 두어 평소 부하에서는 거절이 나지 않게 한다. 요청을 가상 스레드로 처리하도록 바꾸면(`spring.threads.virtual.enabled`) 요청 동시성에 상한이 없어지므로 이 크기를 다시 정한다(설계 리뷰 3회차 지적: 거절을 전역 장애로 보면 한 계정이 요청을 몰아 모든 계정의 외부 계정 API를 10초 동안 `503`으로 만든다).
+  - 동시 호출 상한: 가상 스레드 실행기(작업마다 스레드 하나)와 `Semaphore`(`server.tomcat.threads.max`개)로 센다. 제출 전에 `tryAcquire`(기다리지 않음)로 자리를 얻고, 작업이 끝나는 `finally`에서 돌려준다. 기한을 넘긴 작업도 끝날 때까지 자리를 잡으므로 "동시 Redis 명령 ≤ 상한 = 명령 큐 크기"가 지켜진다. 처음 정한 `ThreadPoolExecutor`(`SynchronousQueue`, 최대 크기 = 상한)는 쓰지 않는다. 작업을 끝낸 워커가 큐로 돌아오기 전에 다음 제출이 오면 자리가 남아도 거절해, 정상 Redis에서 요청 스레드가 모두 한도 확인 중일 때 0.25~3.5%를 거짓으로 거절했다(구현 세션 실측, N = 4·16·64).
+  - 상한 거절은 Redis 장애가 아니라 이 서버의 과부하다. 그 요청 하나만 정책대로 처리하고(`MEMORY_FALLBACK`은 메모리로 세고, `REJECT`는 `503`), "Redis 있음" 상태는 바꾸지 않는다. 로그는 1분에 `WARN` 1번까지, 계정 ID 없이 남긴다. 상한은 `server.tomcat.threads.max`(기본 200)와 같다. 요청 스레드마다 한도 확인은 한 번에 하나이므로, 기한을 넘긴 작업이 자리를 잡고 있을 때(Redis가 느릴 때)만 거절이 난다. 요청을 가상 스레드로 처리하도록 바꾸면(`spring.threads.virtual.enabled`) 요청 동시성에 상한이 없어지므로 이 크기를 다시 정한다(설계 리뷰 3회차 지적: 거절을 전역 장애로 보면 한 계정이 요청을 몰아 모든 계정의 외부 계정 API를 10초 동안 `503`으로 만든다).
   - 기한이 필요한 이유: 공유 Lettuce 연결은 처음 만들 때 팩토리 하나의 잠금 안에서 연결하고(SDR 4.1.1 `SharedConnection`), 실패하면 줄 선 다음 요청이 같은 잠금 안에서 다시 연결한다. 그래서 명령 timeout(NSU-101 검사)만으로는 대기가 묶이지 않는다. 전용 연결은 다른 모듈의 공유 연결 줄에 서지 않는다. 연결이 있는 동안의 작업은 명령 timeout(250ms) 안에, 탐침 작업은 연결 timeout과 명령 timeout의 합(450ms) 안에 실행기 자리를 놓는다.
   - 대기 상한 지적이 설계 리뷰 2·3·4회차에 연달아 나왔다. 경로를 하나씩 막지 않고 불변식 두 개로 묶었다. ① 요청은 `redis-total-timeout`까지만 기다린다. ② 연결을 만드는 Redis 호출은 탐침 한 건뿐이다. ①은 요청의 응답 시간을, ②는 실행기 자리와 연결 시도 수를 묶는다. 시험 10이 둘을 함께 확인한다.
   - 기한을 넘긴 호출은 뒤에서 끝날 수 있다. 그 호출이 받음으로 끝나면 `MEMORY_FALLBACK` 요청은 Redis와 메모리에서 한 번씩 세어지고, `REJECT` 요청은 `503`을 받았는데 Redis에서 1회를 쓴다. 둘 다 더 세는 쪽이라 받아들인다.
@@ -196,10 +197,10 @@ GCRA는 토큰 버킷과 같은 결과를 숫자 하나로 계산한다. `T` = `
     | 사용자 경험 | 장애 시작 때 쓰기가 수 초 멈출 수 있다 | 최대 1초 | 최대 1초 |
     | 구현량 | 가장 적다 | 실행기와 기한 | 실행기·기한 + 연결 설정(`SignupSendRedisConfig` 본뜸) |
 
-    전용 연결을 고른 이유는 성능(스레드 점유가 짧고 공유 연결 줄과 분리)이다. 뺀 것: `SignupSendPreflight`의 실행기 크기 32(요청 스레드 수에 맞춘다), `SignupSendRedisConfig`의 명령 큐 크기 32(실행기 최대 크기에 맞춘다), 가입 발송 전용 설정 키(한도 확인 설정을 따로 둔다).
+    전용 연결을 고른 이유는 성능(스레드 점유가 짧고 공유 연결 줄과 분리)이다. 뺀 것: `SignupSendPreflight`의 실행기(크기 32의 `ThreadPoolExecutor`. 요청 스레드 수만큼의 `Semaphore`로 바꾼다), `SignupSendRedisConfig`의 명령 큐 크기 32(동시 호출 상한에 맞춘다), 가입 발송 전용 설정 키(한도 확인 설정을 따로 둔다).
 - Redis가 돌아와도 메모리 카운터를 비우지 않는다. Redis가 오락가락할 때 넘어갈 때마다 계정이 새 한도를 받지 않게 하기 위해서다. 항목 수는 위 상한이 묶는다.
 - 메모리 카운터는 서버를 다시 시작하면 사라진다. 장애 중에만 쓰므로 받아들인다.
-- 로그는 상태가 바뀔 때만 남긴다. 장애 시작 `WARN`(예외 클래스 이름만), 회복 `INFO`, 메모리 상한 도달 `WARN`(장애 한 번에 1번). 계정 ID는 남기지 않는다.
+- 로그는 상태가 바뀔 때만 남긴다. 장애 시작 `WARN`(예외 클래스 이름만, 기동 뒤 첫 탐침 실패 포함), 회복 `INFO`, 메모리 상한 도달 `WARN`(장애 한 번에 1번). 계정 ID는 남기지 않는다.
 - Redis가 `maxmemory`에 닿으면(`noeviction`) 받는 경로의 `SET`이 실패해 `DataAccessException`이 되고 위 장애 동작으로 간다. 거절 경로는 `GET`만 하므로 그대로 `429`를 준다. 스크립트에 shebang(`#!lua`)을 두지 않아야 이렇게 동작한다(Redis는 shebang 없는 스크립트를 쓰기 명령에서만 OOM으로 거절한다, Redis 문서 확인).
 
 `REJECT`는 외부 계정과 본인확인이다. §1.6의 이유가 둘 다 맞는다. 진행 상태가 Redis에 있어 어차피 실패하고, 요청마다 외부 비용(YouTube units, PortOne 재조회)이 든다.
@@ -378,7 +379,7 @@ user-request-limit.redis-connect-timeout=PT0.2S
 user-request-limit.redis-command-timeout=PT0.25S
 ```
 
-- 기동할 때 검사한다. 상수마다 설정이 있어야 하고, `capacity` ≥ 1, `refill-every` ≥ 1초, `server-count` ≥ 1, `memory-max-entries` ≥ 1, `redis-retry-interval` ≥ 1초, 100ms ≤ `redis-total-timeout` < `redis-retry-interval`, 0 < `redis-connect-timeout`·`redis-command-timeout` < `redis-total-timeout`이다. 어기면 서버가 뜨지 않는다.
+- 기동할 때 검사한다. 상수마다 설정이 있어야 하고, `capacity` ≥ 1, `refill-every` ≥ 1초, `server-count` ≥ 1, `memory-max-entries` ≥ 1, `redis-retry-interval` ≥ 1초, 100ms ≤ `redis-total-timeout` ≤ 5초, `redis-total-timeout` < `redis-retry-interval`, 0 < `redis-connect-timeout`·`redis-command-timeout` < `redis-total-timeout`이다. 어기면 서버가 뜨지 않는다. `redis-total-timeout`의 상한 5초는 `PT30S` 같은 잘못된 값이 장애 첫 순간 요청 스레드를 붙잡지 않게 하는 오설정 방어다. 적정값은 운영 Redis의 지연을 잰 뒤 정한다.
 - 서버를 여러 대로 늘리면 `server-count`를 함께 바꾼다. 배포 서버를 설계할 때 이 설정을 함께 정한다.
 - 통합 테스트의 기본값은 넉넉하게 둔다(테스트 설정). 한도 테스트만 실제 숫자나 작은 숫자를 쓴다. 출시 기본값은 설정 파일을 읽는 테스트가 고정한다.
 
@@ -422,7 +423,7 @@ user-request-limit.redis-command-timeout=PT0.25S
 | 14 | 로그에 계정 ID가 없다 | 장애 시작·회복·상한 로그에 계정 UUID가 없다(`LogSafetyFiles`에 로그를 남기는 클래스를 더한다) |
 | 15 | 문서가 코드에서 나온다 | `OpenApiDocsIntegrationTest`가 행사 4개·프로필 2개의 `429`와 외부 계정 5개의 `429`·`503 RATE_LIMIT_UNAVAILABLE`을 상태·설명·`ErrorResponse` 스키마로 고정한다 |
 | 16 | `@WebMvcTest`에 Redis 빈이 없다 | 기존 `@WebMvcTest` 3개가 그대로 통과한다 |
-| 17 | 실행기 포화는 장애가 아니다 | Redis가 정상일 때 실행기 크기를 2로 두고 동시 요청 10건을 보내면, 상태는 "Redis 있음"으로 남고 장애 시작 `WARN`이 없다. 거절된 요청만 `MEMORY_FALLBACK`은 메모리로 세고 `REJECT`는 `503`이다. 기본 설정에서 실행기 최대 크기와 전용 연결의 명령 큐 크기가 `server.tomcat.threads.max`와 같다. Redis가 정상일 때 `CLIENT PAUSE 100 ALL`을 걸고 서로 다른 계정 64개로 동시 요청을 보내면(명령 33개 이상이 응답을 기다린다), 모두 Redis로 세어지고 상태는 "Redis 있음"이다 |
+| 17 | 동시 호출 상한 거절은 장애가 아니다 | Redis가 정상일 때 상한을 2로 두고 기한을 넘기는 느린 호출 2개가 자리를 잡은 채 요청을 보내면, 그 요청만 `MEMORY_FALLBACK`은 메모리로 세고 `REJECT`는 `503`이며 상태는 "Redis 있음"으로 남고 장애 시작 `WARN`이 없다. 즉시 응답하는 Redis에 요청 스레드 N개가 상한 N으로 계속 한도를 확인하면 거절이 0건이다. 기본 설정에서 상한과 전용 연결의 명령 큐 크기가 `server.tomcat.threads.max`와 같다. Redis가 정상일 때 `CLIENT PAUSE 100 ALL`을 걸고 서로 다른 계정 64개로 동시 요청을 보내면(명령 33개 이상이 응답을 기다린다), 모두 Redis로 세어지고 상태는 "Redis 있음"이다 |
 
 ## 구현 범위와 순서
 
