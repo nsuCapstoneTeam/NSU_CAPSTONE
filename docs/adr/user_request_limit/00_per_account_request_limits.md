@@ -35,7 +35,7 @@
 | `COMMENT` | 댓글 작성·답글·수정·삭제(NSU-128) | 10 | 1분마다 1 | 70 | `MEMORY_FALLBACK` |
 | `IDENTITY_VERIFICATION` | 본인확인 시작·완료(08, NSU-105) | 10 | 6분마다 1 | 20 | `REJECT` |
 
-\* 어떤 1시간 구간에서도 넘지 않는 수다. `capacity` + 3600초 ÷ `refill-every`로 계산한다.
+\* 이 서버가 Redis로 세는 동안 어떤 1시간 구간에서도 넘지 않는 수다. `capacity` + 3600초 ÷ `refill-every`로 계산한다. 서버 메모리로 세는 동안(Redis 장애, 기동 직후 첫 탐침 전, 기한 초과 뒤 10초, 동시 호출 상한 거절)의 예외는 6번에 있다.
 
 - 숫자는 설정값이다(`config/user-request-limit.properties`). 측정한 최적값이 아니다. 장애 동작은 보안 결정이라 설정이 아니라 enum 상수에 둔다.
 - 용어: "요청 한도"는 코드의 `RequestBudget`(설정 `budgets`)이다. 기존 문서의 "요청 제한"과 같은 뜻이고, 06 §11.2의 "YouTube 하루 예산"과는 다른 개념이다.
