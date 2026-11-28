@@ -29,8 +29,13 @@ CREATE TABLE artist_schedules (
     CONSTRAINT ck_artist_schedules_status CHECK (
         status IN ('AVAILABLE', 'HOLD', 'BOOKED', 'UNAVAILABLE')
     ),
-    -- 공백만인 이름을 막는 마지막 방어선이다. 앱은 더 넓은 규칙(UserText)으로 그런 값을 null로 바꾼다. NULL은 통과한다.
-    CONSTRAINT ck_artist_schedules_title CHECK (char_length(btrim(title)) >= 1),
+    -- 공백만인 이름을 막는 마지막 방어선이다. 이름은 NULL이거나, 앱이 앞뒤에서 지우는 글자(UserText.spacing: 공백·제어 공백·
+    -- 공백 구분자·폭 없는 공백·단어 결합자·BOM)가 아닌 글자를 하나 이상 담는다. 앱은 더 넓은 규칙(UserText)으로 보이는 글자가 없는
+    -- 값도 null로 바꾼다. btrim은 공백(U+0020)만 지우므로 탭·줄바꿈·NBSP 같은 값이 통과해 쓰지 않는다. UserText.spacing을 바꾸면
+    -- 이 목록도 함께 바꾼다(테스트가 두 집합이 같은지 본다).
+    CONSTRAINT ck_artist_schedules_title CHECK (
+        title ~ '[^\u0009-\u000D\u001C-\u0020\u00A0\u1680\u2000-\u200B\u2028\u2029\u202F\u205F\u2060\u3000\uFEFF]'
+    ),
     -- 같은 아티스트의 일정은 상태와 관계없이 겹치지 않는다. [시작, 끝)이라 끝과 시작이 맞닿는 것은 겹침이 아니다.
     -- 운영자 SQL도 막으려고 앱 검사가 아니라 DB 제약으로 둔다.
     CONSTRAINT ex_artist_schedules_no_overlap EXCLUDE USING gist (

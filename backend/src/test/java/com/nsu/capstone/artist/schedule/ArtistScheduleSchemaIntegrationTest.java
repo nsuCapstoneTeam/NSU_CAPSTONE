@@ -3,11 +3,21 @@ package com.nsu.capstone.artist.schedule;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.nsu.capstone.global.text.UserText;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.postgresql.util.PSQLException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.ConnectionCallback;
 
 class ArtistScheduleSchemaIntegrationTest extends ArtistScheduleIntegrationTestBase {
 
@@ -74,6 +84,50 @@ class ArtistScheduleSchemaIntegrationTest extends ArtistScheduleIntegrationTestB
     }
 
     @Test
+    void 일정_이름이_탭_줄바꿈_NBSP_폭_없는_공백뿐이면_거절하고_보이는_글자가_하나라도_있으면_저장한다() {
+        for (String spacingOnly : new String[] {"\t", "\n", "\u00A0", "\u200B", " \t\n\u3000\uFEFF"}) {
+            assertThatThrownBy(() ->
+                            insert(artist, "2026-12-13 18:00:00+09", "2026-12-13 19:00:00+09", "HOLD", spacingOnly))
+                    .isInstanceOf(DataIntegrityViolationException.class)
+                    .rootCause()
+                    .isInstanceOfSatisfying(PSQLException.class, exception -> {
+                        assertThat(exception.getSQLState()).isEqualTo("23514");
+                        assertThat(exception.getServerErrorMessage().getConstraint())
+                                .isEqualTo("ck_artist_schedules_title");
+                    });
+        }
+        assertThat(scheduleRows(artist)).isZero();
+
+        String[] visible = {"a", "공연", "😀", "\t가\u200B"};
+        for (int index = 0; index < visible.length; index++) {
+            insert(
+                    artist,
+                    "2026-12-12 %02d:00:00+09".formatted(index * 2),
+                    "2026-12-12 %02d:00:00+09".formatted(index * 2 + 1),
+                    "HOLD",
+                    visible[index]);
+        }
+        assertThat(scheduleRows(artist)).isEqualTo(visible.length);
+    }
+
+    /** 기준 문서(ADR 마이그레이션 스케치)가 두 집합이 같아야 한다고 정한다. 한쪽을 바꾸면 이 테스트가 다른 쪽을 고치라고 알려 준다. */
+    @Test
+    void 이름_CHECK가_공백으로_보는_글자는_UserText가_앞뒤에서_지우는_글자와_같다() {
+        Set<Integer> rejectedByDatabase =
+                new TreeSet<>(jdbcTemplate.execute((ConnectionCallback<List<Integer>>) this::rejectedTitleCodePoints));
+
+        // 글자 하나가 공백류인지는 'a' 뒤에 붙여 앱이 지우는지로 본다. 지워지면 'a'만 남는다
+        Set<Integer> trimmedByApplication = new TreeSet<>();
+        for (int codePoint = 1; codePoint <= 0xFFFF; codePoint++) {
+            if (!Character.isSurrogate((char) codePoint) && "a".equals(UserText.optional("a" + (char) codePoint, 30))) {
+                trimmedByApplication.add(codePoint);
+            }
+        }
+
+        assertThat(rejectedByDatabase).isNotEmpty().isEqualTo(trimmedByApplication);
+    }
+
+    @Test
     void 같은_아티스트의_일정은_상태와_관계없이_겹칠_수_없고_맞닿는_것과_다른_아티스트는_괜찮다() {
         User other = newUser(UserRole.ARTIST, "other@example.com");
         insert(artist, "2026-12-12 18:00:00+09", "2026-12-12 20:00:00+09", "AVAILABLE", null);
@@ -98,6 +152,49 @@ class ArtistScheduleSchemaIntegrationTest extends ArtistScheduleIntegrationTestB
                 String.class);
 
         assertThat(definition).contains("(user_id, start_at)");
+    }
+
+    /**
+     * 실제 이름 CHECK를 복사한 임시 표에 BMP 글자를 하나씩 넣어, 이름 CHECK가 거절하는 글자를 모은다. 서로게이트와 NUL은 넣을 수 없어 뺀다. 같은 연결에서
+     * 쓰고 끝에 표를 지워, 풀에 돌아간 연결에 남지 않는다.
+     */
+    private List<Integer> rejectedTitleCodePoints(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            try {
+                statement.execute("CREATE TEMP TABLE title_probe (LIKE artist_schedules INCLUDING CONSTRAINTS)");
+                statement.execute("CREATE TEMP TABLE title_rejected (code_point INT)");
+                statement.execute("""
+                        DO $$
+                        DECLARE
+                            cp INT;
+                            violated TEXT;
+                        BEGIN
+                            FOR cp IN 1..65535 LOOP
+                                CONTINUE WHEN cp BETWEEN 55296 AND 57343;
+                                BEGIN
+                                    INSERT INTO title_probe (id, user_id, start_at, end_at, status, title)
+                                    VALUES (gen_random_uuid(), gen_random_uuid(), TIMESTAMPTZ '2026-12-12 18:00+09',
+                                            TIMESTAMPTZ '2026-12-12 19:00+09', 'HOLD', chr(cp));
+                                EXCEPTION WHEN check_violation THEN
+                                    GET STACKED DIAGNOSTICS violated = CONSTRAINT_NAME;
+                                    IF violated <> 'ck_artist_schedules_title' THEN
+                                        RAISE;
+                                    END IF;
+                                    INSERT INTO title_rejected VALUES (cp);
+                                END;
+                            END LOOP;
+                        END $$""");
+                List<Integer> rejected = new ArrayList<>();
+                try (ResultSet rows = statement.executeQuery("SELECT code_point FROM title_rejected")) {
+                    while (rows.next()) {
+                        rejected.add(rows.getInt(1));
+                    }
+                }
+                return rejected;
+            } finally {
+                statement.execute("DROP TABLE IF EXISTS pg_temp.title_probe, pg_temp.title_rejected");
+            }
+        }
     }
 
     private void assertOverlapRejected(String startAt, String endAt, String status) {
