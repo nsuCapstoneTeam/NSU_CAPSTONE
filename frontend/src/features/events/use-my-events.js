@@ -2,7 +2,7 @@
 // 실제 저장은 events-api.js가 모드(server·demo)에 따라 맡습니다.
 // enabled: 목록을 불러올지 (서버 모드에서는 로그인한 행사 관계자일 때만)
 // owner: 로그인한 계정이 바뀌면 목록을 다시 불러오기 위한 값 (userId 등)
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { eventsApi as defaultApi } from './events-api.js';
 import { SETTLED_CODES, registrationKey as defaultKey } from './registration-key.js';
 
@@ -22,28 +22,34 @@ export default function useMyEvents({ enabled = true, owner = null, api = defaul
     setState(startState(enabled));
   }
 
-  // 지금 계정 범위 (등록·수정·삭제 응답이 도착했을 때 같은 계정인지 확인용)
-  const scopeRef = useRef(scope);
-  useEffect(() => {
-    scopeRef.current = scope;
+  // 같은 계정으로 돌아와도 이전 요청과 구분하도록 범위가 바뀔 때마다 새 객체를 사용
+  const scopeRef = useRef(null);
+  useLayoutEffect(() => {
+    scopeRef.current = { changes: 0 };
+    return () => {
+      scopeRef.current = null;
+    };
   }, [scope]);
-  // 등록·수정·삭제가 끝날 때마다 올림. 그 전에 시작한 목록 조회는 결과를 버리고 다시 조회
-  const changes = useRef(0);
 
   useEffect(() => {
     if (!enabled) return undefined;
     // 늦게 도착한 예전 응답이 새 목록을 덮지 않게
     let stale = false;
-    const startedAt = changes.current;
+    const requestScope = scopeRef.current;
+    const startedAt = requestScope.changes;
+    function isCurrent() {
+      if (stale || scopeRef.current !== requestScope) return false;
+      if (requestScope.changes === startedAt) return true;
+      // 등록·수정·삭제 전에 시작한 조회는 성공과 실패 모두 버리고 다시 받음
+      setVersion((v) => v + 1);
+      return false;
+    }
     api.list().then(
       (events) => {
-        if (stale) return;
-        // 조회 중에 등록·수정·삭제가 끝났으면 그 결과가 빠진 목록이라 다시 받음
-        if (changes.current !== startedAt) setVersion((v) => v + 1);
-        else setState({ events, status: 'ready', error: null });
+        if (isCurrent()) setState({ events, status: 'ready', error: null });
       },
       (error) => {
-        if (!stale) setState((prev) => ({ ...prev, status: 'error', error }));
+        if (isCurrent()) setState((prev) => ({ ...prev, status: 'error', error }));
       },
     );
     return () => {
@@ -59,8 +65,8 @@ export default function useMyEvents({ enabled = true, owner = null, api = defaul
 
   // 등록·수정·삭제 결과를 목록에 반영. 요청 중에 계정이 바뀌었으면 새 계정 목록에 넣지 않음
   function applyChange(startScope, change) {
-    changes.current += 1;
-    if (scopeRef.current !== startScope) return;
+    if (!startScope || scopeRef.current !== startScope) return;
+    startScope.changes += 1;
     setState((prev) => ({ ...prev, events: change(prev.events) }));
   }
 

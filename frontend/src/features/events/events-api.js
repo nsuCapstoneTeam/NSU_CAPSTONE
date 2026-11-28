@@ -108,8 +108,11 @@ function createServerApi({ fetchImpl, authHeader, sleep, retryDelays }) {
     const items = [];
     for (let page = 0, totalPages = 1; page < totalPages; page += 1) {
       const data = await request('GET', `/api/v1/me/events?period=${period}&page=${page}&size=100`);
-      items.push(...(data?.items ?? []));
-      totalPages = Number(data?.totalPages) || 0;
+      if (!Array.isArray(data?.items) || !Number.isSafeInteger(data.totalPages) || data.totalPages < 0) {
+        throw new EventsApiError('UNKNOWN_ERROR');
+      }
+      items.push(...data.items);
+      totalPages = data.totalPages;
     }
     return items;
   }
