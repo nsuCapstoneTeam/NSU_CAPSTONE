@@ -35,6 +35,34 @@ class ArtistScheduleRequestTest {
         assertInvalid(times("2026-12-12", "18:00", "2026-12-12", null));
     }
 
+    @Test
+    void 날짜는_2000_01_01부터_2099_12_31까지만_받는다() {
+        assertInvalid(times("1999-12-31", "18:00", "1999-12-31", "22:00"));
+        assertInvalid(times("2100-01-01", "18:00", "2100-01-01", "22:00"));
+        assertInvalid(times("2099-12-31", "23:00", "2100-01-01", "00:00"));
+
+        assertThat(times("2000-01-01", "00:00", "2000-01-01", "01:00").toDraft().start())
+                .isEqualTo(LocalDateTime.of(2000, 1, 1, 0, 0));
+        assertThat(times("2099-12-31", "22:00", "2099-12-31", "23:59").toDraft().end())
+                .isEqualTo(LocalDateTime.of(2099, 12, 31, 23, 59));
+    }
+
+    @Test
+    void 시작이_끝보다_이르고_길이가_1분_이상_24시간_이하일_때만_받는다() {
+        assertInvalid(times("2026-12-12", "20:00", "2026-12-12", "20:00"));
+        assertInvalid(times("2026-12-12", "20:00", "2026-12-12", "18:00"));
+        assertInvalid(times("2026-12-13", "00:00", "2026-12-14", "00:30"));
+
+        assertThat(times("2026-12-12", "19:00", "2026-12-12", "19:01").toDraft().end())
+                .isEqualTo(LocalDateTime.of(2026, 12, 12, 19, 1));
+        assertThat(times("2026-12-12", "22:00", "2026-12-13", "02:00").toDraft().end())
+                .isEqualTo(LocalDateTime.of(2026, 12, 13, 2, 0));
+        assertThat(times("2026-12-13", "00:00", "2026-12-14", "00:00").toDraft().end())
+                .isEqualTo(LocalDateTime.of(2026, 12, 14, 0, 0));
+        assertThat(times("2026-12-12", "19:40", "2026-12-12", "20:10").toDraft().start())
+                .isEqualTo(LocalDateTime.of(2026, 12, 12, 19, 40));
+    }
+
     private static ArtistScheduleRequest times(String startDate, String startTime, String endDate, String endTime) {
         return new ArtistScheduleRequest(startDate, startTime, endDate, endTime, "AVAILABLE", null);
     }
