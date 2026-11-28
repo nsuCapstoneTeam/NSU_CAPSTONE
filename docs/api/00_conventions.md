@@ -124,8 +124,11 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 
 - 멱등 키(`Idempotency-Key` 헤더)는 [03 행사 등록 §5.3.1](./03_events.md#531-멱등-키)에서 처음 정했다(2026-10-18). 값은 따옴표 없는 소문자 하이픈 표기 UUID이고, 키는 호출자마다 따로다. 다른 생성 API가 멱등 키를 받게 되면 같은 헤더·값 형식과 `400 VALIDATION_ERROR`·`422 IDEMPOTENCY_KEY_REUSED` 규칙을 따른다.
 - 로그인한 사용자가 상태를 바꾸는 요청(`POST`·`PUT`·`PATCH`·`DELETE`)은 계정마다 요청 한도를 받는다([ADR user_request_limit/00](../adr/user_request_limit/00_per_account_request_limits.md), 2026-11-28). 요청마다 외부 비용이 드는 조회(외부 계정 작업물 후보)도 받는다. 한도를 넘으면 `429 TOO_MANY_REQUESTS`이고, `Retry-After`는 1건을 다시 보낼 수 있을 때까지 남은 초다.
-  - 세는 시점은 모든 API에서 같다. 토큰 `401`, 시연 서버 `403`, 역할 `403`, JSON 문법 `400`(`ProblemDetail`) 다음이고, 경로·헤더·본문 검증 `400`과 업무 판정(`404`·`403`·`409`·`422`·`503`) 전이다.
+  - 세는 시점은 모든 API에서 같다. 토큰 `401`, 시연 서버 `403`, 역할 `403`, JSON 문법·타입 `400`(`ProblemDetail`) 다음이고, 경로·헤더·본문 검증 `400`과 업무 판정(`404`·`403`·`409`·`422`·`503`) 전이다.
   - 앞의 거절은 세지 않고, 뒤의 거절은 1회로 센다. `429`로 거절된 요청은 세지 않는다.
+  - JSON 문법·타입 오류는 Spring MVC가 본문을 메서드 인자로 바꾸지 못한 `ProblemDetail` `400`이다. JSON 문법 오류, 필드 타입으로 바꿀 수 없는 값, 빈 본문이 들어간다. 지원하지 않는 `Content-Type`의 `415`도 같은 단계라 세지 않는다.
+  - 역할 `403`과 JSON 문법·타입 `400`의 순서는 역할 검사 방식에 따라 다르다. URL 규칙·모듈 인터셉터는 JSON보다 먼저이고, `@PreAuthorize`는 JSON 다음이다.
+  - 본인확인 시작·완료(PR #245)는 그 PR이 머지된 뒤 이 장치로 옮긴다. 그전까지는 자체 한도를 쓴다(ADR 9번).
   - 한도와 API별 검사 순서는 각 계약 문서에 있다. Redis를 쓸 수 없을 때 한도마다 서버 메모리로 세거나 `503 RATE_LIMIT_UNAVAILABLE`로 막는다([signup-terms-and-send-limits §1.6](./signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때)).
 
 구현 메모:

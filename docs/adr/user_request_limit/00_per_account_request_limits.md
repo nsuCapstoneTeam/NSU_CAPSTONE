@@ -2,8 +2,9 @@
 
 - 상태: **Proposed** (설계 리뷰와 PR 리뷰에서 확정)
 - 결정일: **2026-11-28** (NSU-100 설계 세션, 김동엽). 기본 숫자, Redis 장애 때의 동작, 본인확인 한도의 이전은 사용자가 정했다(2026-11-28, 지휘 세션 경유). 나머지는 architect 결과("Synthesis decision")와 근거 문서로 설계 세션이 정했다
-- 요구사항: SSOT 최종 승인 v1.17.1의 `SEC-118`(Rate Limiting). SSOT는 대상 API, 숫자, 장애 동작을 정하지 않았다. 이 ADR이 정한다
+- 요구사항: SSOT 최종 승인 v1.17.1의 `SEC-118`(Rate Limiting). SSOT는 대상 API, 숫자, 장애 동작을 정하지 않았다. 이 ADR이 정한다. 현재 리비전(v1.24 초안)의 `SEC-118` 아래 v1.21 초안 문단은 가입 인증 확인이 Redis 장애 때 막는다는 규칙이고, 로그인 사용자 쓰기에는 해당하지 않는다
 - 관련: [00 공통 규칙 §8·§10.1](../../api/00_conventions.md#8-에러-형식), [03 행사 API §5.7·§9](../../api/03_events.md#57-요청-한도), [05 EVENT_PARTNER 프로필 §4](../../api/05_event_partner_profile.md#4-응답-상태와-오류), [06 외부 계정 §2·§11.2](../../api/06_external_accounts.md#112-요청-제한과-youtube-하루-예산), [가입 약관·발송 한도 §1.6](../../api/signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때), [ADR event_management/03](../event_management/03_event_registration_idempotency_key.md), [ADR external_links/00](../external_links/00_external_account_links.md) 15번, [ADR authentication/00](../authentication/00_csrf_protection_for_bearer_api.md), NSU-100, NSU-101(Redis timeout), NSU-105(본인확인, PR #245), NSU-119(아티스트 프로필, PR #254), NSU-128(행사 댓글), NSU-129(시연 공개), NSU-158(시연 공개 쓰기 거절), NSU-163(Redis 메모리)
+- 다른 브랜치에만 있는 문서: 08 본인확인 계약과 ADR identity_verification/01(PR #245), 09 아티스트 프로필(PR #254), 10 행사 댓글(NSU-128), 11 아티스트 일정(NSU-120). 이 ADR은 그 문서를 번호로만 가리킨다
 - architect 산출물 사본: `/Users/dy/dev/NSU/nsu-command/work/design-nsu-100/arena/`(후보 2개, Codex 교차 심판, 조사). 저장소 밖 로컬 사본이다
 
 ---
@@ -15,7 +16,7 @@
 - 컨트롤러 메서드에 `@UserRequestLimit(RequestBudget.X)`를 단다. 이것이 유일한 사용법이다. 서비스에서 부르는 메서드는 없다.
 - 익명으로 부를 수 없는 `POST`·`PUT`·`PATCH`·`DELETE` 매핑은 모두 이 애너테이션을 달아야 한다. 빠지면 `UserRequestLimitCoverageIntegrationTest`가 실패한다. 외부 비용이 드는 `GET`(외부 계정 작업물 후보)에도 단다.
 - 세는 곳은 컨트롤러 프록시의 AOP advisor다. Spring Security의 `@PreAuthorize` 검사 바로 다음, 메서드 본문 전이다.
-  - 세지 않는 거절: 토큰(`401`), 시연 공개 쓰기(`403`), 역할(`403`), JSON 문법 오류(`ProblemDetail` `400`).
+  - 세지 않는 거절: 토큰(`401`), 시연 서버 쓰기(`403`), 역할(`403`), JSON 문법·타입 오류(Spring MVC가 본문을 인자로 바꾸지 못한 `ProblemDetail` `400`: JSON 문법, 필드 타입 변환 실패, 빈 본문. 지원하지 않는 `Content-Type`의 `415`도 같다).
   - 세는 거절: 경로·헤더·본문 형식(`400`), 그 뒤의 `404`·`403`·`409`·`422`·`503`.
   - `429`로 거절된 요청은 세지 않는다.
 - 알고리즘은 GCRA(Generic Cell Rate Algorithm)다. "연달아 `capacity`건, 그 뒤 `refill-every`마다 1건"으로 읽는다. Redis에 계정·한도마다 숫자 하나(이론상 다음 도착 시각, TAT)를 두고 Lua 스크립트로 원자적으로 읽고 쓴다.
@@ -29,7 +30,7 @@
 |---|---|---|---|---|---|
 | `EVENT_REGISTRATION` | `POST /api/v1/events` | 5 | 3분마다 1 | 25 | `MEMORY_FALLBACK` |
 | `EVENT_CHANGE` | `PUT /api/v1/events/{eventId}`, `PUT /api/v1/events/{eventId}/cancellation`, `DELETE /api/v1/events/{eventId}` | 10 | 1분마다 1 | 70 | `MEMORY_FALLBACK` |
-| `PROFILE` | `PUT`·`DELETE /api/v1/me/event-partner-profile`. 아티스트 프로필(NSU-119)과 공연 가능 시간(NSU-120)도 이 한도를 쓴다 | 10 | 2분마다 1 | 40 | `MEMORY_FALLBACK` |
+| `PROFILE` | `PUT`·`DELETE /api/v1/me/event-partner-profile`. 아티스트 프로필(NSU-119)도 이 한도를 쓴다. 아티스트 일정(NSU-120)은 그 이슈가 정한다 | 10 | 2분마다 1 | 40 | `MEMORY_FALLBACK` |
 | `EXTERNAL_ACCOUNT` | `/api/v1/me/external-accounts/**`의 5개 핸들러(작업물 후보 `GET` 포함) | 30 | 20초마다 1 | 210 | `REJECT` |
 | `COMMENT` | 댓글 작성·답글·수정·삭제(NSU-128) | 10 | 1분마다 1 | 70 | `MEMORY_FALLBACK` |
 | `IDENTITY_VERIFICATION` | 본인확인 시작·완료(08, NSU-105) | 10 | 6분마다 1 | 20 | `REJECT` |
@@ -37,6 +38,7 @@
 \* 어떤 1시간 구간에서도 넘지 않는 수다. `capacity` + 3600초 ÷ `refill-every`로 계산한다.
 
 - 숫자는 설정값이다(`config/user-request-limit.properties`). 측정한 최적값이 아니다. 장애 동작은 보안 결정이라 설정이 아니라 enum 상수에 둔다.
+- 용어: "요청 한도"는 코드의 `RequestBudget`(설정 `budgets`)이다. 기존 문서의 "요청 제한"과 같은 뜻이고, 06 §11.2의 "YouTube 하루 예산"과는 다른 개념이다.
 - `COMMENT`와 `IDENTITY_VERIFICATION`은 그 API가 main에 들어올 때 상수와 설정을 더한다("구현 범위와 순서").
 
 ## Context
@@ -93,10 +95,10 @@ advisor는 `ROLE_INFRASTRUCTURE` 빈이고, 순서는 `AuthorizationInterceptors
 
 Spring MVC는 요청 본문(JSON)을 메서드 인자로 바꾼 뒤 컨트롤러 프록시를 부른다. 그래서 모든 API의 검사 순서가 다음처럼 같아진다.
 
-> `401` → `403 DEMO_WRITE_NOT_ALLOWED`(NSU-158, 미구현) → `403`(역할: URL 규칙·모듈 인터셉터) → `400`(JSON 문법, `ProblemDetail`) → `403`(역할: `@PreAuthorize`) → **`429`·`503`** → 핸들러 본문의 `400`(경로·헤더·본문 검증) → 서비스의 `404`·`403`·`409`·`422`·`503`
+> `401` → `403 DEMO_WRITE_NOT_ALLOWED`(NSU-158, 미구현) → `403`(역할: URL 규칙·모듈 인터셉터) → `400`(JSON 문법·타입, `ProblemDetail`) → `403`(역할: `@PreAuthorize`) → **`429`·`503`** → 핸들러 본문의 `400`(경로·헤더·본문 검증) → 서비스의 `404`·`403`·`409`·`422`·`503`
 
 - 프레임워크의 거절은 세지 않고, 업무 판정의 거절은 센다. 역할이 틀린 요청이 남의 한도를 쓰지 않는다.
-- 역할 검사를 서비스 코드에 두면 그 요청도 센다. 그래서 역할 검사는 URL 규칙, `@PreAuthorize`, 모듈 인터셉터로 둔다. 지금의 모든 쓰기가 그렇다.
+- 역할 검사를 서비스 코드에 두면 그 요청도 센다. 그래서 역할 검사는 URL 규칙, `@PreAuthorize`, 모듈 인터셉터로 둔다. 지금의 모든 쓰기가 그렇다. 계정 상태 같은 업무 조건의 `403`(예: NSU-119·120·128의 `ACTIVE`·`VERIFIED_ARTIST` 검사)은 서비스에 있어 `429` 뒤이고 센다. 그 계정의 한도만 쓰므로 받아들인다.
 - 로그인 사용자 쓰기 컨트롤러는 `@Valid`를 쓰지 않는다. 본문 검증이 핸들러·서비스에 있어 본문 형식 `400`도 센다.
 - advisor는 컨트롤러 프록시에서 돈다. 트랜잭션 밖이고 `spring.jpa.open-in-view=false`라, Redis를 기다리는 동안 DB 연결을 잡지 않는다. `429`는 DB 연결을 아예 잡지 않는다.
 - 멱등 키 잠금(서비스)보다 앞이다. 같은 키로 몰린 요청도 계정마다 `capacity`건만 잠금 대기에 들어간다.
@@ -193,7 +195,7 @@ GCRA는 토큰 버킷과 같은 결과를 숫자 하나로 계산한다. `T` = `
 - `RequestLimiter`, `RedisKeys.requestLimit`, 더 쓰지 않는 `ExternalAccountFailure.TOO_MANY_REQUESTS`·`RATE_LIMIT_UNAVAILABLE`을 지운다. `MyExternalAccountsInterceptor`는 역할 검사만 한다.
 - 5개 핸들러(시작, 연결, 작업물 후보 `GET`, 작업물 고르기, 해제)에 `EXTERNAL_ACCOUNT`를 단다. 지금 인터셉터가 세는 범위와 같다.
 - 바뀌는 것:
-  - `429`가 JSON 문법 `400` 뒤로 간다. 깨진 JSON은 더 이상 세지 않는다. 기존 원칙("거절은 세지 않는다")과 같은 방향이다.
+  - `429`가 JSON 문법·타입 `400` 뒤로 간다. 깨진 JSON은 더 이상 세지 않는다. 기존 원칙("거절은 세지 않는다")과 같은 방향이다.
   - 고정 창이 GCRA(30건, 20초마다 1건)로 바뀐다. 평균과 최악은 같다(5번).
   - 키가 `extacct:rl:{artistId}:{창 시작}`에서 `user-request-limit:EXTERNAL_ACCOUNT:{artistId}`로 바뀐다. 배포 때 남은 옛 키는 10분 안에 사라진다. 배포 직후 한 번은 새 키로 다시 30건을 받을 수 있다.
   - Redis 장애 때 탐침 1건 덕분에 `503`이 1초 기다림 없이 바로 나간다.
@@ -270,7 +272,7 @@ user-request-limit.budgets.comment.capacity=10
 user-request-limit.budgets.comment.refill-every=PT1M
 ```
 
-기존 한도를 쓰는 API(예: 공연 가능 시간 → `PROFILE`)는 애너테이션만 단다. 설정을 빠뜨리면 서버가 뜨지 않는다.
+기존 한도를 쓰는 API(예: 아티스트 프로필 → `PROFILE`)는 애너테이션만 단다. 설정을 빠뜨리면 서버가 뜨지 않는다.
 
 ### 타입 스케치
 
@@ -326,6 +328,7 @@ return -1
 ```
 
 - 같은 키의 동시 요청은 Redis가 줄 세운다. 동시에 `N`건이 와도 정확히 `capacity`건만 받는다.
+- 키 하나는 약 150바이트다. 버킷이 다시 찰 때(가장 길게 15분)까지만 남으므로, 1만 계정이 한도 4개를 모두 써도 약 6MB다(`maxmemory 256mb`, NSU-163).
 - 스크립트가 끝난 뒤 핸들러 전에 서버가 죽으면 그 1회는 사라진다. 되돌리는 쓰기는 없다.
 
 ### 설정
@@ -355,16 +358,16 @@ user-request-limit.redis-retry-interval=PT10S
 
 | API | 순서 | 계약에서 바뀌는 것 |
 |---|---|---|
-| 행사 등록 | `401` → DEMO → `400`(JSON 문법) → `403`(역할, `@PreAuthorize`) → **`429`** → `400 VALIDATION_ERROR`(키·본문) → 같은 키 확인(`503`·`404`·`422`·`201`) → `400 EVENT_START_IN_PAST` → `201` | 03 §9: `429`를 더하고, JSON 문법 오류가 역할 검사보다 먼저라는 지금 동작을 적는다 |
-| 행사 수정 | `401` → DEMO → `400`(JSON 문법) → **`429`** → `400`(경로·본문 형식) → `404` → `403` → `409` → `400 EVENT_START_IN_PAST` → `200` | 03 §9: 경로·본문 형식 오류를 센다 |
+| 행사 등록 | `401` → DEMO → `400`(JSON 문법·타입) → `403`(역할, `@PreAuthorize`) → **`429`** → `400 VALIDATION_ERROR`(키·본문) → 같은 키 확인(`503`·`404`·`422`·`201`) → `400 EVENT_START_IN_PAST` → `201` | 03 §9: `429`를 더하고, JSON 문법·타입 오류가 역할 검사보다 먼저라는 지금 동작을 적는다 |
+| 행사 수정 | `401` → DEMO → `400`(JSON 문법·타입) → **`429`** → `400`(경로·본문 형식) → `404` → `403` → `409` → `400 EVENT_START_IN_PAST` → `200` | 03 §9: 경로·본문 형식 오류를 센다 |
 | 행사 취소 | `401` → DEMO → **`429`** → `400 INVALID_EVENT_ID` → `404` → `403` → `200`(이미 취소됨) → `409` → `200` | 03 §9 |
 | 행사 삭제 | `401` → DEMO → **`429`** → `400 INVALID_EVENT_ID` → `404` → `403` → `204` | 03 §9 |
-| 프로필 수정 | `401` → DEMO → `403`(역할, URL 규칙) → `400`(JSON 문법) → **`429`** → `400 VALIDATION_ERROR` → `200` | 05 §4 |
+| 프로필 수정 | `401` → DEMO → `403`(역할, URL 규칙) → `400`(JSON 문법·타입) → **`429`** → `400 VALIDATION_ERROR` → `200` | 05 §4 |
 | 프로필 삭제 | `401` → DEMO → `403`(역할) → **`429`** → `204` | 05 §4 |
-| 외부 계정 5개 | `401` → DEMO(쓰기만) → `403`(역할, 인터셉터) → `400`(JSON 문법) → **`429`·`503`** → `400`(경로 형식, 본문 검증) → `404` → `409` → 외부 호출 → 성공 | 06 §2: `429`가 JSON 문법 `400` 뒤로 간다 |
+| 외부 계정 5개 | `401` → DEMO(쓰기만) → `403`(역할, 인터셉터) → `400`(JSON 문법·타입) → **`429`·`503`** → `400`(경로 형식, 본문 검증) → `404` → `409` → 외부 호출 → 성공 | 06 §2: `429`가 JSON 문법·타입 `400` 뒤로 간다 |
 | 본인확인 시작·완료(9번) | `401` → `403`(역할, URL 규칙) → **`429`·`503`** → `400 INVALID_IDENTITY_VERIFICATION_ID`(완료) → `403`(`ACTIVE`) → 이후 08 §3 그대로 | 08 §3: 경로 형식 오류를 센다 |
-| 댓글(NSU-128) | 10 §7.1의 순서에서 JSON 문법 `400`과 역할 `403` 뒤에 `429`를 넣는다 | rebase 때 10에 넣는다 |
-| 아티스트 프로필(NSU-119) | 09의 순서에서 역할 `403`·JSON 문법 `400` 뒤에 `429`를 넣는다 | rebase 때 09에 넣는다 |
+| 댓글(NSU-128) | 10 §7.1의 순서에서 JSON 문법·타입 `400`과 역할 `403` 뒤에 `429`를 넣는다 | rebase 때 10에 넣는다 |
+| 아티스트 프로필(NSU-119) | 09의 순서에서 역할 `403`·JSON 문법·타입 `400` 뒤에 `429`를 넣는다 | rebase 때 09에 넣는다 |
 
 - 역할이 틀린 요청: ARTIST의 행사 등록은 `@PreAuthorize`가, EVENT_PARTNER의 외부 계정 요청은 인터셉터가, ARTIST의 EVENT_PARTNER 프로필 요청은 URL 규칙이 막는다. 셋 다 세지 않는다.
 - 같은 키로 50건을 동시에 보낸 등록(한도가 비어 있을 때): 5건이 서비스까지 간다(1건이 만들고 4건은 기다린 뒤 같은 행사를 받는다). 45건은 `429`, `Retry-After: 180`이고 DB에 닿지 않는다.
@@ -399,7 +402,7 @@ user-request-limit.redis-retry-interval=PT10S
 3. 장애 동작: 탐침 상태, 메모리 대체와 서버 수 나누기, 항목 상한, `REJECT` `503`, 로그, OOM.
 4. 설정과 기동 검사, 출시 기본값 고정.
 5. advisor와 애너테이션: 순서 201, 계정 읽기, 역할 불일치·미인증·재디스패치.
-6. 행사 4개·프로필 2개에 애너테이션을 단다. `EventIntegrationTestBase`가 테스트마다 `user-request-limit:*`을 지운다. 기존 테스트(예: `MyEventsIntegrationTest`는 쓰기 5번)를 확인한다.
+6. 행사 4개·프로필 2개에 애너테이션을 단다. `EventIntegrationTestBase`가 테스트마다 `user-request-limit:*`을 지운다. 기존 통합 테스트가 한 계정으로 한도보다 많이 쓰는지 세어 본다. 테스트 설정의 넉넉한 기본값으로 막는다.
 7. 외부 계정: 5개 핸들러에 애너테이션, 인터셉터는 역할만, `RequestLimiter`·`RedisKeys.requestLimit`·`ExternalAccountFailure` 두 상수 삭제, `ExternalAccountConfig` 정리, 테스트를 새 장치 기준으로 바꾼다.
 8. 커버리지 테스트(#245가 머지되지 않은 채 끝나면 빈 예외 목록 포함, 9번).
 9. OpenAPI customizer, 손으로 단 `429` 삭제, `OpenApiDocsIntegrationTest`.
@@ -407,17 +410,21 @@ user-request-limit.redis-retry-interval=PT10S
     - `IDENTITY_VERIFICATION(REJECT)`와 설정(10, `PT6M`)을 더하고, 시작·완료 핸들러에 단다.
     - 시작·완료 서비스의 기존 한도 호출과 `RedisPublicRequestLimitStore`의 계정 단위 메서드·kind를 지운다. `reset_signup_limits.py`의 키를 바꾼다(강석윤 님 파일, 특이사항).
     - 문서: 08 §3(순서, 세는 범위)·§9(한도 정의)·§10(11번째 요청, Redis 장애, 형식이 틀린 경로 값 시험)·§11.3 예시, ADR identity_verification/00의 본인확인 요청 제한 행과 시험 행, ADR identity_verification/01의 요청 제한 행·Reused·Rejected Alternatives·시험 행, 가입 계약 §1.6의 본인확인 행이 가리키는 근거.
+    - `IdentityVerificationController`에 손으로 단 `429`·`503` `@ApiResponse`를 지우고, `OpenApiDocsIntegrationTest`의 08 행을 customizer 결과에 맞춘다.
+    - `RedisPublicRequestLimitStore.identityVerification(UUID, int)`를 지운다. `SecurityConfig`의 `IDENTITY_VERIFICATION_ENDPOINTS` 역할 규칙은 그대로 둔다.
+    - NSU-105 AC의 "1시간 안 11번째 요청은 `429`"를 "연달아 11번째 요청은 `429`"로 바꾸도록 지휘 세션에 Linear 수정을 요청한다.
 
 다른 브랜치가 rebase 때 할 일:
 
 | 브랜치 | 할 일 |
 |---|---|
-| NSU-128 댓글 | `COMMENT(MEMORY_FALLBACK)` 상수와 설정(10, `PT1M`), 작성·답글·수정·삭제 4개 핸들러에 애너테이션, 10 §7.1 순서에 `429`, §1.6 표의 메모리 대체 행에 댓글이 이미 들어 있는지 확인 |
+| NSU-128 댓글 | `COMMENT(MEMORY_FALLBACK)` 상수와 설정(10, `PT1M`), 작성·답글·수정·삭제 4개 핸들러에 애너테이션, 10 §7.1 순서에 `429`, §1.6 표의 메모리 대체 행에 댓글이 이미 들어 있는지 확인. 128 ADR의 인계 문구는 작성·답글·수정이지만 삭제도 쓰기라 커버리지가 요구한다 |
+| NSU-120 아티스트 일정 | `POST`·`PUT`·`DELETE /api/v1/me/artist-schedules`에 한도를 단다. 달력 편집은 연달아 여러 건을 쓰므로 `PROFILE`(연달아 10건)로 충분한지 그 이슈가 보고, 모자라면 새 상수를 만든다. 일정 개수 상한은 요청 빈도가 아니라 저장 개수의 상한이라 이 ADR이 정하지 않는다 |
 | NSU-119 아티스트 프로필 | `PUT`·`DELETE /api/v1/me/artist-profile`에 `PROFILE`, 09 순서에 `429` |
-| NSU-105 본인확인(9번의 후속 이슈로 갈 때) | 커버리지 예외 목록에 두 경로와 후속 이슈 키 |
-| 앞으로의 쓰기(곡 등록 NSU-89, 추천 생성 NSU-88 등) | 커버리지 테스트가 애너테이션을 요구한다. 기존 한도를 쓸지 새 상수를 만들지는 그 이슈가 정한다. 04·02 §5.2의 자체 한도는 그대로 둔다 |
+| NSU-105 본인확인(NSU-100이 먼저 머지될 때) | #245가 rebase 때 커버리지 예외 목록에 시작·완료 두 경로와 후속 이슈 키를 넣는다. 08 계약·Linear AC·자체 한도 코드는 이전하는 후속 이슈가 바꾼다(9번) |
+| 앞으로의 쓰기(곡 등록 NSU-89, 추천 생성 NSU-88, 검색창 즉시 추천 NSU-122 등) | 커버리지 테스트가 애너테이션을 요구한다. 기존 한도를 쓸지 새 상수를 만들지는 그 이슈가 정한다. 04·02 §5.2의 자체 한도는 그대로 둔다. 추천 생성은 공용 한도를 먼저 쓰고, 그 뒤 자체 한도(같은 행사 1분, 하루 5회)를 본다. 자체 한도에 걸린 요청도 공용 한도 1회를 쓴다. NSU-122가 `GET`이면 커버리지가 요구하지 않으므로, NSU-129 공개 조건의 요청 제한은 NSU-122가 정한다 |
 
-공유 파일: `OpenApiDocsIntegrationTest`(김동엽), `lombok-style-files.txt`, `LogSafetyFiles`(김동엽), `EventIntegrationTestBase`(김동엽, #254도 고친다)는 덧붙이기만 한다. `SecurityConfig`, `ErrorCode`, `GlobalExceptionHandler`는 고치지 않는다.
+공유 파일: `OpenApiDocsIntegrationTest`(김동엽, #245·#254·NSU-121·NSU-128도 고친다), `lombok-style-files.txt`, `LogSafetyFiles`(김동엽), `EventIntegrationTestBase`(김동엽, #254·NSU-121도 고친다)는 덧붙이기만 한다. `ExternalAccountConfig`는 #245도 고친다(`@EnableScheduling` 삭제). `SecurityConfig`, `ErrorCode`, `GlobalExceptionHandler`는 고치지 않는다.
 
 ## 외부 API 검토
 
@@ -451,7 +458,7 @@ user-request-limit.redis-retry-interval=PT10S
 - 새 쓰기 API는 애너테이션 없이는 테스트를 통과하지 못한다. 공개 경로에 붙여도 실패한다.
 - 서버를 늘리면 `user-request-limit.server-count`를 바꿔야 한다. 바꾸지 않으면 Redis 장애 때 메모리 한도가 서버 수만큼 커진다.
 - 표준 multipart 파싱은 지금 꺼져 있다(`spring.servlet.multipart.enabled=false`). 켜면 advisor보다 먼저 본문을 읽는다. 곡 업로드를 만드는 이슈(NSU-89)가 검사 순서를 다시 확인한다.
-- 재생 주소 발급(02 §2.5)은 `GET`이라 커버리지 테스트가 요구하지 않는다. 그 이슈(NSU-87)가 자체 한도를 둘지 이 장치를 쓸지 정한다. 02 §2.5의 메모리 대체 방식은 이 ADR과 같다.
+- 재생 주소 발급(02 §2.5)은 `GET`이라 커버리지 테스트가 요구하지 않는다. 그 이슈(NSU-87)가 자체 한도를 둘지 이 장치를 쓸지 정한다. 02 §2.5의 메모리 대체와는 서버 수로 나누는 방식이 같다. 이 ADR은 서버마다 최소 1건과 메모리 항목 상한을 더했다.
 - 한 경로에 두 한도가 걸리면(곡 등록의 04 자체 한도와 공용 한도) 같은 `code`의 `429`가 차례로 날 수 있다(7번).
 - 계정을 정지해도 남은 토큰이 만료될 때까지 한도 안에서 쓸 수 있다. 계정 상태 검사는 이 ADR의 범위가 아니다(05 §4).
 

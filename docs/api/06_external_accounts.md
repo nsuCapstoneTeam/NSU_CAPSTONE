@@ -48,7 +48,7 @@
 | `GET /api/v1/artists/{artistId}/external-accounts` | `artistId`가 토큰 `sub`와 같을 때만. 다르면 `403 ACCESS_DENIED` | 대상이 `ACTIVE`인 ARTIST일 때만. 없음·EVENT_PARTNER·`SUSPENDED`·`WITHDRAWN`은 모두 `404 ARTIST_NOT_FOUND` |
 
 - 조회의 규칙은 [01 §2](./01_trust_profile.md)와 같다. 같은 코드(`ArtistReadAccess`)를 쓴다.
-- 검사 순서: `401` → `403 DEMO_WRITE_NOT_ALLOWED`(쓰기만) → `403 ACCESS_DENIED`(역할) → `400`(JSON 문법, `ProblemDetail`) → `429`·`503 RATE_LIMIT_UNAVAILABLE`(`/me` 경로만) → `400`(경로 형식, 본문 검증) → `404` → `409` → 외부 호출(`422`·`503`) → 성공.
+- 검사 순서: `401` → `403 DEMO_WRITE_NOT_ALLOWED`(쓰기만) → `403 ACCESS_DENIED`(역할) → `400`(JSON 문법·타입, `ProblemDetail`) → `429`·`503 RATE_LIMIT_UNAVAILABLE`(`/me` 경로만) → `400`(경로 형식, 본문 검증) → `404` → `409` → 외부 호출(`422`·`503`) → 성공.
 - 예외: 연결(§5)은 외부 호출(코드 교환·채널 조회·존재 확인)을 먼저 하고, 그 결과로 잠금 안에서 `409`를 판단한다. 새로 연결할 계정을 알아야 "같은 계정인지", "다른 아티스트가 가졌는지"를 정할 수 있기 때문이다. 시작(§3)의 `409`는 외부 호출 전에 판단한다.
 - `/me` 경로에서 남의 `externalAccountId`는 없는 것과 같이 `404 EXTERNAL_ACCOUNT_NOT_FOUND`다. 다른 아티스트 계정의 존재를 드러내지 않는다.
 
@@ -359,7 +359,7 @@ YouTube 할당량(하루 10,000 units, 태평양 시간 자정 초기화)은 프
 
 | 장치 | 규칙 |
 |---|---|
-| 아티스트별 요청 제한 | `/api/v1/me/external-accounts/**`의 5개 요청(시작, 연결, 작업물 후보, 작업물 고르기, 해제)이 계정별 요청 한도 `EXTERNAL_ACCOUNT`를 함께 쓴다([ADR user_request_limit/00](../adr/user_request_limit/00_per_account_request_limits.md) 8번). 연달아 30번, 그 뒤 20초마다 1번이다. 어떤 10분 동안에도 60번을 넘지 않아 이전 10분 고정 창의 최악(창 경계를 낀 60번)과 같고 평균도 같다. 31번째 연속 요청은 `429 TOO_MANY_REQUESTS`, `Retry-After`는 1번을 다시 보낼 수 있을 때까지 남은 초(예: `20`). 역할 `403`, JSON 문법 오류, `429`는 세지 않는다. Redis를 쓸 수 없으면 `503 RATE_LIMIT_UNAVAILABLE`이고 외부 호출을 하지 않는다 |
+| 아티스트별 요청 제한 | `/api/v1/me/external-accounts/**`의 5개 요청(시작, 연결, 작업물 후보, 작업물 고르기, 해제)이 계정별 요청 한도 `EXTERNAL_ACCOUNT`를 함께 쓴다([ADR user_request_limit/00](../adr/user_request_limit/00_per_account_request_limits.md) 8번). 연달아 30번, 그 뒤 20초마다 1번이다. 어떤 10분 동안에도 60번을 넘지 않아 이전 10분 고정 창의 최악(창 경계를 낀 60번)과 같고 평균도 같다. 31번째 연속 요청은 `429 TOO_MANY_REQUESTS`, `Retry-After`는 1번을 다시 보낼 수 있을 때까지 남은 초(예: `20`). 역할 `403`, JSON 문법·타입 오류, `429`는 세지 않는다. Redis를 쓸 수 없으면 `503 RATE_LIMIT_UNAVAILABLE`이고 외부 호출을 하지 않는다. Redis가 돌아와도 다음 탐침까지 최대 10초는 `503`일 수 있다([signup §1.6](./signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때)) |
 | 확보 지점 | YouTube Data API를 부르기 바로 전에만 확보한다. 연결에서는 코드 교환이 성공한 뒤다. Data API까지 가지 않는 실패(코드 거절, 요청 제한 등)는 예산을 쓰지 않는다 |
 | 호출자 상한 | 그 호출을 일으킨 사용자(아티스트·EVENT_PARTNER)마다 하루 300 units다(`extacct:ytquota:caller:{태평양 시간 날짜}:{userId}`, TTL 2일). 아래 하루 예산과 같은 Lua 스크립트에서 함께 확인하고, 둘 중 하나라도 넘으면 둘 다 올리지 않는다. ID 확인 작업에는 호출자 상한이 없다 |
 | 하루 예산 | YouTube를 부르기 전에 `extacct:ytquota:{태평양 시간 날짜}`(TTL 2일)에서 쓸 units을 확보한다. 연결 2, 후보 3, 표시 정보 계정당 2 units다. 확보는 Lua 스크립트 하나로 "지금 값 + 쓸 units ≤ 한도"를 확인하고 그때만 `INCRBY`한다. 넘으면 값을 바꾸지 않는다. 거절한 요청은 예산을 쓰지 않는다. 확보한 뒤 호출이 실패해도 되돌리지 않는다(YouTube도 실패한 요청에 units를 매긴다) |

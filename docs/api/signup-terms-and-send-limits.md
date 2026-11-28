@@ -182,7 +182,7 @@
 
 ### 1.6 Redis를 쓸 수 없을 때
 
-이 계약의 한도 카운터는 모두 Redis에 있다. Redis가 멈추거나, 응답이 늦거나, `maxmemory`에 닿아 쓰기를 거절하면(`noeviction`) 카운터를 읽고 쓸 수 없다. 경로마다 다음처럼 한다.
+이 계약(로그인 전 요청)의 한도 카운터는 모두 Redis에 있다. 아래 표에는 같은 Redis 장애 때의 로그인 사용자 요청 한도도 함께 적는다. Redis가 멈추거나, 응답이 늦거나, `maxmemory`에 닿아 쓰기를 거절하면(`noeviction`) 카운터를 읽고 쓸 수 없다. 경로마다 다음처럼 한다.
 
 | 경로 | 동작 | 응답 | 이유 |
 |---|---|---|---|
@@ -198,7 +198,7 @@
 - 다른 카운터 명령의 timeout 기준은 1초다. 이 명령들은 공유 Redis 연결을 쓰며, NSU-101에서 그 연결의 명령 timeout `REDIS_COMMAND_TIMEOUT`과 연결 timeout `REDIS_CONNECT_TIMEOUT`을 기본 1초로 정했다. 명령 timeout이 0 이하·1초 초과이거나 연결 timeout이 1ms 미만이거나 두 값 중 하나가 비어 있으면 기동에 실패한다. Lettuce 기본값(명령 60초, 연결 10초)이면 Redis가 멈춘 동안 요청 스레드를 그만큼 붙잡는다. Redis를 멈춘 상태에서 세션 생성·OAuth 시작·로그인이 설정한 timeout 근처에서 끝나는지는 `SharedRedisTimeoutIntegrationTest`로 검증한다.
 - 가입 인증 확인에도 기존 공통 `RATE_LIMIT_UNAVAILABLE`(`503`)을 사용한다. 격리 Redis 8.10.2의 OOM 재현과 fail-closed 회귀는 `SignupSendRedisFailureIntegrationTest.oomCannotAllowTheCorrectCodeAfterAnUncountedWrongCode`로 검증한다. 실제 배포 Redis 검증과는 구분한다.
 - 02 §2.5·04의 요청 제한과 위 표의 로그인 사용자 쓰기는 Redis에 접속할 수 없으면 서버 메모리 카운터로 넘어간다. 로그인 전 요청(가입·로그인·인증 코드)은 그 방식을 쓰지 않는다. 서버 메모리 카운터는 재시작하면 사라지고, 그 경로들은 막아도 사용자가 잠시 뒤 다시 하면 된다.
-- 계정별 요청 한도는 Redis 호출이 한 번 실패하면 10초(`user-request-limit.redis-retry-interval`) 동안 Redis를 부르지 않는다. 그 뒤 요청 1건만 Redis를 다시 시도하고(탐침), 성공하면 Redis로 돌아간다. 그래서 장애가 시작되는 순간 Redis를 기다리던 요청만 최대 1초 늦어진다. 메모리 카운터는 서버마다 최대 10,000항목이고, 가득 차면 새 계정의 요청은 세지 않고 처리한다. 넘어갈 때와 돌아올 때 계정·한도마다 최대 한도만큼 더 들어올 수 있다.
+- 계정별 요청 한도는 Redis 호출이 한 번 실패하면 10초(`user-request-limit.redis-retry-interval`) 동안 Redis를 부르지 않는다. 그 뒤 요청 1건만 Redis를 다시 시도하고(탐침), 성공하면 Redis로 돌아간다. 그래서 Redis가 돌아와도 막는 한도(외부 계정)는 다음 탐침까지 최대 10초 `503`일 수 있다. 그래서 장애가 시작되는 순간 Redis를 기다리던 요청만 최대 1초 늦어진다. 메모리 카운터는 서버마다 최대 10,000항목이고, 가득 차면 새 계정의 요청은 세지 않고 처리한다. 넘어갈 때와 돌아올 때 계정·한도마다 최대 한도만큼 더 들어올 수 있다.
 
 ## 2. breaking change
 
