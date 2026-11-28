@@ -93,7 +93,7 @@ Eligibility ADR Consequences의 "NSU-12·34" 전제와 이 ADR이 지키는 방�
 - `btree_gist`는 PostgreSQL 기본 contrib의 신뢰(trusted) 확장이다. uuid의 `=`를 GiST 인덱스에서 쓰게 해 준다(Context7로 확인). V1이 `vector` 확장을 같은 방식(`CREATE EXTENSION IF NOT EXISTS`)으로 만든다.
 - 배제 제약은 겹치는 행이 다른 트랜잭션에서 아직 커밋되지 않았으면 그 트랜잭션이 끝나기를 기다린다. 앞 트랜잭션이 커밋되면 `409`, 롤백되면 저장한다. 이 대기도 잠금 대기라 `lock_timeout`을 받는다. 3초를 넘으면 `503`이다.
 - 배제 제약만 두면 교착이 생긴다. 제약은 인덱스 항목을 먼저 넣고 충돌을 검사하므로, 겹치는 행을 거의 같은 순간에 넣은 두 트랜잭션이 서로의 미커밋 행을 기다릴 수 있다(PostgreSQL `execIndexing.c` 주석). 아티스트별 잠금(결정 13)이 이것을 없앤다. 같은 아티스트의 `INSERT`와 시작 날짜를 바꾸는 `UPDATE`는 행을 넣기 전에 같은 잠금을 잡으므로 한 번에 하나만 진행한다. 뒤 트랜잭션은 앞 트랜잭션의 커밋 뒤에 검사해 `409`를 받는다. 그래서 API끼리의 동시 겹침은 "하나 `201`, 다른 하나 `409`"다(잠금을 3초 넘게 기다리면 `503`).
-- 교착이 남는 곳은 아티스트별 잠금을 먼저 잡지 않은 운영자 `UPDATE`뿐이다. 그 UPDATE는 일정 행을 먼저 잠그고(시작 날짜를 바꾸면 그 뒤 트리거가 잠금을 잡는다), API는 잠금을 먼저 잡고 일정 행을 기다리므로 순서가 엇갈릴 수 있다. PostgreSQL이 한쪽을 끊고(`40P01`), API 쪽이 끊기면 `503`이며 아무것도 남지 않는다. 운영자 runbook은 일정을 고치기 전에 같은 잠금을 먼저 잡는다(외부 계정 runbook과 같은 방식).
+- 교착이 남는 곳은 runbook의 잠금 순서(`users` → 아티스트별 잠금)를 따르지 않은 운영자 쓰기뿐이다(아래 "쓰기의 계정 상태와 잠금"). 예를 들어 아티스트별 잠금을 먼저 잡지 않은 운영자 `UPDATE`다. 그 UPDATE는 일정 행을 먼저 잠그고(시작 날짜를 바꾸면 그 뒤 트리거가 잠금을 잡는다), API는 잠금을 먼저 잡고 일정 행을 기다리므로 순서가 엇갈릴 수 있다. PostgreSQL이 한쪽을 끊고(`40P01`), API 쪽이 끊기면 `503`이며 아무것도 남지 않는다. 운영자 runbook은 일정을 고치거나 넣기 전에 `users` 행과 같은 잠금을 API와 같은 순서로 먼저 잡는다(외부 계정 runbook과 같은 방식).
 - 오류는 SQLState로 나눈다. `23P01`이고 제약 이름이 `ex_artist_schedules_no_overlap`이면 `409`다. `55P03`(잠금 대기 초과)과 `40P01`(교착)은 `503`이다. 나머지 DB 오류는 `500`이다.
 - 같은 요청 안의 항목끼리 겹쳐도 같은 제약이 잡는다. 제약은 지연되지 않아 행을 넣을 때마다 검사한다. 그래서 요청 안의 겹침을 앱이 따로 검사하지 않고, 응답도 같은 `409`다.
 - `PUT`이 자기 옛 구간과 겹치는 새 구간으로 바꾸는 것은 된다. UPDATE의 새 행은 같은 트랜잭션이 지운 옛 행과 충돌하지 않는다. 테스트로 고정한다.
@@ -141,19 +141,19 @@ Eligibility ADR Consequences의 "NSU-12·34" 전제와 이 ADR이 지키는 방�
 | 성능(응답 시간, 외부 호출 대기, 스레드·연결 점유, 재시도 비용) | 넣는 행마다 인덱스 범위 세기 1번(96행 이하). 같은 아티스트의 쓰기만 줄을 서고, 대기는 3초 상한이다. 외부 호출·재시도 없음 | 채택과 같다 | `users` 행을 쓰는 다른 일(프로필 저장의 `FOR SHARE`, 로그인 기록 등)까지 같은 줄에 선다 |
 | 메모리 | 차이 없음 | 차이 없음 | 차이 없음 |
 | 확장성 | 아티스트끼리는 잠금 키가 달라 서로 기다리지 않는다 | 채택과 같다 | 채택과 같다 |
-| 운영 부담 | 운영자는 상한을 기억하지 않아도 된다. 일정 UPDATE 전에 같은 잠금을 잡는 runbook 한 줄이 는다 | 운영자 SQL이 상한을 넘기면 조회가 커진다 | 프로필·계정 작업이 일정 쓰기를 기다린다 |
+| 운영 부담 | 운영자는 상한을 기억하지 않아도 된다. 일정을 고치거나 넣기 전에 `users` 행과 같은 잠금을 잡는 runbook 두 줄이 는다 | 운영자 SQL이 상한을 넘기면 조회가 커진다 | 프로필·계정 작업이 일정 쓰기를 기다린다 |
 | 사용자 경험 | 화면 사용자에게 차이 없음. 상한을 넘기면 `409`와 안내 | 차이 없음 | 차이 없음 |
 | 구현량 | 트리거 함수 1개, 잠금 문장 1개, 상한·경쟁 테스트 | 채택과 비슷하다. 트리거 대신 앱 코드 | 잠금 문장 하나지만 `ArtistWriteAccess`(NSU-119)와 다른 잠금을 새로 만든다 |
 
 - 상한 96은 15분에 하나꼴이다. 화면은 30분 단위로 고르므로 화면으로 하루를 빈틈없이 채워도 48개다. 짧은 틈은 정각·30분이 아닌 일정(섭외 성사·운영자의 `BOOKED`) 옆에만 생기고, 화면은 그 틈을 옆 일정의 시작·끝 시각으로 채운다(11 §8). 그런 일정 하나는 30분 칸을 하나 이상 차지하므로, 그 일정과 양옆 틈을 더해도 하루 개수는 그 일정 하나당 많아야 2개 는다. 화면 사용자가 상한에 닿으려면 하루에 그런 일정이 24개 넘게 있어야 한다. 그래서 상한 초과 오류는 화면 사용자에게 보이지 않는다.
 - 날짜는 `Asia/Seoul` 날짜이고 시작 시각으로 정한다. 자정을 넘는 일정은 시작한 날에 센다. 조회 상한(4,033건)은 "범위 안의 날 × 96 + 범위 시작을 덮는 1건"으로 셈한다.
 - 잠금은 PostgreSQL 트랜잭션 advisory 잠금이다. 키는 `hashtextextended('artist_schedules:' || user_id, 0)`다. 외부 계정(06 §11.3, `ExternalAccountRepository`)과 같은 방식이고 접두어만 다르다. 다른 키와 해시가 겹치면 두 아티스트의 쓰기가 줄을 설 뿐 결과는 같다. 트랜잭션이 끝나면 풀린다.
-- 상한은 트리거 둘이 같은 함수(`enforce_artist_schedule_daily_limit`)로 검사한다. `trg_artist_schedules_before_insert`(`BEFORE INSERT`)와 `trg_artist_schedules_start_day_change`(`BEFORE UPDATE OF start_at`, `Asia/Seoul` 시작 날짜가 바뀔 때만 도는 `WHEN` 조건)다. 잠금을 잡은 뒤 그날 시작하는 같은 아티스트의 행을 자기 행을 빼고 센다. 96개 이상이면 SQLState `23514`, 제약 이름 `ck_artist_schedules_daily_limit`으로 거절한다.
+- 상한은 트리거 둘이 같은 트리거 함수(`artist_schedule_write_guard`)로 검사한다. `trg_artist_schedules_before_insert`(`BEFORE INSERT`)와 `trg_artist_schedules_start_day_change`(`BEFORE UPDATE OF start_at`, `Asia/Seoul` 시작 날짜가 바뀔 때만 도는 `WHEN` 조건)다. 잠금을 잡은 뒤 그날 시작하는 같은 아티스트의 행을 자기 행을 빼고 센다. 96개 이상이면 SQLState `23514`, 제약 이름 `ck_artist_schedules_daily_limit`으로 거절한다.
   - `READ COMMITTED`에서 트리거 안의 세기 문장은 잠금을 잡은 뒤 새 스냅숏을 쓴다. 그래서 앞에서 잠금을 쥐었던 트랜잭션이 커밋한 행까지 센다.
-  - `REPEATABLE READ`·`SERIALIZABLE`에서는 세기 문장이 트랜잭션 스냅숏을 써서, 잠금을 기다리는 동안 커밋된 행을 놓친다(`SERIALIZABLE`도 상대가 `READ COMMITTED`인 API면 충돌을 잡지 못한다). 그래서 상한 함수는 이 두 격리 수준의 쓰기를 먼저 거절한다(SQLState `25000`). 앱과 탈퇴 절차는 `READ COMMITTED`(기본값)라 걸리지 않는다. 운영자 SQL도 기본값이면 걸리지 않고, 격리 수준을 올린 트랜잭션은 `INSERT`와 시작 날짜를 바꾸는 `UPDATE`만 거절된다. 상한이 작성자의 격리 수준 설정에 기대지 않게 하려는 것이다.
+  - `REPEATABLE READ`·`SERIALIZABLE`에서는 세기 문장이 트랜잭션 스냅숏을 써서, 잠금을 기다리는 동안 커밋된 행을 놓친다(`SERIALIZABLE`도 상대가 `READ COMMITTED`인 API면 충돌을 잡지 못한다). 그래서 트리거 함수는 이 두 격리 수준의 쓰기를 먼저 거절한다(SQLState `25000`). 앱과 탈퇴 절차는 `READ COMMITTED`(기본값)라 걸리지 않는다. 운영자 SQL도 기본값이면 걸리지 않고, 격리 수준을 올린 트랜잭션은 `INSERT`와 시작 날짜를 바꾸는 `UPDATE`만 거절된다. 상한이 작성자의 격리 수준 설정에 기대지 않게 하려는 것이다.
   - 행 단위 `BEFORE` 트리거는 같은 문장이 앞서 넣은 행을 본다(PostgreSQL "Visibility of Data Changes"). 그래서 한 번에 7행을 넣어도 앞 행까지 센다.
   - 시작 날짜를 바꾸지 않는 `UPDATE`는 그날의 개수를 바꾸지 않으므로 잠금도 세기도 하지 않는다. 운영자의 상태 수정이 탈퇴(`users` → 일정 `DELETE`)나 다른 쓰기와 엮일 일을 줄인다.
-- 삽입 가드(결정 11)와 한 트리거 함수로 묶는다. 그 함수가 가드 뒤에 상한 함수를 부른다. `INSERT`에서는 `users` `FOR SHARE` → advisory 잠금 → 세기 순서다. API도 `ArtistWriteAccess`(`users`) → advisory 잠금 → 저장 문장 순서라, 모든 `INSERT` 경로의 잠금 순서가 `users` → advisory → `artist_schedules`로 같다. 트리거 두 개로 나누면 실행 순서가 트리거 이름의 알파벳 순서에 기대게 된다.
+- 삽입 가드(결정 11)와 한 트리거 함수로 묶는다. 함수는 `TG_OP`가 `INSERT`일 때만 가드를 실행하고, 이어서 상한을 검사한다. `INSERT`에서는 `users` `FOR SHARE` → advisory 잠금 → 세기 순서다. API도 `ArtistWriteAccess`(`users`) → advisory 잠금 → 저장 문장 순서라, 모든 `INSERT` 경로의 잠금 순서가 `users` → advisory → `artist_schedules`로 같다. 트리거 두 개로 나누면 실행 순서가 트리거 이름의 알파벳 순서에 기대게 된다.
 - API가 저장 문장 전에 잠금을 먼저 잡는 이유: `PUT`은 대상 일정 행을 잠근 뒤에 트리거가 돈다. 앱이 먼저 잡지 않으면 `PUT`은 일정 행 → advisory, `POST`는 advisory → (겹치는 미커밋 행) 순서가 되어 둘이 교착할 수 있다. 앱이 먼저 잡으면 트리거의 같은 잠금은 이미 쥔 잠금이라 기다리지 않는다.
 - 잠금은 본문 검증 뒤에 잡는다. 검증에 걸리는 요청은 줄을 서지 않는다. 검사 순서(`403` → `400` → `409`)는 바뀌지 않는다.
 - 상한을 넘으면 `409 ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED`다. 지금 저장된 일정 때문에 거절하는 것이라 `409`다(요청 제한의 `429`가 아니다). 한 행이 상한과 겹침에 함께 걸리면 트리거가 먼저 돌므로 상한 쪽이다.
@@ -171,6 +171,9 @@ NSU-119의 결정(ADR artist_profile/00 결정 6·13, "쓰기의 계정 상태",
 
 - `POST`·`PUT`이 `ArtistWriteAccess.require`를 부른다. `DELETE`와 조회는 부르지 않는다.
 - 잠금 순서는 모든 쓰기에서 `users` → 아티스트별 advisory 잠금 → `artist_schedules`다. 탈퇴 절차(D4)는 `users` → `artist_schedules`이고 advisory 잠금을 잡지 않는다. 같은 방향이라 저장과 탈퇴 사이에 교착이 없다. 사용자의 `DELETE`는 `users`도 advisory 잠금도 잡지 않는다.
+- 운영자 SQL도 같은 순서를 쓴다. 일정을 넣거나 고치는 운영자 트랜잭션은 첫 문장으로 `SELECT 1 FROM users WHERE id = :id FOR SHARE`, 다음으로 `SELECT pg_advisory_xact_lock(hashtextextended('artist_schedules:' || :id, 0))`를 실행한 뒤 일정을 바꾼다(runbook). 지우기만 하는 트랜잭션은 잡지 않아도 된다.
+  - 이유: 일정 행을 먼저 잠근 운영자 트랜잭션은 탈퇴와 엇갈린다. 운영자가 일정 R을 고친 직후 탈퇴가 `users` 행을 잡으면, 탈퇴의 `DELETE`는 운영자가 쥔 R을 기다리고, 운영자의 다음 `INSERT`는 삽입 가드에서 탈퇴가 쥔 `users` 행을 기다린다(설계 리뷰 지적). 아티스트별 잠금만으로는 막지 못한다. 탈퇴가 그 잠금을 잡지 않기 때문이다. `users`를 먼저 잡으면 탈퇴 UPDATE가 운영자의 커밋을 기다린 뒤 `DELETE`가 그 일정까지 지운다.
+  - 경계: 잠금 순서는 교착을 피하는 규칙이고, 데이터 보장은 여기에 기대지 않는다. 순서를 어긴 쓰기가 교착하면 PostgreSQL이 한쪽을 `40P01`로 끊고, 끊긴 쪽은 아무것도 남기지 않는다. 탈퇴 뒤 일정 잔존은 삽입 가드가, 하루 상한은 트리거가, 겹침은 배제 제약이 어떤 순서에서도 지킨다. 그래서 운영자 경로의 교착은 경로를 하나씩 막지 않고 이 runbook 규칙 하나와, 끊긴 탈퇴를 다시 실행하는 NSU-167의 재시도로 다룬다(같은 종류의 지적이 2회차 `UPDATE` 가드에 이어 두 번째라, 경로를 더 막지 않고 경계로 적는다).
 - 일정은 아티스트마다 여러 행이라 잠금 대기가 생기는 곳이 둘 더 있다. 같은 아티스트의 다른 쓰기를 기다리는 advisory 잠금과, 겹치는 미커밋 일정(잠금을 먼저 잡지 않은 운영자 UPDATE)을 기다리는 배제 제약 검사다. 둘 다 3초 상한 안이다.
 
 ### 탈퇴 시 파기
@@ -375,13 +378,18 @@ CREATE TABLE artist_schedules (
 -- 배제 제약의 GiST 인덱스는 `= ANY(배열)` 조건에 쓰이지 않는다. 탈퇴 절차의 삭제도 이 인덱스를 쓴다.
 CREATE INDEX ix_artist_schedules_user_start ON artist_schedules (user_id, start_at);
 
--- 하루 상한(결정 13): 아티스트별 advisory 잠금을 잡은 뒤 그날(Asia/Seoul) 시작하는 행을 센다.
+-- 새 행과 시작 날짜 변경(결정 11·13)을 한 함수가 맡는다. 두 트리거가 같은 함수를 부른다.
+-- 표는 트리거가 걸린 artist_schedules와 같은 스키마(TG_TABLE_SCHEMA)에서 찾고, 함수의 search_path를 고정한다.
+-- 운영자 세션의 search_path나 같은 이름의 임시 표(users, artist_schedules)로 확인과 세기를 속일 수 없다(V11과 같다).
 -- Asia/Seoul은 일광 절약 시간이 없어 하루가 늘 24시간이다.
-CREATE FUNCTION enforce_artist_schedule_daily_limit(p_user_id UUID, p_start_at TIMESTAMPTZ, p_id UUID)
-RETURNS void
-LANGUAGE plpgsql AS $$
+CREATE FUNCTION artist_schedule_write_guard() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $$
 DECLARE
-    day_start TIMESTAMPTZ := date_trunc('day', p_start_at AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul';
+    active_artist BOOLEAN;
+    same_day BIGINT;
+    day_start TIMESTAMPTZ := date_trunc('day', NEW.start_at AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul';
 BEGIN
     -- 세기는 잠금 뒤의 새 스냅숏에 기댄다(READ COMMITTED). 그보다 높은 격리 수준은 트랜잭션 스냅숏으로 세어
     -- 앞에서 잠금을 쥐었던 트랜잭션의 행을 놓치므로 거절한다.
@@ -389,57 +397,46 @@ BEGIN
         RAISE EXCEPTION '공연 가능 일정은 READ COMMITTED 트랜잭션에서만 넣거나 시작 날짜를 바꿀 수 있다'
             USING ERRCODE = 'invalid_transaction_state';
     END IF;
-    PERFORM pg_advisory_xact_lock(hashtextextended('artist_schedules:' || p_user_id, 0));
-    IF (SELECT count(*) FROM artist_schedules
-        WHERE user_id = p_user_id
-          AND start_at >= day_start
-          AND start_at < day_start + INTERVAL '24 hours'
-          AND id <> p_id) >= 96 THEN
-        RAISE EXCEPTION '하루에 둘 수 있는 공연 가능 일정 수를 넘었다: %', p_user_id
+    -- 삽입 가드(결정 11): 새 행만. users FOR SHARE → advisory 잠금 → 세기 순서는 API와 같다.
+    IF TG_OP = 'INSERT' THEN
+        EXECUTE format('SELECT true FROM %I.users WHERE id = $1 AND role = ''ARTIST'' AND status = ''ACTIVE'' FOR SHARE',
+                       TG_TABLE_SCHEMA)
+            INTO active_artist USING NEW.user_id;
+        IF active_artist IS NULL THEN
+            RAISE EXCEPTION '활성 아티스트가 아닌 사용자의 공연 가능 일정은 저장할 수 없다: %', NEW.user_id
+                USING ERRCODE = 'check_violation';
+        END IF;
+    END IF;
+    -- 하루 상한(결정 13): 아티스트별 잠금을 잡은 뒤 그날 시작하는 행을 자기 행을 빼고 센다.
+    PERFORM pg_advisory_xact_lock(hashtextextended('artist_schedules:' || NEW.user_id, 0));
+    EXECUTE format('SELECT count(*) FROM %I.artist_schedules WHERE user_id = $1 AND start_at >= $2 '
+                   'AND start_at < $2 + INTERVAL ''24 hours'' AND id <> $3', TG_TABLE_SCHEMA)
+        INTO same_day USING NEW.user_id, day_start, NEW.id;
+    IF same_day >= 96 THEN
+        RAISE EXCEPTION '하루에 둘 수 있는 공연 가능 일정 수를 넘었다: %', NEW.user_id
             USING ERRCODE = 'check_violation', CONSTRAINT = 'ck_artist_schedules_daily_limit';
     END IF;
-END;
-$$;
-
--- 새 행(결정 11·13): users FOR SHARE(삽입 가드) → advisory 잠금 → 세기. API와 같은 잠금 순서다.
-CREATE FUNCTION artist_schedule_before_insert() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-    PERFORM 1 FROM users
-    WHERE id = NEW.user_id AND role = 'ARTIST' AND status = 'ACTIVE'
-    FOR SHARE;
-    IF NOT FOUND THEN
-        RAISE EXCEPTION '활성 아티스트가 아닌 사용자의 공연 가능 일정은 저장할 수 없다: %', NEW.user_id
-            USING ERRCODE = 'check_violation';
-    END IF;
-    PERFORM enforce_artist_schedule_daily_limit(NEW.user_id, NEW.start_at, NEW.id);
     RETURN NEW;
 END;
 $$;
 
 CREATE TRIGGER trg_artist_schedules_before_insert
     BEFORE INSERT ON artist_schedules
-    FOR EACH ROW EXECUTE FUNCTION artist_schedule_before_insert();
+    FOR EACH ROW EXECUTE FUNCTION artist_schedule_write_guard();
 
--- 시작 날짜를 바꾸는 수정만 센다. users는 잠그지 않는다(탈퇴와의 교착 방지, "탈퇴 시 파기").
-CREATE FUNCTION artist_schedule_start_day_change() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-    PERFORM enforce_artist_schedule_daily_limit(NEW.user_id, NEW.start_at, NEW.id);
-    RETURN NEW;
-END;
-$$;
-
+-- 시작 날짜를 바꾸는 수정만 센다. TG_OP가 UPDATE라 users는 잠그지 않는다(탈퇴와의 교착 방지, "탈퇴 시 파기").
 CREATE TRIGGER trg_artist_schedules_start_day_change
     BEFORE UPDATE OF start_at ON artist_schedules
     FOR EACH ROW
     WHEN ((OLD.start_at AT TIME ZONE 'Asia/Seoul')::date
           IS DISTINCT FROM (NEW.start_at AT TIME ZONE 'Asia/Seoul')::date)
-    EXECUTE FUNCTION artist_schedule_start_day_change();
+    EXECUTE FUNCTION artist_schedule_write_guard();
 
 -- 소유자 변경 금지: users를 잠그지 않는다. 같은 값을 SET에 넣은 UPDATE는 WHEN 조건으로 함수를 부르지 않는다.
 CREATE FUNCTION reject_artist_schedule_owner_change() RETURNS trigger
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $$
 BEGIN
     RAISE EXCEPTION '공연 가능 일정의 소유자는 바꿀 수 없다: %', OLD.id
         USING ERRCODE = 'check_violation';
@@ -457,12 +454,23 @@ CREATE TRIGGER trg_artist_schedules_fixed_owner
 - 삽입 가드·소유자 변경 금지·하루 상한 트리거 예외의 SQLState는 모두 `23514`(`check_violation`)다. 앱은 제약 이름으로 나눈다. `ck_artist_schedules_daily_limit`이면 `409 ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED`다. 이름이 없는 삽입 가드 예외는 API에서 나오지 않고(앞의 `ArtistWriteAccess`가 막는다), 나오면 `500`이다. 격리 수준 거절(`25000`)도 API에서 나오지 않고(앱은 `READ COMMITTED`), 나오면 `500`이다. 메시지에는 사용자 ID만 넣고 일정 값은 넣지 않는다.
 - 세기 문장은 `ix_artist_schedules_user_start`(`user_id`, `start_at`)의 범위 조회다. 하루 96행 이하라 비용은 넣는 행마다 작은 인덱스 범위 하나다.
 - 트리거 함수는 `SECURITY DEFINER`가 아니다. 쓰는 계정의 권한으로 `users`와 일정 표를 읽는다.
+- 두 함수는 표를 `TG_TABLE_SCHEMA`(트리거가 걸린 `artist_schedules`의 스키마, 이 마이그레이션이 `users`와 같은 스키마에 만든다)로 한정하고 `search_path`를 `pg_catalog, pg_temp`로 고정한다(V11의 프로필 가드·파기 함수와 같다). 운영자 세션에 같은 이름의 임시 표(`users`, `artist_schedules`)가 있어도 가드는 실제 계정 상태를, 상한은 실제 일정 수를 본다(설계 리뷰 지적). 상한 검사를 별도 함수로 두면 고정한 `search_path`에서 그 함수를 다시 스키마로 한정해 불러야 하므로, 가드와 상한을 한 트리거 함수에 두고 `TG_OP`로 가드만 `INSERT`에 건다.
 - 롤백 계획(NSU-119 F6와 같은 방식):
   - 1차는 앱만 이전 버전으로 되돌린다. 표와 데이터는 그대로 둔다. Flyway 기본 설정(`ignoreMigrationPatterns=*:future`)이라 이전 앱은 이 마이그레이션이 적용된 DB로도 뜬다.
   - 이전 앱은 이 표를 읽지 않고 빈 구현(`EmptyArtistScheduleReader`)으로 돌아간다. 추천은 이 PR 전처럼 모든 아티스트가 `SCHEDULE_NOT_COVERED`다. 저장된 일정은 표에 남아, 다시 배포하면 그대로 쓰인다.
   - 앱만 되돌려도 삽입 가드 트리거는 DB에 남는다(바라는 동작이다). 탈퇴할 때의 `DELETE`는 탈퇴 절차(NSU-167)와 runbook이 그대로 실행한다.
   - `DROP TABLE`을 롤백 절차로 쓰지 않는다. 아티스트가 입력한 일정이 모두 사라지고, Flyway 이력은 남아 같은 버전을 다시 배포해도 표가 다시 생기지 않는다.
-  - 기능을 없애야 할 때만 데이터를 백업하고 복구를 확인한 뒤, 새 forward 마이그레이션으로 트리거 → 트리거 함수 → 상한 함수 → 표 순서로 지운다. `btree_gist` 확장은 남긴다. 이 절차를 PR 설명에도 적는다.
+  - 기능을 없애야 할 때만 데이터를 백업하고 복구를 확인한 뒤, 새 forward 마이그레이션으로 트리거 → 트리거 함수 → 표 순서로 지운다. `btree_gist` 확장은 남긴다. 이 절차를 PR 설명에도 적는다.
+- 일정 표만 백업에서 되돌리기(V11 프로필 복원 절차와 같은 방식). 정지(`SUSPENDED`) 아티스트의 일정은 정상 백업에도 있다(정지 전에 저장한 일정은 남는다, 11 §5.2). 그런 행은 `ACTIVE` 전용 삽입 가드에 걸리고, 가드와 상한이 한 트리거라 트리거를 끄면 상한 검사도 꺼진다. 그래서 `pg_restore --disable-triggers`를 쓰지 않고, 아래를 한 `psql` 세션의 한 `READ COMMITTED` 트랜잭션으로 실행한다(`\set ON_ERROR_STOP on`). 중간에 멈추면 모두 롤백되고 임시 표도 세션과 함께 사라진다.
+  1. `BEGIN`, `SET LOCAL lock_timeout = '3s'`.
+  2. `CREATE TEMP TABLE artist_schedules_restore (LIKE artist_schedules)`를 만들고 덤프의 이 표 데이터를 `\copy`로 받는다.
+  3. 받은 행 중 `users`에 없거나, ARTIST가 아니거나, `WITHDRAWN`인 사용자의 행을 먼저 지운다. 남은 사용자의 `users` 행을 id 순서로 `FOR SHARE` 잠그고, 이어서 같은 순서로 아티스트별 잠금을 잡는다(API와 같은 순서).
+  4. `ACTIVE` ARTIST의 행은 트리거를 켠 채 `INSERT … SELECT`로 옮긴다. 가드와 상한이 같은 확인을 다시 한다.
+  5. 정지 ARTIST의 행은 `ALTER TABLE artist_schedules DISABLE TRIGGER trg_artist_schedules_before_insert`로 그 트리거 하나만 끄고 그 행만 넣는다. 배제 제약, `CHECK`, FK는 그대로 검사한다.
+  6. 트리거를 다시 켜기 전에 두 가지를 확인한다. (a) ARTIST가 아니거나 상태가 `ACTIVE`·`SUSPENDED`가 아닌 사용자의 행이 없다. (b) 같은 아티스트가 같은 날(`Asia/Seoul` 시작 날짜)에 시작하는 행이 96개를 넘는 곳이 없다. 하나라도 있으면 예외를 던져 전체를 롤백한다. 없으면 트리거를 다시 켜고 `COMMIT`한 뒤 `pg_trigger.tgenabled`가 `'O'`인지 본다.
+  - 잠금: `DISABLE TRIGGER`는 `artist_schedules`에 `SHARE ROW EXCLUSIVE` 잠금을 잡는다. 진행 중인 쓰기가 끝나기를 기다리고 커밋까지 새 쓰기가 줄을 선다. 그래서 (b)를 확인하는 동안 다른 쓰기가 끼어들지 않고, 커밋 전의 트리거 변경은 다른 세션에 보이지 않는다.
+  - 겹침이나 상한에 걸리면 전체가 롤백된다. 되돌릴 사용자와 기간을 좁혀 다시 실행한다.
+  - 한계: 덤프 뒤에 본인이 지운 일정도 되살아난다. 되돌릴 범위는 사고 내용에 맞게 운영자가 좁힌다.
 
 ### SQL 스케치
 
