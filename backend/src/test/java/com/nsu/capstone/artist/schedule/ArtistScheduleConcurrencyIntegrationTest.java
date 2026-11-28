@@ -79,7 +79,7 @@ class ArtistScheduleConcurrencyIntegrationTest extends ArtistScheduleIntegration
         assertThat(scheduleRows(artist)).isEqualTo(96);
     }
 
-    /** 삽입이 끝났거나 ID 변경 연결의 커밋을 기다리는 상태가 될 때까지 기다린다. 잠깐 자는 것으로 순서를 가정하지 않는다. */
+    /** 삽입이 끝났거나 ID 변경 연결의 커밋을 기다리는 상태가 될 때까지 기다린다. 잠깐 자는 것으로 순서를 가정하지 않는다. 시간이 지나도 둘 다 아니면 실패시킨다. */
     private void awaitFinishedOrBlocked(Future<?> insertion) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
         while (!insertion.isDone() && System.nanoTime() < deadline) {
@@ -91,6 +91,9 @@ class ArtistScheduleConcurrencyIntegrationTest extends ArtistScheduleIntegration
                 return;
             }
             Thread.sleep(20);
+        }
+        if (!insertion.isDone()) {
+            throw new AssertionError("삽입이 끝나지도 잠금을 기다리지도 않은 채 대기 시간이 지났다");
         }
     }
 
