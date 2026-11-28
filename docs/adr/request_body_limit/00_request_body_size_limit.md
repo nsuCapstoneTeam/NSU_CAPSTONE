@@ -49,7 +49,7 @@
    - 두 경우 모두 `413`은 본문을 메서드 인자로 바꾸기 전에 난다. 그래서 그 뒤의 검사(`@PreAuthorize` 역할 검사, 요청 값 검증, 업무 판정, NSU-100 계정별 요청 한도)에 닿지 않는다.
    - API 계약 문서의 검사 순서 표(예: 05 §4, 06 §2)에는 `413`을 따로 적지 않는다. `413`의 자리는 00 §12 한 곳이 정한다. API마다 적으면 새 API가 생길 때마다 빠뜨릴 곳이 늘기 때문이다.
 7. **로그**: 이 결정의 `413`과 폼 파싱 `400`은 ERROR로 남기지 않는다. 새 로그 줄도 만들지 않는다. `RequestIdFilter`의 완료 줄(INFO, 상태 `413`) 하나만 남는다. 본문, 길이 헤더 값, 예외 메시지는 남기지 않는다.
-8. **상한 값의 정본은 필터의 상수다.** `server.tomcat.max-http-form-post-size`에는 같은 값을 적고, 둘이 같은지 테스트로 지킨다. 이 설정은 새 파일 `config/web.properties`에 두고 `application.properties`의 `spring.config.import`에 더한다.
+8. **상한 값의 정본은 필터의 상수다.** `server.tomcat.max-http-form-post-size`에는 같은 값을 적고, 둘이 같은지 테스트로 지킨다. 배포에서 환경 변수(`SERVER_TOMCAT_MAX_HTTP_FORM_POST_SIZE`) 등으로 이 값을 바꾸면 chunked 폼 `POST`만 상한이 풀리므로(`Content-Length` 폼은 필터가 막는다), 기동할 때 값이 필터 상수와 다르면 앱이 뜨지 않게 한다(`RedisTimeoutValidation`과 같은 방식). 64KiB보다 큰 본문이 필요하면 설정이 아니라 이 ADR의 예외로 다룬다(00 §12). 이 설정은 새 파일 `config/web.properties`에 두고 `application.properties`의 `spring.config.import`에 더한다.
 9. **프록시는 권장값만 적는다.** nginx `/api/` location에 `client_max_body_size 1m`을 명시하고, `proxy_request_buffering`은 기본값(`on`)을 둔다. `backend/README.md`의 "요청 본문 크기 상한" 절에 적는다. 프록시 설정 파일과 배포 확인은 이 이슈 밖이다(NSU-129).
 10. 외부 데이터·서비스를 쓰지 않으므로 `public-api-scout`은 해당 없다.
 
@@ -166,6 +166,7 @@ A를 고른다. 막아야 하는 곳(인증 전 JSON, `FormContentFilter`, 폼 �
 | `global/exception/GlobalExceptionHandler.java` | 강석윤 | `handleHttpMessageNotReadable` 재정의, `InvalidParameterException`·`RequestBodyTooLargeException` 처리기 |
 | `global/config/OpenApiConfig.java` | 김동엽 | 첫 화면 설명에 `413` 한 줄(00 §10.1의 `500`과 같은 방식) |
 | `resources/config/web.properties` (새 파일) | - | `server.tomcat.max-http-form-post-size=64KB` |
+| `global/web/FormPostSizeValidation.java` (새 파일, 구현 뒤 추가) | - | 기동할 때 폼 상한이 `MAX_BODY_BYTES`와 다르면 실패(Decision 8) |
 | `resources/application.properties` | 강석윤 | `spring.config.import`에 `config/web.properties` 한 줄 |
 | `src/test/resources/lombok-style-files.txt` | - | 새 운영 코드 파일 세 개 |
 | `backend/README.md` | 강석윤 | "요청 본문 크기 상한" 절(설계 단계에서 씀) |
@@ -289,7 +290,7 @@ private static ResponseEntity<Object> requestBodyTooLarge() {
 - 필터: `Content-Length`가 상한보다 크면 체인과 `getInputStream()`을 부르지 않는다. 체인 안에서 초과 예외가 나면 `413`을 쓰고 `X-Request-Id`를 지우지 않는다. 체인 안의 필터가 던진 `InvalidParameterException`(errorCode `413`)도 같은 `413`이 되고, errorCode `400`이면 그대로 던진다. 커밋된 응답이면 쓰지 않는다. 다른 예외는 그대로 던진다.
 - 래퍼: `read()`, `read(byte[], int, int)`, `readAllBytes()`, `readNBytes`, `skip`, `transferTo`, `getReader()`가 모두 바이트로 센다. 정확히 상한은 통과하고 상한+1은 예외다. 상한 이하에서는 원래 바이트를 그대로 돌려준다.
 - 처리기: 원인 사슬 깊숙이 초과 예외가 있는 `HttpMessageNotReadableException`이 `413`이 된다. 그대로 던진 `RequestBodyTooLargeException`도 `500`이 아니라 `413`이 된다. 원인이 다르면 `400` `ProblemDetail` 그대로다. 두 처리기의 `413` 응답에 `Content-Type: application/json`이 명시돼 있다.
-- 설정: `server.tomcat.max-http-form-post-size`와 `MAX_BODY_BYTES`가 같다.
+- 설정: `server.tomcat.max-http-form-post-size`와 `MAX_BODY_BYTES`가 같다. 다른 값(예: `2MB`)으로 띄우면 애플리케이션 컨텍스트가 뜨지 않는다.
 - 동시성 테스트는 해당 없다. 필터와 래퍼에 요청 사이 공유 상태가 없다.
 
 ### 계약 검토 (`api-and-interface-design`)
