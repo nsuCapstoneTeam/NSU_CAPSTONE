@@ -65,6 +65,13 @@ class RequestBodyLimitTomcatIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
+    void 폼_상한_기동_검사는_실제_앱에_등록되어_있다() {
+        // 단위 테스트는 클래스를 직접 등록하므로, 앱이 스캔으로 찾는지는 여기서만 고정된다
+        assertThat(applicationContext.getBeansOfType(FormPostSizeValidation.class))
+                .hasSize(1);
+    }
+
+    @Test
     void 길이를_밝힌_65537바이트_로그인은_본문을_읽기_전에_413이다() throws IOException {
         RawSocket.Response response = RawSocket.send(
                 port, RawSocket.request("POST", LOGIN).body("application/json", loginJsonOfSize(LIMIT + 1)));
