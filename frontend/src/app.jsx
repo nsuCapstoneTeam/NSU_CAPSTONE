@@ -14,6 +14,7 @@ import useAuthSession from './features/auth/use-auth-session.js';
 import { authSession, pageAfterLogin } from './features/auth/auth-session.js';
 
 import Icon from './components/common/icon.jsx';
+import MainNav from './components/common/main-nav.jsx';
 import Home from './features/home/home-page.jsx';
 import Matching from './features/matching/matching-page.jsx';
 import ArtistSignUp from './features/auth/pages/artist-sign-up-page.jsx';
@@ -48,6 +49,15 @@ const LOGIN_FLOW_PAGES = [
 ];
 
 // 앱 전체: 현재 화면(page) 전환, 공유 상태(테마·프로필·로그인·게시글·일정·관심 목록), 공통 헤더·푸터
+// 주 메뉴 [화면 key, 이름]
+const NAV_ITEMS = [
+  ['home', '홈'],
+  ['match', '아티스트 매칭'],
+  ['events', '행사 찾기'],
+  ['board', '자유게시판'],
+  ['mypage', '마이페이지'],
+];
+
 export default function App() {
   // 현재 화면 이름 (라우터 라이브러리 대신 상태로 전환)
   // 처음에는 주소로 정함 (/events로 열면 행사 찾기). 이후에는 navigate()가 화면과 주소를 함께 바꿈 (NSU-119)
@@ -254,32 +264,19 @@ export default function App() {
                   alt=""
                 />
               </button>
-              {/* 주 메뉴. 비로그인 상태로 마이페이지를 누르면 로그인 안내로 이동 */}
-              <nav aria-label="주 메뉴">
-                {[
-                  ['home', '홈'],
-                  ['match', '아티스트 매칭'],
-                  ['events', '행사 찾기'],
-                  ['board', '자유게시판'],
-                  ['mypage', '마이페이지'],
-                ].map(([key, label]) => (
-                  <button
-                    key={key}
-                    className={page === key ? 'nav-active' : ''}
-                    aria-current={page === key ? 'page' : undefined}
-                    onClick={() => {
-                      if (key === 'mypage' && !session) {
-                        navigate('auth-required');
-                        setReturnTo('mypage');
-                      } else {
-                        navigate(key);
-                      }
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </nav>
+              {/* 주 메뉴 + 스포트라이트 (NSU-181). 비로그인 상태로 마이페이지를 누르면 로그인 안내로 이동 */}
+              <MainNav
+                items={NAV_ITEMS}
+                current={page}
+                onSelect={(key) => {
+                  if (key === 'mypage' && !session) {
+                    navigate('auth-required');
+                    setReturnTo('mypage');
+                  } else {
+                    navigate(key);
+                  }
+                }}
+              />
               {/* 테마 전환 + 로그인 상태에 따라 계정 버튼 또는 로그인 버튼 */}
               <div className="header-actions">
                 <button

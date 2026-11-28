@@ -1,0 +1,139 @@
+/* 주 메뉴 스포트라이트 (main-nav.jsx, NSU-181)
+   조명 크기는 Figma 시안 그대로: 조명기구 24×9, 렌즈 14×2, 빛줄기는 위 16px에서 아래로 퍼지는 사다리꼴, 바닥 빛 타원.
+   움직이는 것은 위치 변수(transition)와 바닥 빛 밝기(한 번)뿐이고, 움직임 줄이기 설정이면 모두 끔. */
+
+/* 위치 변수를 부드럽게 옮기려면 타입을 등록해야 함 */
+@property --spot-lamp {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spot-pool {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+@property --spot-w {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 33px;
+}
+
+.header-inner {
+  position: relative;
+  /* 화면 밖에 남은 조명(크기를 줄인 뒤의 미리 보기 등)이 가로 스크롤을 만들지 않게. 위쪽 조명기구는 그대로 보임 */
+  overflow-x: clip;
+}
+.main-nav {
+  position: relative;
+  z-index: 1;
+}
+
+.main-nav-spot {
+  /* 라이트: 할래말래 파랑 */
+  --spot-color: 8 102 223;
+  --spot-beam-a: 0.2;
+  --spot-pool-a: 0.3;
+  --spot-lamp-color: #142840;
+  /* 빛줄기 아래쪽 반폭: 메뉴 글자보다 조금 넓게, 최소는 시안의 '홈'(49px) */
+  --spot-half: max(24.5px, calc(var(--spot-w) / 2 + 10px));
+  position: absolute;
+  top: var(--spot-top, 0px);
+  left: 0;
+  right: 0;
+  z-index: 0;
+  height: var(--spot-h, 96px);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+:root[data-theme='dark'] .main-nav-spot {
+  /* 다크: 따뜻한 무대 조명색 */
+  --spot-color: 255 233 176;
+  --spot-beam-a: 0.36;
+  --spot-pool-a: 0.6;
+  --spot-lamp-color: #3a4f6c;
+}
+.main-nav-spot[data-on='true'] {
+  opacity: 1;
+}
+/* 처음 자리 잡은 뒤에만 미끄러짐: 위는 70ms 늦게, 아래는 바로. 도착할 때 살짝 지나쳤다 돌아옴 */
+.main-nav-spot[data-ready='true'] {
+  transition:
+    opacity 0.2s ease,
+    --spot-lamp 380ms cubic-bezier(0.34, 1.35, 0.64, 1) 70ms,
+    --spot-pool 380ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    --spot-w 380ms ease;
+}
+/* 미리 보기 빛: 약하게, 옮겨 다니지 않고 그 자리에서 나타남 */
+.main-nav-spot.is-preview[data-on='true'] {
+  opacity: 0.6;
+}
+
+.main-nav-lamp,
+.main-nav-lens,
+.main-nav-beam,
+.main-nav-pool {
+  position: absolute;
+}
+.main-nav-lamp {
+  top: -4px;
+  left: calc(var(--spot-lamp) - 12px);
+  width: 24px;
+  height: 9px;
+  border-radius: 0 0 3px 3px;
+  background: var(--spot-lamp-color);
+}
+.main-nav-lens {
+  top: 4px;
+  left: calc(var(--spot-lamp) - 7px);
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgb(var(--spot-color) / 0.9);
+}
+.main-nav-beam {
+  top: 5px;
+  left: 0;
+  right: 0;
+  height: calc(var(--spot-h, 96px) * 0.74);
+  clip-path: polygon(
+    calc(var(--spot-lamp) - 8px) 0,
+    calc(var(--spot-lamp) + 8px) 0,
+    calc(var(--spot-pool) + var(--spot-half)) 100%,
+    calc(var(--spot-pool) - var(--spot-half)) 100%
+  );
+  background: linear-gradient(to bottom, rgb(var(--spot-color) / var(--spot-beam-a)), rgb(var(--spot-color) / 0.02));
+}
+.main-nav-pool {
+  top: calc(var(--spot-h, 96px) * 0.77 - 8px);
+  left: calc(var(--spot-pool) - var(--spot-half) - 4px);
+  width: calc(var(--spot-half) * 2 + 8px);
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgb(var(--spot-color) / var(--spot-pool-a)),
+    rgb(var(--spot-color) / calc(var(--spot-pool-a) * 0.45)) 55%,
+    transparent
+  );
+}
+/* 도착하면 바닥 빛이 한 번 밝아짐 (120ms) */
+.main-nav-spot[data-ready='true']:not(.is-preview) .main-nav-pool {
+  animation: main-nav-arrive 120ms ease-out 380ms;
+}
+@keyframes main-nav-arrive {
+  50% {
+    filter: brightness(1.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main-nav-spot,
+  .main-nav-spot[data-ready='true'] {
+    transition: none;
+  }
+  .main-nav-spot[data-ready='true']:not(.is-preview) .main-nav-pool {
+    animation: none;
+  }
+}
