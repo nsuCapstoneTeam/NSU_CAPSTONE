@@ -26,6 +26,36 @@ class ArtistScheduleTable {
     private final JdbcClient jdbc;
 
     /**
+     * 한 아티스트의 일정 중 {@code [from, toExclusive)}와 겹치는 것을 시작 순으로 읽는다. 구간에 맞닿기만 한 일정은 빠진다(11 §2.1).
+     * 구간에 걸친 일정은 자르지 않는다.
+     */
+    List<MyArtistSchedule> findMine(UUID userId, LocalDateTime from, LocalDateTime toExclusive) {
+        OffsetDateTime fromAt = from.atZone(Event.ZONE).toOffsetDateTime();
+        OffsetDateTime toAt = toExclusive.atZone(Event.ZONE).toOffsetDateTime();
+        return jdbc.sql("""
+                        SELECT id,
+                               start_at AT TIME ZONE :zone AS start_local,
+                               end_at AT TIME ZONE :zone AS end_local,
+                               status, title
+                        FROM artist_schedules
+                        WHERE user_id = :userId
+                          AND start_at < :to AND end_at > :from AND start_at >= :floor
+                        ORDER BY start_at""")
+                .param("zone", Event.ZONE.getId())
+                .param("userId", userId)
+                .param("from", fromAt)
+                .param("to", toAt)
+                .param("floor", fromAt.minusHours(MAX_LENGTH_HOURS))
+                .query((rs, rowNum) -> new MyArtistSchedule(
+                        rs.getObject("id", UUID.class),
+                        rs.getObject("start_local", LocalDateTime.class),
+                        rs.getObject("end_local", LocalDateTime.class),
+                        ArtistScheduleStatus.valueOf(rs.getString("status")),
+                        rs.getString("title")))
+                .list();
+    }
+
+    /**
      * {@code [from, to]}와 겹치거나 맞닿는 일정을 아티스트별 시작 순으로 읽는다. 한 문장이다.
      * {@code start_at >= from - 24시간}은 {@code (user_id, start_at)} 인덱스로 범위를 묶는 조건이다. 일정이 24시간을 넘지 않으므로(CHECK) 끝이 {@code from} 이후인
      * 일정은 모두 이 범위에 든다.

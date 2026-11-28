@@ -1,13 +1,19 @@
 package com.nsu.capstone.artist.schedule;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
 import com.nsu.capstone.event.EventIntegrationTestBase;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 abstract class ArtistScheduleIntegrationTestBase extends EventIntegrationTestBase {
+
+    static final String PATH = "/api/v1/me/artist-schedules";
 
     protected User artist;
 
@@ -40,6 +46,18 @@ abstract class ArtistScheduleIntegrationTestBase extends EventIntegrationTestBas
                        CAST(? AS timestamptz) + n * INTERVAL '10 minutes' + INTERVAL '1 minute',
                        'AVAILABLE'
                 FROM generate_series(0, ? - 1) AS n""", owner.getId(), firstStart, firstStart, count);
+    }
+
+    /** {@code null}인 파라미터는 아예 보내지 않는다. */
+    ResultActions getSchedules(User caller, String from, String to) throws Exception {
+        MockHttpServletRequestBuilder request = get(PATH).header("Authorization", bearer(caller));
+        if (from != null) {
+            request.queryParam("from", from);
+        }
+        if (to != null) {
+            request.queryParam("to", to);
+        }
+        return mockMvc.perform(request);
     }
 
     void changeStatus(User user, String status) {

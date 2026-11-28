@@ -1,6 +1,10 @@
 package com.nsu.capstone.artist.schedule;
 
+import com.nsu.capstone.global.exception.BusinessException;
+import com.nsu.capstone.global.exception.ErrorCode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +16,9 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class ArtistSchedules {
+
+    /** 월간 화면의 6주 칸(11 §2.1) */
+    private static final long MAX_QUERY_DAYS = 42;
 
     private final ArtistScheduleTable table;
 
@@ -33,5 +40,15 @@ public class ArtistSchedules {
             return Map.of();
         }
         return table.findOverlapping(artistIds, from, to);
+    }
+
+    /** 내 일정 조회(11 §2.1). {@code from}·{@code to}는 포함하는 날짜이고, 구간은 {@code [from 00:00, to 다음 날 00:00)}이다. */
+    List<MyArtistSchedule> findMine(UUID artistId, String from, String to) {
+        LocalDate first = ArtistScheduleRequest.date(from);
+        LocalDate last = ArtistScheduleRequest.date(to);
+        if (last.isBefore(first) || ChronoUnit.DAYS.between(first, last) + 1 > MAX_QUERY_DAYS) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        }
+        return table.findMine(artistId, first.atStartOfDay(), last.plusDays(1).atStartOfDay());
     }
 }

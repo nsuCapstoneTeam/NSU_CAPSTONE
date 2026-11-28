@@ -51,7 +51,8 @@ record ArtistScheduleRequest(
         return parsed;
     }
 
-    private static LocalDate date(String value) {
+    /** 조회 파라미터(11 §2.1)도 같은 날짜 규칙을 쓴다. */
+    static LocalDate date(String value) {
         if (value == null || !DATE.matcher(value).matches()) {
             throw invalid();
         }
