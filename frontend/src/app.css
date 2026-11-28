@@ -1,6 +1,6 @@
 /* 전체 공통 스타일: 색상 변수·다크 모드, 기본 요소, 헤더·푸터, 각 화면 공통 레이아웃 */
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&family=Fredoka:wght@500;600&family=Gowun+Dodum&family=Jua&family=Pacifico&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&family=Fredoka:wght@500;600&family=Gowun+Dodum&family=Jua&family=Pacifico&family=Gasoek+One&display=swap');
 /* 색상·그림자 등 디자인 변수 (라이트 모드 기본값) */
 :root {
   font-family: 'Noto Sans KR', sans-serif;
@@ -297,19 +297,6 @@ svg {
 .account-chip svg { color: var(--blue); }
 .header-logout { font-size: 11px; }
 /* 헤더 아래 체험판 안내 띠 */
-.demo-strip {
-  background: var(--soft);
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  padding: 9px 20px;
-  font-size: 11px;
-  color: var(--muted);
-  text-align: center;
-}
-.demo-dot,
 .live-dot {
   display: inline-block;
   width: 6px;
@@ -1591,12 +1578,6 @@ audio {
 @media (max-width: 580px) {
   .page-container {
     padding: 0 18px;
-  }
-  .demo-strip {
-    font-size: 9px;
-    gap: 5px;
-    padding: 8px 12px;
-    flex-wrap: wrap;
   }
   .header-inner {
     padding: 6px 18px;

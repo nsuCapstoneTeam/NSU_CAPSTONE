@@ -1,6 +1,8 @@
 import Icon from '../../../components/common/icon.jsx';
 
-// 홈 첫 구간: 서비스를 한 문장으로 소개하고, 매칭 체험과 소개 보기로 이어 줍니다.
+// 홈 첫 구간 (NSU-179, Figma '홈 · 디스플레이 제목 시안 → B · 3D 유리 CD')
+// 카드 없이 큰 제목이 첫 화면의 주인공이고, 뒤쪽 유리 CD(glass-cd.jsx)와 살짝 겹칩니다.
+// 한글 제목은 Gasoek One, CLAP SOUND는 Pacifico (DESIGN.md 3장 글꼴 예외)
 export default function TrackHome({ sectionProps, navigate, onShowIntro }) {
   return (
     <section
@@ -8,24 +10,30 @@ export default function TrackHome({ sectionProps, navigate, onShowIntro }) {
       className="stage-track stage-track-home"
       aria-labelledby="home-track-home-title"
     >
-      <div className="stage-panel stage-hero">
-        <p className="eyebrow">YOUR NEXT STAGE</p>
-        <h1 id="home-track-home-title">
-          당신의 음악이
-          <br />
-          필요한 무대를
-          <br />
-          만나세요.
+      <div className="stage-hero">
+        <h1
+          id="home-track-home-title"
+          className="stage-display"
+        >
+          <span className="stage-display-ko">
+            당신의 <em>음악</em>이
+            <br />
+            필요한 순간,
+          </span>
+          <span
+            className="stage-display-brand"
+            lang="en"
+          >
+            CLAP SOUND
+          </span>
         </h1>
         <p className="stage-hero-lead">
-          음악을 들려줄 아티스트와
-          <br />
-          그 음악이 필요한 행사 관계자가 만나는 곳.
+          음악을 들려줄 <b>아티스트</b>와
+          <br />그 음악이 필요한 <b>행사 관계자</b>가 만나는 곳.
         </p>
-        <p className="stage-chip">행사 설명과 가까운 곡을 CLAP 음악 유사도로 추천해요</p>
         <div className="stage-actions">
           <button
-            className="stage-button is-primary"
+            className="stage-button is-primary is-hero"
             onClick={() => navigate('match')}
           >
             아티스트 찾기

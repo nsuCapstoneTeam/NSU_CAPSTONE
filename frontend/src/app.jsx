@@ -309,12 +309,6 @@ export default function App() {
               </div>
             </div>
           </header>
-          {/* 체험판 안내 띠 */}
-          <div className="demo-strip">
-            <span className="demo-dot" />
-            학기 프로젝트 체험판 <span>·</span> 가상 아티스트와 조건 기반 추천을
-            제공합니다.
-          </div>
         </>
       )}
       {/* 저장소 사용이 막혔을 때(시크릿 모드 등) 경고 */}
