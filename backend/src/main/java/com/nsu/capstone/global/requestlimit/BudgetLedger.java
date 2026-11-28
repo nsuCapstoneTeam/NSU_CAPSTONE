@@ -24,7 +24,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 
 /** {@code user-request-limit:*} 키를 읽고 쓰는 유일한 곳. */
 @Slf4j
-final class BudgetLedger {
+final class BudgetLedger implements AutoCloseable {
 
     static final String KEY_PREFIX = "user-request-limit:";
     static final String PROBE_KEY = KEY_PREFIX + "probe";
@@ -40,6 +40,7 @@ final class BudgetLedger {
     private final MemoryBudgetCounter memory;
     private final int memoryMaxEntries;
     private final ExecutorService executor;
+    private final Runnable onClose;
     private final long retryIntervalMillis;
     private final long totalTimeoutMillis;
     private final AtomicReference<RedisState> state;
@@ -53,9 +54,22 @@ final class BudgetLedger {
 
     BudgetLedger(
             StringRedisTemplate redis, Clock clock, UserRequestLimitProperties properties, ExecutorService executor) {
+        this(redis, clock, properties, executor, () -> {});
+    }
+
+    /**
+     * @param onClose 닫을 때 실행기 다음에 부른다. 이 원장이 만든 전용 연결을 닫는 데 쓴다
+     */
+    BudgetLedger(
+            StringRedisTemplate redis,
+            Clock clock,
+            UserRequestLimitProperties properties,
+            ExecutorService executor,
+            Runnable onClose) {
         this.redis = redis;
         this.clock = clock;
         this.executor = executor;
+        this.onClose = onClose;
         this.memoryMaxEntries = properties.memoryMaxEntries();
         this.memory = new MemoryBudgetCounter(memoryMaxEntries);
         this.retryIntervalMillis = properties.redisRetryInterval().toMillis();
@@ -72,6 +86,13 @@ final class BudgetLedger {
                             Math.max(1, setting.capacity() / servers),
                             setting.refillEvery().multipliedBy(servers)));
         });
+    }
+
+    /** 서버를 내릴 때 한도 확인이 쓰던 실행기와 전용 연결을 닫는다. */
+    @Override
+    public void close() {
+        executor.shutdownNow();
+        onClose.run();
     }
 
     /**

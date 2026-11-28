@@ -14,6 +14,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
@@ -44,6 +45,18 @@ class BudgetLedgerOutageTest {
         redis.releaseHeldCalls();
         callers.shutdownNow();
         executor.shutdownNow();
+    }
+
+    @Test
+    void 닫으면_한도_확인_실행기를_멈추고_넘겨받은_정리를_부른다() {
+        AtomicInteger cleanups = new AtomicInteger();
+        BudgetLedger ledger =
+                new BudgetLedger(redis, clock, RedisFixture.releaseProperties(), executor, cleanups::incrementAndGet);
+
+        ledger.close();
+
+        assertThat(executor.isShutdown()).isTrue();
+        assertThat(cleanups).hasValue(1);
     }
 
     static Stream<Supplier<RuntimeException>> dataAccessFailures() {

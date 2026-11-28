@@ -55,6 +55,9 @@ src/main/java/com/nsu/capstone/global/requestlimit/DedicatedRedis.java
 src/main/java/com/nsu/capstone/global/requestlimit/MemoryBudgetCounter.java
 src/main/java/com/nsu/capstone/global/requestlimit/OutagePolicy.java
 src/main/java/com/nsu/capstone/global/requestlimit/RequestBudget.java
+src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimit.java
+src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimitAdvice.java
+src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimitConfig.java
 src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimitProperties.java
 src/main/java/com/nsu/capstone/identity/application/ArtistReadAccess.java
 src/main/java/com/nsu/capstone/identity/config/OAuthProviderHttpConfig.java
