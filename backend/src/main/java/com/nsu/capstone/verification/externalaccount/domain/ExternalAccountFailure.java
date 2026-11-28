@@ -29,11 +29,7 @@ public enum ExternalAccountFailure {
     /** 그 플랫폼이 설정으로 꺼져 있음(키 없음, 유료 승인 전) */
     EXTERNAL_PROVIDER_DISABLED,
     /** 아티스트 잠금(06 §11.3)을 3초 안에 잡지 못함. 같은 아티스트의 다른 변경이 끝나지 않았거나 DB가 느림 */
-    EXTERNAL_ACCOUNT_BUSY,
-    /** {@code /me/external-accounts/**} 아티스트별 요청 제한을 넘음. 남은 초는 예외의 retryAfterSeconds다 */
-    TOO_MANY_REQUESTS,
-    /** 요청 제한 카운터(Redis)를 쓸 수 없음 */
-    RATE_LIMIT_UNAVAILABLE;
+    EXTERNAL_ACCOUNT_BUSY;
 
     /** 이 사유를 HTTP 응답으로 옮기는 {@link ErrorCode}. 이름이 같은 항목이다. */
     public ErrorCode errorCode() {

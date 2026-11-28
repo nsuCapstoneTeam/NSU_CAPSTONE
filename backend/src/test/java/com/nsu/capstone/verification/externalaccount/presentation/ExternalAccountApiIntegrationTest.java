@@ -239,23 +239,6 @@ class ExternalAccountApiIntegrationTest extends ExternalAccountIntegrationTestBa
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
-    @Test
-    void 아티스트당_10분에_30번을_넘으면_429와_Retry_After다() throws Exception {
-        User artist = newUser(UserRole.ARTIST, "api-limit@example.com");
-        UUID unknown = UUID.randomUUID();
-
-        for (int i = 0; i < 30; i++) {
-            get(artist, ME + "/" + unknown + "/work-candidates").andExpect(status().isNotFound());
-        }
-
-        get(artist, ME + "/" + unknown + "/work-candidates")
-                .andExpect(status().isTooManyRequests())
-                .andExpect(jsonPath("$.code").value("TOO_MANY_REQUESTS"))
-                .andExpect(header().exists("Retry-After"));
-        // 조회 API(/artists/...)는 이 제한을 받지 않는다
-        get(artist, "/api/v1/artists/" + artist.getId() + "/external-accounts").andExpect(status().isOk());
-    }
-
     private UUID connectYoutubeDirectly(User artist) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update(

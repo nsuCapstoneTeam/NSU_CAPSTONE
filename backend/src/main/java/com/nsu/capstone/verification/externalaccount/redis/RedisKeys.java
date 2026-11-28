@@ -45,10 +45,6 @@ final class RedisKeys {
         return PREFIX + "authz:" + stateDigest + ":" + artistId;
     }
 
-    static String requestLimit(UUID artistId, long windowStartEpochSecond) {
-        return PREFIX + "rl:" + artistId + ":" + windowStartEpochSecond;
-    }
-
     /** 그날(태평양 시간) 쓴 YouTube units. */
     static String youtubeQuota(String pacificDate) {
         return PREFIX + "ytquota:" + pacificDate;

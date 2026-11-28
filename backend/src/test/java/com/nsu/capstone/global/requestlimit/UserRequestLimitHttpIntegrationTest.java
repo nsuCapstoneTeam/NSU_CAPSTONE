@@ -1,8 +1,11 @@
 package com.nsu.capstone.global.requestlimit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -40,12 +43,15 @@ import org.springframework.test.web.servlet.ResultActions;
             "user-request-limit.budgets.event-change.capacity=10",
             "user-request-limit.budgets.event-change.refill-every=PT1M",
             "user-request-limit.budgets.profile.capacity=10",
-            "user-request-limit.budgets.profile.refill-every=PT2M"
+            "user-request-limit.budgets.profile.refill-every=PT2M",
+            "user-request-limit.budgets.external-account.capacity=30",
+            "user-request-limit.budgets.external-account.refill-every=PT20S"
         })
 class UserRequestLimitHttpIntegrationTest extends EventIntegrationTestBase {
 
     private static final String PROFILE_PATH = "/api/v1/me/event-partner-profile";
     private static final String ARTIST_PROFILE_PATH = "/api/v1/me/artist-profile";
+    private static final String EXTERNAL_ACCOUNTS = "/api/v1/me/external-accounts";
 
     @Autowired
     private StringRedisTemplate redis;
@@ -137,6 +143,93 @@ class UserRequestLimitHttpIntegrationTest extends EventIntegrationTestBase {
         deleteArtistProfile(artist)
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().string("Retry-After", "120"));
+    }
+
+    @FunctionalInterface
+    private interface ExternalAccountCall {
+        ResultActions run(User caller) throws Exception;
+    }
+
+    private ResultActions startExternalAuthorization(User caller) throws Exception {
+        return mockMvc.perform(post(EXTERNAL_ACCOUNTS + "/authorizations")
+                .header("Authorization", bearer(caller))
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("provider", "SPOTIFY"))));
+    }
+
+    private ResultActions connectExternalAccount(User caller) throws Exception {
+        return mockMvc.perform(post(EXTERNAL_ACCOUNTS)
+                .header("Authorization", bearer(caller))
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                        "provider", "YOUTUBE", "url", "https://open.spotify.com/artist/4Z8W4fKeB5YxbusRsdQVPb"))));
+    }
+
+    private ResultActions externalWorkCandidates(User caller) throws Exception {
+        return mockMvc.perform(get(EXTERNAL_ACCOUNTS + "/" + UUID.randomUUID() + "/work-candidates")
+                .header("Authorization", bearer(caller)));
+    }
+
+    private ResultActions chooseExternalWorks(User caller) throws Exception {
+        return mockMvc.perform(put(EXTERNAL_ACCOUNTS + "/not-a-uuid/works")
+                .header("Authorization", bearer(caller))
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("workIds", List.of()))));
+    }
+
+    private ResultActions disconnectExternalAccount(User caller) throws Exception {
+        return mockMvc.perform(delete(EXTERNAL_ACCOUNTS + "/not-a-uuid").header("Authorization", bearer(caller)));
+    }
+
+    @Test
+    void 외부_계정_5개_핸들러는_한도_하나를_나눠_쓰고_31번째는_429와_Retry_After_20이다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "external-budget@example.com");
+        List<ExternalAccountCall> calls = List.of(
+                this::startExternalAuthorization,
+                this::connectExternalAccount,
+                this::externalWorkCandidates,
+                this::chooseExternalWorks,
+                this::disconnectExternalAccount);
+
+        for (int i = 0; i < 30; i++) {
+            calls.get(i % calls.size()).run(artist).andExpect(status().is(not(equalTo(429))));
+        }
+
+        for (ExternalAccountCall call : calls) {
+            call.run(artist)
+                    .andExpect(status().isTooManyRequests())
+                    .andExpect(header().string("Retry-After", "20"))
+                    .andExpect(jsonPath("$.code").value("TOO_MANY_REQUESTS"));
+        }
+        // 조회 API(/artists/...)는 이 한도를 받지 않는다
+        mockMvc.perform(get("/api/v1/artists/" + artist.getId() + "/external-accounts")
+                        .header("Authorization", bearer(artist)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void ARTIST가_아닌_계정의_외부_계정_요청은_403이고_세지_않는다() throws Exception {
+        for (int i = 0; i < 40; i++) {
+            externalWorkCandidates(partner).andExpect(status().isForbidden());
+            startExternalAuthorization(partner).andExpect(status().isForbidden());
+        }
+
+        assertThat(limitKeysOf(partner)).isEmpty();
+    }
+
+    @Test
+    void 외부_계정_요청_가운데_깨진_JSON은_세지_않는다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "external-broken-json@example.com");
+
+        for (int i = 0; i < 40; i++) {
+            mockMvc.perform(post(EXTERNAL_ACCOUNTS + "/authorizations")
+                            .header("Authorization", bearer(artist))
+                            .contentType(APPLICATION_JSON)
+                            .content("{깨진 JSON"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        assertThat(limitKeysOf(artist)).isEmpty();
     }
 
     private Set<String> limitKeysOf(User user) {

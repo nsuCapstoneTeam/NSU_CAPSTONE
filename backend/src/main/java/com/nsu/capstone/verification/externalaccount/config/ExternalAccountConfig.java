@@ -2,7 +2,6 @@ package com.nsu.capstone.verification.externalaccount.config;
 
 import com.nsu.capstone.global.logging.RequestIdExecutors;
 import com.nsu.capstone.verification.externalaccount.presentation.MyExternalAccountsInterceptor;
-import com.nsu.capstone.verification.externalaccount.redis.RequestLimiter;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
@@ -62,12 +61,12 @@ public class ExternalAccountConfig {
     }
 
     /**
-     * {@code /api/v1/me/external-accounts/**}에만 역할·요청 제한 인터셉터를 건다. 조회 API와 콜백은 건너뛴다(06 §1).
+     * {@code /api/v1/me/external-accounts/**}에만 역할 인터셉터를 건다. 조회 API와 콜백은 건너뛴다(06 §1).
      * 설정 클래스 안의 {@code @Bean}이라 {@code @WebMvcTest} 슬라이스에는 읽히지 않는다.
      */
     @Bean
-    WebMvcConfigurer externalAccountWebMvcConfigurer(RequestLimiter requestLimiter) {
-        MyExternalAccountsInterceptor interceptor = new MyExternalAccountsInterceptor(requestLimiter);
+    WebMvcConfigurer externalAccountWebMvcConfigurer() {
+        MyExternalAccountsInterceptor interceptor = new MyExternalAccountsInterceptor();
         return new WebMvcConfigurer() {
             @Override
             public void addInterceptors(InterceptorRegistry registry) {

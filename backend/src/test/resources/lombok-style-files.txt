@@ -187,7 +187,6 @@ src/main/java/com/nsu/capstone/verification/externalaccount/redis/DisplayCache.j
 src/main/java/com/nsu/capstone/verification/externalaccount/redis/ProfileCache.java
 src/main/java/com/nsu/capstone/verification/externalaccount/redis/RedisKeys.java
 src/main/java/com/nsu/capstone/verification/externalaccount/redis/RefreshJobState.java
-src/main/java/com/nsu/capstone/verification/externalaccount/redis/RequestLimiter.java
 src/main/java/com/nsu/capstone/verification/externalaccount/redis/YoutubeQuota.java
 src/main/java/com/nsu/capstone/verification/externalaccount/repository/ExternalAccountRepository.java
 src/main/java/com/nsu/capstone/verification/externalaccount/repository/LockedArtist.java
