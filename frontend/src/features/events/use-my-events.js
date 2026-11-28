@@ -27,15 +27,19 @@ export default function useMyEvents({ enabled = true, owner = null, api = defaul
     // 늦게 도착한 예전 응답이 새 목록을 덮지 않게
     let stale = false;
     const startedAt = changes.current;
+    // 조회 중에 등록·수정·삭제가 끝났으면 그 변경이 빠진 결과라, 성공이든 실패든 버리고 다시 받음
+    function isCurrent() {
+      if (stale) return false;
+      if (changes.current === startedAt) return true;
+      setVersion((v) => v + 1);
+      return false;
+    }
     api.list().then(
       (events) => {
-        if (stale) return;
-        // 조회 중에 등록·수정·삭제가 끝났으면 그 결과가 빠진 목록이라 다시 받음
-        if (changes.current !== startedAt) setVersion((v) => v + 1);
-        else setState(listLoaded(listScope, events));
+        if (isCurrent()) setState(listLoaded(listScope, events));
       },
       (error) => {
-        if (!stale) setState(listFailed(listScope, error));
+        if (isCurrent()) setState(listFailed(listScope, error));
       },
     );
     return () => {

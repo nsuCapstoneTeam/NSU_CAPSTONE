@@ -187,6 +187,17 @@ test('서버 목록: 다가오는 행사와 지난 행사를 쪽마다 모두 �
   );
 });
 
+test('서버 목록: 다음 쪽의 응답이 비었거나 페이지 정보가 없으면 부분 목록을 반환하지 않는다', async () => {
+  for (const body of [null, { items: [] }, { totalPages: 2 }]) {
+    const { api } = server([
+      { body: { items: [SERVER_EVENT], totalPages: 2 } },
+      { body: { items: [], totalPages: 0 } },
+      { body },
+    ]);
+    await assert.rejects(api.list(), { code: 'UNKNOWN_ERROR' });
+  }
+});
+
 // 체험 모드
 function memoryStorage() {
   const data = new Map();
