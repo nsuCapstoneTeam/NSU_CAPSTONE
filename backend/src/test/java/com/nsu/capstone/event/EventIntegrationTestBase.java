@@ -16,6 +16,7 @@ import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,7 +26,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.databind.ObjectMapper;
@@ -33,6 +36,18 @@ import tools.jackson.databind.ObjectMapper;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, EventIntegrationTestBase.MutableClockConfig.class})
+// 계정별 요청 한도(NSU-100)는 통합 테스트에서 넉넉하게 둔다. 한도를 확인하는 테스트만 실제 숫자를 다시 적는다
+@TestPropertySource(
+        properties = {
+            "user-request-limit.budgets.event-registration.capacity=1000",
+            "user-request-limit.budgets.event-registration.refill-every=PT1S",
+            "user-request-limit.budgets.event-change.capacity=1000",
+            "user-request-limit.budgets.event-change.refill-every=PT1S",
+            "user-request-limit.budgets.profile.capacity=1000",
+            "user-request-limit.budgets.profile.refill-every=PT1S",
+            "user-request-limit.budgets.external-account.capacity=1000",
+            "user-request-limit.budgets.external-account.refill-every=PT1S"
+        })
 public abstract class EventIntegrationTestBase {
 
     /** 테스트의 '지금' 기본값: 2026-10-18 10:00 (Asia/Seoul) */
@@ -92,11 +107,19 @@ public abstract class EventIntegrationTestBase {
     @Autowired
     protected JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private StringRedisTemplate requestLimitRedis;
+
     protected User partner;
 
     @BeforeEach
     void setUp() {
         clock.set(NOW);
+        // 계정별 요청 한도 키가 다른 테스트로 넘어가지 않게 지운다
+        Set<String> limitKeys = requestLimitRedis.keys("user-request-limit:*");
+        if (limitKeys != null && !limitKeys.isEmpty()) {
+            requestLimitRedis.delete(limitKeys);
+        }
         jdbcTemplate.update("DELETE FROM events");
         jdbcTemplate.update("DELETE FROM oauth_accounts");
         // 프로필이 users를 참조하므로, 다른 테스트가 남긴 행이 있어도 users를 지울 수 있게 먼저 지운다

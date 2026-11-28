@@ -124,20 +124,24 @@ ARTIST가 자기 프로필(활동명, 소개, 공연 형태, 장르, 공연 가�
 | 수정에서 계정이 `ACTIVE`가 아님(`SUSPENDED`·`WITHDRAWN`) | 403 | `ACCESS_DENIED` |
 | 본문 검증 실패. 필수·길이, 목록에 없는 코드, 개수 초과, 중복, 목록 키가 빠지거나 `null`, 출연료 규칙 | 400 | `VALIDATION_ERROR` |
 | JSON 문법 오류, 필드 타입으로 바꿀 수 없는 값 | 400 | 없음. Spring 표준 `ProblemDetail`(ADR-007 §4.4) |
+| 수정·삭제가 계정의 요청 한도를 넘음(아래). `Retry-After`를 붙인다 | 429 | `TOO_MANY_REQUESTS` |
 | 수정·삭제에서 행 잠금 하나를 3초 안에 잡지 못함. 같은 사용자의 탈퇴·상태 변경이나 다른 쓰기가 끝나지 않았거나 DB가 느림. 아무것도 바뀌지 않는다. `Retry-After`는 붙이지 않는다 | 503 | `ARTIST_PROFILE_BUSY` |
 | 서버 오류 | 500 | `INTERNAL_SERVER_ERROR` |
 
 검사 순서:
 
 - 조회: `401` → `403`(역할) → `200`
-- 수정: `401` → `403 DEMO_WRITE_NOT_ALLOWED` → `403 ACCESS_DENIED`(역할) → `403 ACCESS_DENIED`(계정 상태) → `400 VALIDATION_ERROR`(본문) → `200`. 계정 상태 확인(`users` 행 잠금)이나 저장 문장이 잠금을 각각 3초 안에 잡지 못하면 `503 ARTIST_PROFILE_BUSY`다
-- 삭제: `401` → `403 DEMO_WRITE_NOT_ALLOWED` → `403 ACCESS_DENIED`(역할) → `204`. 삭제 문장이 행 잠금을 3초 안에 잡지 못하면 `503 ARTIST_PROFILE_BUSY`다
+- 수정: `401` → `403 DEMO_WRITE_NOT_ALLOWED` → `403 ACCESS_DENIED`(역할) → `400`(JSON 문법·타입, `ProblemDetail`) → `429 TOO_MANY_REQUESTS` → `403 ACCESS_DENIED`(계정 상태) → `400 VALIDATION_ERROR`(본문) → `200`. 계정 상태 확인(`users` 행 잠금)이나 저장 문장이 잠금을 각각 3초 안에 잡지 못하면 `503 ARTIST_PROFILE_BUSY`다
+- 삭제: `401` → `403 DEMO_WRITE_NOT_ALLOWED` → `403 ACCESS_DENIED`(역할) → `429 TOO_MANY_REQUESTS` → `204`. 삭제 문장이 행 잠금을 3초 안에 잡지 못하면 `503 ARTIST_PROFILE_BUSY`다
 
 순서의 이유:
 
 - 역할은 `SecurityConfig`의 URL 규칙이 본문을 읽기 전에 막는다. 그래서 EVENT_PARTNER가 깨진 JSON을 보내도 `403`이다. 컨트롤러의 `@PreAuthorize`는 두 번째 방어선이다.
 - 계정 상태는 본문 검증보다 먼저다. 곡 업로드(04 §2.2 검사 2)와 같은 순서다. 그래서 정지된 아티스트가 틀린 본문을 보내도 `400`이 아니라 `403`이다.
-- 다만 JSON 문법·타입 오류(`ProblemDetail`)는 본문을 객체로 읽는 단계에서 나므로 계정 상태 검사보다 먼저 나올 수 있다.
+- 다만 JSON 문법·타입 오류(`ProblemDetail`)는 본문을 객체로 읽는 단계에서 나므로 계정 상태 검사와 요청 한도보다 먼저 나온다.
+- 수정·삭제는 행사 주최자 프로필(05 §4)과 같은 계정별 요청 한도 "프로필"(`PROFILE`)을 쓴다([ADR user_request_limit/00](../adr/user_request_limit/00_per_account_request_limits.md), NSU-100). 연달아 10건, 그 뒤 2분마다 1건이다. 숫자는 설정값이다.
+  - `429`보다 앞의 거절(`401`, 시연 서버 `403`, 역할 `403`, JSON 문법·타입 오류)은 한도를 쓰지 않는다. 계정 상태 `403`과 본문 검증 `400`, `503 ARTIST_PROFILE_BUSY`는 1회를 쓴다. `429`로 거절된 요청은 세지 않는다.
+  - `Retry-After`는 1건을 다시 보낼 수 있을 때까지 남은 초다. Redis를 쓸 수 없으면 서버 메모리로 세므로 이 한도 때문에 `503`이 나지는 않는다.
 - 시연 서버 검사(00 §8)는 인증 바로 다음이다. 이 검사는 전역 필터(NSU-158)가 하며 2026-11-22 기준 아직 구현되지 않았다. 조회는 이 검사를 받지 않는다. NSU-158이 끝나기 전에는 이 쓰기 API를 외부에서 접속할 수 있는 시연 서버에 배포하지 않는다(04 §2.2, 06 §1과 같다).
 - 삭제는 계정 상태를 보지 않는다. 정보주체가 자기 정보를 지우는 요구(개인정보보호법 §36)를 막지 않기 위해서다. 삭제는 정보를 줄이기만 하므로 정지된 계정에 허용해도 위험이 없다.
 - 본인 조회는 계정 상태를 보지 않는다. 본인의 Trust Profile·외부 계정 조회(01 §3, 06 §2)와 같다.
@@ -284,6 +288,7 @@ Authorization: Bearer {accessToken}
 | 지역 하나 | `regionCodes` 0~20개. `GET /api/v1/regions`로 두 단계 선택(시·도 전체 포함). 라벨은 "공연 가능 지역". 저장 뒤 응답의 정규화된 값으로 다시 그린다 |
 | 출연료 하나(만 원, 필수) | `feeMin`·`feeMax` 범위(원, 선택). 만 원으로 입력받으면 10,000을 곱해 보낸다. 칸이 비면 빈 문자열이 아니라 `null`을 보낸다(빈 문자열은 `400`, §2) |
 | 저장과 삭제 | 저장 요청이 진행 중이면 삭제 버튼을 막거나 저장 응답을 기다린 뒤 삭제한다(§5 겹침) |
+| `429 TOO_MANY_REQUESTS` | 저장·삭제가 되지 않았다. 입력값을 그대로 두고 `Retry-After`의 남은 시간을 보여 준다. 자동으로 다시 보내지 않고, 사용자가 다시 누르면 보낸다 |
 | `503 ARTIST_PROFILE_BUSY` | 저장·삭제가 되지 않았다. 입력값을 그대로 두고 "잠시 후 다시 시도해 주세요"를 보여 준다. 자동으로 다시 보내지 않는다 |
 | 공연 형태 없음 | `artistTypes` 다중 선택 |
 | 채널 주소 | 외부 계정 연결(06, NSU-37)로 옮기거나 뺀다 |
@@ -315,6 +320,7 @@ DB가 관여하는 경우(upsert, `CHECK`, 동시 요청, 배열, 조회 횟수)
 | 출연료 | `feeMin > feeMax`, 음수, 10억 초과, 소수, 한쪽만 있음은 `VALIDATION_ERROR`. 0과 10억, 두 값이 같은 경우는 통과. 출연료가 저장된 프로필에 `"feeMin": "", "feeMax": ""`(다른 필드는 유효)나 `"500000"` 문자열을 보내면 `400`이고 저장된 출연료가 그대로다 |
 | 목록 키 | `artistTypes`·`genres`·`regionCodes`가 빠지거나 `null`이면 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다 |
 | 형식 오류 | 깨진 JSON은 Spring 표준 400(`ProblemDetail`) |
+| 요청 한도 | 수정·삭제를 섞은 11번째는 `429`이고 `Retry-After`는 남은 초(120 이하)다. 시각을 고정한 테스트에서만 `Retry-After: 120`을 기대한다. EVENT_PARTNER의 요청과 JSON 문법·타입 오류는 한도를 쓰지 않고, 본문 검증 `400`은 1회를 쓴다(NSU-100) |
 | 무시하는 필드 | 본문의 `updatedAt`·`artistId`와 모르는 필드는 저장 결과에 영향이 없다 |
 | 운영 관측 | 형식은 맞지만 목록에 없는 지역 코드(`29`)를 보내면 `400`이고 WARN 로그에 그 코드가 남는다(양성 대조). 가짜 활동명·소개를 넣은 저장 성공, 검증 실패(41자 활동명), 깨진 JSON, 지역 코드 거절 흐름에서 배포 설정 인코더의 실제 출력 바이트에 그 값이 없다(`LogPrivacyIntegrationTest`와 같은 방식) |
 

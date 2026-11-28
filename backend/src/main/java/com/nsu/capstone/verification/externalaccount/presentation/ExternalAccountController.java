@@ -3,6 +3,8 @@ package com.nsu.capstone.verification.externalaccount.presentation;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.global.exception.ErrorResponse;
+import com.nsu.capstone.global.requestlimit.RequestBudget;
+import com.nsu.capstone.global.requestlimit.UserRequestLimit;
 import com.nsu.capstone.verification.externalaccount.application.AccountView;
 import com.nsu.capstone.verification.externalaccount.application.AuthorizationStart;
 import com.nsu.capstone.verification.externalaccount.application.ConnectResult;
@@ -36,8 +38,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 아티스트 본인의 외부 계정 연결·작업물·해제(06 §3~§9). 호출 주체(ARTIST)와 요청 제한은
- * {@link MyExternalAccountsInterceptor}가 먼저 확인한다. 비즈니스 규칙은 서비스에 있다.
+ * 아티스트 본인의 외부 계정 연결·작업물·해제(06 §3~§9). 호출 주체(ARTIST)는 {@link MyExternalAccountsInterceptor}가 먼저
+ * 확인하고, 요청 제한은 핸들러의 {@code @UserRequestLimit}이 센다. 비즈니스 규칙은 서비스에 있다.
  */
 @ApiResponse(
         responseCode = "401",
@@ -56,6 +58,7 @@ public class ExternalAccountController {
     private final ExternalAccountBindingCookie bindingCookie;
 
     @PostMapping("/authorizations")
+    @UserRequestLimit(RequestBudget.EXTERNAL_ACCOUNT)
     @ApiResponse(responseCode = "200")
     @ApiResponse(
             responseCode = "400",
@@ -68,10 +71,6 @@ public class ExternalAccountController {
     @ApiResponse(
             responseCode = "409",
             description = "EXTERNAL_ACCOUNT_CONNECTION_CHANGED",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(
-            responseCode = "429",
-            description = "TOO_MANY_REQUESTS",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(
             responseCode = "503",
@@ -88,6 +87,7 @@ public class ExternalAccountController {
     }
 
     @PostMapping
+    @UserRequestLimit(RequestBudget.EXTERNAL_ACCOUNT)
     @ApiResponse(responseCode = "200", description = "같은 계정을 다시 연결")
     @ApiResponse(responseCode = "201", description = "새 연결이나 교체")
     @ApiResponse(
@@ -108,10 +108,6 @@ public class ExternalAccountController {
             description = "YOUTUBE_CHANNEL_NOT_FOUND, SPOTIFY_ARTIST_NOT_FOUND",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(
-            responseCode = "429",
-            description = "TOO_MANY_REQUESTS",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(
             responseCode = "503",
             description =
                     "EXTERNAL_PROVIDER_UNAVAILABLE, EXTERNAL_PROVIDER_DISABLED, RATE_LIMIT_UNAVAILABLE, EXTERNAL_ACCOUNT_BUSY",
@@ -130,6 +126,7 @@ public class ExternalAccountController {
     }
 
     @GetMapping("/{externalAccountId}/work-candidates")
+    @UserRequestLimit(RequestBudget.EXTERNAL_ACCOUNT)
     @ApiResponse(responseCode = "200")
     @ApiResponse(
             responseCode = "400",
@@ -148,10 +145,6 @@ public class ExternalAccountController {
             description = "EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(
-            responseCode = "429",
-            description = "TOO_MANY_REQUESTS",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(
             responseCode = "503",
             description = "EXTERNAL_PROVIDER_UNAVAILABLE, EXTERNAL_PROVIDER_DISABLED, RATE_LIMIT_UNAVAILABLE",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -162,6 +155,7 @@ public class ExternalAccountController {
     }
 
     @PutMapping("/{externalAccountId}/works")
+    @UserRequestLimit(RequestBudget.EXTERNAL_ACCOUNT)
     @ApiResponse(responseCode = "200")
     @ApiResponse(
             responseCode = "400",
@@ -181,10 +175,6 @@ public class ExternalAccountController {
             description = "EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(
-            responseCode = "429",
-            description = "TOO_MANY_REQUESTS",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(
             responseCode = "503",
             description =
                     "EXTERNAL_PROVIDER_UNAVAILABLE, EXTERNAL_PROVIDER_DISABLED, RATE_LIMIT_UNAVAILABLE, EXTERNAL_ACCOUNT_BUSY",
@@ -198,6 +188,7 @@ public class ExternalAccountController {
     }
 
     @DeleteMapping("/{externalAccountId}")
+    @UserRequestLimit(RequestBudget.EXTERNAL_ACCOUNT)
     @ApiResponse(responseCode = "204")
     @ApiResponse(
             responseCode = "400",
@@ -210,10 +201,6 @@ public class ExternalAccountController {
     @ApiResponse(
             responseCode = "404",
             description = "EXTERNAL_ACCOUNT_NOT_FOUND",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(
-            responseCode = "429",
-            description = "TOO_MANY_REQUESTS",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(
             responseCode = "503",

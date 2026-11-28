@@ -1,6 +1,8 @@
 package com.nsu.capstone.partner.profile.presentation;
 
 import com.nsu.capstone.global.exception.ErrorResponse;
+import com.nsu.capstone.global.requestlimit.RequestBudget;
+import com.nsu.capstone.global.requestlimit.UserRequestLimit;
 import com.nsu.capstone.partner.profile.application.EventPartnerProfileService;
 import com.nsu.capstone.partner.profile.presentation.dto.EventPartnerProfileRequest;
 import com.nsu.capstone.partner.profile.presentation.dto.EventPartnerProfileResponse;
@@ -48,6 +50,7 @@ public class EventPartnerProfileController {
     }
 
     @PutMapping
+    @UserRequestLimit(RequestBudget.PROFILE)
     @ApiResponse(responseCode = "200")
     @ApiResponse(
             responseCode = "400",
@@ -59,6 +62,7 @@ public class EventPartnerProfileController {
     }
 
     @DeleteMapping
+    @UserRequestLimit(RequestBudget.PROFILE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @ApiResponse(responseCode = "204")
     public void delete(@AuthenticationPrincipal Jwt jwt) {

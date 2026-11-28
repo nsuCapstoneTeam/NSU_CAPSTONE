@@ -1,6 +1,8 @@
 package com.nsu.capstone.artist.profile;
 
 import com.nsu.capstone.global.exception.ErrorResponse;
+import com.nsu.capstone.global.requestlimit.RequestBudget;
+import com.nsu.capstone.global.requestlimit.UserRequestLimit;
 import com.nsu.capstone.identity.application.ArtistReadAccess;
 import com.nsu.capstone.identity.domain.UserRole;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -74,6 +76,7 @@ public class ArtistProfileController {
 
     @PutMapping("/api/v1/me/artist-profile")
     @PreAuthorize("hasRole('ARTIST')")
+    @UserRequestLimit(RequestBudget.PROFILE)
     @ApiResponse(responseCode = "200")
     @ApiResponse(
             responseCode = "400",
@@ -89,6 +92,7 @@ public class ArtistProfileController {
 
     @DeleteMapping("/api/v1/me/artist-profile")
     @PreAuthorize("hasRole('ARTIST')")
+    @UserRequestLimit(RequestBudget.PROFILE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @ApiResponse(responseCode = "204")
     @ApiResponse(

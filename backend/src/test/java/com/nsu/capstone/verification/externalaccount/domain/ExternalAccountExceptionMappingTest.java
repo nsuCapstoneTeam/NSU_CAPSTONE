@@ -11,7 +11,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
-/** 06 §10: 사유마다 정해진 HTTP 상태와 같은 이름의 code로 나가고, 429에는 Retry-After가 붙는다. 매핑은 ErrorCode 한 곳에 있다. */
+/** 06 §10: 사유마다 정해진 HTTP 상태와 같은 이름의 code로 나가고, 이 사유들에는 Retry-After가 붙지 않는다. 매핑은 ErrorCode 한 곳에 있다. */
 class ExternalAccountExceptionMappingTest {
 
     private static final Map<ExternalAccountFailure, HttpStatus> EXPECTED_STATUS = new EnumMap<>(Map.ofEntries(
@@ -27,9 +27,7 @@ class ExternalAccountExceptionMappingTest {
             Map.entry(ExternalAccountFailure.YOUTUBE_CHANNEL_NOT_FOUND, HttpStatus.UNPROCESSABLE_ENTITY),
             Map.entry(ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE, HttpStatus.SERVICE_UNAVAILABLE),
             Map.entry(ExternalAccountFailure.EXTERNAL_PROVIDER_DISABLED, HttpStatus.SERVICE_UNAVAILABLE),
-            Map.entry(ExternalAccountFailure.EXTERNAL_ACCOUNT_BUSY, HttpStatus.SERVICE_UNAVAILABLE),
-            Map.entry(ExternalAccountFailure.TOO_MANY_REQUESTS, HttpStatus.TOO_MANY_REQUESTS),
-            Map.entry(ExternalAccountFailure.RATE_LIMIT_UNAVAILABLE, HttpStatus.SERVICE_UNAVAILABLE)));
+            Map.entry(ExternalAccountFailure.EXTERNAL_ACCOUNT_BUSY, HttpStatus.SERVICE_UNAVAILABLE)));
 
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
 
@@ -59,14 +57,6 @@ class ExternalAccountExceptionMappingTest {
                 ExternalAccountFailure.EXTERNAL_PROVIDER_UNAVAILABLE, "YouTube 하루 예산을 확보하지 못했다"));
 
         assertThat(response.getBody().message()).doesNotContain("예산");
-    }
-
-    @Test
-    void 요청_제한을_넘으면_Retry_After에_남은_초를_담는다() {
-        ResponseEntity<ErrorResponse> response = handler.handleBusinessException(
-                new ExternalAccountException(ExternalAccountFailure.TOO_MANY_REQUESTS, "요청이 많다", 120L));
-
-        assertThat(response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("120");
     }
 
     @Test

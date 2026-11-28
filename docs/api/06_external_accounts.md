@@ -37,7 +37,7 @@
 - `externalAccountId`·`artistId`는 정규형 UUID다. 형식이 틀리면 `400 INVALID_EXTERNAL_ACCOUNT_ID`·`400 INVALID_ARTIST_ID`다.
 - 연결 결과(`201`)에는 `Location`을 붙이지 않는다. 계정 하나를 조회하는 API가 없기 때문이다.
 - 쓰기 요청은 `DEMO`에서 허용 목록 계정만 통과한다(`403 DEMO_WRITE_NOT_ALLOWED`, 00 §8). 이 필터는 전역 필터(NSU-158)이고 2026-11-18 기준 아직 구현되지 않았다. 구현되기 전에는 시연 서버에서 외부 계정 플랫폼을 켜지 않는다(ADR 9번).
-- `/api/v1/me/external-accounts/**`는 아티스트마다 10분에 30번까지다. 넘으면 `429 TOO_MANY_REQUESTS`와 `Retry-After`다(§11.2).
+- `/api/v1/me/external-accounts/**`는 아티스트마다 연달아 30번, 그 뒤 20초마다 1번까지다(평균 10분에 30번). 넘으면 `429 TOO_MANY_REQUESTS`와 `Retry-After`다(§11.2).
 - 태그 이름은 `외부 계정`이다(00 §10.1 목록에 더한다).
 
 ## 2. 호출 주체와 검사 순서
@@ -48,7 +48,7 @@
 | `GET /api/v1/artists/{artistId}/external-accounts` | `artistId`가 토큰 `sub`와 같을 때만. 다르면 `403 ACCESS_DENIED` | 대상이 `ACTIVE`인 ARTIST일 때만. 없음·EVENT_PARTNER·`SUSPENDED`·`WITHDRAWN`은 모두 `404 ARTIST_NOT_FOUND` |
 
 - 조회의 규칙은 [01 §2](./01_trust_profile.md)와 같다. 같은 코드(`ArtistReadAccess`)를 쓴다.
-- 검사 순서: `401` → `403 DEMO_WRITE_NOT_ALLOWED`(쓰기만) → `403 ACCESS_DENIED`(역할) → `429`(`/me` 경로만) → `400`(경로 형식, 본문 검증) → `404` → `409` → 외부 호출(`422`·`503`) → 성공.
+- 검사 순서: `401` → `403 DEMO_WRITE_NOT_ALLOWED`(쓰기만) → `403 ACCESS_DENIED`(역할) → `400`(JSON 문법·타입, `ProblemDetail`) → `429`·`503 RATE_LIMIT_UNAVAILABLE`(`/me` 경로만) → `400`(경로 형식, 본문 검증) → `404` → `409` → 외부 호출(`422`·`503`) → 성공.
 - 예외: 연결(§5)은 외부 호출(코드 교환·채널 조회·존재 확인)을 먼저 하고, 그 결과로 잠금 안에서 `409`를 판단한다. 새로 연결할 계정을 알아야 "같은 계정인지", "다른 아티스트가 가졌는지"를 정할 수 있기 때문이다. 시작(§3)의 `409`는 외부 호출 전에 판단한다.
 - `/me` 경로에서 남의 `externalAccountId`는 없는 것과 같이 `404 EXTERNAL_ACCOUNT_NOT_FOUND`다. 다른 아티스트 계정의 존재를 드러내지 않는다.
 
@@ -303,7 +303,7 @@ YouTube 계정만 받는다.
 | 409 | `EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED` | Spotify 계정의 작업물 요청 |
 | 422 | `YOUTUBE_CHANNEL_NOT_FOUND` | 로그인한 Google 계정에 공개 YouTube 채널이 없음 |
 | 422 | `SPOTIFY_ARTIST_NOT_FOUND` | Spotify에 그 아티스트가 없음 |
-| 429 | `TOO_MANY_REQUESTS` | `/me/external-accounts/**` 아티스트별 요청 제한을 넘음. `Retry-After`는 창이 끝날 때까지 남은 초(00 §8) |
+| 429 | `TOO_MANY_REQUESTS` | `/me/external-accounts/**` 아티스트별 요청 제한을 넘음. `Retry-After`는 1번을 다시 보낼 수 있을 때까지 남은 초(00 §8) |
 | 503 | `EXTERNAL_PROVIDER_UNAVAILABLE` | 플랫폼 시간 초과·`429`·`5xx`, 토큰 폐기 두 번 실패, YouTube 하루 예산의 사용자 한도 초과. `Retry-After`는 붙이지 않는다 |
 | 503 | `RATE_LIMIT_UNAVAILABLE` | 요청 제한 카운터(Redis)를 쓸 수 없음(00 §8) |
 | 503 | `EXTERNAL_PROVIDER_DISABLED` | 그 플랫폼이 설정으로 꺼져 있음(키 없음, 유료 승인 전) |
@@ -359,7 +359,7 @@ YouTube 할당량(하루 10,000 units, 태평양 시간 자정 초기화)은 프
 
 | 장치 | 규칙 |
 |---|---|
-| 아티스트별 요청 제한 | `/api/v1/me/external-accounts/**` 요청을 아티스트마다 10분 고정 창으로 센다(`extacct:rl:{artistId}:{창 시작}`, `INCR`·`EXPIRE`). 31번째부터 `429 TOO_MANY_REQUESTS`, `Retry-After`는 창이 끝날 때까지 남은 초. Redis를 쓸 수 없으면 `503 RATE_LIMIT_UNAVAILABLE` |
+| 아티스트별 요청 제한 | `/api/v1/me/external-accounts/**`의 5개 요청(시작, 연결, 작업물 후보, 작업물 고르기, 해제)이 계정별 요청 한도 `EXTERNAL_ACCOUNT`를 함께 쓴다([ADR user_request_limit/00](../adr/user_request_limit/00_per_account_request_limits.md) 8번). 연달아 30번, 그 뒤 20초마다 1번이다. 어떤 10분 동안에도 60번을 넘지 않아 이전 10분 고정 창의 최악(창 경계를 낀 60번)과 같고 평균도 같다. 31번째 연속 요청은 `429 TOO_MANY_REQUESTS`, `Retry-After`는 1번을 다시 보낼 수 있을 때까지 남은 초(예: `20`). 역할 `403`, JSON 문법·타입 오류, `429`는 세지 않는다. Redis를 쓸 수 없으면 `503 RATE_LIMIT_UNAVAILABLE`이고 외부 호출을 하지 않는다. Redis가 돌아와도 다음 탐침이 성공할 때까지 `503`일 수 있다. 보통 10초 안이지만, Redis 재시작처럼 연결이 끊긴 장애는 Lettuce 재연결 지연(지수로 늘고 최대 30초) 때문에 약 40초까지 갈 수 있다. 서버가 뜬 직후 첫 탐침이 끝날 때까지도 `503`이다([signup §1.6](./signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때)) |
 | 확보 지점 | YouTube Data API를 부르기 바로 전에만 확보한다. 연결에서는 코드 교환이 성공한 뒤다. Data API까지 가지 않는 실패(코드 거절, 요청 제한 등)는 예산을 쓰지 않는다 |
 | 호출자 상한 | 그 호출을 일으킨 사용자(아티스트·EVENT_PARTNER)마다 하루 300 units다(`extacct:ytquota:caller:{태평양 시간 날짜}:{userId}`, TTL 2일). 아래 하루 예산과 같은 Lua 스크립트에서 함께 확인하고, 둘 중 하나라도 넘으면 둘 다 올리지 않는다. ID 확인 작업에는 호출자 상한이 없다 |
 | 하루 예산 | YouTube를 부르기 전에 `extacct:ytquota:{태평양 시간 날짜}`(TTL 2일)에서 쓸 units을 확보한다. 연결 2, 후보 3, 표시 정보 계정당 2 units다. 확보는 Lua 스크립트 하나로 "지금 값 + 쓸 units ≤ 한도"를 확인하고 그때만 `INCRBY`한다. 넘으면 값을 바꾸지 않는다. 거절한 요청은 예산을 쓰지 않는다. 확보한 뒤 호출이 실패해도 되돌리지 않는다(YouTube도 실패한 요청에 units를 매긴다) |
@@ -412,7 +412,7 @@ DB·Redis가 관여하는 경우는 Testcontainers(PostgreSQL, Redis)로 확인�
 | 해제와 연결 경쟁 | X 교체로 시작한 연결 요청이 지금 연결 X를 읽은 직후 해제를 끼워 넣도록 잠금 획득 순서를 고정한다. 해제가 먼저 잠금을 잡아 `204`를 받으면 연결 요청은 `409`이고 행이 없다. 교체의 조건부 삭제가 0행이면 아무것도 저장하지 않는다. 고르기 저장 직전에 해제되면 고르기는 `404`다. `null`로 시작한 요청은, 그사이 다른 기기가 X를 연결했다가 해제해 연결이 없으면 `201`로 새 연결을 만든다(의도한 동작, §11.3) |
 | 삭제만 하는 고르기 | YouTube가 `5xx`를 주고, 하루 예산이 8,000이고, 후보 캐시가 없는 상태에서 `workIds: []`, 기존 선택의 일부, 기존 선택의 순서만 바꾼 요청은 모두 `200`이고 YouTube 호출과 예산 확보가 없다. 새 ID가 섞인 요청은 같은 상태에서 `503`이고 기존 선택이 그대로다 |
 | 같은 잠금 | 연결·고르기·해제·ID 확인 작업이 모두 `extacct:` 아티스트 잠금을 잡는다. 한 경로가 잠금을 잡고 있는 동안 다른 경로가 같은 아티스트 행을 바꾸지 못한다 |
-| 요청 제한 | 같은 아티스트의 31번째 `/me/external-accounts/**` 요청은 `429`이고 `Retry-After`가 있다. 다른 아티스트는 영향이 없다. EVENT_PARTNER 조회는 제한을 받지 않는다 |
+| 요청 제한 | 같은 아티스트의 31번째 연속 `/me/external-accounts/**` 요청(작업물 후보 `GET` 포함)은 `429`이고 `Retry-After`는 남은 초(20 이하)다. 시각을 고정한 테스트에서만 `Retry-After: 20`을 기대한다. EVENT_PARTNER의 `/me` 요청(`403`)과 깨진 JSON은 한도를 쓰지 않는다. 다른 아티스트는 영향이 없다. EVENT_PARTNER 조회는 제한을 받지 않는다 |
 | 확보 지점과 호출자 상한 | 가짜 `code`로 시작·연결을 되풀이하면 `400`이고 예산·호출자 카운터가 그대로다. 한 호출자가 그날 300 units를 쓰면 그 호출자의 연결·후보는 `503`, 조회는 표시 정보만 `null`이고, 다른 호출자는 영향이 없다. 호출자 상한에 걸린 요청은 전체 예산도 올리지 않는다 |
 | 고르기 잠금 | 고르기가 잠금 밖에서 v1을 기존 선택으로 본 뒤, 잠금 전에 ID 확인 작업이 v1 행을 지우도록 순서를 고정한다. 저장은 `400 EXTERNAL_ACCOUNT_WORK_NOT_CANDIDATE`이고 아무것도 바뀌지 않는다 |
 | 잠금 대기 | 다른 트랜잭션이 아티스트 잠금을 쥔 채 3초 넘게 있으면 연결·고르기·해제는 `503 EXTERNAL_ACCOUNT_BUSY`이고(`500`이 아니다) 행이 그대로다. 같은 상황의 ID 확인 작업은 그 아티스트를 건너뛰고 다른 아티스트를 계속 처리한다 |

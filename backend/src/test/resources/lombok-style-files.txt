@@ -58,6 +58,17 @@ src/main/java/com/nsu/capstone/global/logging/RequestIdFilter.java
 src/main/java/com/nsu/capstone/global/logging/RequestIdExecutors.java
 src/main/java/com/nsu/capstone/global/logging/RequestIdInterceptor.java
 src/main/java/com/nsu/capstone/global/logging/UncaughtExceptionLogger.java
+src/main/java/com/nsu/capstone/global/requestlimit/BudgetLedger.java
+src/main/java/com/nsu/capstone/global/requestlimit/BudgetRate.java
+src/main/java/com/nsu/capstone/global/requestlimit/DedicatedRedis.java
+src/main/java/com/nsu/capstone/global/requestlimit/MemoryBudgetCounter.java
+src/main/java/com/nsu/capstone/global/requestlimit/OutagePolicy.java
+src/main/java/com/nsu/capstone/global/requestlimit/RequestBudget.java
+src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimit.java
+src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimitAdvice.java
+src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimitConfig.java
+src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimitOperationCustomizer.java
+src/main/java/com/nsu/capstone/global/requestlimit/UserRequestLimitProperties.java
 src/main/java/com/nsu/capstone/global/text/UserText.java
 src/main/java/com/nsu/capstone/identity/application/ArtistReadAccess.java
 src/main/java/com/nsu/capstone/identity/application/ArtistWriteAccess.java
@@ -178,7 +189,6 @@ src/main/java/com/nsu/capstone/verification/externalaccount/redis/DisplayCache.j
 src/main/java/com/nsu/capstone/verification/externalaccount/redis/ProfileCache.java
 src/main/java/com/nsu/capstone/verification/externalaccount/redis/RedisKeys.java
 src/main/java/com/nsu/capstone/verification/externalaccount/redis/RefreshJobState.java
-src/main/java/com/nsu/capstone/verification/externalaccount/redis/RequestLimiter.java
 src/main/java/com/nsu/capstone/verification/externalaccount/redis/YoutubeQuota.java
 src/main/java/com/nsu/capstone/verification/externalaccount/repository/ExternalAccountRepository.java
 src/main/java/com/nsu/capstone/verification/externalaccount/repository/LockedArtist.java
