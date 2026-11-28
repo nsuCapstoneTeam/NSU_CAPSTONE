@@ -63,6 +63,39 @@ class ArtistScheduleRequestTest {
                 .isEqualTo(LocalDateTime.of(2026, 12, 12, 19, 40));
     }
 
+    @Test
+    void 상태는_가능_보류_불가만_받고_확정과_없는_값과_소문자와_null은_거절한다() {
+        assertInvalid(status("BOOKED"));
+        assertInvalid(status("CONFIRMED"));
+        assertInvalid(status("available"));
+        assertInvalid(status(""));
+        assertInvalid(status(null));
+
+        assertThat(status("AVAILABLE").toDraft().status()).isEqualTo(ArtistScheduleStatus.AVAILABLE);
+        assertThat(status("HOLD").toDraft().status()).isEqualTo(ArtistScheduleStatus.HOLD);
+        assertThat(status("UNAVAILABLE").toDraft().status()).isEqualTo(ArtistScheduleStatus.UNAVAILABLE);
+    }
+
+    @Test
+    void 일정_이름은_31자면_거절하고_30자와_이모지_30개는_받으며_보이는_글자가_없으면_이름_없음이다() {
+        assertInvalid(title("가".repeat(31)));
+        assertInvalid(title("이름\u0000"));
+
+        assertThat(title("가".repeat(30)).toDraft().title()).hasSize(30);
+        assertThat(title("😀".repeat(30)).toDraft().title().codePointCount(0, 60)).isEqualTo(30);
+        assertThat(title("   ").toDraft().title()).isNull();
+        assertThat(title("​").toDraft().title()).isNull();
+        assertThat(title(null).toDraft().title()).isNull();
+    }
+
+    private static ArtistScheduleRequest title(String title) {
+        return new ArtistScheduleRequest("2026-12-12", "18:00", "2026-12-12", "22:00", "HOLD", title);
+    }
+
+    private static ArtistScheduleRequest status(String status) {
+        return new ArtistScheduleRequest("2026-12-12", "18:00", "2026-12-12", "22:00", status, null);
+    }
+
     private static ArtistScheduleRequest times(String startDate, String startTime, String endDate, String endTime) {
         return new ArtistScheduleRequest(startDate, startTime, endDate, endTime, "AVAILABLE", null);
     }

@@ -31,8 +31,24 @@ record ArtistScheduleRequest(
         if (length.isNegative() || length.isZero() || length.compareTo(MAX_LENGTH) > 0) {
             throw invalid();
         }
-        return new ArtistScheduleDraft(
-                start, end, ArtistScheduleStatus.valueOf(status), UserText.optional(title, TITLE_MAX));
+        return new ArtistScheduleDraft(start, end, requestedStatus(), UserText.optional(title, TITLE_MAX));
+    }
+
+    /** 확정({@code BOOKED})은 섭외가 성사될 때 서버가 쓰는 값이라 요청으로 받지 않는다(ADR 결정 3). */
+    private ArtistScheduleStatus requestedStatus() {
+        if (status == null) {
+            throw invalid();
+        }
+        ArtistScheduleStatus parsed;
+        try {
+            parsed = ArtistScheduleStatus.valueOf(status);
+        } catch (IllegalArgumentException exception) {
+            throw invalid();
+        }
+        if (parsed == ArtistScheduleStatus.BOOKED) {
+            throw invalid();
+        }
+        return parsed;
     }
 
     private static LocalDate date(String value) {
