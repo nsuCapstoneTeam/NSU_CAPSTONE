@@ -8,6 +8,8 @@ import com.nsu.capstone.event.presentation.dto.EventResponse;
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.global.exception.ErrorResponse;
+import com.nsu.capstone.global.requestlimit.RequestBudget;
+import com.nsu.capstone.global.requestlimit.UserRequestLimit;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -49,6 +51,7 @@ public class EventController {
 
     @PostMapping
     @PreAuthorize("hasRole('EVENT_PARTNER')")
+    @UserRequestLimit(RequestBudget.EVENT_REGISTRATION)
     @ApiResponse(responseCode = "201")
     @ApiResponse(
             responseCode = "400",
@@ -96,6 +99,7 @@ public class EventController {
     }
 
     @PutMapping("/{eventId}")
+    @UserRequestLimit(RequestBudget.EVENT_CHANGE)
     @ApiResponse(responseCode = "200")
     @ApiResponse(
             responseCode = "400",
@@ -121,6 +125,7 @@ public class EventController {
     }
 
     @PutMapping("/{eventId}/cancellation")
+    @UserRequestLimit(RequestBudget.EVENT_CHANGE)
     @ApiResponse(responseCode = "200")
     @ApiResponse(
             responseCode = "400",
@@ -143,6 +148,7 @@ public class EventController {
     }
 
     @DeleteMapping("/{eventId}")
+    @UserRequestLimit(RequestBudget.EVENT_CHANGE)
     @ApiResponse(responseCode = "204")
     @ApiResponse(
             responseCode = "400",

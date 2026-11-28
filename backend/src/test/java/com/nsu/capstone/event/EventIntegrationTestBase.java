@@ -1,9 +1,7 @@
 package com.nsu.capstone.event;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.TestcontainersConfiguration;
@@ -18,6 +16,7 @@ import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +26,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.databind.ObjectMapper;
@@ -35,6 +36,18 @@ import tools.jackson.databind.ObjectMapper;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, EventIntegrationTestBase.MutableClockConfig.class})
+// 계정별 요청 한도(NSU-100)는 통합 테스트에서 넉넉하게 둔다. 한도를 확인하는 테스트만 실제 숫자를 다시 적는다
+@TestPropertySource(
+        properties = {
+            "user-request-limit.budgets.event-registration.capacity=1000",
+            "user-request-limit.budgets.event-registration.refill-every=PT1S",
+            "user-request-limit.budgets.event-change.capacity=1000",
+            "user-request-limit.budgets.event-change.refill-every=PT1S",
+            "user-request-limit.budgets.profile.capacity=1000",
+            "user-request-limit.budgets.profile.refill-every=PT1S",
+            "user-request-limit.budgets.external-account.capacity=1000",
+            "user-request-limit.budgets.external-account.refill-every=PT1S"
+        })
 public abstract class EventIntegrationTestBase {
 
     /** 테스트의 '지금' 기본값: 2026-10-18 10:00 (Asia/Seoul) */
@@ -73,20 +86,40 @@ public abstract class EventIntegrationTestBase {
         }
     }
 
-    @Autowired protected MutableClock clock;
+    @Autowired
+    protected MutableClock clock;
 
-    @Autowired protected MockMvc mockMvc;
-    @Autowired protected ObjectMapper objectMapper;
-    @Autowired protected UserRepository userRepository;
-    @Autowired protected UuidV7Generator uuidV7Generator;
-    @Autowired protected JwtAccessTokenService jwtAccessTokenService;
-    @Autowired protected JdbcTemplate jdbcTemplate;
+    @Autowired
+    protected MockMvc mockMvc;
+
+    @Autowired
+    protected ObjectMapper objectMapper;
+
+    @Autowired
+    protected UserRepository userRepository;
+
+    @Autowired
+    protected UuidV7Generator uuidV7Generator;
+
+    @Autowired
+    protected JwtAccessTokenService jwtAccessTokenService;
+
+    @Autowired
+    protected JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private StringRedisTemplate requestLimitRedis;
 
     protected User partner;
 
     @BeforeEach
     void setUp() {
         clock.set(NOW);
+        // 계정별 요청 한도 키가 다른 테스트로 넘어가지 않게 지운다
+        Set<String> limitKeys = requestLimitRedis.keys("user-request-limit:*");
+        if (limitKeys != null && !limitKeys.isEmpty()) {
+            requestLimitRedis.delete(limitKeys);
+        }
         jdbcTemplate.update("DELETE FROM events");
         jdbcTemplate.update("DELETE FROM oauth_accounts");
         // EVENT_PARTNER 프로필이 users를 참조하므로, 다른 테스트가 남긴 행이 있어도 users를 지울 수 있게 먼저 지운다
@@ -97,13 +130,15 @@ public abstract class EventIntegrationTestBase {
 
     protected User newUser(UserRole role, String email) {
         UUID id = uuidV7Generator.generate();
-        return userRepository.saveAndFlush(role == UserRole.ARTIST
-            ? User.createArtist(id, email, "hash", "01011112222")
-            : User.createEventPartner(id, email, "hash", "01011112222"));
+        return userRepository.saveAndFlush(
+                role == UserRole.ARTIST
+                        ? User.createArtist(id, email, "hash", "01011112222")
+                        : User.createEventPartner(id, email, "hash", "01011112222"));
     }
 
     protected String bearer(User user) {
-        return "Bearer " + jwtAccessTokenService.issue(user.getId(), user.getRole()).value();
+        return "Bearer "
+                + jwtAccessTokenService.issue(user.getId(), user.getRole()).value();
     }
 
     /** 03 §10.1의 예시 본문. 시작은 지금(10-18 10:00)보다 뒤다. */
@@ -145,26 +180,28 @@ public abstract class EventIntegrationTestBase {
         return register(caller, body, UUID.randomUUID().toString());
     }
 
-    protected ResultActions register(User caller, Map<String, Object> body, String idempotencyKey)
-        throws Exception {
+    protected ResultActions register(User caller, Map<String, Object> body, String idempotencyKey) throws Exception {
         return mockMvc.perform(post("/api/v1/events")
-            .header("Authorization", bearer(caller))
-            .header("Idempotency-Key", idempotencyKey)
-            .contentType(APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(body)));
+                .header("Authorization", bearer(caller))
+                .header("Idempotency-Key", idempotencyKey)
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)));
     }
 
     /** 멱등 키 헤더 없이 등록한다. */
     protected ResultActions registerWithoutKey(User caller, Map<String, Object> body) throws Exception {
         return mockMvc.perform(post("/api/v1/events")
-            .header("Authorization", bearer(caller))
-            .contentType(APPLICATION_JSON)
-            .content(objectMapper.writeValueAsString(body)));
+                .header("Authorization", bearer(caller))
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)));
     }
 
     protected String registeredId(Map<String, Object> body) throws Exception {
-        String json = register(partner, body).andExpect(status().isCreated())
-            .andReturn().getResponse().getContentAsString();
+        String json = register(partner, body)
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         return objectMapper.readTree(json).get("id").asString();
     }
 }
