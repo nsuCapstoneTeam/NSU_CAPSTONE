@@ -82,7 +82,8 @@ class ArtistScheduleRequestTest {
         assertInvalid(title("이름\u0000"));
 
         assertThat(title("가".repeat(30)).toDraft().title()).hasSize(30);
-        assertThat(title("😀".repeat(30)).toDraft().title().codePointCount(0, 60)).isEqualTo(30);
+        assertThat(title("😀".repeat(30)).toDraft().title().codePointCount(0, 60))
+                .isEqualTo(30);
         assertThat(title("   ").toDraft().title()).isNull();
         assertThat(title("​").toDraft().title()).isNull();
         assertThat(title(null).toDraft().title()).isNull();

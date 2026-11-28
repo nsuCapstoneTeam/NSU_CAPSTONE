@@ -20,7 +20,7 @@ record ArtistScheduleRequest(
     private static final LocalDate FIRST_DATE = LocalDate.of(2000, 1, 1);
 
     private static final LocalDate LAST_DATE = LocalDate.of(2099, 12, 31);
-    private static final Pattern DATE =Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
+    private static final Pattern DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
     private static final Pattern TIME = Pattern.compile("([01]\\d|2[0-3]):[0-5]\\d");
 
     ArtistScheduleDraft toDraft() {
