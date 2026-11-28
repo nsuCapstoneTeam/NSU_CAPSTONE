@@ -16,7 +16,7 @@ public interface ArtistProfileReader {
      * {@code feeMin}을 null로 둔다. 공연 가능지역·공연 형태를 입력하지 않았으면 null이나 빈 집합으로 둔다(필터는 둘 다 미입력으로 본다).
      * 지도 자체는 null로 돌려주지 않고, 조회에 실패하면 예외를 던진다.
      * 출연료는 DB CHECK로 {@code fee_min >= 0}, {@code fee_min <= fee_max}를 지킨다(필터도 음수를 실패로 본다).
-     * 실제 창구를 붙이면 {@code EmptyArtistProfileReader}를 지운다. 둘 다 빈이라 남기면 서버가 뜨지 않는다.
+     * 구현은 {@code SavedArtistProfileReader}(NSU-119) 하나다. 같은 인터페이스의 빈이 둘이 되면 서버가 뜨지 않는다.
      */
     Map<UUID, ArtistProfile> findByArtistIds(Collection<UUID> artistIds);
 }
