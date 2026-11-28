@@ -2,7 +2,6 @@ package com.nsu.capstone.identity.signup;
 
 import com.nsu.capstone.global.exception.BusinessException;
 import com.nsu.capstone.global.exception.ErrorCode;
-import com.nsu.capstone.identity.verification.OtpDigestService;
 import com.nsu.capstone.identity.verification.VerificationChannel;
 import java.time.Clock;
 import java.time.Instant;

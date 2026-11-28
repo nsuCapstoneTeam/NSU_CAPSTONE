@@ -13,7 +13,9 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.convert.ApplicationConversionService;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.convert.ConversionException;
 import org.springframework.core.env.Environment;
 
 /** ADR logging/00 Decision 7: 커밋한 설정 파일이 정한 값. OS 환경 변수 없이(배포와 같은 설정) 읽는다. */
@@ -117,18 +119,39 @@ class LoggingConfigTest {
         properties.load(new StringReader(propertiesText));
         return properties.stringPropertyNames().stream()
                 .filter(key -> isForbidden(key.strip().toLowerCase(Locale.ROOT), properties.getProperty(key)))
-                .map(key -> key.strip() + "=" + properties.getProperty(key).strip())
+                .map(key -> key.strip() + "=" + properties.getProperty(key))
                 .sorted()
                 .toList();
     }
 
+    // 로그 설정 키에는 리터럴만 허용한다. 참조(${..}) 값은 다른 설정 파일이나 환경 변수가 바꿀 수 있어 한 파일만 보고 판정할 수 없다
     private static boolean isForbidden(String key, String value) {
+        boolean loggingSwitch = key.startsWith("logging.level.")
+                || key.equals("debug")
+                || key.equals("trace")
+                || key.contains("accesslog.enabled")
+                || key.contains("log-request-details");
+        return loggingSwitch && (value.contains("${") || isForbiddenValue(key, value));
+    }
+
+    private static boolean isForbiddenValue(String key, String value) {
         String setting = value.strip().toLowerCase(Locale.ROOT);
         boolean verboseLevel = key.startsWith("logging.level.") && (setting.equals("debug") || setting.equals("trace"));
-        boolean debugSwitch = (key.equals("debug") || key.equals("trace")) && setting.equals("true");
+        // Boot는 값이 정확히 false가 아니면 켜진 것으로 본다(LoggingApplicationListener.isSet). 값 뒤의 공백도 남기므로 원문을 비교한다
+        boolean debugSwitch = (key.equals("debug") || key.equals("trace")) && !value.equals("false");
         boolean requestLogging =
-                (key.contains("accesslog.enabled") || key.contains("log-request-details")) && setting.equals("true");
+                (key.contains("accesslog.enabled") || key.contains("log-request-details")) && bindsToTrue(setting);
         return verboseLevel || debugSwitch || requestLogging;
+    }
+
+    /** Spring이 설정 값을 Boolean으로 바꾸는 규칙을 그대로 쓴다(true·on·yes·1). Boolean으로 읽지 못하는 값은 켜진 것이 아니다. */
+    private static boolean bindsToTrue(String setting) {
+        try {
+            return Boolean.TRUE.equals(
+                    ApplicationConversionService.getSharedInstance().convert(setting, Boolean.class));
+        } catch (ConversionException e) {
+            return false;
+        }
     }
 
     @Test
@@ -151,6 +174,69 @@ class LoggingConfigTest {
                         "server.tomcat.accesslog.enabled=true",
                         "spring.mvc.log-request-details=true",
                         "debug=true");
+    }
+
+    /** Spring은 on·yes·1도 true로 바인딩한다. 문자열 true만 보면 accesslog.enabled=on이 통과한다(NSU-162). */
+    @Test
+    void 요청_로깅_설정은_Spring이_true로_읽는_값이면_모두_금지다() throws IOException {
+        String text = """
+                server.tomcat.accesslog.enabled=on
+                spring.mvc.log-request-details=YES
+                spring.codec.log-request-details=1
+                """;
+
+        assertThat(forbiddenSettings(text))
+                .containsExactlyInAnyOrder(
+                        "server.tomcat.accesslog.enabled=on",
+                        "spring.mvc.log-request-details=YES",
+                        "spring.codec.log-request-details=1");
+    }
+
+    @Test
+    void 요청_로깅_설정은_Spring이_false로_읽는_값이면_허용한다() throws IOException {
+        String text = """
+                server.tomcat.accesslog.enabled=off
+                spring.mvc.log-request-details=no
+                spring.codec.log-request-details=0
+                """;
+
+        assertThat(forbiddenSettings(text)).isEmpty();
+    }
+
+    /**
+     * Boot는 debug·trace 값이 정확히 false가 아니면 켜진 것으로 본다(LoggingApplicationListener.isSet). on, 빈 값, False도 켜진다.
+     */
+    @Test
+    void debug와_trace_스위치는_정확히_false가_아니면_금지다() throws IOException {
+        assertThat(forbiddenSettings("debug=on\ntrace=\n")).containsExactlyInAnyOrder("debug=on", "trace=");
+        assertThat(forbiddenSettings("debug=False\n")).containsExactly("debug=False");
+        assertThat(forbiddenSettings("debug=false\ntrace=false\n")).isEmpty();
+    }
+
+    /** Boot의 속성 로더는 값 뒤의 공백을 남기고 isSet은 원문을 비교한다. "false " 는 false가 아니라서 켜진다(PR #249 리뷰). */
+    @Test
+    void debug와_trace_스위치는_false_뒤에_공백이나_줄바꿈이_붙어도_금지다() throws IOException {
+        assertThat(forbiddenSettings("debug=false \n")).containsExactly("debug=false ");
+        assertThat(forbiddenSettings("trace=false\\n\n")).containsExactly("trace=false\n");
+        assertThat(forbiddenSettings("debug =  false\n")).isEmpty();
+    }
+
+    // 참조 값은 다른 설정 파일(import한 파일이 우선한다)이나 환경 변수가 바꿀 수 있어, 한 파일만 보고 판정할 수 없다.
+    // 그래서 로그 설정 키에는 리터럴만 허용한다(PR #249 리뷰)
+    @Test
+    void 로그_설정_키는_같은_파일의_참조라도_리터럴이_아니면_금지다() throws IOException {
+        assertThat(forbiddenSettings("app.logs.access=false\nserver.tomcat.accesslog.enabled=${app.logs.access}\n"))
+                .containsExactly("server.tomcat.accesslog.enabled=${app.logs.access}");
+        assertThat(forbiddenSettings("app.logging.verbose=false\ndebug=${app.logging.verbose:false}\n"
+                        + "spring.mvc.log-request-details=${LOG_DETAILS:false}\n"
+                        + "logging.level.root=${LOG_LEVEL:INFO}\n"))
+                .containsExactlyInAnyOrder(
+                        "debug=${app.logging.verbose:false}",
+                        "spring.mvc.log-request-details=${LOG_DETAILS:false}",
+                        "logging.level.root=${LOG_LEVEL:INFO}");
+        // 로그 설정 키가 아니면 참조를 써도 된다
+        assertThat(forbiddenSettings("logging.structured.format.console=${LOG_FORMAT:logstash}\n"))
+                .isEmpty();
     }
 
     @Test

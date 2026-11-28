@@ -1,0 +1,437 @@
+/* 지역 지도 (NSU-117). 조각 색 5가지는 Figma '3D 지도' 시안의 파스텔 색 (윗면 / 옆면) */
+.rm {
+  --rm-top-0: #e6e0fa;
+  --rm-side-0: #b8aee0;
+  --rm-top-1: #d9efe4;
+  --rm-side-1: #a6cdb9;
+  --rm-top-2: #fbe5cf;
+  --rm-side-2: #dcb894;
+  --rm-top-3: #dce8fb;
+  --rm-side-3: #a9c1e4;
+  --rm-top-4: #f8dde6;
+  --rm-side-4: #dcb0c0;
+  --rm-edge: #fff;
+  --rm-pick: #cfe1ff;
+  --rm-pick-side: #8fb2e8;
+  --rm-shadow: #1d3a6614;
+  position: relative;
+}
+:root[data-theme='dark'] .rm {
+  --rm-top-0: #3a3866;
+  --rm-side-0: #252347;
+  --rm-top-1: #26493f;
+  --rm-side-1: #17312a;
+  --rm-top-2: #514030;
+  --rm-side-2: #35291e;
+  --rm-top-3: #284468;
+  --rm-side-3: #182c47;
+  --rm-top-4: #51303f;
+  --rm-side-4: #361f2a;
+  --rm-edge: #132137;
+  --rm-pick: #2f5f9c;
+  --rm-pick-side: #1b3c66;
+  --rm-shadow: #0006;
+}
+
+.rm-stage {
+  position: relative;
+  margin: 0 auto;
+}
+.rm-stage::before {
+  /* 지도 아래 그림자 */
+  content: '';
+  position: absolute;
+  inset: auto 6% 2% 6%;
+  height: 14%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--rm-shadow), transparent);
+  pointer-events: none;
+}
+.rm-stage svg {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.rm-land use {
+  stroke-linejoin: round;
+}
+.rm-top {
+  stroke: var(--rm-edge);
+  stroke-width: 1;
+  cursor: pointer;
+  outline: none;
+}
+.rm-side {
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+.rm-top.rm-tone-0 { fill: var(--rm-top-0); }
+.rm-top.rm-tone-1 { fill: var(--rm-top-1); }
+.rm-top.rm-tone-2 { fill: var(--rm-top-2); }
+.rm-top.rm-tone-3 { fill: var(--rm-top-3); }
+.rm-top.rm-tone-4 { fill: var(--rm-top-4); }
+.rm-side.rm-tone-0 { fill: var(--rm-side-0); stroke: var(--rm-side-0); }
+.rm-side.rm-tone-1 { fill: var(--rm-side-1); stroke: var(--rm-side-1); }
+.rm-side.rm-tone-2 { fill: var(--rm-side-2); stroke: var(--rm-side-2); }
+.rm-side.rm-tone-3 { fill: var(--rm-side-3); stroke: var(--rm-side-3); }
+.rm-side.rm-tone-4 { fill: var(--rm-side-4); stroke: var(--rm-side-4); }
+
+/* 떠오른 조각 */
+.rm-lifted {
+  cursor: pointer;
+  animation: rm-lift 160ms ease-out both;
+}
+.rm-lifted .rm-top {
+  stroke-width: 1.5;
+}
+.rm-lifted.is-picked .rm-top {
+  fill: var(--rm-pick);
+  stroke: var(--blue);
+}
+.rm-lifted.is-picked .rm-side {
+  fill: var(--rm-pick-side);
+  stroke: var(--rm-pick-side);
+}
+.rm-lifted.is-focus .rm-top {
+  stroke: var(--blue);
+  stroke-width: 2.5;
+}
+@keyframes rm-lift {
+  from {
+    transform: translateY(14px);
+  }
+}
+
+/* 처음 나타날 때: 가운데 조각부터 위에서 내려앉음 */
+.rm-drop {
+  animation: rm-drop 520ms cubic-bezier(0.2, 0.8, 0.25, 1) var(--delay, 0ms) both;
+}
+@keyframes rm-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-36px);
+  }
+}
+
+/* 핀: 이름과 행사 수 */
+.rm-pins {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.rm-pin,
+.rm-name {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+  transition: top 160ms ease-out;
+}
+.rm-pin {
+  z-index: 1;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: -4px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 2px 6px #163e7a1a;
+  color: var(--muted);
+  font-size: 12px;
+}
+.rm-pin::after {
+  /* 핀 꼬리 */
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 7px;
+  height: 7px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: inherit;
+  transform: translateX(-50%) rotate(45deg);
+}
+.rm-pin b {
+  color: var(--ink);
+  font-size: 13px;
+}
+.rm-pin.is-on {
+  z-index: 2;
+  border-color: var(--blue);
+  background: var(--blue);
+  color: var(--on-blue);
+  font-size: 13px;
+}
+.rm-pin.is-on::after {
+  border-color: var(--blue);
+}
+.rm-pin.is-on b {
+  color: var(--on-blue);
+  font-size: 14px;
+}
+.rm-name {
+  transform: translate(-50%, -50%);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 마우스를 올린 조각 안내 */
+.rm-tip {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  gap: 2px;
+  min-width: 168px;
+  margin: -6px 0 0 34px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px #163e7a1f;
+  transform: translateY(-100%);
+  pointer-events: none;
+}
+.rm-tip.is-left {
+  margin-left: -34px;
+  transform: translate(-100%, -100%);
+}
+.rm-tip strong {
+  font-size: 15px;
+}
+.rm-tip span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.rm-tip small {
+  margin-top: 4px;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 지도 밖 섬 지역 (옹진군, 울릉군) */
+.rm-away {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+/* 지도를 못 불러왔을 때 대신 쓰는 지역 버튼 */
+.rm-fallback {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 520px;
+  margin-top: 6px;
+}
+.rm-away-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+}
+.rm-away-chip b {
+  color: var(--ink);
+}
+.rm-away-chip:hover,
+.rm-away-chip.is-on {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+/* 불러오는 중, 실패 */
+.rm-wait {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  min-height: 320px;
+  border-radius: 14px;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.rm-wait p {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-drop,
+  .rm-lifted {
+    animation: none;
+  }
+  .rm-pin,
+  .rm-name {
+    transition: none;
+  }
+}
+
+/* 자리가 좁아 비켜 선 핀: 꼬리 대신 원래 자리에 점 */
+.rm-pin.is-moved::after,
+.rm-marker.is-moved::after {
+  display: none;
+}
+.rm-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border: 1.5px solid var(--surface);
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+/* 행사 장소 번호 핀 (목록 번호와 같음) */
+.rm-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.rm-marker {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 3px 8px #163e7a33;
+  color: var(--surface);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  transform: translate(-50%, calc(-100% - 6px));
+  transition:
+    transform 140ms ease-out,
+    background-color 140ms ease-out;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.rm-marker::after {
+  /* 땅에 꽂힌 심 */
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 2px;
+  height: 7px;
+  margin-top: 1px;
+  background: var(--ink);
+  transform: translateX(-50%);
+}
+/* 조각과 함께 떠오른 핀: 원래 자리까지 누르는 자리를 넓혀서
+   핀 아래쪽에 마우스를 올렸다가 핀이 올라가도 마우스가 핀 위에 남게 함 (깜박임 방지) */
+.rm-marker.is-up::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: -2px;
+  right: -2px;
+  height: calc(var(--lift) + 6px);
+}
+.rm-marker.is-hot,
+.rm-marker.is-picked {
+  z-index: 4;
+  background: var(--blue);
+  color: var(--on-blue);
+  transform: translate(-50%, calc(-100% - 6px)) scale(1.18);
+}
+.rm-marker.is-hot::after,
+.rm-marker.is-picked::after {
+  background: var(--blue);
+}
+.rm-tip.is-marker span {
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rm-marker {
+    transition: none;
+  }
+}
+
+/* 장소 작은 지도 (장소 보기·행사 상세) */
+.rm-mini {
+  container-type: inline-size;
+  position: relative;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  aspect-ratio: 16 / 7;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--soft);
+}
+.rm-mini > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.rm-mini .rm-top {
+  cursor: default;
+}
+.rm-mini .is-near {
+  opacity: 0.45;
+}
+.rm-mini .rm-top.is-here {
+  fill: var(--rm-pick);
+  stroke: var(--blue);
+  stroke-width: 1.5;
+}
+.rm-mini .rm-side.is-here {
+  fill: var(--rm-pick-side);
+  stroke: var(--rm-pick-side);
+}
+.rm-mini-area {
+  position: absolute;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  transform: translate(-50%, -50%);
+}
+.rm-mini .rm-mini-pin {
+  transform: translate(-15px, -36px);
+}
+.rm-mini figcaption {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  opacity: 0.9;
+}
+.rm-mini-wait {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.rm-mini-wait p {
+  margin: 0;
+  padding: 0 16px;
+  text-align: center;
+}

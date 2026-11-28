@@ -11,6 +11,7 @@ import com.nsu.capstone.identity.oauth.*;
 import com.nsu.capstone.identity.presentation.dto.ArtistSignupResponse;
 import com.nsu.capstone.identity.repository.*;
 import com.nsu.capstone.identity.repository.UserTermsAgreementRepository;
+import com.nsu.capstone.identity.signup.OAuthSignupStateStore;
 import java.time.Clock;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

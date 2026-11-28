@@ -10,9 +10,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import ch.qos.logback.classic.Level;
 import com.nsu.capstone.SignupTestTerms;
 import com.nsu.capstone.TestcontainersConfiguration;
+import com.nsu.capstone.identity.signup.OtpCodeGenerator;
 import com.nsu.capstone.identity.signup.SignupSession;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
-import com.nsu.capstone.identity.verification.OtpCodeGenerator;
 import com.nsu.capstone.identity.verification.adapter.resend.ResendEmailSender;
 import com.nsu.capstone.identity.verification.adapter.solapi.SolapiSmsSender;
 import com.nsu.capstone.identity.verification.config.SolapiSmsProperties;
@@ -175,7 +175,7 @@ class LogPrivacySignupSendIntegrationTest {
                 assertThat(capture.lines())
                         .as("발송 결과를 알 수 없다는 WARN 줄")
                         .anyMatch(line -> line.contains(
-                                        "\"logger_name\":\"com.nsu.capstone.identity.application.SignupVerificationService\"")
+                                        "\"logger_name\":\"com.nsu.capstone.identity.signup.SignupVerificationChallenges\"")
                                 && line.contains("\"level\":\"WARN\"")
                                 && line.contains("\"requestId\":\""));
             }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.nsu.capstone.TestcontainersConfiguration;
 import com.nsu.capstone.global.logging.LogCapture;
+import com.nsu.capstone.identity.signup.SignupChallengeTestSupport;
 import com.nsu.capstone.identity.signup.SignupRateLimitKeys;
 import java.time.Duration;
 import java.time.Instant;
@@ -54,16 +55,17 @@ class VerificationAlertRequestIdIntegrationTest {
 
     @Test
     void 요청_스레드가_넘긴_알림_작업의_WARN_줄에_같은_요청_ID가_있다() throws Exception {
-        var window = VerificationRateWindows.at(NOW, VerificationChannel.PHONE);
-        String counter = SignupRateLimitKeys.counter("total-phone", window.channelDayStart(), "all");
+        Instant dayStart = SignupChallengeTestSupport.channelDayStart(NOW, VerificationChannel.PHONE);
+        Instant dayEnd = SignupChallengeTestSupport.channelDayEnd(NOW, VerificationChannel.PHONE);
+        String counter = SignupRateLimitKeys.counter("total-phone", dayStart, "all");
         try (var capture = LogCapture.start(environment)) {
             MDC.put("requestId", "req-for-alert");
             // 기존 알림 테스트와 같은 순서: 임계값 바로 아래에서 한 번 부른 뒤 임계값(300의 80% = 240)에 닿게 하고 다시 부른다
             redis.opsForValue().set(counter, "239", Duration.ofHours(1));
-            alerts.quota(VerificationChannel.PHONE, counter, window.channelDayStart(), window.channelDayEnd());
+            alerts.quota(VerificationChannel.PHONE, counter, dayStart, dayEnd);
             redis.opsForValue().set(counter, "240", Duration.ofHours(1));
 
-            alerts.quota(VerificationChannel.PHONE, counter, window.channelDayStart(), window.channelDayEnd());
+            alerts.quota(VerificationChannel.PHONE, counter, dayStart, dayEnd);
 
             List<String> lines = waitForLines(capture, "[NSU] verification quota");
             assertThat(lines).as("알림 작업이 남긴 WARN 줄").isNotEmpty();

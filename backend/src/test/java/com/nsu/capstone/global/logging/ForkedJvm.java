@@ -192,7 +192,7 @@ final class ForkedJvm {
     }
 
     /** 줄 뒤에 다른 토큰이 남아 있으면 실패한다(`{...}{...}`, `{...} 나머지`). */
-    private static final JsonMapper JSON = JsonMapper.builder()
+    static final JsonMapper JSON = JsonMapper.builder()
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
             .build();
 }
