@@ -41,6 +41,24 @@ class ArtistScheduleListApiIntegrationTest extends ArtistScheduleIntegrationTest
     }
 
     @Test
+    void 운영자_SQL로_넣은_일정_이름도_UserText_규칙으로_정리해_돌려주고_보이는_글자가_없으면_null이다() throws Exception {
+        insert(artist, "2026-12-12 10:00:00+09", "2026-12-12 11:00:00+09", "HOLD", "\u3164");
+        insert(artist, "2026-12-12 12:00:00+09", "2026-12-12 13:00:00+09", "HOLD", "  공연  ");
+        insert(artist, "2026-12-12 14:00:00+09", "2026-12-12 15:00:00+09", "HOLD", "\u00A0노래\u200B");
+        insert(artist, "2026-12-12 16:00:00+09", "2026-12-12 17:00:00+09", "HOLD", "\u2800");
+        insert(artist, "2026-12-12 18:00:00+09", "2026-12-12 19:00:00+09", "HOLD", "그대로");
+
+        getSchedules(artist, "2026-12-12", "2026-12-12")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(5))
+                .andExpect(jsonPath("$.items[0].title").value((Object) null))
+                .andExpect(jsonPath("$.items[1].title").value("공연"))
+                .andExpect(jsonPath("$.items[2].title").value("노래"))
+                .andExpect(jsonPath("$.items[3].title").value((Object) null))
+                .andExpect(jsonPath("$.items[4].title").value("그대로"));
+    }
+
+    @Test
     void 운영자_SQL로_넣은_BOOKED_일정도_조회에_그대로_나온다() throws Exception {
         UUID booked = insert(artist, "2026-12-12 18:00:00+09", "2026-12-12 19:40:00+09", "BOOKED", null);
 

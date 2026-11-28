@@ -1,6 +1,7 @@
 package com.nsu.capstone.artist.schedule;
 
 import com.nsu.capstone.event.domain.Event;
+import com.nsu.capstone.global.text.UserText;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -112,7 +113,7 @@ class ArtistScheduleTable {
                         rs.getObject("start_local", LocalDateTime.class),
                         rs.getObject("end_local", LocalDateTime.class),
                         ArtistScheduleStatus.valueOf(rs.getString("status")),
-                        rs.getString("title")))
+                        UserText.tidy(rs.getString("title"))))
                 .list();
     }
 
