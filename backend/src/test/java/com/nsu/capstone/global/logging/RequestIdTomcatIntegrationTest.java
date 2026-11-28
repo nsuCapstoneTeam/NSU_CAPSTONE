@@ -31,6 +31,8 @@ class RequestIdTomcatIntegrationTest extends EventIntegrationTestBase {
 
     private static final Duration LOG_WAIT = Duration.ofSeconds(5);
 
+    private static final Duration QUIET = Duration.ofMillis(200);
+
     @LocalServerPort
     int port;
 
@@ -55,11 +57,11 @@ class RequestIdTomcatIntegrationTest extends EventIntegrationTestBase {
             assertThat(requestIds).as("응답 헤더 X-Request-Id").hasSize(1).allMatch(UUID_FORMAT.asMatchPredicate());
             String requestId = requestIds.get(0);
 
-            List<String> filterLines = awaitFilterLines(capture, 2);
-            assertThat(filterLines).as("필터 줄은 모두 응답 헤더와 같은 ID").allMatch(line -> line.contains(requestId));
-            assertThat(filterLines.stream().filter(line -> line.contains(COMPLETION)))
-                    .as("REQUEST 디스패치와 ERROR 디스패치의 완료 줄")
+            // ERROR 디스패치가 새 ID를 만들면 응답 헤더와 같은 ID의 완료 줄은 1개뿐이다
+            assertThat(awaitCompletionLines(capture, requestId, 2))
+                    .as("응답 헤더와 같은 ID의 REQUEST 디스패치와 ERROR 디스패치 완료 줄")
                     .hasSize(2);
+            awaitQuiet(capture);
             assertThat(capture.lines()).as("ID 없이 Tomcat이 쓰던 줄").noneMatch(line -> line.contains("Servlet.service()"));
         }
     }
@@ -83,21 +85,40 @@ class RequestIdTomcatIntegrationTest extends EventIntegrationTestBase {
     }
 
     /**
-     * 필터 줄을 완료 줄이 completions개 모일 때까지(최대 LOG_WAIT) 기다려 돌려준다. 기한이 지나면 그때까지 모인 줄을 돌려줘 단언이 실패하게 한다.
+     * requestId가 든 필터 완료 줄이 completions개 모일 때까지(최대 LOG_WAIT) 기다려 돌려준다. 기한이 지나면 그때까지 모인 줄을 돌려줘 단언이 실패하게 한다.
      * 응답을 다 받았어도 ERROR 디스패치의 완료 줄은 아직 없을 수 있다. 401 본문을 쓰는 진입점이 출력 스트림을 닫으면 Tomcat이 응답을 바로 보내고,
-     * 필터는 그 뒤 finally에서 완료 줄을 남기기 때문이다(NSU-176).
+     * 필터는 그 뒤 finally에서 완료 줄을 남기기 때문이다(NSU-176). 앞 테스트 요청의 완료 줄도 같은 이유로 늦게 들어올 수 있어 ID로 좁힌다.
      */
-    private static List<String> awaitFilterLines(LogCapture capture, int completions) throws InterruptedException {
+    private static List<String> awaitCompletionLines(LogCapture capture, String requestId, int completions)
+            throws InterruptedException {
         long deadline = System.nanoTime() + LOG_WAIT.toNanos();
         while (true) {
             List<String> lines = capture.lines().stream()
                     .filter(line -> line.contains("\"logger_name\":\"" + RequestIdFilter.class.getName() + "\""))
+                    .filter(line -> line.contains(COMPLETION) && line.contains(requestId))
                     .toList();
-            if (lines.stream().filter(line -> line.contains(COMPLETION)).count() >= completions
-                    || System.nanoTime() >= deadline) {
+            if (lines.size() >= completions || System.nanoTime() >= deadline) {
                 return lines;
             }
             Thread.sleep(10);
+        }
+    }
+
+    /**
+     * 새 줄이 QUIET 동안 늘지 않을 때까지(최대 LOG_WAIT) 기다린다. ERROR 디스패치에서 예외가 필터 밖으로 나가면 Tomcat(ApplicationDispatcher)은
+     * 필터의 완료 줄보다 뒤에 ID 없는 줄을 쓰므로, 완료 줄만 기다리고 "없음"을 검사하면 그 줄을 놓칠 수 있다.
+     */
+    private static void awaitQuiet(LogCapture capture) throws InterruptedException {
+        long deadline = System.nanoTime() + LOG_WAIT.toNanos();
+        int seen = capture.lines().size();
+        long quietSince = System.nanoTime();
+        while (System.nanoTime() - quietSince < QUIET.toNanos() && System.nanoTime() < deadline) {
+            Thread.sleep(10);
+            int now = capture.lines().size();
+            if (now != seen) {
+                seen = now;
+                quietSince = System.nanoTime();
+            }
         }
     }
 
