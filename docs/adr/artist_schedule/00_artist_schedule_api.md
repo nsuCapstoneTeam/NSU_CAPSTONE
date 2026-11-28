@@ -368,7 +368,7 @@ CREATE TABLE artist_schedules (
         status IN ('AVAILABLE', 'HOLD', 'BOOKED', 'UNAVAILABLE')
     ),
     -- 이름은 NULL이거나 앱이 앞뒤에서 지우는 글자(UserText.spacing: 공백·제어 공백·공백 구분자·폭 없는 공백·단어 결합자·BOM)가 아닌 글자를 하나 이상 담는다.
-    CONSTRAINT ck_artist_schedules_title CHECK (title ~ '[^\u0009-\u000D\u001C-    -​    ⁠　﻿]'),
+    CONSTRAINT ck_artist_schedules_title CHECK (title ~ '[^\u0009-\u000D\u001C-\u0020\u00A0\u1680\u2000-\u200B\u2028\u2029\u202F\u205F\u2060\u3000\uFEFF]'),
     CONSTRAINT ex_artist_schedules_no_overlap EXCLUDE USING gist (
         user_id WITH =,
         tstzrange(start_at, end_at, '[)') WITH &&
@@ -467,7 +467,7 @@ CREATE TRIGGER trg_artist_schedules_fixed_owner
   - 기능을 없애야 할 때만 데이터를 백업하고 복구를 확인한 뒤, 새 forward 마이그레이션으로 트리거 → 트리거 함수 → 표 순서로 지운다. `btree_gist` 확장은 남긴다. 이 절차를 PR 설명에도 적는다.
 - 일정 표만 백업에서 되돌리기(V11 프로필 복원 절차와 같은 방식). 정지(`SUSPENDED`) 아티스트의 일정은 정상 백업에도 있다(정지 전에 저장한 일정은 남는다, 11 §5.2). 그런 행은 `ACTIVE` 전용 삽입 가드에 걸리고, 가드와 상한이 한 트리거라 트리거를 끄면 상한 검사도 꺼진다. 그래서 `pg_restore --disable-triggers`를 쓰지 않고, 아래를 한 `psql` 세션의 한 `READ COMMITTED` 트랜잭션으로 실행한다(`\set ON_ERROR_STOP on`). 중간에 멈추면 모두 롤백되고 임시 표도 세션과 함께 사라진다.
   1. `BEGIN`, `SET LOCAL lock_timeout = '3s'`.
-  2. `CREATE TEMP TABLE artist_schedules_restore (LIKE artist_schedules)`를 만들고 덤프의 이 표 데이터를 `\copy`로 받는다.
+  2. `CREATE TEMP TABLE artist_schedules_restore (LIKE artist_schedules) ON COMMIT DROP`을 만들고 덤프의 이 표 데이터를 `\copy`로 받는다.
   3. 받은 행 중 `users`에 없거나, ARTIST가 아니거나, `WITHDRAWN`인 사용자의 행을 먼저 지운다. 남은 사용자의 `users` 행을 `FOR SHARE`로 잠근다(행 잠금이라 서버의 잠금 표를 쓰지 않는다). 그동안 탈퇴 UPDATE는 커밋까지 기다린다.
   4. `LOCK TABLE artist_schedules IN SHARE ROW EXCLUSIVE MODE`로 표 잠금을 한 번 잡는다. 진행 중인 쓰기가 끝나기를 기다리고, 커밋까지 다른 모든 쓰기(API, 운영자, 탈퇴의 `DELETE`)가 줄을 선다. 아티스트별 advisory 잠금은 잡지 않는다. 표 잠금이 같은 아티스트의 다른 쓰기를 이미 막고, 아티스트마다 advisory 잠금을 잡으면 커밋까지 쌓여 아티스트 수가 많은 백업에서 서버의 공유 잠금 공간(`max_locks_per_transaction` × 연결 수)을 다 쓸 수 있다(설계 리뷰 지적).
   5. `ALTER TABLE artist_schedules DISABLE TRIGGER trg_artist_schedules_before_insert`로 삽입 트리거 하나만 끄고, `ACTIVE`·`SUSPENDED` ARTIST의 행을 한 번의 `INSERT … SELECT`로 옮긴다. 트리거가 켜진 채 넣으면 트리거가 행마다 advisory 잠금을 잡아 같은 문제가 생기므로, 상태와 관계없이 끈 채 넣고 6단계가 같은 확인을 한다. 배제 제약, `CHECK`, FK는 그대로 검사한다.
