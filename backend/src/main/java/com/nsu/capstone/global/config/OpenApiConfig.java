@@ -14,12 +14,15 @@ public class OpenApiConfig {
 
     private static final String BEARER_AUTH = "bearerAuth";
 
-    /** 500은 API마다 적지 않고 여기에 한 번 적는다(00 공통 규칙 §10.1). */
+    /** 500과 413은 API마다 적지 않고 여기에 한 번 적는다(00 공통 규칙 §10.1, §12). */
     private static final String DESCRIPTION = """
         오류 응답 본문은 `{code, message}`(`ErrorResponse`)다. 클라이언트는 `code`로 분기하고, \
         `message`는 문구가 바뀔 수 있으므로 파싱하지 않는다.
 
         모든 API는 `500 INTERNAL_SERVER_ERROR`가 날 수 있다.
+
+        요청 본문이 64KiB를 넘으면 `413 REQUEST_BODY_TOO_LARGE`다. \
+        앞단 프록시가 먼저 거절한 `413`은 `{code, message}`가 아닐 수 있으므로, 클라이언트는 `413`을 상태 코드로 분기한다.
 
         잘못된 JSON처럼 Spring MVC가 직접 처리하는 `400`은 `code`가 없는 `ProblemDetail`이다.
 
