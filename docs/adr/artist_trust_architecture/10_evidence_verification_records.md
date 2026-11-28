@@ -150,7 +150,7 @@ identity_verification/00은 "시연 서버는 외부 가입을 받되, 공개되
 
 이 AC는 결정과 구조로 이미 성립한다. 06 D26은 Verification 결과, 공연 결과 원장, 매칭 결과를 한 표에 섞지 않고, 04 D39와 `TRUST-153`은 신뢰 정보를 순위에 쓰지 않는다. v1.9부터 순위는 음악 유사도(AI의 CLAP 결과)만 쓰고, Spring에는 Matching Score 코드가 없다.
 
-이번 변경이 이 경계를 지키는지는 원칙 테스트로 강제한다. external_links/00 3번의 `ExternalAccountDisplayOnlyScanTest`와 같은 방식이다. 모듈 밖 `src/main` 파일(Java, SQL, 설정)에 `verification.evidence`나 `evidence_verification`이 문자열로라도 나오면 실패한다. V15 마이그레이션만 예외다. Trust Profile에는 Spring이 `VerificationSource` 구현을 주입하므로 이 모듈을 import할 일이 없다.
+이번 변경이 이 경계를 지키는지는 원칙 테스트로 강제한다. external_links/00 3번의 `ExternalAccountDisplayOnlyScanTest`와 같은 방식이다. 모듈 밖 `src/main` 파일(Java, SQL, 설정)에 `verification.evidence`나 `evidence_verification`이 문자열로라도 나오면 실패한다. V12 마이그레이션만 예외다. Trust Profile에는 Spring이 `VerificationSource` 구현을 주입하므로 이 모듈을 import할 일이 없다.
 
 추천 결과 조합 코드가 신뢰 정보를 순위에 쓰지 않는다는 강제는 그 코드가 생길 때 그 이슈에서 한다. NSU-18은 닫지 않고 추천 조합 이슈에 붙인다(2026-11-22 지휘 세션 결정).
 
@@ -239,7 +239,7 @@ identity_verification/00은 "시연 서버는 외부 가입을 받되, 공개되
 - DB의 `verification_type` 문자열은 `VerificationType`으로 바로 바꾼다. 세 값만 담기는 것은 DB CHECK가 보장하므로 모듈 전용 enum이나 별도 검사를 두지 않는다. 앱에 쓰기 경로가 없어 값을 받을 입구가 없기 때문이다.
 - 새 `src/main/java` 파일은 Lombok 규칙을 따르고 `lombok-style-files.txt`에 더한다.
 
-### 저장 (Flyway `V15`)
+### 저장 (Flyway `V12`)
 
 | 표 | 열과 제약 |
 |---|---|
@@ -249,8 +249,8 @@ identity_verification/00은 "시연 서버는 외부 가입을 받되, 공개되
 - `users` FK를 거는 DDL 앞에 `SET LOCAL lock_timeout = '3s'`를 둔다(V7·V10 선례).
 - FK에 `ON DELETE`를 두지 않는다. 탈퇴는 `users` 행을 지우지 않고 상태를 바꾼다(NSU-119 ADR `artist_profile/00` 13번). 탈퇴 때 이 두 표를 어떻게 파기할지는 NSU-167이 정한다.
 - 상태 행의 `id`(기록 ID)는 운영자가 실행 전에 `uuidv7()`로 한 번 만들어 넘긴다. 감사 행의 `id`는 SQL 안에서 `uuidv7()`로 만든다.
-- 번호 V15는 2026-11-22 지휘 세션 배정이다(V11 #245, V12 NSU-119, V13 NSU-121, V14 NSU-128 예약). 머지 순서가 바뀌면 나중에 머지하는 쪽이 번호와 그 번호를 적은 문서·테스트를 바꾼다. 이 저장소는 Flyway `outOfOrder`를 켜지 않았다. 그래서 V15가 먼저 배포된 DB에 더 낮은 번호(V11~V14)가 나중에 들어오면 기동 검증이 실패한다. 번호를 비워 둔 채 머지하지 않는다. 앞 번호 PR을 먼저 머지하거나, 나중 PR이 가장 큰 번호 다음으로 올린다.
-- 새 표 두 개만 만들고 기존 표와 데이터를 바꾸지 않는다. 앱을 이전 버전으로 되돌려도 두 표와 감사 이력은 지우지 않는다. 이전 앱은 이 표를 읽지 않으므로 표가 남아도 영향이 없다. 표를 지우면 Flyway에는 V15 적용 기록이 남아 같은 버전을 다시 배포해도 표가 생기지 않고, source가 실패해 Trust Profile 조회 전체가 실패한다(01 §7).
+- 번호는 V12다. 2026-11-22 지휘 세션은 V15를 배정했다(V11~V14는 다른 PR 예약). 2026-11-22 결정으로 예약을 풀고 머지 직전 main 최대 번호 다음을 쓰기로 했다. 2026-11-28 머지 직전 main 최대는 V11(#254)이라 V12로 바꿨다. 이 저장소는 Flyway `outOfOrder`를 켜지 않았다. 그래서 더 높은 번호가 먼저 배포된 DB에 낮은 번호가 나중에 들어오면 기동 검증이 실패한다. 이 PR 뒤에 머지하는 PR(#245 등)은 머지 직전에 자기 번호를 main 최대 다음으로 올린다.
+- 새 표 두 개만 만들고 기존 표와 데이터를 바꾸지 않는다. 앱을 이전 버전으로 되돌려도 두 표와 감사 이력은 지우지 않는다. 이전 앱은 이 표를 읽지 않으므로 표가 남아도 영향이 없다. 표를 지우면 Flyway에는 V12 적용 기록이 남아 같은 버전을 다시 배포해도 표가 생기지 않고, source가 실패해 Trust Profile 조회 전체가 실패한다(01 §7).
 
 설계 단계 검사(`supabase-postgres-best-practices`) 결과는 다음과 같다.
 
@@ -313,7 +313,7 @@ WHERE artist_id IN (:artistIds)
 | runbook의 예시 `operator` 값으로 실행하면 DB가 거절한다 | 7번 |
 | runbook 취소 SQL은 행 ID로만 지우고 `REVOKED`와 사유 코드를 남긴다. 사유 코드가 없거나(SQL `NULL`, 빈 문자열) 목록 밖이면 DB가 거절하고 아무것도 바뀌지 않는다 | 3·7번 |
 | 감사 `operator`에 형식 밖 값(공백, 한글 이름, 40자 이상)을 넣으면 DB가 거절한다 | 7번 |
-| 모듈 밖 `src/main` 파일에 `verification.evidence`·`evidence_verification`이 나오지 않는다(V15 제외). 스캔이 모듈 안에서는 찾아진다 | 9번 |
+| 모듈 밖 `src/main` 파일에 `verification.evidence`·`evidence_verification`이 나오지 않는다(V12 제외). 스캔이 모듈 안에서는 찾아진다 | 9번 |
 | Verification 유무가 `reliability`를 바꾸지 않는다(01 §8 기존 기준을 이 항목으로도 확인) | `TRUST-152` |
 
 ---
