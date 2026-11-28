@@ -24,7 +24,8 @@ import MyPage from './features/my-page/my-page.jsx';
 import Board from './features/board/board-page.jsx';
 import EventSearch from './features/event-search/event-search-page.jsx';
 import { STATUS_VALUES as SCHEDULE_STATUSES } from './features/my-page/availability.js';
-import { isEventList } from './features/my-page/organizer-events.js';
+import useMyEvents from './features/events/use-my-events.js';
+import { AUTH_API_MODE } from './features/auth/api/auth-api.js';
 import { isSavedArtistList } from './features/my-page/saved-artists.js';
 
 // 저장소에서 읽은 값이 올바른 형식인지 확인하는 함수들 (형식이 틀리면 초기값 사용)
@@ -89,8 +90,12 @@ export default function App() {
           (s.status === undefined || SCHEDULE_STATUSES.includes(s.status)),
       ),
   );
-  // 행사 관계자 '내 행사' 목록 (NSU-56, 서버 API 전까지 체험 저장)
-  const [events, setEvents, eventsError] = useStoredState('hm-mvp-events-v1', [], isEventList);
+  // 행사 관계자 '내 행사' 목록 (NSU-56·NSU-125): 서버 모드는 행사 API, 체험 모드는 이 브라우저.
+  // 서버 모드에서는 로그인한 행사 관계자일 때만 불러오고, 계정이 바뀌면 다시 불러옴
+  const myEvents = useMyEvents({
+    enabled: AUTH_API_MODE !== 'server' || session?.role === 'organizer',
+    owner: session?.userId ?? session?.role ?? null,
+  });
   // 관심 아티스트 id 목록 (추천 결과에만 있는 아티스트도 저장되므로 형식만 확인, NSU-139)
   const [saved, setSaved, savedError] = useStoredState('hm-mvp-saved-v1', [], isSavedArtistList);
   // search: 마지막 매칭 검색 조건, notice: 화면 위 알림 문구
@@ -317,7 +322,6 @@ export default function App() {
         profileError ||
         postsError ||
         scheduleError ||
-        eventsError ||
         savedError ||
         sessionError) && (
         <div
@@ -364,7 +368,7 @@ export default function App() {
             toggleSaved={toggleSaved}
             search={search}
             setSearch={setSearch}
-            events={events}
+            events={myEvents.events}
             onGoToEvents={openMyEvents}
           />
         )}{' '}
@@ -457,8 +461,7 @@ export default function App() {
             setProfile={setProfile}
             schedules={schedules}
             setSchedules={setSchedules}
-            events={events}
-            setEvents={setEvents}
+            myEvents={myEvents}
             initialTab={myPageTab}
             saved={saved}
             toggleSaved={toggleSaved}

@@ -1,10 +1,18 @@
-import { useRef, useState } from 'react';
-import { GENRES } from '../../matching/matching.js';
+import { useEffect, useRef, useState } from 'react';
+import SoundWave from '../../../components/common/sound-wave.jsx';
+import { noticeFor } from '../../events/events-api.js';
 import {
   ARTIST_TYPES,
+  DETAIL_FLAGS,
+  DETAIL_TEXTS,
+  DETAIL_TEXT_MAX,
+  EVENT_GENRES,
   EVENT_TYPES,
+  GENRE_MAX,
   NOTES_MAX,
   VISIBILITIES,
+  endDateFor,
+  endsNextDay,
   eventProblems,
   spanMinutes,
 } from '../organizer-events.js';
@@ -12,12 +20,31 @@ import PlaceField from './place-field.jsx';
 import StagePlanField from './stage-plan-field.jsx';
 import './event-form.css';
 
-// 행사 등록·수정 폼 (NSU-56·NSU-115, 요구사항 EVT-042 필수 15개)
-// - 장소: 주소 검색으로 장소와 지역을 함께 정함 (place-field.jsx)
-// - 행사 설명(추천에 사용) 다음에 특이사항·무대 도면(추천에 쓰지 않음)을 이어서 받음
+// 행사 등록·수정 폼 (NSU-56·NSU-115·NSU-125, 요구사항 EVT-042 필수 15개)
+// - 장소: 주소 검색으로 장소와 지역을 함께 정함 (place-field.jsx). 서버 모드에서는 주소를 저장하지 않음
+// - 종료가 시작보다 이르면 다음 날 끝나는 행사로 저장 (22:00~02:00)
+// - 현장 정보(리허설·무대·장비·제공 여부·기타 조건)는 아티스트에게 보여 주기만 하고 추천에 쓰지 않음
 // - 저장을 누르면 고칠 항목을 위쪽 안내 상자에 모아 보여 주고, 항목을 누르면 그 칸으로 이동
-// - 안내 상자가 뜬 뒤에는 입력할 때마다 목록이 줄어듦
-// initial: 처음 값 (수정이면 저장된 행사), onSave(values): 저장, onCancel: 취소
+// - 서버에 보내는 동안 버튼에 소리 막대를 띄우고, 실패하면 위쪽에 이유와 할 일을 보여 줌 (입력은 그대로)
+// initial: 처음 값 (수정이면 저장된 행사)
+// onSave(values, { onRetry }): 저장 (Promise). 실패하면 EventsApiError를 던짐
+// onCancel: 취소, onShowList: 실패 안내의 '내 행사 보기', serverMode: 서버에 저장하는지
+
+// 제공 여부 세 갈래 [값, 이름]
+const FLAG_CHOICES = [
+  [true, '제공'],
+  [false, '안 함'],
+  [null, '미정'],
+];
+
+// 실패 안내의 할 일 버튼 이름 (events-api.js의 action)
+const FAILURE_ACTION_LABELS = { date: '날짜 고치기', list: '내 행사 보기', retry: '다시 시도' };
+
+// '2026-10-31' → '10월 31일'
+const monthDay = (date) => {
+  const [, m, d] = String(date).split('-').map(Number);
+  return m && d ? `${m}월 ${d}일` : '';
+};
 
 // 라벨 옆 필수 표시 (화면낭독기는 입력칸의 required로 '필수'를 읽으므로 *는 숨김)
 function Req() {
@@ -28,16 +55,33 @@ function Req() {
   );
 }
 
-export default function EventForm({ initial, isEdit, onSave, onCancel }) {
+export default function EventForm({ initial, isEdit, onSave, onCancel, onShowList, serverMode = false }) {
   const [form, setForm] = useState(initial);
   // 저장을 한 번 눌러 봤는지 (그 전에는 빨간 표시를 하지 않음)
   const [tried, setTried] = useState(false);
+  // 보내는 중: null | { retry: 0 } | { retry: n, total } (n번째로 다시 보내는 중)
+  const [sending, setSending] = useState(null);
+  // 서버 실패 안내 (noticeFor 결과)
+  const [failure, setFailure] = useState(null);
   const summaryRef = useRef(null);
+  const failureRef = useRef(null);
+  // 폼이 닫힌 뒤 도착한 응답으로 상태를 바꾸지 않게 (개발 모드의 다시 붙이기에도 맞게 붙을 때 true)
+  const alive = useRef(false);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   const problems = eventProblems(form);
   const problemIds = new Set(problems.map((p) => p.id));
   const invalid = (id) => tried && problemIds.has(id);
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  const updateDetail = (key, value) =>
+    setForm((prev) => ({ ...prev, details: { ...prev.details, [key]: value } }));
+  const overnight = Boolean(form.startTime && form.endTime) && endsNextDay(form.startTime, form.endTime);
+  const genreFull = form.genres.length >= GENRE_MAX;
   // 비워 둘 시간의 길이와 공연 시간 (비우면 시간 전체)
   const span = spanMinutes(form.startTime, form.endTime);
   const minutes = Number(form.performanceMinutes) > 0 ? Number(form.performanceMinutes) : span;
@@ -49,16 +93,52 @@ export default function EventForm({ initial, isEdit, onSave, onCancel }) {
     );
   }
 
+  async function send() {
+    if (sending) return;
+    setFailure(null);
+    setSending({ retry: 0 });
+    try {
+      await onSave(form, {
+        onRetry: (retry, total) => alive.current && setSending({ retry, total }),
+      });
+    } catch (error) {
+      if (!alive.current) return;
+      setFailure(noticeFor(error));
+      // 안내 상자로 포커스 → 화면낭독기가 실패 이유를 바로 읽음
+      window.requestAnimationFrame(() => failureRef.current?.focus());
+    } finally {
+      if (alive.current) setSending(null);
+    }
+  }
+
   function submit(e) {
     e.preventDefault();
     setTried(true);
     if (problems.length) {
+      setFailure(null);
       // 안내 상자로 포커스 → 화면낭독기가 고칠 항목 수를 바로 읽음
       window.requestAnimationFrame(() => summaryRef.current?.focus());
       return;
     }
-    onSave(form);
+    send();
   }
+
+  // 실패 안내의 버튼: 날짜 칸으로, 내 행사 보기, 다시 시도
+  function runFailureAction() {
+    if (failure?.action === 'date') goTo('date');
+    else if (failure?.action === 'list') onShowList?.();
+    else if (failure?.action === 'retry') send();
+  }
+  const failureActionLabel = FAILURE_ACTION_LABELS[failure?.action];
+
+  const saveLabel = isEdit ? '수정 내용 저장' : '행사 등록';
+  const sendingLabel = !sending
+    ? saveLabel
+    : sending.retry
+      ? `연결이 끊겨 다시 보내는 중 (${sending.retry}/${sending.total})`
+      : isEdit
+        ? '저장하는 중…'
+        : '등록하는 중…';
 
   // 안내 상자에서 항목을 누르면 그 입력칸으로 이동
   function goTo(id) {
@@ -71,8 +151,26 @@ export default function EventForm({ initial, isEdit, onSave, onCancel }) {
     <form className="event-form" onSubmit={submit} noValidate aria-labelledby="event-form-title">
       <h3 id="event-form-title">{isEdit ? '행사 정보 수정' : '새 행사 등록'}</h3>
       <p className="event-form-note">
-        <Req /> 표시는 필수 항목이에요. 등록한 행사는 이 브라우저에만 저장돼요.
+        <Req /> 표시는 필수 항목이에요.{serverMode ? '' : ' 등록한 행사는 이 브라우저에만 저장돼요.'}
       </p>
+
+      {/* 서버 실패 안내: 무엇이 안 됐는지와 할 일. 입력한 내용은 그대로 둠 */}
+      {failure && (
+        <div
+          className={`event-failure ${failure.tone === 'warn' ? 'is-warn' : ''}`}
+          role="alert"
+          tabIndex={-1}
+          ref={failureRef}
+        >
+          <strong>{failure.title}</strong>
+          {failure.body && <p>{failure.body}</p>}
+          {failureActionLabel && (
+            <button type="button" className="secondary" onClick={runFailureAction}>
+              {failureActionLabel}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 고칠 항목 안내 (저장을 눌렀는데 문제가 있을 때만) */}
       {tried && problems.length > 0 && (
@@ -191,15 +289,23 @@ export default function EventForm({ initial, isEdit, onSave, onCancel }) {
             </label>
           </div>
           <small id="event-time-help">
-            이동·리허설·대기까지 포함해 주세요. 공연 시간은 그 안에서 실제로 무대에 서는 길이이고, 비우면 시간 전체로
-            저장돼요.
+            이동, 리허설, 대기까지 포함해 주세요. 공연 시간은 그 안에서 실제로 무대에 서는 길이이고, 비우면 시간
+            전체로 저장돼요.
           </small>
           {span > 0 && (
             <p
               id="event-time-summary"
               className="event-time-summary"
             >
-              {form.startTime}~{form.endTime} 중 <strong>{minutes}분 공연</strong>
+              {form.startTime}~{overnight ? '다음 날 ' : ''}
+              {form.endTime} 중 <strong>{minutes}분 공연</strong>
+            </p>
+          )}
+          {overnight && (
+            <p className="event-overnight" role="status">
+              종료가 시작보다 일러서{' '}
+              {form.date ? `다음 날(${monthDay(endDateFor(form.date, form.startTime, form.endTime))})` : '다음 날'}{' '}
+              {form.endTime}까지로 저장해요.
             </p>
           )}
         </fieldset>
@@ -208,6 +314,11 @@ export default function EventForm({ initial, isEdit, onSave, onCancel }) {
           update={update}
           invalid={invalid}
         />
+        {serverMode && (
+          <p className="event-section-note">
+            주소는 지역을 정하는 데만 쓰고 저장하지 않아요. 아티스트에게는 장소 이름과 지역이 보여요.
+          </p>
+        )}
       </fieldset>
 
       {/* 2. 원하는 공연 */}
@@ -250,20 +361,28 @@ export default function EventForm({ initial, isEdit, onSave, onCancel }) {
         </div>
         <fieldset className="event-genres" aria-invalid={invalid('genres')}>
           <legend>
-            희망 장르 <Req /> <small>여러 개 고를 수 있어요</small>
+            희망 장르 <Req />{' '}
+            <small id="event-genres-help">
+              1~{GENRE_MAX}개 골라 주세요 ({form.genres.length}/{GENRE_MAX})
+            </small>
           </legend>
           <div className="event-chip-row">
-            {GENRES.map((g, i) => (
-              <label key={g} className="event-chip">
-                <input
-                  id={i === 0 ? 'event-genres' : undefined}
-                  type="checkbox"
-                  checked={form.genres.includes(g)}
-                  onChange={() => toggleGenre(g)}
-                />
-                {g}
-              </label>
-            ))}
+            {EVENT_GENRES.map((g, i) => {
+              const checked = form.genres.includes(g);
+              return (
+                <label key={g} className={`event-chip ${!checked && genreFull ? 'is-disabled' : ''}`}>
+                  <input
+                    id={i === 0 ? 'event-genres' : undefined}
+                    type="checkbox"
+                    checked={checked}
+                    disabled={!checked && genreFull}
+                    onChange={() => toggleGenre(g)}
+                    aria-describedby="event-genres-help"
+                  />
+                  {g}
+                </label>
+              );
+            })}
           </div>
         </fieldset>
       </fieldset>
@@ -307,10 +426,10 @@ export default function EventForm({ initial, isEdit, onSave, onCancel }) {
         </div>
       </fieldset>
 
-      {/* 4. 행사 설명·현장 정보: 설명은 추천에 쓰고, 특이사항·도면은 아티스트에게 보여 주기만 함 */}
+      {/* 4. 행사 설명: 추천에 사용 */}
       <fieldset className="event-section">
         <legend>
-          행사 설명·현장 정보 <small>아티스트가 행사 상세에서 봐요</small>
+          행사 설명 <small>AI가 읽고 어울리는 곡을 찾아요</small>
         </legend>
         <label>
           <span>
@@ -327,43 +446,83 @@ export default function EventForm({ initial, isEdit, onSave, onCancel }) {
             aria-invalid={invalid('description')}
             aria-describedby="event-description-help"
           />
-          <small id="event-description-help">
-            행사 분위기, 관객층, 원하는 음악을 적어 주세요. AI가 이 글을 읽고 어울리는 곡을 찾아요.
-          </small>
+          <small id="event-description-help">행사 분위기, 관객층, 원하는 음악을 적어 주세요.</small>
         </label>
+      </fieldset>
+
+      {/* 5. 현장 정보: 모두 선택. 아티스트에게 보여 주기만 하고 추천에 쓰지 않음 (행사 API §3.4) */}
+      <fieldset className="event-section">
+        <legend>
+          현장 정보 <small>모두 선택이에요. 추천에는 쓰지 않아요</small>
+        </legend>
+        <div className="event-details-grid">
+          {DETAIL_TEXTS.map(([id, label, placeholder]) => (
+            <label key={id}>
+              <span>{label}</span>
+              <input
+                id={`event-details-${id}`}
+                maxLength={DETAIL_TEXT_MAX}
+                value={form.details[id]}
+                onChange={(e) => updateDetail(id, e.target.value)}
+                placeholder={placeholder}
+                aria-invalid={invalid(`details-${id}`)}
+              />
+            </label>
+          ))}
+        </div>
+        <div className="event-flags">
+          {DETAIL_FLAGS.map(([id, label]) => (
+            <fieldset key={id} className="event-flag">
+              <legend>{label}</legend>
+              <div className="event-flag-choices">
+                {FLAG_CHOICES.map(([value, name]) => (
+                  <label key={name}>
+                    <input
+                      type="radio"
+                      name={`event-${id}`}
+                      checked={form.details[id] === value}
+                      onChange={() => updateDetail(id, value)}
+                    />
+                    <span>{name}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ))}
+        </div>
         <label>
           <span>
-            특이사항 <small>선택</small>
+            기타 조건 <small>선택</small>
           </span>
           <textarea
             id="event-notes"
             maxLength={NOTES_MAX}
-            rows={4}
+            rows={3}
             value={form.notes}
             onChange={(e) => update('notes', e.target.value)}
-            placeholder="예: 리허설은 18:00부터 30분이에요. 대기실이 있고 저녁 식사를 드려요."
+            placeholder="예: 주차는 2대까지 돼요. 공연 중 사진 촬영이 있어요."
             aria-describedby="event-notes-help event-notes-count"
           />
           <span className="event-field-foot">
-            <small id="event-notes-help">
-              리허설 시간, 대기실, 식사, 교통비, 숙박, 현장 장비처럼 현장 안내를 적어 주세요. 추천에는 쓰지 않아요.
-            </small>
+            <small id="event-notes-help">위 칸에 없는 현장 안내를 적어 주세요.</small>
             <small id="event-notes-count">
               {form.notes.length} / {NOTES_MAX}
             </small>
           </span>
         </label>
-        <StagePlanField
-          value={form.stagePlan}
-          onChange={(value) => update('stagePlan', value)}
-        />
-        <p className="event-section-note">
-          행사 설명은 추천에 쓰고, 특이사항과 무대 도면은 추천에 쓰지 않아요. 특이사항이나 도면을 고쳐도 받은 추천은
-          그대로예요.
-        </p>
+        {serverMode ? (
+          <p className="event-section-note">
+            무대 도면은 아직 서버에 저장할 곳이 없어 받지 않아요. 필요하면 기타 조건에 적어 주세요.
+          </p>
+        ) : (
+          <StagePlanField
+            value={form.stagePlan}
+            onChange={(value) => update('stagePlan', value)}
+          />
+        )}
       </fieldset>
 
-      {/* 5. 공개 범위 */}
+      {/* 6. 공개 범위 */}
       <fieldset className="event-section">
         <legend>공개 범위</legend>
         <fieldset className="event-visibility">
@@ -389,11 +548,20 @@ export default function EventForm({ initial, isEdit, onSave, onCancel }) {
         </fieldset>
       </fieldset>
 
+      {/* 보내는 중 상태를 화면낭독기에 알림 (버튼 글자와 같은 내용) */}
+      <p className="event-live" role="status">
+        {sending ? sendingLabel : ''}
+      </p>
       <div className="event-form-actions">
-        <button className="primary" type="submit">
-          {isEdit ? '수정 내용 저장' : '행사 등록'}
+        <button
+          className={`primary ${sending ? 'is-sending' : ''}`}
+          type="submit"
+          aria-disabled={Boolean(sending)}
+        >
+          {sending && <SoundWave />}
+          {sendingLabel}
         </button>
-        <button className="secondary" type="button" onClick={onCancel}>
+        <button className="secondary" type="button" onClick={onCancel} disabled={Boolean(sending)}>
           취소
         </button>
       </div>

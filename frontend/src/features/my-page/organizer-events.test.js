@@ -5,6 +5,8 @@ import {
   NOTES_MAX,
   REQUIRED_FIELDS,
   budgetText,
+  endDateFor,
+  endsNextDay,
   eventProblems,
   isEventList,
   isPast,
@@ -26,7 +28,7 @@ const FULL = {
   regionCode: '11440',
   venue: '대운동장 무대',
   artistType: '밴드',
-  genres: ['밴드'],
+  genres: ['록'],
   budgetMin: '30',
   budgetMax: '50',
   audience: '500',
@@ -62,9 +64,37 @@ test('예산 최소가 최대보다 크면 예산 최대를 고치라고 한다 
   assert.deepEqual(eventProblems({ ...FULL, budgetMin: '50', budgetMax: '50' }), []);
 });
 
-test('종료 시간이 시작 시간과 같거나 빠르면 알려 준다', () => {
+test('종료 시간이 시작 시간과 같으면 알려 주고, 더 이르면 다음 날 끝나는 행사로 받는다 (NSU-125)', () => {
   assert.deepEqual(ids(eventProblems({ ...FULL, endTime: '18:00' })), ['endTime']);
-  assert.deepEqual(ids(eventProblems({ ...FULL, endTime: '17:30' })), ['endTime']);
+  assert.deepEqual(ids(eventProblems({ ...FULL, endTime: '17:30' })), []);
+});
+
+test('다음 날 끝나는 행사: 종료 날짜와 시간대 길이', () => {
+  assert.equal(endsNextDay('22:00', '02:00'), true);
+  assert.equal(endsNextDay('18:00', '20:00'), false);
+  assert.equal(endDateFor('2026-10-30', '22:00', '02:00'), '2026-10-31');
+  assert.equal(endDateFor('2026-12-31', '23:00', '01:00'), '2027-01-01');
+  assert.equal(endDateFor('2026-10-30', '18:00', '20:00'), '2026-10-30');
+  assert.equal(spanMinutes('22:00', '02:00'), 240);
+  assert.equal(normalizeEvent({ ...FULL, startTime: '22:00', endTime: '02:00', performanceMinutes: '' }).endDate, '2026-10-31');
+});
+
+test('희망 장르는 3개까지, 현장 정보 글 칸은 100자까지', () => {
+  assert.deepEqual(ids(eventProblems({ ...FULL, genres: ['록', '재즈', '발라드'] })), []);
+  assert.deepEqual(ids(eventProblems({ ...FULL, genres: ['록', '재즈', '발라드', '팝·대중가요'] })), ['genres']);
+  const long = { ...FULL, details: { ...FULL.details, stageSize: 'ㄱ'.repeat(101) } };
+  assert.deepEqual(ids(eventProblems(long)), ['details-stageSize']);
+});
+
+test('현장 정보: 저장할 때 글 칸 공백을 지우고, 형식이 틀리면 목록을 거부한다', () => {
+  const saved = normalizeEvent({ ...FULL, details: { ...FULL.details, rehearsal: '  30분  ', isMealProvided: true } });
+  assert.equal(saved.details.rehearsal, '30분');
+  assert.equal(saved.details.isMealProvided, true);
+  assert.equal(saved.details.isPaProvided, null);
+  const stored = { ...saved, id: 'e1' };
+  assert.equal(isEventList([stored]), true);
+  assert.equal(isEventList([{ ...stored, details: { isMealProvided: 'yes' } }]), false);
+  assert.equal(isEventList([{ ...stored, status: 3 }]), false);
 });
 
 test('빈칸이면 형식 오류를 중복으로 알리지 않는다', () => {
