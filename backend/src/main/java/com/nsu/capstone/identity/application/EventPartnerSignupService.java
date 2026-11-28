@@ -9,7 +9,6 @@ import com.nsu.capstone.identity.presentation.dto.EventPartnerSignupResponse;
 import com.nsu.capstone.identity.repository.UserRepository;
 import com.nsu.capstone.identity.signup.RedisPublicRequestLimitStore;
 import com.nsu.capstone.identity.signup.SignupIdentityNormalizer;
-import com.nsu.capstone.identity.signup.SignupMethod;
 import com.nsu.capstone.identity.signup.SignupSession;
 import com.nsu.capstone.identity.signup.SignupSessionStore;
 import com.nsu.capstone.identity.verification.terms.RequiredTermsPolicy;
@@ -34,14 +33,12 @@ public class EventPartnerSignupService {
     private final SignupSessionStore signupSessionStore;
     private final PasswordEncoder passwordEncoder;
     private final UserIdGenerator userIdGenerator;
-    private final SignupRequiredConditionsValidator conditionsValidator;
 
     public EventPartnerSignupService(
             UserRepository userRepository,
             SignupSessionStore signupSessionStore,
             PasswordEncoder passwordEncoder,
             UserIdGenerator userIdGenerator,
-            SignupRequiredConditionsValidator conditionsValidator,
             RequiredTermsPolicy termsPolicy,
             Clock clock,
             SignupPersistenceService persistence,
@@ -54,7 +51,6 @@ public class EventPartnerSignupService {
         this.signupSessionStore = signupSessionStore;
         this.passwordEncoder = passwordEncoder;
         this.userIdGenerator = userIdGenerator;
-        this.conditionsValidator = conditionsValidator;
     }
 
     public CreateEventPartnerSignupSessionResponse createSession(
@@ -78,14 +74,7 @@ public class EventPartnerSignupService {
     }
 
     public EventPartnerSignupResponse signup(String signupSessionId, String password) {
-        SignupSession signupSession = signupSessionStore
-                .findById(signupSessionId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID));
-
-        if (signupSession.signupMethod() != SignupMethod.LOCAL) {
-            throw new BusinessException(ErrorCode.SIGNUP_SESSION_INVALID);
-        }
-        conditionsValidator.validate(signupSession, UserRole.EVENT_PARTNER);
+        SignupSession signupSession = signupSessionStore.completeLocal(signupSessionId, UserRole.EVENT_PARTNER);
 
         if (userRepository.existsByEmail(signupSession.email())) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);

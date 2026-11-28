@@ -73,6 +73,7 @@ public enum ErrorCode {
             "EXTERNAL_PROVIDER_DISABLED", HttpStatus.SERVICE_UNAVAILABLE, "이 플랫폼 연결은 아직 사용할 수 없습니다."),
     EXTERNAL_ACCOUNT_BUSY(
             "EXTERNAL_ACCOUNT_BUSY", HttpStatus.SERVICE_UNAVAILABLE, "다른 변경을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."),
+    ARTIST_PROFILE_BUSY("ARTIST_PROFILE_BUSY", HttpStatus.SERVICE_UNAVAILABLE, "다른 변경을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."),
     INTERNAL_SERVER_ERROR("INTERNAL_SERVER_ERROR", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
     private final String code;

@@ -4,13 +4,15 @@ import { DISTRICTS, PROVINCES } from '../../data/regions.js';
 import { eventProblems, isEventList, toFormValues } from '../my-page/organizer-events.js';
 import { DEMO_PUBLIC_EVENTS } from './event-search-data.js';
 import {
+  countMap,
   dateParts,
+  districtName,
   eventsIn,
   provinceName,
   provinceOf,
   publicEvents,
-  regionCounts,
   shortRegion,
+  venuePoint,
 } from './event-search.js';
 
 test('예시 행사는 행사 등록 폼과 같은 형식이고 규칙에도 맞는다', () => {
@@ -26,28 +28,11 @@ test('예시 행사는 행사 등록 폼과 같은 형식이고 규칙에도 맞
 });
 
 test('예시 행사는 16개 시·도에 모두 하나 이상 있다', () => {
-  const counts = regionCounts(DEMO_PUBLIC_EVENTS);
-  assert.equal(counts.length, PROVINCES.length);
-  assert.ok(counts.every((r) => r.count > 0));
-});
-
-test('시·도별 행사 수는 많은 순, 같으면 시·도 목록 순서', () => {
-  const events = [
-    { regionCode: '41110' },
-    { regionCode: '11440' },
-    { regionCode: '41130' },
-    { regionCode: '26350' },
-  ];
-  const counts = regionCounts(events);
-  assert.deepEqual(
-    counts.slice(0, 3).map((r) => [r.short, r.count]),
-    [
-      ['경기', 2],
-      ['서울', 1],
-      ['부산', 1],
-    ],
+  const counts = countMap(DEMO_PUBLIC_EVENTS);
+  assert.ok(
+    PROVINCES.every((p) => counts[p.code] > 0),
+    PROVINCES.filter((p) => !(counts[p.code] > 0)).map((p) => p.short).join(', '),
   );
-  assert.equal(counts.at(-1).count, 0);
 });
 
 test('공개 행사만 고른다', () => {
@@ -87,4 +72,42 @@ test('날짜 칸과 지역 이름', () => {
   assert.equal(provinceOf({ regionCode: '41110' }), '41');
   assert.equal(provinceName('41'), '경기도');
   assert.equal(provinceName('99'), '');
+});
+
+test('지도용 행사 수: 전국은 시·도별, 시·도를 고르면 시·군·구별', () => {
+  const events = [
+    { regionCode: '11440' },
+    { regionCode: '11440' },
+    { regionCode: '11110' },
+    { regionCode: '26350' },
+  ];
+  assert.deepEqual(countMap(events), { 11: 3, 26: 1 });
+  assert.deepEqual(countMap(events, '11'), { 11440: 2, 11110: 1 });
+  assert.deepEqual(countMap(events, '50'), {});
+});
+
+test('시·군·구를 고르면 그 시·군·구 행사만', () => {
+  const mapo = eventsIn(DEMO_PUBLIC_EVENTS, '11', '11440');
+  assert.ok(mapo.length > 0);
+  assert.ok(mapo.every((e) => e.regionCode === '11440'));
+  assert.ok(eventsIn(DEMO_PUBLIC_EVENTS, '11').length > mapo.length);
+  assert.equal(districtName('11440'), '마포구');
+  assert.equal(districtName('99999'), '');
+});
+
+test('공연장 좌표: 숫자·문자열 좌표를 [경도, 위도]로, 없거나 한국 밖이면 null', () => {
+  assert.deepEqual(venuePoint({ venueLat: 37.56, venueLng: 126.92 }), [126.92, 37.56]);
+  assert.deepEqual(venuePoint({ venueLat: '37.56', venueLng: '126.92' }), [126.92, 37.56]);
+  assert.equal(venuePoint({ venueLat: null, venueLng: null }), null);
+  assert.equal(venuePoint({}), null);
+  assert.equal(venuePoint({ venueLat: '', venueLng: '' }), null);
+  assert.equal(venuePoint({ venueLat: 'abc', venueLng: 126.92 }), null);
+  assert.equal(venuePoint({ venueLat: 126.92, venueLng: 37.56 }), null); // 위도·경도를 바꿔 넣은 경우
+  assert.equal(venuePoint({ venueLat: 40.7, venueLng: -74 }), null);
+  // 숫자나 문자열이 아닌 값은 Number()로 바뀌더라도 좌표로 보지 않음
+  assert.equal(venuePoint({ venueLat: [37.56], venueLng: 126.92 }), null);
+  assert.equal(venuePoint({ venueLat: { valueOf: () => 37.56 }, venueLng: 126.92 }), null);
+  assert.equal(venuePoint({ venueLat: true, venueLng: 126.92 }), null);
+  const withPoint = DEMO_PUBLIC_EVENTS.filter((e) => venuePoint(e));
+  assert.equal(withPoint.length, DEMO_PUBLIC_EVENTS.length - 1);
 });
