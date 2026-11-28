@@ -4,6 +4,7 @@ import com.nsu.capstone.global.exception.ErrorCode;
 import com.nsu.capstone.global.exception.ErrorResponse;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -13,6 +14,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import tools.jackson.core.json.JsonWriteFeature;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -54,6 +56,16 @@ class RequestBodyLimitFilter extends OncePerRequestFilter {
         ErrorCode errorCode = ErrorCode.REQUEST_BODY_TOO_LARGE;
         response.setStatus(errorCode.getHttpStatus().value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        objectMapper.writeValue(response.getOutputStream(), ErrorResponse.from(errorCode));
+        ErrorResponse body = ErrorResponse.from(errorCode);
+        ServletOutputStream out;
+        try {
+            out = response.getOutputStream();
+        } catch (IllegalStateException writerInUse) {
+            // 체인이 getWriter()를 이미 불렀다. resetBuffer()는 그 기록을 지우지 않아 getOutputStream()이 막힌다.
+            // writer의 문자 인코딩은 이미 정해져 바꿀 수 없으므로, 어떤 인코딩에서도 깨지지 않게 ASCII로만 쓴다
+            objectMapper.writer().with(JsonWriteFeature.ESCAPE_NON_ASCII).writeValue(response.getWriter(), body);
+            return;
+        }
+        objectMapper.writeValue(out, body);
     }
 }

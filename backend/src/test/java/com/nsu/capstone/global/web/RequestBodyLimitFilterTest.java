@@ -3,9 +3,13 @@ package com.nsu.capstone.global.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.nsu.capstone.global.exception.ErrorCode;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletInputStream;
+import jakarta.servlet.ServletOutputStream;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -86,6 +90,25 @@ class RequestBodyLimitFilterTest {
     }
 
     @Test
+    void 체인이_getWriter로_쓰던_응답도_초과_예외가_나면_413이다() throws Exception {
+        TomcatLikeResponse response = new TomcatLikeResponse();
+        FilterChain chain = (req, res) -> {
+            res.getWriter().write("쓰다 만 응답");
+            throw new RequestBodyTooLargeException();
+        };
+
+        filter.doFilter(chunked(new byte[10]), response, chain);
+
+        assertTooLarge(response);
+        // 쓰는 쪽(writer)의 문자 인코딩은 이미 정해져 있다. 한글이 깨지지 않고 스트림으로 쓴 것과 같은 JSON이어야 한다
+        assertThat(objectMapper
+                        .readTree(response.getContentAsByteArray())
+                        .path("message")
+                        .asString())
+                .isEqualTo(ErrorCode.REQUEST_BODY_TOO_LARGE.getMessage());
+    }
+
+    @Test
     void 체인_안_필터가_던진_Tomcat_폼_파싱의_413도_같은_413이다() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
         ServletException wrapped =
@@ -132,6 +155,29 @@ class RequestBodyLimitFilterTest {
         assertThat(body.path("code").asString()).isEqualTo("REQUEST_BODY_TOO_LARGE");
         assertThat(body.path("message").asString()).isNotBlank();
         assertThat(body.size()).as("응답 필드 수").isEqualTo(2);
+    }
+
+    /**
+     * Tomcat처럼 getWriter() 뒤의 getOutputStream()을 거절한다. resetBuffer()도 getWriter()를 불렀다는 기록을 지우지 않는다(Tomcat
+     * Response.resetBuffer(false)). MockHttpServletResponse는 둘을 섞어 써도 막지 않는다.
+     */
+    private static final class TomcatLikeResponse extends MockHttpServletResponse {
+
+        private boolean writerUsed;
+
+        @Override
+        public PrintWriter getWriter() throws UnsupportedEncodingException {
+            writerUsed = true;
+            return super.getWriter();
+        }
+
+        @Override
+        public ServletOutputStream getOutputStream() {
+            if (writerUsed) {
+                throw new IllegalStateException("getWriter()를 이미 불러서 getOutputStream()은 쓸 수 없다");
+            }
+            return super.getOutputStream();
+        }
     }
 
     /** Content-Length 없이 보낸 요청이다. */
