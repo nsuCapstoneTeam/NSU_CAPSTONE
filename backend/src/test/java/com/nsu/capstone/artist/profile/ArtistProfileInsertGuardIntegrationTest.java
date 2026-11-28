@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.nsu.capstone.identity.domain.User;
 import java.sql.SQLException;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -41,8 +42,24 @@ class ArtistProfileInsertGuardIntegrationTest extends ArtistProfileIntegrationTe
         assertThat(profileRows(artist)).isOne();
     }
 
+    @Test
+    void 정지된_ARTIST의_기존_행에_upsert해도_23514로_거절되고_옛_값이_그대로다() {
+        insertProfile(artist);
+        changeStatus(artist, "SUSPENDED");
+
+        assertGuardRejects(() -> upsertProfile(artist, "새이름"), artist);
+
+        assertThat(profileName(artist)).isEqualTo("이름");
+    }
+
     private void assertInsertRejected(User owner) {
-        assertThatThrownBy(() -> insertProfile(owner))
+        assertGuardRejects(() -> insertProfile(owner), owner);
+
+        assertThat(profileRows(owner)).isZero();
+    }
+
+    private void assertGuardRejects(ThrowingCallable write, User owner) {
+        assertThatThrownBy(write)
                 .rootCause()
                 .isInstanceOfSatisfying(SQLException.class, exception -> {
                     assertThat(exception.getSQLState()).isEqualTo(CHECK_VIOLATION);
@@ -50,8 +67,6 @@ class ArtistProfileInsertGuardIntegrationTest extends ArtistProfileIntegrationTe
                             .contains(owner.getId().toString())
                             .doesNotContain("이름");
                 });
-
-        assertThat(profileRows(owner)).isZero();
     }
 
     private void insertProfile(User owner) {
@@ -60,5 +75,19 @@ class ArtistProfileInsertGuardIntegrationTest extends ArtistProfileIntegrationTe
                     (user_id, name, artist_types, genres, region_codes, updated_at)
                 VALUES (?, '이름', ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], now())
                 """, owner.getId());
+    }
+
+    private void upsertProfile(User owner, String name) {
+        jdbcTemplate.update("""
+                INSERT INTO artist_profiles
+                    (user_id, name, artist_types, genres, region_codes, updated_at)
+                VALUES (?, ?, ARRAY[]::varchar[], ARRAY[]::varchar[], ARRAY[]::varchar[], now())
+                ON CONFLICT (user_id) DO UPDATE SET name = EXCLUDED.name, updated_at = EXCLUDED.updated_at
+                """, owner.getId(), name);
+    }
+
+    private String profileName(User owner) {
+        return jdbcTemplate.queryForObject(
+                "SELECT name FROM artist_profiles WHERE user_id = ?", String.class, owner.getId());
     }
 }
