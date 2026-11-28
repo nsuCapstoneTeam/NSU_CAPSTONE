@@ -18,12 +18,15 @@
    - `getReader()`도 문자 수가 아니라 바이트 수로 센다. `read`의 모든 형태(`readAllBytes`, `readNBytes`, `skip`, `transferTo` 포함)가 같은 계수기를 거친다.
    - 래퍼는 앱이 읽은 만큼만 센다. 본문을 읽지 않는 API(예: `@RequestBody`가 없는 `DELETE`)에 온 chunked 본문은 `413`이 되지 않고 그 API의 응답이 나간다. 남은 본문은 Tomcat이 응답 뒤 `max-swallow-size`(2MiB)까지 읽어 버리고, 넘으면 연결을 닫는다. 이 바이트는 앱 힙에 쌓이지 않는다. 이 ADR이 지키는 것은 "앱이 읽는 본문의 크기"이고, 읽지 않는 본문을 막는 것은 범위 밖이다. 이슈의 목적이 서버 메모리 보호이기 때문이다. Linear NSU-174 AC 첫 줄도 이 기준으로 고쳤다(2026-11-28, 지휘 세션).
      - 확인한 방법: Tomcat 11.0.24 소스 jar(`tomcat-embed-core-11.0.24-sources.jar`)를 읽었다. chunked 본문은 `ChunkedInputFilter.end()`가 끝 chunk가 나올 때까지 `doRead`로 읽어 버린다. 버린 양이 `maxSwallowSize`를 넘으면 `BadRequestException`을 던져 연결을 닫는다. `Content-Length` 본문은 `IdentityInputFilter.end()`가 같은 일을 한다. 두 메서드 모두 연결의 읽기 버퍼를 다시 쓰고, 읽은 바이트를 모아 두지 않는다.
-     - 구현에서 고정하는 테스트: 테스트 기준 11번. 이 동작이 바뀌는 Tomcat 업그레이드는 이 테스트가 잡는다.
+     - 구현에서 고정하는 테스트: 테스트 기준 11번. "`413`이 아니다"와 "읽지 않은 본문 뒤에도 같은 연결이 이어진다"를 고정한다. `max-swallow-size` 값 자체(2MiB)는 고정하지 않는다.
 3. **응답은 `413 REQUEST_BODY_TOO_LARGE`이고 본문은 `{code, message}`다**(00 §8, §12).
    - 필터가 응답 본문을 직접 쓴다(`JsonAuthenticationEntryPoint`와 같은 방식). `sendError`는 쓰지 않는다. `/error` 디스패치가 인증을 요구해서 익명 요청은 `401`로 바뀌기 때문이다(logging/00 Decision 6, NSU-147).
    - 필터 체인 안(예: `FormContentFilter`)에서 난 초과 예외도 필터가 잡아 같은 응답을 쓴다. 이미 커밋된 응답은 바꿀 수 없으므로 예외를 삼키고 끝낸다.
    - Spring MVC가 `@RequestBody`를 읽다가 난 초과는 `HttpMessageNotReadableException`의 원인 사슬에 남는다. `GlobalExceptionHandler`가 `handleHttpMessageNotReadable`을 재정의해, 원인 사슬에 이 예외가 있으면 같은 `413`을 낸다. 없으면 지금처럼 Spring 표준 `400`(`ProblemDetail`)이다.
-   - 앱이 쓰는 모든 `413`은 요청의 `Accept`와 상관없이 `Content-Type: application/json`이다. 필터는 직접 쓰므로 그렇다. 처리기 두 곳(`handleHttpMessageNotReadable`, `InvalidParameterException`)은 `413` 응답을 만드는 private 메서드 하나를 함께 쓰고, 그 메서드가 `Content-Type`을 명시한다. 명시하지 않으면 Spring이 `Accept`로 형식을 고른다. `ErrorResponse`는 `ProblemDetail`과 달리 맞는 형식이 없을 때의 대체 형식이 없다(Spring 7.0.9 `AbstractMessageConverterMethodProcessor`). 그래서 `Accept: text/html`인 요청은 `HttpMediaTypeNotAcceptableException`으로 처리기 응답을 쓰지 못한다. 그러면 원래 예외가 `ServletException`으로 감싸여 Tomcat ERROR 로그와 `/error`(익명이면 `401`)로 간다.
+   - 이 결정의 `413`(`REQUEST_BODY_TOO_LARGE`)은 요청의 `Accept`와 상관없이 `Content-Type: application/json`이다. 업로드 API의 `413`(04 §2.2)은 이 결정 밖이다. 필터는 직접 쓰므로 그렇다. 처리기 두 곳(`handleHttpMessageNotReadable`, `InvalidParameterException`)은 `413` 응답을 만드는 private 메서드 하나를 함께 쓰고, 그 메서드가 `Content-Type`을 명시한다. 명시하지 않으면 Spring이 `Accept`로 형식을 고른다. `ErrorResponse`는 `ProblemDetail`과 달리 맞는 형식이 없을 때의 대체 형식이 없다(Spring 7.0.9 `AbstractMessageConverterMethodProcessor`). 그래서 `Accept: text/html`인 요청은 `HttpMediaTypeNotAcceptableException`으로 처리기 응답을 쓰지 못한다(`ExceptionHandlerExceptionResolver`가 WARN을 남긴다). 그 뒤는 경로마다 다르다.
+     - JSON 경로: 원래 `HttpMessageNotReadableException`을 `DefaultHandlerExceptionResolver`가 받아 `sendError(400)`을 부른다. `/error`로 가서 익명이면 `401`이다.
+     - 폼 경로: 받는 resolver가 없어 `InvalidParameterException`이 `ServletException`으로 감싸인다. Tomcat이 ERROR를 남기고 `/error`(익명이면 `401`)로 간다.
+   - **초과 판정은 한 곳에 둔다.** `RequestBodyTooLargeException.isBodyTooLarge(Throwable)`가 원인 사슬에서 두 가지를 찾는다: 이 예외, 그리고 errorCode가 `413`인 Tomcat `InvalidParameterException`. 필터의 catch와 처리기 두 곳이 모두 이 메서드를 쓴다. 그래서 감지한 곳이 MVC 안이든 그 밖(앞으로 Security 필터나 다른 서블릿 필터가 `getParameter*`로 폼 본문을 읽는 경우)이든, 필터 체인 밖으로 나온 초과는 필터가 같은 `413`으로 쓴다. 지금 Security 체인에는 `POST` 폼 본문을 파라미터로 읽는 곳이 없다(OAuth 콜백 필터는 `GET`만 받고, Bearer 토큰의 폼 본문 파라미터는 꺼져 있다. `OAuthSecurityConfigurer`, Spring Security 7.1.1 `DefaultBearerTokenResolver`). 이 판정은 그런 곳이 생겨도 형식이 바뀌지 않게 하려는 것이다.
 4. **Tomcat의 폼 파싱에도 같은 상한을 건다.**
    - `application/x-www-form-urlencoded` `POST`는 Tomcat이 파라미터로 파싱한다. 이 파싱은 앱의 래퍼를 거치지 않는다. 그래서 `server.tomcat.max-http-form-post-size`를 `64KB`로 둔다(Boot의 KB는 KiB).
    - Tomcat이 이 상한으로 거절하면 `InvalidParameterException`(errorCode `413`)이 난다. `GlobalExceptionHandler`가 이것을 같은 `413 REQUEST_BODY_TOO_LARGE`로 바꾼다.
@@ -34,9 +37,10 @@
    - `Content-Length` 초과 `413`은 인증(`401`)을 포함한 모든 판정보다 먼저다.
    - chunked 초과 `413`은 본문을 읽을 때 난다. JSON 문법 `400`과 같은 단계다. 그래서 본문을 읽기 전의 검사가 먼저다.
      - 인증(`401`). 토큰 없이 보호 경로에 보내면 `401`이다.
+     - 시연 서버 쓰기 차단(`403 DEMO_WRITE_NOT_ALLOWED`, NSU-158. 00 §8은 인증 바로 다음으로 둔다).
      - URL 규칙의 역할 검사(`403`. 예: `SecurityConfig`의 EVENT_PARTNER 프로필 경로).
      - 모듈 인터셉터(`preHandle`)의 역할 검사와, 그 인터셉터가 세는 요청 한도. 지금 main에서는 외부 계정 API(06 §2)의 한도가 chunked `413` 요청도 1회로 센다. NSU-100이 이 한도를 AOP advisor로 옮기면 세지 않는다.
-   - 단 `PUT`·`PATCH`·`DELETE`의 폼 본문은 Spring `FormContentFilter`가 Security보다 먼저 읽는다. 그래서 chunked라도 `413`이 `401`보다 먼저다.
+   - 단 `PUT`·`PATCH`·`DELETE`의 폼 본문은 Spring `FormContentFilter`가 Security보다 먼저 읽는다. 그래서 chunked라도 `413`이 `401`과 시연 서버 쓰기 차단보다 먼저다. 00 §8의 시연 서버 행은 "`413`은 예외이고 어느 `413`이 먼저인지는 §12가 정한다"로 고쳤다.
    - 두 경우 모두 `413`은 본문을 메서드 인자로 바꾸기 전에 난다. 그래서 그 뒤의 검사(`@PreAuthorize` 역할 검사, 요청 값 검증, 업무 판정, NSU-100 계정별 요청 한도)에 닿지 않는다.
    - API 계약 문서의 검사 순서 표(예: 05 §4, 06 §2)에는 `413`을 따로 적지 않는다. `413`의 자리는 00 §12 한 곳이 정한다. API마다 적으면 새 API가 생길 때마다 빠뜨릴 곳이 늘기 때문이다.
 7. **로그**: 이 결정의 `413`과 폼 파싱 `400`은 ERROR로 남기지 않는다. 새 로그 줄도 만들지 않는다. `RequestIdFilter`의 완료 줄(INFO, 상태 `413`) 하나만 남는다. 본문, 길이 헤더 값, 예외 메시지는 남기지 않는다.
@@ -121,7 +125,7 @@ A를 고른다. 막아야 하는 곳(인증 전 JSON, `FormContentFilter`, 폼 �
 ### 예외 타입
 
 - `RequestBodyTooLargeException`은 `IOException`의 하위 타입이다. `InputStream.read`의 계약이 `IOException`이고, 읽는 쪽(Jackson, Spring 변환기, `StreamUtils`)은 `IOException`을 처리하는 길을 이미 갖고 있다.
-- Jackson 3는 읽기 중 `IOException`을 `JacksonIOException`으로 감싸고, Spring은 그것을 `HttpMessageNotReadableException`으로 감싼다. 그래서 처리기는 최상위 타입이 아니라 원인 사슬을 본다. 사슬을 찾는 정적 메서드는 이 예외 클래스에 하나 두고 필터와 처리기가 함께 쓴다.
+- Jackson 3는 읽기 중 `IOException`을 `JacksonIOException`으로 감싸고, Spring은 그것을 `HttpMessageNotReadableException`으로 감싼다. 그래서 처리기는 최상위 타입이 아니라 원인 사슬을 본다. 사슬을 찾는 정적 메서드(`isBodyTooLarge`)는 이 예외 클래스에 하나 두고 필터와 처리기가 함께 쓴다. Tomcat 폼 파싱의 초과(`InvalidParameterException`, errorCode `413`)도 이 메서드가 함께 찾는다(Decision 3).
 - 재사용 검토: `DataBufferLimitException`(spring-core)은 WebFlux `DataBuffer` 상한의 예외라 뜻이 다르다. 나중에 `WebClient`를 쓰면 응답 상한 초과도 같은 타입으로 나서 요청 본문 `413`으로 잘못 바뀐다. `MaxUploadSizeExceededException`은 multipart 전용이고 Spring 표준 `413` `ProblemDetail`로 처리된다. Tomcat `InvalidParameterException`은 파라미터 파싱의 예외다. 그래서 새 타입을 하나 만든다.
 
 ### Tomcat 설정
@@ -192,7 +196,7 @@ class RequestBodyLimitFilter extends OncePerRequestFilter {
         try {
             chain.doFilter(new BodyLimitedRequest(request, MAX_BODY_BYTES), response);
         } catch (IOException | ServletException | RuntimeException e) {
-            if (!RequestBodyTooLargeException.isCauseOf(e)) {
+            if (!RequestBodyTooLargeException.isBodyTooLarge(e)) {
                 throw e;
             }
             if (!response.isCommitted()) {
@@ -208,7 +212,8 @@ final class BodyLimitedRequest extends HttpServletRequestWrapper { ... }
 
 /** 요청 본문이 상한을 넘었다. 메시지는 고정 문구이고 요청 값을 담지 않는다. */
 public final class RequestBodyTooLargeException extends IOException {
-    public static boolean isCauseOf(Throwable throwable) { ... } // 원인 사슬을 따라가며 찾는다
+    // 원인 사슬에서 이 예외 또는 errorCode 413인 Tomcat InvalidParameterException을 찾는다(Decision 3)
+    public static boolean isBodyTooLarge(Throwable throwable) { ... }
 }
 ```
 
@@ -217,7 +222,7 @@ public final class RequestBodyTooLargeException extends IOException {
 @Override
 protected ResponseEntity<Object> handleHttpMessageNotReadable(
         HttpMessageNotReadableException exception, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
-    if (RequestBodyTooLargeException.isCauseOf(exception)) {
+    if (RequestBodyTooLargeException.isBodyTooLarge(exception)) {
         return requestBodyTooLarge();
     }
     return super.handleHttpMessageNotReadable(exception, headers, status, request);
@@ -225,7 +230,7 @@ protected ResponseEntity<Object> handleHttpMessageNotReadable(
 
 @ExceptionHandler(InvalidParameterException.class)
 ResponseEntity<Object> handleInvalidParameter(InvalidParameterException exception, WebRequest request) {
-    if (exception.getErrorCode() == HttpStatus.CONTENT_TOO_LARGE.value()) {
+    if (RequestBodyTooLargeException.isBodyTooLarge(exception)) { // errorCode 413
         return requestBodyTooLarge();
     }
     // Tomcat 메시지에는 파라미터 원문이 들어갈 수 있어 detail은 고정 문구다(잘못된 JSON의 400과 같은 "Failed to read request")
@@ -247,7 +252,10 @@ private static ResponseEntity<Object> requestBodyTooLarge() {
 
 ### 테스트 기준
 
-실제 Tomcat(`@SpringBootTest(webEnvironment = RANDOM_PORT)`, `java.net.http.HttpClient`)으로 확인한다. MockMvc는 Tomcat의 `Content-Length`·chunked 처리와 `maxPostSize`를 거치지 않는다. `RequestIdTomcatIntegrationTest`의 구성을 따른다.
+실제 Tomcat(`@SpringBootTest(webEnvironment = RANDOM_PORT)`)으로 확인한다. MockMvc는 Tomcat의 `Content-Length`·chunked 처리와 `maxPostSize`를 거치지 않는다. `RequestIdTomcatIntegrationTest`의 구성을 따른다.
+
+- 로그를 검사하는 테스트(12번)는 응답을 받자마자 로그를 읽지 않는다. 완료 줄은 응답을 보낸 뒤 `RequestIdFilter`의 `finally`에서 남는다. `java.net.http.HttpClient`로 받고 바로 읽으면 줄을 놓칠 수 있다(NSU-176에서 재현, PR #268). raw 소켓(`Connection: close`, EOF까지 읽기)으로 보내거나, 줄이 모일 때까지 기다린 뒤 읽는다(#268의 도우미). 고정 sleep은 쓰지 않는다.
+- 11번은 raw 소켓 하나로 두 요청을 보내고 두 번째 응답을 같은 소켓에서 읽는다. `HttpClient`는 연결이 닫히면 새 연결로 다시 보내므로 "같은 연결"을 확인하지 못한다.
 
 | # | 요청 | 기대 |
 |---|---|---|
@@ -261,12 +269,12 @@ private static ResponseEntity<Object> requestBodyTooLarge() {
 | 8 | 로그인에 `Accept: text/html`, chunked 65,537바이트 JSON | `413`, `Content-Type: application/json`, `{code, message}` |
 | 9 | 로그인에 `Accept: text/html`, 폼 `POST` chunked 65,537바이트 | `413`, `Content-Type: application/json`, `{code, message}` |
 | 10 | EVENT_PARTNER가 아닌 토큰으로 `PUT /api/v1/me/event-partner-profile`에 chunked 65,537바이트 JSON | `403`(URL 역할 규칙이 본문을 읽기 전에 거절한다. Decision 6) |
-| 11 | 본문을 받지 않는 공개 `GET` 경로에 chunked 70KiB 본문 | `413`이 아니다(그 API의 응답). 70KiB는 2MiB보다 작아 Tomcat이 다 버리므로, 같은 연결로 보낸 다음 요청도 정상 응답을 받는다. Decision 2의 경계 |
+| 11 | 본문을 받지 않는 공개 `GET` 경로에 chunked 70KiB 본문 | `413`이 아니다(그 API의 응답). 70KiB는 2MiB보다 작아 Tomcat이 다 버리므로, 같은 소켓으로 보낸 다음 요청도 정상 응답을 받는다. Decision 2의 경계 |
 | 12 | 위 1~11 | ERROR·WARN 로그가 없고, 로그에 본문·길이 값이 없다 |
 
 단위 테스트:
 
-- 필터: `Content-Length`가 상한보다 크면 체인과 `getInputStream()`을 부르지 않는다. 체인 안에서 초과 예외가 나면 `413`을 쓰고 `X-Request-Id`를 지우지 않는다. 커밋된 응답이면 쓰지 않는다. 다른 예외는 그대로 던진다.
+- 필터: `Content-Length`가 상한보다 크면 체인과 `getInputStream()`을 부르지 않는다. 체인 안에서 초과 예외가 나면 `413`을 쓰고 `X-Request-Id`를 지우지 않는다. 체인 안의 필터가 던진 `InvalidParameterException`(errorCode `413`)도 같은 `413`이 되고, errorCode `400`이면 그대로 던진다. 커밋된 응답이면 쓰지 않는다. 다른 예외는 그대로 던진다.
 - 래퍼: `read()`, `read(byte[], int, int)`, `readAllBytes()`, `readNBytes`, `skip`, `transferTo`, `getReader()`가 모두 바이트로 센다. 정확히 상한은 통과하고 상한+1은 예외다. 상한 이하에서는 원래 바이트를 그대로 돌려준다.
 - 처리기: 원인 사슬 깊숙이 초과 예외가 있는 `HttpMessageNotReadableException`이 `413`이 된다. 원인이 다르면 `400` `ProblemDetail` 그대로다. 두 처리기의 `413` 응답에 `Content-Type: application/json`이 명시돼 있다.
 - 설정: `server.tomcat.max-http-form-post-size`와 `MAX_BODY_BYTES`가 같다.
@@ -291,6 +299,17 @@ private static ResponseEntity<Object> requestBodyTooLarge() {
 | 본문을 읽지 않는 API에는 chunked 상한이 걸리지 않는다 | 경계로 적었다(Decision 2). 앱 힙에 쌓이지 않으므로 이 ADR의 목적(앱 메모리)은 지켜진다. 테스트 11 |
 | Tomcat이 남은 본문을 버리는 방식을 반대로 적었다 | "Tomcat 설정", 비교표, 기각한 대안을 실제 동작(2MiB까지 읽은 뒤 닫는다)으로 고쳤다 |
 
+2차(고친 것 확인) 리뷰. 이전 5건은 모두 해결로 판정됐고, 고치면서 생긴 Low 5건을 반영했다.
+
+| 지적 | 처리 |
+|---|---|
+| Security 필터가 `getParameter*`로 읽은 폼 본문의 Tomcat `413`은 필터와 처리기 둘 다 받지 못해 `/error`(`401`)가 된다 | 1차 M1과 같은 종류(경로에 따라 `413` 형식이 깨짐)라 사례 하나를 막지 않고 장치를 넓혔다. 초과 판정을 `isBodyTooLarge` 하나로 모아 필터 catch와 처리기 둘이 함께 쓰고, Tomcat `InvalidParameterException`(errorCode `413`)도 이 판정이 찾는다(Decision 3). 지적의 예(OAuth 콜백 `POST`)는 지금 코드에서 나지 않는다. 콜백 필터는 `GET`만 받는다. 앞으로 생길 경로를 막는 장치다 |
+| NSU-100 뒤에는 §12의 "인터셉터가 세는 한도"가 06 §2와 어긋난다 | §12에 "지금은 세고, NSU-100으로 옮기면 세지 않는다"를 적었다 |
+| §12의 폼 `413`(인증보다 먼저)이 §8 시연 서버 행("본문을 읽기 전의 `413`만 예외")과 모순된다 | §8 시연 서버 행의 예외를 "`413`, 순서는 §12"로 고치고, §12·Decision 6에 시연 서버 차단의 자리를 적었다 |
+| NSU-89 테스트 기준 "거절되고"가 별도 서블릿 선택지와 맞지 않는다 | 두 선택지 공통 기준(임시 파일 없음, 파트로 파싱하지 않음)으로 바꿨다. 파일이 아닌 파트 합계 초과가 `IllegalStateException`이라는 사실을 인계에 적었다 |
+| 테스트 11이 `HttpClient`로는 같은 연결을 확인하지 못하고, Tomcat 업그레이드를 잡는다는 문장이 과하다 | 11번을 raw 소켓 하나로 두 요청을 보내는 테스트로 바꾸고, 고정하는 것을 "`413`이 아님, 같은 연결 유지"로 좁혔다 |
+| (근거 없는 주장) JSON 경로도 Tomcat ERROR로 간다고 적었다 | Decision 3을 경로별로 고쳤다. JSON은 WARN 뒤 `sendError(400)` → `/error`, 폼은 Tomcat ERROR → `/error`다 |
+
 ## Consequences
 
 - 앱이 읽는 모든 본문이 64KiB로 묶인다. 인증 전 경로와 `FormContentFilter` 경로도 같다. 앱이 읽지 않는 본문은 Tomcat이 응답 뒤 2MiB까지 버린다(Decision 2).
@@ -307,8 +326,9 @@ private static ResponseEntity<Object> requestBodyTooLarge() {
   - 업로드가 아닌 경로도 파라미터를 읽는다. 예: OAuth 콜백(`OAuth2LoginAuthenticationFilter`의 `getParameterMap()`), 외부 계정 콜백의 `@RequestParam`. 공개 `GET` 경로에 chunked multipart를 보내면 요청 상한(36MiB)까지 임시 파일에 쓰게 된다.
   - 그래서 `spring.servlet.multipart.resolve-lazily=true`만으로는 막지 못한다. Spring의 해석 시점만 바꾸고 Tomcat의 파싱은 그대로이기 때문이다.
   - NSU-89가 정한다: 업로드가 아닌 경로의 `multipart/*` 요청을 체인 전에 거절하거나, 업로드만 별도 서블릿(그 서블릿에만 `MultipartConfigElement`)에서 받는다.
-  - NSU-89 테스트 기준: 업로드가 아닌 경로(공개 `GET` 포함)에 chunked multipart를 보내면 거절되고 임시 파일이 생기지 않는다.
-- Tomcat `maxPostSize`(64KiB)는 multipart의 파일이 아닌 파트 합계에도 걸린다(Tomcat `Request.parseParts`). 텍스트 파트가 이 안에 드는지, 이 상한으로 거절될 때의 예외·응답 형식·로그 수준이 무엇인지 확인한다.
+  - NSU-89 테스트 기준(두 선택지 공통): 업로드가 아닌 경로(공개 `GET` 포함)에 chunked multipart를 보내도 임시 파일이 생기지 않고, 그 본문을 파트로 파싱하지 않는다. 체인 전에 거절하는 쪽을 고르면 거절 응답도 확인한다.
+- Tomcat `maxPostSize`(64KiB)는 multipart의 파일이 아닌 파트 합계에도 걸린다(Tomcat `Request.parseParts`). 텍스트 파트가 이 안에 드는지 확인한다.
+  - 이 합계가 넘으면 Tomcat은 `InvalidParameterException`이 아니라 일반 `IllegalStateException`을 던진다(Tomcat 11.0.24 `Request.java` 2680행 부근). 그래서 이 ADR의 초과 판정(`isBodyTooLarge`)과 `InvalidParameterException` 처리기에 걸리지 않는다. NSU-89가 이 경우의 응답 형식과 로그 수준을 정한다.
 - music_upload/00의 표에 이 인계를 한 줄로 적어 둔다.
 
 ## Excluded
