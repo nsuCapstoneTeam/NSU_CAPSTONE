@@ -119,6 +119,7 @@ src/main/java/com/nsu/capstone/trust/risk/RiskSignal.java
 src/main/java/com/nsu/capstone/trust/risk/RiskSignalEvaluator.java
 src/main/java/com/nsu/capstone/trust/risk/RiskSignalType.java
 src/main/java/com/nsu/capstone/trust/simulation/ReliabilitySimulator.java
+src/main/java/com/nsu/capstone/verification/evidence/EvidenceVerificationSource.java
 src/main/java/com/nsu/capstone/verification/externalaccount/application/AccountDisplay.java
 src/main/java/com/nsu/capstone/verification/externalaccount/application/AccountView.java
 src/main/java/com/nsu/capstone/verification/externalaccount/application/AuthorizationStart.java
