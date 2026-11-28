@@ -45,9 +45,10 @@ class UserRequestLimitConfigTest {
                     RedisFixture.container().getHost(), RedisFixture.container().getMappedPort(6379));
         }
 
+        /** 시각을 고정한다. 실제 시계면 요청 사이에 시간이 흘러 Retry-After의 정확값이 흔들린다. */
         @Bean
         Clock clock() {
-            return Clock.systemUTC();
+            return new TestClock();
         }
     }
 
