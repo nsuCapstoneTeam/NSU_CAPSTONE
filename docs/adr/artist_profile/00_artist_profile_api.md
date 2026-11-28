@@ -195,6 +195,7 @@ Eligibility ADR은 JPA를 권했고, `JdbcClient`로 만들면 DataSource 수준
 - 함수는 파기 함수와 같은 이유로 `users`를 `TG_TABLE_SCHEMA`로 한정하고 `search_path`를 `pg_catalog, pg_temp`로 고정한다. 운영자 세션의 같은 이름 임시 표(`users`)로 확인을 속일 수 없다.
 - API 응답 규칙은 바뀌지 않는다. `ArtistWriteAccess`가 먼저 막으므로 트리거 예외는 API에서 나오지 않고, 나오면 `500`이다.
 - 정지(`SUSPENDED`) 계정에도 새 행을 넣지 못한다. API(`403`)와 같은 조건이다. 이미 있는 행의 다른 열을 바꾸는 UPDATE는 막지 않는다(탈퇴하면 행이 지워지므로 잔존과 무관하다).
+- 백업 복원: 전체 복원(`pg_restore`)은 트리거를 데이터를 넣은 뒤에 만들므로 이 가드에 걸리지 않는다. 데이터만 복원(`--data-only`)하면 정지 계정의 기존 프로필 행이 `23514`로 거절된다. 그때는 `--disable-triggers`(슈퍼유저 필요)로 복원한다.
 
 ### 다른 사용자 조회를 이 이슈에 넣는 것
 
