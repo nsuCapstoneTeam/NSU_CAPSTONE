@@ -8,6 +8,7 @@ const EXTERNAL_ACCOUNT_LABELS = { YOUTUBE: 'YouTube 채널 제어권 확인' };
 
 // Trust Profile verifications 한 줄({ type, provider }) → 목록 이름과, 배지 색을 켜는지
 // EXTERNAL_ACCOUNT는 가짜 채널로도 만들 수 있어 색을 켜지 않고 목록에만 보여 줌 (ADR 5-2번)
+// 증빙 확인 기록 세 항목(사업자등록·실연 참여·공식 활동)도 색을 켜지 않는다. 배지 기준은 NSU-145가 정한다 (증빙 확인 ADR 12번)
 function describeOne({ type, provider }) {
   switch (type) {
     case 'IDENTITY':
@@ -15,7 +16,11 @@ function describeOne({ type, provider }) {
     case 'COPYRIGHT':
       return { label: '등록부 저작자·권리자와 실명 일치', lightsBadge: true };
     case 'BUSINESS_REGISTRATION':
-      return { label: '사업자등록 확인', lightsBadge: true };
+      return { label: '사업자등록 확인', lightsBadge: false };
+    case 'PERFORMANCE_PARTICIPATION':
+      return { label: '실연 참여 확인', lightsBadge: false };
+    case 'OFFICIAL_ACTIVITY':
+      return { label: '공식 활동 확인', lightsBadge: false };
     case 'EXTERNAL_ACCOUNT':
       return { label: EXTERNAL_ACCOUNT_LABELS[provider] ?? '외부 계정 제어권 확인', lightsBadge: false };
     default:
@@ -32,10 +37,22 @@ export function describeVerifications(verifications = []) {
   };
 }
 
+// 이름 목록 경로에서 색을 켜지 않는 이름. describeOne이 같은 항목에 붙이는 이름을 그대로 쓴다
+const LIST_ONLY_LABELS = new Set(
+  [
+    { type: 'BUSINESS_REGISTRATION' },
+    { type: 'PERFORMANCE_PARTICIPATION' },
+    { type: 'OFFICIAL_ACTIVITY' },
+    { type: 'EXTERNAL_ACCOUNT', provider: 'YOUTUBE' },
+    { type: 'EXTERNAL_ACCOUNT' },
+    {}, // 모르는 type에 붙는 기본 이름("확인된 항목")
+  ].map((verification) => describeOne(verification).label),
+);
+
 // 이름 목록만 넘기는 기존 화면용
-// 이름이 있으면 예전부터 파랗게 하던 항목이므로 색과 목록에 같은 이름을 쓴다
+// 위 이름이 아니면 예전부터 파랗게 하던 항목이므로 색과 목록에 같은 이름을 쓴다
 export function itemsFromNames(names = []) {
-  return { badgeItems: names, listItems: names };
+  return { badgeItems: names.filter((name) => !LIST_ONLY_LABELS.has(name)), listItems: names };
 }
 
 // 항목 → 배지가 그릴 값

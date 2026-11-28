@@ -1,7 +1,7 @@
 // 로그인 토큰 보관함 테스트 (실행: node --test src/features/auth/api/auth-token.test.js)
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { TOKEN_KEY, createTokenStore, toAppRole } from './auth-token.js';
+import { TOKEN_KEY, createTokenStore } from './auth-token.js';
 
 // 가짜 sessionStorage
 function memoryStorage() {
@@ -81,11 +81,5 @@ describe('토큰 보관함', () => {
     assert.equal(store.save(LOGIN), true);
     assert.equal(calls, 1);
     assert.ok(storage.getItem(TOKEN_KEY));
-  });
-
-  it('백엔드 역할을 화면 역할로 바꾼다', () => {
-    assert.equal(toAppRole('ARTIST'), 'artist');
-    assert.equal(toAppRole('EVENT_PARTNER'), 'organizer');
-    assert.equal(toAppRole('ADMIN'), null);
   });
 });

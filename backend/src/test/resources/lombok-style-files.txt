@@ -1,5 +1,13 @@
 # Lombok 스타일 검사 대상. backend/ 기준 경로, 한 줄에 파일 하나. 규칙: docs/adr/backend_code_style/00_lombok_usage.md
 # 김동엽이 만든 파일(git log --follow 처음 작성자)이다. 김동엽 세션이 새 파일을 만들면 같은 PR에서 더한다.
+src/main/java/com/nsu/capstone/artist/profile/ArtistProfileController.java
+src/main/java/com/nsu/capstone/artist/profile/ArtistProfileDraft.java
+src/main/java/com/nsu/capstone/artist/profile/ArtistProfileRequest.java
+src/main/java/com/nsu/capstone/artist/profile/ArtistProfileResponse.java
+src/main/java/com/nsu/capstone/artist/profile/ArtistProfileTable.java
+src/main/java/com/nsu/capstone/artist/profile/ArtistProfiles.java
+src/main/java/com/nsu/capstone/artist/profile/JsonNumberOnlyDeserializer.java
+src/main/java/com/nsu/capstone/artist/profile/SavedArtistProfile.java
 src/main/java/com/nsu/capstone/event/application/CanViewPrivateEvent.java
 src/main/java/com/nsu/capstone/event/application/DenyingCanViewPrivateEvent.java
 src/main/java/com/nsu/capstone/event/application/EventAccess.java
@@ -37,6 +45,7 @@ src/main/java/com/nsu/capstone/event/recommendation/EventSnapshot.java
 src/main/java/com/nsu/capstone/event/region/Region.java
 src/main/java/com/nsu/capstone/event/region/RegionController.java
 src/main/java/com/nsu/capstone/event/region/RegionListResponse.java
+src/main/java/com/nsu/capstone/event/region/RegionNormalizer.java
 src/main/java/com/nsu/capstone/event/region/RegionRepository.java
 src/main/java/com/nsu/capstone/event/repository/EventRepository.java
 src/main/java/com/nsu/capstone/global/config/OpenApiConfig.java
@@ -49,7 +58,9 @@ src/main/java/com/nsu/capstone/global/logging/RequestIdFilter.java
 src/main/java/com/nsu/capstone/global/logging/RequestIdExecutors.java
 src/main/java/com/nsu/capstone/global/logging/RequestIdInterceptor.java
 src/main/java/com/nsu/capstone/global/logging/UncaughtExceptionLogger.java
+src/main/java/com/nsu/capstone/global/text/UserText.java
 src/main/java/com/nsu/capstone/identity/application/ArtistReadAccess.java
+src/main/java/com/nsu/capstone/identity/application/ArtistWriteAccess.java
 src/main/java/com/nsu/capstone/identity/config/OAuthProviderHttpConfig.java
 src/main/java/com/nsu/capstone/identity/oauth/GetOnlyAuthorizationRequestResolver.java
 src/main/java/com/nsu/capstone/identity/oauth/OAuthBindingCookie.java
@@ -57,7 +68,6 @@ src/main/java/com/nsu/capstone/identity/repository/UserAccountRow.java
 src/main/java/com/nsu/capstone/music/domain/RightsBasis.java
 src/main/java/com/nsu/capstone/partner/profile/application/EventPartnerProfileService.java
 src/main/java/com/nsu/capstone/partner/profile/application/ProfileContent.java
-src/main/java/com/nsu/capstone/partner/profile/application/RegionNormalizer.java
 src/main/java/com/nsu/capstone/partner/profile/presentation/EventPartnerProfileController.java
 src/main/java/com/nsu/capstone/partner/profile/presentation/dto/EventPartnerProfileRequest.java
 src/main/java/com/nsu/capstone/partner/profile/presentation/dto/EventPartnerProfileResponse.java
@@ -74,8 +84,8 @@ src/main/java/com/nsu/capstone/recommendation/eligibility/domain/EligibleMusic.j
 src/main/java/com/nsu/capstone/recommendation/eligibility/domain/MusicCandidate.java
 src/main/java/com/nsu/capstone/recommendation/eligibility/domain/ScheduleSlot.java
 src/main/java/com/nsu/capstone/recommendation/eligibility/domain/ScheduleStatus.java
-src/main/java/com/nsu/capstone/recommendation/eligibility/infrastructure/EmptyArtistProfileReader.java
 src/main/java/com/nsu/capstone/recommendation/eligibility/infrastructure/EmptyArtistScheduleReader.java
+src/main/java/com/nsu/capstone/recommendation/eligibility/infrastructure/SavedArtistProfileReader.java
 src/main/java/com/nsu/capstone/recommendation/eligibility/infrastructure/UserArtistAccountReader.java
 src/main/java/com/nsu/capstone/trust/profile/application/PerformanceOutcomeReader.java
 src/main/java/com/nsu/capstone/trust/profile/application/TrustProfileAssembler.java
@@ -109,6 +119,7 @@ src/main/java/com/nsu/capstone/trust/risk/RiskSignal.java
 src/main/java/com/nsu/capstone/trust/risk/RiskSignalEvaluator.java
 src/main/java/com/nsu/capstone/trust/risk/RiskSignalType.java
 src/main/java/com/nsu/capstone/trust/simulation/ReliabilitySimulator.java
+src/main/java/com/nsu/capstone/verification/evidence/EvidenceVerificationSource.java
 src/main/java/com/nsu/capstone/verification/externalaccount/application/AccountDisplay.java
 src/main/java/com/nsu/capstone/verification/externalaccount/application/AccountView.java
 src/main/java/com/nsu/capstone/verification/externalaccount/application/AuthorizationStart.java

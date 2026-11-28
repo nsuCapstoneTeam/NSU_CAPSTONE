@@ -38,6 +38,9 @@ export const ERROR_MESSAGES = {
   INTERNAL_SERVER_ERROR: '서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요.',
   NETWORK_ERROR: '서버에 연결할 수 없어요. 백엔드가 켜져 있는지 확인해 주세요.',
   OAUTH_NOT_READY: '간편가입은 아직 준비 중이에요. 이메일로 가입해 주세요.',
+  TOO_MANY_REQUESTS: '요청이 너무 많아요. 잠시 뒤에 다시 시도해 주세요.',
+  LOGIN_CANCELLED: '로그인을 취소했어요. 다시 로그인해 주세요.',
+  SESSION_STORAGE_FAILED: '브라우저 저장이 막혀 있어 로그인을 유지할 수 없어요. 시크릿 창이라면 일반 창에서 다시 시도해 주세요.',
   UNKNOWN_ERROR: '알 수 없는 문제가 생겼어요. 잠시 후 다시 시도해 주세요.',
 };
 

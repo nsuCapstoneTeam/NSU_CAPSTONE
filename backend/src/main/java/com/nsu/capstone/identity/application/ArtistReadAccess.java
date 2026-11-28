@@ -6,6 +6,7 @@ import com.nsu.capstone.identity.domain.UserRole;
 import com.nsu.capstone.identity.domain.UserStatus;
 import com.nsu.capstone.identity.repository.UserRepository;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +21,18 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ArtistReadAccess {
 
+    private static final Pattern CANONICAL_UUID =
+            Pattern.compile("\\p{XDigit}{8}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{4}-\\p{XDigit}{12}");
+
     private final UserRepository userRepository;
+
+    /** 경로의 {@code artistId}를 읽는다. 정규형 UUID(8-4-4-4-12자리, 대소문자 구분 없음)만 받고 아니면 INVALID_ARTIST_ID다(01 §1). */
+    public static UUID parseArtistId(String raw) {
+        if (!CANONICAL_UUID.matcher(raw).matches()) {
+            throw new BusinessException(ErrorCode.INVALID_ARTIST_ID);
+        }
+        return UUID.fromString(raw);
+    }
 
     public void require(UUID callerId, UserRole callerRole, UUID artistId) {
         if (callerRole == UserRole.ARTIST && callerId.equals(artistId)) {

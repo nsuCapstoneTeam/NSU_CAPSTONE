@@ -2,8 +2,8 @@
 
 아티스트 1명의 Trust Profile(Verification, Artist Reliability, 근거 집계, Risk Signal, Activity Freshness)을 조회한다. 추천 결과에 넣을 여러 명의 Trust Profile은 HTTP가 아닌 내부 일괄 조회 계약(§7)으로 조합한다.
 
-- 구현 이슈: NSU-70, NSU-105(`verifications`의 `IDENTITY`)
-- 요구사항: SSOT `TRUST-149`~`TRUST-154` (현재 리비전 v1.14에서 확인). `IDENTITY` 항목은 `TRUST-142`(v1.18 초안 ③, 팀 확인 전)에 기댄다(2026-11-07, 확인한 현재 리비전 v1.19 초안·최종 승인 v1.17.1)
+- 구현 이슈: NSU-70, NSU-105(`verifications`의 `IDENTITY`), NSU-33(`verifications`의 `BUSINESS_REGISTRATION`·`PERFORMANCE_PARTICIPATION`·`OFFICIAL_ACTIVITY`)
+- 요구사항: SSOT `TRUST-149`~`TRUST-154` (현재 리비전 v1.14에서 확인, 2026-11-22 v1.23 초안·최종 승인 v1.17.1에서 다시 확인). 증빙 확인 기록 세 항목은 `TRUST-142`·`ADMIN-095`·`AUDIT-099`의 v1.24 초안(팀 확인 전)에 기댄다. `IDENTITY` 항목은 `TRUST-142`(v1.18 초안 ③, 팀 확인 전)에 기댄다(2026-11-07, 확인한 현재 리비전 v1.19 초안·최종 승인 v1.17.1)
   - v1.4(2026-10-04 승인): MVP의 "근거 부족 · 관측 0건" 표시(`TRUST-149`), 위험 신호 정책(`TRUST-150`), 신뢰 정보를 순위에 쓰지 않는 원칙(`TRUST-153`)
   - v1.9(2026-10-07 승인): 추천 순위 기준이 음악 유사도로 바뀌었다(`TRUST-153`). 신뢰 정보를 순위에 쓰지 않는 원칙은 그대로다
 - 정책: `reliability-v1` — [04 D09·D39·D41·D44](../adr/artist_trust_architecture/04_final_policy_decisions.md), [05 §13](../adr/artist_trust_architecture/05_trust_event_catalog.md), [06 §10·§18](../adr/artist_trust_architecture/06_database_and_implementation_roadmap.md)
@@ -104,14 +104,18 @@ Authorization: Bearer {accessToken}
 | `IDENTITY` | `null` | 실명 본인확인을 마침(NSU-105). 확인했다는 사실만 넣고, 본인확인 정보와 출처는 내보내지 않는다(§5) |
 | `EXTERNAL_ACCOUNT` | `YOUTUBE` / `SOUNDCLOUD` | 해당 외부 계정의 **제어권이 확인됨** |
 | `COPYRIGHT` | `null` | 저작권 등록부와 대조를 통과하고(`rights.isRegistrationMatched`) 권리 신고로 중단되지 않은 곡이 1개 이상([04 §1.1](./04_music.md#11-곡-응답-본문)). 뜻은 "본인확인 이름이 한국저작권위원회 등록부의 저작자·권리자 중 한 명의 이름과 같음"이다. 이름이 같은 다른 사람일 수 있고, 올린 음원이 그 저작물인지도 확인하지 않는다. 권리 보증만 한 곡은 넣지 않는다 |
-| `BUSINESS_REGISTRATION` | `null` | 사업자등록정보 검증 완료 |
-| `PERFORMANCE_PARTICIPATION` | `null` | 실연 참여 증빙 검증 완료 |
-| `OFFICIAL_ACTIVITY` | `null` | 공식 발매 또는 공연 활동 증빙 검증 완료 |
+| `BUSINESS_REGISTRATION` | `null` | 운영자가 사업자등록 사실을 확인해 남긴 증빙 확인 기록이 있음 |
+| `PERFORMANCE_PARTICIPATION` | `null` | 운영자가 실연 참여 사실을 확인해 남긴 증빙 확인 기록이 있음 |
+| `OFFICIAL_ACTIVITY` | `null` | 운영자가 공식 발매 또는 공연 활동 사실을 확인해 남긴 증빙 확인 기록이 있음 |
 
 - 확인이 끝난 항목만 넣는다. 진행 중, 반려, 취소된 검증은 넣지 않는다.
 - `IDENTITY`는 곡 업로드·PRIVATE 행사 열람·댓글 권한(`VERIFIED_ARTIST`)의 근거인 실명 본인확인을 EVENT_PARTNER에게 보여 준다. 요구사항은 SSOT `TRUST-142`(v1.18 초안 ③, 팀 확인 전)이고, `TRUST-152`에 따라 Artist Reliability에 더하지 않는다. 화면은 "실명 본인확인"으로 표시하고, "인증된 아티스트"로 쓰지 않는다(용어집). 2026-11-05에 추가했다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)).
 - 시연 서버의 `IDENTITY`는 테스트 본인확인이다. 테스트임은 항목마다 표시하지 않고 시연 환경 배너로 알린다. 테스트 본인확인은 시연 DB에만 있고 운영 DB로 옮기지 않는다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)).
 - NSU-105를 구현하기 전에는 본인확인 기록이 없어 `IDENTITY`가 나오지 않는다.
+- `BUSINESS_REGISTRATION`·`PERFORMANCE_PARTICIPATION`·`OFFICIAL_ACTIVITY`는 증빙 확인 기록으로 넣는다([artist_trust_architecture/10](../adr/artist_trust_architecture/10_evidence_verification_records.md) D46, NSU-33). 기록과 취소는 운영자가 [runbook](../runbook/evidence_verification.md)으로 한다. 지금은 기록을 바꾸는 HTTP API가 없다(접수 창구는 NSU-145). 이 API는 기록을 읽기만 한다.
+- 증빙 확인 기록은 표시 전용이다. 곡 업로드·`VERIFIED_ARTIST` 권한·추천 Eligibility의 근거가 아니다.
+- 증빙 확인 기록은 취소하기 전까지 유효하다. 취소하면 다음 조회부터 빠지고, 취소 사실과 사유는 내보내지 않는다. 다시 넣으려면 운영자가 증빙을 다시 확인해 새로 기록한다.
+- 증빙 접수 창구는 아직 없다(NSU-145). 그 전에는 시연 서버의 팀 계정에만 기록하므로 세 항목은 시연 데이터다. 시연 DB에만 있고 운영 DB로 옮기지 않는다.
 - YouTube는 OAuth 연결이 제어권 확인이다. 연결하면 넣고, 해제하면 다음 조회부터 뺀다. Spotify 주소 연결은 넣지 않는다(아래 Spotify 항목). 연결한 계정과 작업물 링크는 [06 외부 계정 API](./06_external_accounts.md)(NSU-37·79)가 보여 주며, 그 조회 API는 `verifications`를 바꾸지 않는다. YouTube Music 아티스트 채널은 `YOUTUBE`로 표시한다.
 - `SOUNDCLOUD`는 지금 나오지 않는다. SoundCloud 약관이 아티스트 전용 프로필에 API 사용을 금지해 SoundCloud 연결을 만들지 않았다([external_links/00](../adr/external_links/00_external_account_links.md) 13번). 값은 계약에 남긴다(enum 삭제는 깨지는 변경, 00 §3). 클라이언트는 이 값을 받아도 처리할 수 있어야 한다.
 - 제어권 확인 기준과 한계(관리 권한만 있는 사람, 진짜 채널인지는 확인하지 못함)는 [external_links/00](../adr/external_links/00_external_account_links.md) 5번에 있다. 화면은 "채널 제어권 확인"으로 표시하고 "인증"이라고 쓰지 않는다. `EXTERNAL_ACCOUNT`만으로는 확인 배지를 켜지 않는다(같은 ADR 5-2번).
@@ -184,6 +188,7 @@ Authorization: Bearer {accessToken}
 | `performanceId`, `sourceDomain`, `sourceId`, 상대 EVENT_PARTNER 식별자 | 개별 공연·상대방 특정 방지 |
 | 확정 출처(`ADMIN_DECISION` 등), 판정 시각, 개별 결과의 날짜 | 판정 과정은 Dispute 도메인 정보 |
 | 진행 중·반려·취소된 Verification, 증빙 원본, 외부 계정 ID·URL | 검증이 아니거나 민감한 권리 문서(`ADMIN-096`) |
+| 증빙 확인 기록의 확인 시각·운영자·취소 사유, 사업자등록번호 | 확인 과정은 운영 정보다. 사업자등록번호는 저장하지도 않는다(artist_trust_architecture/10 7번) |
 | 실명 본인확인 정보(이름·생년월일·성별·휴대폰 번호·통신사·외국인 여부·CI·DI), 본인확인 시각, 본인확인 출처(지금은 `MOCK`·`SANDBOX`. `PRODUCTION`은 운영 단계 ADR에서 정한다) | 개인정보다. 테스트 본인확인임은 출처 대신 시연 환경 배너로 알린다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)) |
 | Reliability 내부 값(`α`, `β`, 반올림 전 `R`) | 정책 변경 시 표시 계약이 흔들리지 않게 함 |
 
@@ -330,10 +335,10 @@ Map<UUID, TrustProfile> findByArtistIds(Collection<UUID> artistIds);
 - 존재하지 않거나 `role = ARTIST`가 아닌 ID는 결과 Map에 넣지 않는다. 계정 상태(`SUSPENDED` 등)에 따른 제외는 호출자(추천의 Eligibility)가 이미 적용했으므로 이 계약에서 다시 거르지 않는다.
 - 빈 입력은 빈 Map이다.
 
-Verification은 여러 도메인에서 온다. `IDENTITY`는 본인확인(NSU-105), `COPYRIGHT`는 곡 권리 정보(NSU-89)가 만든다. 그래서 Verification을 읽는 포트(`VerificationReader`)는 출처 도메인마다 source를 하나씩 두고 결과를 합친다.
+Verification은 여러 도메인에서 온다. `IDENTITY`는 본인확인(NSU-105), `COPYRIGHT`는 곡 권리 정보(NSU-89), `BUSINESS_REGISTRATION`·`PERFORMANCE_PARTICIPATION`·`OFFICIAL_ACTIVITY`는 증빙 확인 기록(NSU-33)이 만든다. 그래서 Verification을 읽는 포트(`VerificationReader`)는 출처 도메인마다 source를 하나씩 두고 결과를 합친다.
 
 ```java
-// 출처 도메인마다 하나씩 구현한다(NSU-105: IDENTITY, NSU-89: COPYRIGHT)
+// 출처 도메인마다 하나씩 구현한다(NSU-105: IDENTITY, NSU-89: COPYRIGHT, NSU-33: 증빙 확인 기록 세 항목)
 interface VerificationSource {
     Map<UUID, List<VerificationItem>> findVerifiedByArtistIds(Collection<UUID> artistIds);
 }
@@ -354,6 +359,8 @@ interface VerificationSource {
 | YouTube 연결을 본인 해제나 ID 확인 작업이 지우면 다음 조회에서 `EXTERNAL_ACCOUNT`·`YOUTUBE`가 빠진다. Spotify만 연결한 아티스트에게는 나오지 않는다 | §4.3, [06 §11.1](./06_external_accounts.md) |
 | 실명 본인확인을 마친 아티스트는 `verifications`에 `IDENTITY`가 있고, §5의 본인확인 정보와 출처는 응답에 없다 | §4.3·§5 |
 | 등록정보 일치 곡이 있어도 `IDENTITY`가 없으면 `COPYRIGHT`가 나오지 않는다 | §4.2 불변식 8, §7 |
+| 증빙 확인 기록이 있는 항목만 그 아티스트의 `verifications`에 나오고, runbook으로 취소하면 다음 조회에서 빠진다. 다시 기록하면 다시 나온다 | §4.3, artist_trust_architecture/10 |
+| 증빙 확인 기록의 확인 시각·운영자·취소 사유가 응답에 없다 | §5 |
 | 일괄 조회의 쿼리 수가 아티스트 1명과 100명에서 같다 | §7 |
 | `401`·`403`도 `{code, message}` 형식이다 | 00_conventions §8, ADR-007 |
 | §4.2 불변식이 모든 응답에서 성립한다 | 본 문서 |

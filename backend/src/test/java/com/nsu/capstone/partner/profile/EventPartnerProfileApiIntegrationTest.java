@@ -23,29 +23,36 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
     @Test
     void 저장_전_조회는_200과_빈_값이고_키가_모두_있다() throws Exception {
         String json = getProfile(partner)
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.name").value((Object) null))
-            .andExpect(jsonPath("$.organization").value((Object) null))
-            .andExpect(jsonPath("$.bio").value((Object) null))
-            .andExpect(jsonPath("$.updatedAt").value((Object) null))
-            .andExpect(jsonPath("$.eventTypes").isEmpty())
-            .andExpect(jsonPath("$.regionCodes").isEmpty())
-            .andReturn().getResponse().getContentAsString();
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value((Object) null))
+                .andExpect(jsonPath("$.organization").value((Object) null))
+                .andExpect(jsonPath("$.bio").value((Object) null))
+                .andExpect(jsonPath("$.updatedAt").value((Object) null))
+                .andExpect(jsonPath("$.eventTypes").isEmpty())
+                .andExpect(jsonPath("$.regionCodes").isEmpty())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
         assertThat(fieldNames(json))
-            .containsExactlyInAnyOrder("name", "organization", "bio", "eventTypes", "regionCodes", "updatedAt");
+                .containsExactlyInAnyOrder("name", "organization", "bio", "eventTypes", "regionCodes", "updatedAt");
     }
 
     @Test
     void 첫_PUT은_200이고_응답이_이어서_한_조회와_같다() throws Exception {
         String saved = putProfile(partner, validProfile())
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.name").value("김담당"))
-            .andExpect(jsonPath("$.updatedAt").isNotEmpty())
-            .andReturn().getResponse().getContentAsString();
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("김담당"))
+                .andExpect(jsonPath("$.updatedAt").isNotEmpty())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
-        String fetched = getProfile(partner).andExpect(status().isOk())
-            .andReturn().getResponse().getContentAsString();
+        String fetched = getProfile(partner)
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
         assertThat(objectMapper.readTree(fetched)).isEqualTo(objectMapper.readTree(saved));
     }
@@ -53,8 +60,9 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
     /** 토큰 없는 PUT·DELETE는 전역 CSRF 설정 때문에 401이 아니라 403이다. 계약과 어긋나 main에 보고했다. */
     @Test
     void 토큰이_없는_조회는_401이다() throws Exception {
-        mockMvc.perform(get(PATH)).andExpect(status().isUnauthorized())
-            .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        mockMvc.perform(get(PATH))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
     }
 
     @Test
@@ -62,18 +70,21 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         User artist = newUser(UserRole.ARTIST, "artist@example.com");
         putProfile(partner, validProfile()).andExpect(status().isOk());
 
-        getProfile(artist).andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
-        putProfile(artist, validProfile()).andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
-        deleteProfile(artist).andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        getProfile(artist)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        putProfile(artist, validProfile())
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        deleteProfile(artist)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
 
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM event_partner_profiles", Integer.class))
+                .isEqualTo(1);
         assertThat(jdbcTemplate.queryForObject(
-            "SELECT count(*) FROM event_partner_profiles", Integer.class)).isEqualTo(1);
-        assertThat(jdbcTemplate.queryForObject(
-            "SELECT count(*) FROM event_partner_profiles WHERE user_id = ?", Integer.class,
-            artist.getId())).isZero();
+                        "SELECT count(*) FROM event_partner_profiles WHERE user_id = ?", Integer.class, artist.getId()))
+                .isZero();
     }
 
     @Test
@@ -82,11 +93,12 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
 
         deleteProfile(partner).andExpect(status().isNoContent());
 
-        getProfile(partner).andExpect(status().isOk())
-            .andExpect(jsonPath("$.name").value((Object) null))
-            .andExpect(jsonPath("$.updatedAt").value((Object) null))
-            .andExpect(jsonPath("$.eventTypes").isEmpty())
-            .andExpect(jsonPath("$.regionCodes").isEmpty());
+        getProfile(partner)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value((Object) null))
+                .andExpect(jsonPath("$.updatedAt").value((Object) null))
+                .andExpect(jsonPath("$.eventTypes").isEmpty())
+                .andExpect(jsonPath("$.regionCodes").isEmpty());
     }
 
     @Test
@@ -95,8 +107,9 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
 
         putProfile(partner, validProfile()).andExpect(status().isOk());
         deleteProfile(partner).andExpect(status().isNoContent());
-        putProfile(partner, validProfile()).andExpect(status().isOk())
-            .andExpect(jsonPath("$.name").value("김담당"));
+        putProfile(partner, validProfile())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("김담당"));
     }
 
     @Test
@@ -122,14 +135,15 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         replacement.remove("bio");
         replacement.put("eventTypes", List.of());
 
-        putProfile(partner, replacement).andExpect(status().isOk())
-            .andExpect(jsonPath("$.organization").value((Object) null))
-            .andExpect(jsonPath("$.bio").value((Object) null))
-            .andExpect(jsonPath("$.eventTypes").isEmpty());
+        putProfile(partner, replacement)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.organization").value((Object) null))
+                .andExpect(jsonPath("$.bio").value((Object) null))
+                .andExpect(jsonPath("$.eventTypes").isEmpty());
         getProfile(partner)
-            .andExpect(jsonPath("$.organization").value((Object) null))
-            .andExpect(jsonPath("$.bio").value((Object) null))
-            .andExpect(jsonPath("$.eventTypes").isEmpty());
+                .andExpect(jsonPath("$.organization").value((Object) null))
+                .andExpect(jsonPath("$.bio").value((Object) null))
+                .andExpect(jsonPath("$.eventTypes").isEmpty());
     }
 
     @Test
@@ -145,20 +159,23 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
     @Test
     void 글자_수를_넘거나_이름이_비면_VALIDATION_ERROR다() throws Exception {
         for (Map.Entry<String, String> invalid : Map.of(
-            "name", "",
-            "name ", "   ",
-            "name  ", "가".repeat(41),
-            "organization", "나".repeat(61),
-            "bio", "다".repeat(701)).entrySet()) {
+                        "name", "",
+                        "name ", "   ",
+                        "name  ", "가".repeat(41),
+                        "organization", "나".repeat(61),
+                        "bio", "다".repeat(701))
+                .entrySet()) {
             Map<String, Object> body = validProfile();
             body.put(invalid.getKey().trim(), invalid.getValue());
-            putProfile(partner, body).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+            putProfile(partner, body)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         }
         Map<String, Object> noName = validProfile();
         noName.remove("name");
-        putProfile(partner, noName).andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        putProfile(partner, noName)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @Test
@@ -168,10 +185,11 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         body.put("organization", "  ");
         body.put("bio", null);
 
-        putProfile(partner, body).andExpect(status().isOk())
-            .andExpect(jsonPath("$.name").value("김담당"))
-            .andExpect(jsonPath("$.organization").value((Object) null))
-            .andExpect(jsonPath("$.bio").value((Object) null));
+        putProfile(partner, body)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("김담당"))
+                .andExpect(jsonPath("$.organization").value((Object) null))
+                .andExpect(jsonPath("$.bio").value((Object) null));
     }
 
     @Test
@@ -179,26 +197,28 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         Map<String, Object> body = validProfile();
         body.put("eventTypes", List.of("WEDDING", "CONCERT"));
 
-        putProfile(partner, body).andExpect(status().isOk())
-            .andExpect(jsonPath("$.eventTypes[0]").value("CONCERT"))
-            .andExpect(jsonPath("$.eventTypes[1]").value("WEDDING"))
-            .andExpect(jsonPath("$.eventTypes.length()").value(2));
+        putProfile(partner, body)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eventTypes[0]").value("CONCERT"))
+                .andExpect(jsonPath("$.eventTypes[1]").value("WEDDING"))
+                .andExpect(jsonPath("$.eventTypes.length()").value(2));
         getProfile(partner)
-            .andExpect(jsonPath("$.eventTypes[0]").value("CONCERT"))
-            .andExpect(jsonPath("$.eventTypes[1]").value("WEDDING"));
+                .andExpect(jsonPath("$.eventTypes[0]").value("CONCERT"))
+                .andExpect(jsonPath("$.eventTypes[1]").value("WEDDING"));
     }
 
     @Test
     void 없는_행사_종류_4개_중복은_VALIDATION_ERROR다() throws Exception {
         for (List<String> invalid : List.of(
-            List.of("NOPE"),
-            List.of("concert"),
-            List.of("CONCERT", "WEDDING", "OTHER", "SMALL_VENUE"),
-            List.of("CONCERT", "CONCERT"))) {
+                List.of("NOPE"),
+                List.of("concert"),
+                List.of("CONCERT", "WEDDING", "OTHER", "SMALL_VENUE"),
+                List.of("CONCERT", "CONCERT"))) {
             Map<String, Object> body = validProfile();
             body.put("eventTypes", invalid);
-            putProfile(partner, body).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+            putProfile(partner, body)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         }
     }
 
@@ -207,30 +227,33 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         for (String key : List.of("eventTypes", "regionCodes")) {
             Map<String, Object> missing = validProfile();
             missing.remove(key);
-            putProfile(partner, missing).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+            putProfile(partner, missing)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
 
             Map<String, Object> nulled = validProfile();
             nulled.put(key, null);
-            putProfile(partner, nulled).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+            putProfile(partner, nulled)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         }
     }
 
     @Test
     void 목록에_없는_지역_형식이_틀린_값_4개는_VALIDATION_ERROR다() throws Exception {
         for (List<String> invalid : List.of(
-            List.of("11999"),
-            List.of("29"),
-            List.of("123"),
-            List.of("ab"),
-            List.of("1168a"),
-            List.of(""),
-            List.of("11", "26", "27", "28"))) {
+                List.of("11999"),
+                List.of("29"),
+                List.of("123"),
+                List.of("ab"),
+                List.of("1168a"),
+                List.of(""),
+                List.of("11", "26", "27", "28"))) {
             Map<String, Object> body = validProfile();
             body.put("regionCodes", invalid);
-            putProfile(partner, body).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+            putProfile(partner, body)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         }
     }
 
@@ -244,8 +267,9 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
 
         // 다른 WARN이나 시각의 "29"에 우연히 맞지 않도록, 같은 줄에 로거·레벨·메시지·코드가 함께 있어야 한다
         assertThat(output.getOut().lines())
-            .anyMatch(line -> line.contains("WARN") && line.contains("RegionNormalizer")
-                && line.contains("지역 목록에 없는 EVENT_PARTNER 프로필 지역 코드: 29"));
+                .anyMatch(line -> line.contains("WARN")
+                        && line.contains("RegionNormalizer")
+                        && line.contains("지역 목록에 없는 프로필 지역 코드: 29"));
     }
 
     @Test
@@ -260,16 +284,19 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
 
     @Test
     void 깨진_JSON과_타입이_안_맞는_값은_code_없는_ProblemDetail_400이다() throws Exception {
-        mockMvc.perform(put(PATH).header("Authorization", bearer(partner))
-                .contentType(APPLICATION_JSON).content("{broken"))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").doesNotExist())
-            .andExpect(jsonPath("$.status").value(400));
-        mockMvc.perform(put(PATH).header("Authorization", bearer(partner))
-                .contentType(APPLICATION_JSON)
-                .content("{\"name\":\"김\",\"eventTypes\":{},\"regionCodes\":[]}"))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").doesNotExist());
+        mockMvc.perform(put(PATH)
+                        .header("Authorization", bearer(partner))
+                        .contentType(APPLICATION_JSON)
+                        .content("{broken"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.status").value(400));
+        mockMvc.perform(put(PATH)
+                        .header("Authorization", bearer(partner))
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"name\":\"김\",\"eventTypes\":{},\"regionCodes\":[]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").doesNotExist());
     }
 
     @Test
@@ -279,22 +306,27 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         body.put("userId", "00000000-0000-0000-0000-000000000000");
         body.put("unknown", "x");
 
-        putProfile(partner, body).andExpect(status().isOk())
-            .andExpect(jsonPath("$.updatedAt").value(startsWith("2026-10-18T10:00:00+09:00")))
-            .andExpect(jsonPath("$.userId").doesNotExist());
+        putProfile(partner, body)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.updatedAt").value(startsWith("2026-10-18T10:00:00+09:00")))
+                .andExpect(jsonPath("$.userId").doesNotExist());
     }
 
     @Test
     void ARTIST는_본문이_깨져도_400이_아니라_403이다() throws Exception {
         User artist = newUser(UserRole.ARTIST, "artist2@example.com");
 
-        mockMvc.perform(put(PATH).header("Authorization", bearer(artist))
-                .contentType(APPLICATION_JSON).content("{broken"))
-            .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
-        mockMvc.perform(put(PATH).header("Authorization", bearer(artist))
-                .contentType(APPLICATION_JSON).content("{\"eventTypes\":{}}"))
-            .andExpect(status().isForbidden());
+        mockMvc.perform(put(PATH)
+                        .header("Authorization", bearer(artist))
+                        .contentType(APPLICATION_JSON)
+                        .content("{broken"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        mockMvc.perform(put(PATH)
+                        .header("Authorization", bearer(artist))
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"eventTypes\":{}}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -302,8 +334,9 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         for (String field : List.of("name", "organization", "bio")) {
             Map<String, Object> body = validProfile();
             body.put(field, "a\u0000b");
-            putProfile(partner, body).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+            putProfile(partner, body)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         }
     }
 
@@ -313,15 +346,17 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         String invisible = " ​⁠";
         Map<String, Object> body = validProfile();
         body.put("name", invisible);
-        putProfile(partner, body).andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        putProfile(partner, body)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
 
         body = validProfile();
         body.put("organization", invisible);
         body.put("bio", "   ");
-        putProfile(partner, body).andExpect(status().isOk())
-            .andExpect(jsonPath("$.organization").value((Object) null))
-            .andExpect(jsonPath("$.bio").value((Object) null));
+        putProfile(partner, body)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.organization").value((Object) null))
+                .andExpect(jsonPath("$.bio").value((Object) null));
     }
 
     @Test
@@ -330,15 +365,17 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         for (String invisible : List.of("ㅤ", "ᅟᅠ", "ﾠ", "⠀")) {
             Map<String, Object> body = validProfile();
             body.put("name", invisible);
-            putProfile(partner, body).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+            putProfile(partner, body)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         }
 
         // 길이보다 빈 값 판정이 먼저다: 보이지 않는 글자 61개인 소속은 400이 아니라 null이다
         Map<String, Object> body = validProfile();
         body.put("organization", "ㅤ".repeat(61));
-        putProfile(partner, body).andExpect(status().isOk())
-            .andExpect(jsonPath("$.organization").value((Object) null));
+        putProfile(partner, body)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.organization").value((Object) null));
     }
 
     @Test
@@ -347,16 +384,18 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         for (String invisible : List.of("️", "͏", "᠋", "󠄀")) {
             Map<String, Object> body = validProfile();
             body.put("name", invisible);
-            putProfile(partner, body).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+            putProfile(partner, body)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         }
 
         // 보이는 글자가 하나라도 있으면 저장한다: 이모지(기호), 숫자, 문장부호
         for (String visible : List.of("😀", "7", "-")) {
             Map<String, Object> body = validProfile();
             body.put("name", visible);
-            putProfile(partner, body).andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value(visible));
+            putProfile(partner, body)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.name").value(visible));
         }
     }
 
@@ -365,14 +404,16 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         // 웹에서 복사한 이름 끝에 NBSP가 붙어도 40자 이름은 통과하고, 지운 값이 저장된다
         Map<String, Object> body = validProfile();
         body.put("name", "﻿​" + "가".repeat(40) + "  ");
-        putProfile(partner, body).andExpect(status().isOk())
-            .andExpect(jsonPath("$.name").value("가".repeat(40)));
+        putProfile(partner, body)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("가".repeat(40)));
 
         // 끝의 결합 표식은 앞 글자의 일부라 지우지 않는다(e + U+0301 = é)
         body = validProfile();
         body.put("name", "René");
-        putProfile(partner, body).andExpect(status().isOk())
-            .andExpect(jsonPath("$.name").value("René"));
+        putProfile(partner, body)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("René"));
     }
 
     @Test
@@ -383,8 +424,9 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         for (String name : List.of("김담당 " + scotland, "김담당 " + family)) {
             Map<String, Object> body = validProfile();
             body.put("name", name);
-            putProfile(partner, body).andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value(name));
+            putProfile(partner, body)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.name").value(name));
         }
     }
 
@@ -395,10 +437,12 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
             String body = """
                 {"name": "김담당", "eventTypes": [], "regionCodes": [], "%s": "김\\uD800"}
                 """.formatted(field);
-            mockMvc.perform(put(PATH).header("Authorization", bearer(partner))
-                    .contentType(APPLICATION_JSON).content(body))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+            mockMvc.perform(put(PATH)
+                            .header("Authorization", bearer(partner))
+                            .contentType(APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         }
     }
 
@@ -409,15 +453,19 @@ class EventPartnerProfileApiIntegrationTest extends EventPartnerProfileIntegrati
         putProfile(partner, body).andExpect(status().isOk());
 
         body.put("name", "😀".repeat(41));
-        putProfile(partner, body).andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        putProfile(partner, body)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     private void assertRegions(List<String> requested, List<String> expected) throws Exception {
         Map<String, Object> body = validProfile();
         body.put("regionCodes", requested);
-        String saved = putProfile(partner, body).andExpect(status().isOk())
-            .andReturn().getResponse().getContentAsString();
+        String saved = putProfile(partner, body)
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         String fetched = getProfile(partner).andReturn().getResponse().getContentAsString();
 
         assertThat(strings(saved, "regionCodes")).containsExactlyElementsOf(expected);
