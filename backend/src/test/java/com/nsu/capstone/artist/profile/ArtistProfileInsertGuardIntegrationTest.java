@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.nsu.capstone.identity.domain.User;
+import com.nsu.capstone.identity.domain.UserRole;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -144,6 +145,20 @@ class ArtistProfileInsertGuardIntegrationTest extends ArtistProfileIntegrationTe
         assertThat(jdbcTemplate.queryForObject("SELECT status FROM users WHERE id = ?", String.class, artist.getId()))
                 .isEqualTo("WITHDRAWN");
         assertThat(profileRows(artist)).as("커밋된 행을 탈퇴 트리거가 지웠다").isZero();
+    }
+
+    @Test
+    void 행의_user_id를_다른_활성_ARTIST로_바꾸는_UPDATE는_23514로_거절되고_행이_그대로다() {
+        User other = newUser(UserRole.ARTIST, "other-artist@example.com");
+        insertProfile(artist);
+
+        assertGuardRejects(
+                () -> jdbcTemplate.update("UPDATE artist_profiles SET user_id = ? WHERE user_id = ?",
+                        other.getId(), artist.getId()),
+                artist);
+
+        assertThat(profileRows(artist)).isOne();
+        assertThat(profileRows(other)).isZero();
     }
 
     private void assertInsertRejected(User owner) {

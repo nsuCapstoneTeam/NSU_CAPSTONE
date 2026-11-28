@@ -164,3 +164,21 @@ CREATE TRIGGER trg_artist_profiles_require_active_artist
     BEFORE INSERT OR UPDATE OF user_id ON artist_profiles
     FOR EACH ROW
     EXECUTE FUNCTION require_active_artist_for_profile();
+
+-- 행의 사용자(user_id)를 바꾸는 UPDATE를 거절한다. 다른 사용자의 행으로 옮겨 가드를 피하지 못하게 한다.
+-- users를 읽거나 잠그지 않는다. WHEN이 거짓이면(같은 값을 SET에 넣은 UPDATE) 함수를 부르지 않는다.
+CREATE FUNCTION reject_artist_profile_owner_change() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+    RAISE EXCEPTION '프로필의 사용자는 바꿀 수 없다: %', OLD.user_id
+        USING ERRCODE = 'check_violation';
+END;
+$$;
+
+CREATE TRIGGER trg_artist_profiles_fixed_owner
+    BEFORE UPDATE OF user_id ON artist_profiles
+    FOR EACH ROW
+    WHEN (OLD.user_id IS DISTINCT FROM NEW.user_id)
+    EXECUTE FUNCTION reject_artist_profile_owner_change();
