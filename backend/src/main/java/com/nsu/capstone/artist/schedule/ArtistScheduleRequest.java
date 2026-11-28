@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.regex.Pattern;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /**
  * 일정 한 건 본문(11 §2.2). 날짜·시:분·상태는 문자열로 받아 직접 검사한다. JSON 변환 단계에서 실패해 Spring 표준 400이 나가지 않게 하기 위해서다. 그래서 API 문서의 필수 여부와
@@ -28,7 +29,8 @@ record ArtistScheduleRequest(
                 allowableValues = {"AVAILABLE", "HOLD", "UNAVAILABLE"})
         String status,
 
-        @Schema(types = {"string", "null"}) String title) {
+        @JsonDeserialize(using = JsonStringOnlyDeserializer.class) @Schema(types = {"string", "null"})
+        String title) {
 
     private static final int TITLE_MAX = 30;
     private static final Duration MAX_LENGTH = Duration.ofHours(24);

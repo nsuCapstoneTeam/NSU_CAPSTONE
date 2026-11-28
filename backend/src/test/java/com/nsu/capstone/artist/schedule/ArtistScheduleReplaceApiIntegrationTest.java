@@ -46,6 +46,25 @@ class ArtistScheduleReplaceApiIntegrationTest extends ArtistScheduleIntegrationT
     }
 
     @Test
+    void 일정_이름이_숫자_불리언_객체_배열이면_code_없는_ProblemDetail_400이고_기존_일정_이름을_바꾸지_않는다() throws Exception {
+        UUID id = insert(artist, "2026-12-12 18:00:00+09", "2026-12-12 19:00:00+09", "AVAILABLE", "기존 이름");
+
+        for (String title : new String[] {"123", "true", "{}", "[\"가\"]"}) {
+            putRaw(artist, id.toString(), """
+                    {"startDate":"2026-12-12","startTime":"20:00","endDate":"2026-12-12","endTime":"21:00",\
+                    "status":"HOLD","title":%s}""".formatted(title))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").doesNotExist())
+                    .andExpect(jsonPath("$.status").value(400));
+        }
+
+        assertThat(jdbcTemplate.queryForObject("SELECT title FROM artist_schedules WHERE id = ?", String.class, id))
+                .isEqualTo("기존 이름");
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM artist_schedules WHERE id = ?", String.class, id))
+                .isEqualTo("AVAILABLE");
+    }
+
+    @Test
     void 없는_일정과_다른_사용자의_일정은_404이고_남의_일정은_바뀌지_않는다() throws Exception {
         User other = newUser(UserRole.ARTIST, "other@example.com");
         UUID othersId = insert(other, "2026-12-12 18:00:00+09", "2026-12-12 20:00:00+09", "AVAILABLE", "남의 일정");

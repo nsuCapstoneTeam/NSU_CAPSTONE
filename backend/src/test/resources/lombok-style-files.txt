@@ -17,6 +17,7 @@ src/main/java/com/nsu/capstone/artist/schedule/ArtistScheduleResponse.java
 src/main/java/com/nsu/capstone/artist/schedule/ArtistScheduleStatus.java
 src/main/java/com/nsu/capstone/artist/schedule/ArtistScheduleTable.java
 src/main/java/com/nsu/capstone/artist/schedule/ArtistSchedules.java
+src/main/java/com/nsu/capstone/artist/schedule/JsonStringOnlyDeserializer.java
 src/main/java/com/nsu/capstone/artist/schedule/MyArtistSchedule.java
 src/main/java/com/nsu/capstone/artist/schedule/SavedArtistSchedule.java
 src/main/java/com/nsu/capstone/event/application/CanViewPrivateEvent.java

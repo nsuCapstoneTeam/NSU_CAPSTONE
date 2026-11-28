@@ -78,6 +78,32 @@ class ArtistScheduleAddApiIntegrationTest extends ArtistScheduleIntegrationTestB
     }
 
     @Test
+    void 일정_이름이_숫자_불리언_객체_배열이면_code_없는_ProblemDetail_400이고_행을_만들지_않으며_null과_빠짐은_통과한다() throws Exception {
+        for (String title : new String[] {"123", "true", "{}", "[\"가\"]"}) {
+            postRaw(artist, itemJson("18:00", "19:00", "\"title\":" + title))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").doesNotExist())
+                    .andExpect(jsonPath("$.status").value(400));
+        }
+        assertThat(scheduleRows(artist)).isZero();
+
+        postRaw(artist, itemJson("18:00", "19:00", "\"title\":null"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.items[0].title").value((Object) null));
+        postRaw(artist, itemJson("20:00", "21:00", "\"unknown\":1"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.items[0].title").value((Object) null));
+        assertThat(scheduleRows(artist)).isEqualTo(2);
+    }
+
+    /** 2026-12-12 {@code startTime~endTime} HOLD 한 건. {@code extraField}는 {@code "이름":값} 꼴의 필드 하나를 더 붙인다. */
+    private static String itemJson(String startTime, String endTime, String extraField) {
+        return "{\"items\":[{\"startDate\":\"2026-12-12\",\"startTime\":\"" + startTime
+                + "\",\"endDate\":\"2026-12-12\",\"endTime\":\"" + endTime + "\",\"status\":\"HOLD\","
+                + extraField + "}]}";
+    }
+
+    @Test
     void 본문의_id와_artistId와_모르는_필드는_무시하고_일정_이름은_앞뒤_공백을_지워_저장한다() throws Exception {
         Map<String, Object> item = item("2026-12-12", "18:00", "2026-12-12", "20:00", "HOLD", "  이름  ");
         item.put("id", UUID.randomUUID().toString());
