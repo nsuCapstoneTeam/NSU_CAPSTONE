@@ -3,20 +3,28 @@ package com.nsu.capstone.global.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.nsu.capstone.event.EventIntegrationTestBase;
+import com.nsu.capstone.global.logging.LogCapture;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.web.servlet.AbstractFilterRegistrationBean;
+import org.springframework.boot.web.servlet.ServletContextInitializerBeans;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.Environment;
 import org.springframework.util.unit.DataSize;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * 실제 Tomcat에서 확인한다(ADR request_body_limit/00 테스트 기준). MockMvc는 Tomcat의 Content-Length·chunked 처리와 폼 파싱 상한을 거치지
@@ -33,11 +41,20 @@ class RequestBodyLimitTomcatIntegrationTest extends EventIntegrationTestBase {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    private static final Duration COMPLETION_LINE_TIMEOUT = Duration.ofSeconds(10);
+
+    /** 보낸 본문의 크기(65,536·65,537·71,680)와 본문 안의 값. 숫자는 앞뒤가 숫자가 아닐 때만 센다. */
+    private static final Pattern LEAKED_VALUE =
+            Pattern.compile("(?<!\\d)(65536|65537|71680)(?!\\d)|hunter2|%zz|limit@example\\.com");
+
     @LocalServerPort
     int port;
 
     @Autowired
     Environment environment;
+
+    @Autowired
+    ConfigurableApplicationContext applicationContext;
 
     @Test
     void Tomcat_폼_파싱_상한은_필터의_상한과_같다() {
@@ -184,6 +201,123 @@ class RequestBodyLimitTomcatIntegrationTest extends EventIntegrationTestBase {
                 RawSocket.request("GET", "/v3/api-docs"));
 
         assertThat(responses).extracting(RawSocket.Response::status).containsExactly(200, 200);
+    }
+
+    /**
+     * 위 요청들(ADR 테스트 1~11)을 모두 보낸 뒤 로그를 본다. 완료 줄은 응답을 보낸 뒤 RequestIdFilter의 finally에서 남으므로, 응답을 받자마자 읽지 않고
+     * 줄이 모일 때까지 기다린다. 고정 sleep은 쓰지 않는다. 실패 메시지에는 줄의 내용이 아니라 로거 이름만 싣는다.
+     */
+    @Test
+    void 상한_요청_11가지는_WARN_ERROR_줄과_본문_길이_값을_로그에_남기지_않는다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "artist@example.com");
+        byte[] unreadBody = new byte[70 * 1024];
+        Arrays.fill(unreadBody, (byte) 'x');
+        List<List<RawSocket.Request>> exchanges = List.of(
+                List.of(RawSocket.request("POST", LOGIN).body("application/json", loginJsonOfSize(LIMIT + 1))),
+                List.of(RawSocket.request("POST", LOGIN).body("application/json", loginJsonOfSize(LIMIT))),
+                List.of(RawSocket.request("POST", LOGIN)
+                        .body("application/json", loginJsonOfSize(LIMIT + 1))
+                        .chunked()),
+                List.of(RawSocket.request("POST", "/api/v1/events")
+                        .body("application/json", loginJsonOfSize(LIMIT + 1))
+                        .chunked()),
+                List.of(RawSocket.request("PUT", PARTNER_PROFILE)
+                        .body("application/x-www-form-urlencoded", formOfSize(LIMIT + 1))
+                        .chunked()),
+                List.of(RawSocket.request("POST", LOGIN)
+                        .body("application/x-www-form-urlencoded", formOfSize(LIMIT + 1))
+                        .chunked()),
+                List.of(RawSocket.request("POST", LOGIN)
+                        .body(
+                                "application/x-www-form-urlencoded",
+                                "secret=%zz-hunter2".getBytes(StandardCharsets.UTF_8))),
+                List.of(RawSocket.request("POST", LOGIN)
+                        .header("Accept", "text/html")
+                        .body("application/json", loginJsonOfSize(LIMIT + 1))
+                        .chunked()),
+                List.of(RawSocket.request("POST", LOGIN)
+                        .header("Accept", "text/html")
+                        .body("application/x-www-form-urlencoded", formOfSize(LIMIT + 1))
+                        .chunked()),
+                List.of(RawSocket.request("PUT", PARTNER_PROFILE)
+                        .header("Authorization", bearer(artist))
+                        .body("application/json", loginJsonOfSize(LIMIT + 1))
+                        .chunked()),
+                List.of(
+                        RawSocket.request("GET", "/v3/api-docs")
+                                .body("text/plain", unreadBody)
+                                .chunked()
+                                .keepAlive(),
+                        RawSocket.request("GET", "/v3/api-docs")));
+
+        try (LogCapture capture = LogCapture.start(environment)) {
+            long errorResponses = 0;
+            for (List<RawSocket.Request> exchange : exchanges) {
+                errorResponses += RawSocket.exchange(port, exchange.toArray(RawSocket.Request[]::new)).stream()
+                        .filter(response -> response.status() >= 400)
+                        .count();
+            }
+            // RequestIdFilter는 400 이상의 응답만 INFO 완료 줄로 남긴다(성공은 DEBUG)
+            awaitCompletionLines(capture, errorResponses);
+
+            List<ObjectNode> events = capture.lines().stream()
+                    .map(line -> (ObjectNode) JSON.readTree(line))
+                    .toList();
+            assertThat(events.stream()
+                            .filter(event -> List.of("WARN", "ERROR")
+                                    .contains(event.path("level").asString("")))
+                            .map(event -> event.path("logger_name").asString("(로거 이름 없음)")))
+                    .as("WARN·ERROR 줄의 로거")
+                    .isEmpty();
+            assertThat(events.stream()
+                            .map(event -> event.path("message").asString("")
+                                    + event.path("stack_trace").asString(""))
+                            .filter(text -> LEAKED_VALUE.matcher(text).find())
+                            .count())
+                    .as("본문·길이 값이 든 줄 수")
+                    .isZero();
+        }
+    }
+
+    private static void awaitCompletionLines(LogCapture capture, long expected) throws InterruptedException {
+        Instant deadline = Instant.now().plus(COMPLETION_LINE_TIMEOUT);
+        long found;
+        while ((found = capture.lines().stream()
+                                .filter(line -> line.contains("요청 처리 완료"))
+                                .count())
+                        < expected
+                && Instant.now().isBefore(deadline)) {
+            Thread.sleep(20);
+        }
+        assertThat(found).as("완료 줄 수").isGreaterThanOrEqualTo(expected);
+    }
+
+    /**
+     * 이 필터보다 앞 순서의 필터가 읽은 본문은 상한 밖이다(ADR Decision 3의 보장 범위). 앞 순서에 필터를 더하면 이 목록이 바뀌어 테스트가 실패하므로, 그 필터가
+     * 본문을 읽는지 리뷰에서 보게 된다. 지금 목록의 필터는 모두 본문을 읽지 않는다.
+     */
+    @Test
+    void 이_필터보다_앞_순서의_서블릿_필터는_고정된_목록뿐이다() {
+        List<AbstractFilterRegistrationBean<?>> registrations = new ServletContextInitializerBeans(
+                        applicationContext.getBeanFactory())
+                .stream()
+                        .filter(AbstractFilterRegistrationBean.class::isInstance)
+                        .<AbstractFilterRegistrationBean<?>>map(AbstractFilterRegistrationBean.class::cast)
+                        .toList();
+        int limitFilterOrder = registrations.stream()
+                .filter(registration -> registration.getFilter() instanceof RequestBodyLimitFilter)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("RequestBodyLimitFilter가 서블릿 필터로 등록되지 않았다"))
+                .getOrder();
+
+        List<String> earlierFilters = registrations.stream()
+                .filter(registration -> registration.getOrder() < limitFilterOrder)
+                .map(registration -> registration.getFilter().getClass().getSimpleName())
+                .toList();
+
+        assertThat(earlierFilters)
+                .containsExactlyInAnyOrder(
+                        "OrderedCharacterEncodingFilter", "RequestIdFilter", "ServerHttpObservationFilter");
     }
 
     private static void assertTooLargeJson(RawSocket.Response response) throws IOException {
