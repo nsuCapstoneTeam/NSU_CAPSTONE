@@ -148,7 +148,8 @@ Eligibility ADR Consequences의 "NSU-12·34" 전제와 이 ADR이 지키는 방�
 - 상한 96은 15분에 하나꼴이다. 화면은 30분 단위로 고르므로 화면으로 하루를 빈틈없이 채워도 48개다. 짧은 틈은 정각·30분이 아닌 일정(섭외 성사·운영자의 `BOOKED`) 옆에만 생기고, 화면은 그 틈을 옆 일정의 시작·끝 시각으로 채운다(11 §8). 그런 일정 하나는 30분 칸을 하나 이상 차지하므로, 그 일정과 양옆 틈을 더해도 하루 개수는 그 일정 하나당 많아야 2개 는다. 화면 사용자가 상한에 닿으려면 하루에 그런 일정이 24개 넘게 있어야 한다. 그래서 상한 초과 오류는 화면 사용자에게 보이지 않는다.
 - 날짜는 `Asia/Seoul` 날짜이고 시작 시각으로 정한다. 자정을 넘는 일정은 시작한 날에 센다. 조회 상한(4,033건)은 "범위 안의 날 × 96 + 범위 시작을 덮는 1건"으로 셈한다.
 - 잠금은 PostgreSQL 트랜잭션 advisory 잠금이다. 키는 `hashtextextended('artist_schedules:' || user_id, 0)`다. 외부 계정(06 §11.3, `ExternalAccountRepository`)과 같은 방식이고 접두어만 다르다. 다른 키와 해시가 겹치면 두 아티스트의 쓰기가 줄을 설 뿐 결과는 같다. 트랜잭션이 끝나면 풀린다.
-- 상한은 트리거 둘이 같은 트리거 함수(`artist_schedule_write_guard`)로 검사한다. `trg_artist_schedules_before_insert`(`BEFORE INSERT`)와 `trg_artist_schedules_start_day_change`(`BEFORE UPDATE OF start_at`, `Asia/Seoul` 시작 날짜가 바뀔 때만 도는 `WHEN` 조건)다. 잠금을 잡은 뒤 그날 시작하는 같은 아티스트의 행을 자기 행을 빼고 센다. 96개 이상이면 SQLState `23514`, 제약 이름 `ck_artist_schedules_daily_limit`으로 거절한다.
+- 상한은 트리거 둘이 같은 트리거 함수(`artist_schedule_write_guard`)로 검사한다. `trg_artist_schedules_before_insert`(`BEFORE INSERT`)와 `trg_artist_schedules_start_day_change`(`BEFORE UPDATE OF start_at`, `Asia/Seoul` 시작 날짜가 바뀔 때만 도는 `WHEN` 조건)다. 잠금을 잡은 뒤 그날 시작하는 같은 아티스트의 행을 모두 센다. 96개 이상이면 SQLState `23514`, 제약 이름 `ck_artist_schedules_daily_limit`으로 거절한다.
+  - 세기에서 ID로 행을 빼지 않는다. 넣는 행은 아직 표에 없고, 시작 날짜를 옮기는 행의 옛 버전은 다른 날에 있어 어차피 세지 않는다. ID로 빼면 운영자가 꽉 찬 날의 행 ID를 바꾸는 동안 그 옛 ID로 같은 날에 넣는 행이, 아직 보이는 옛 행을 빼고 95개로 세어 97번째가 된다(ID 변경은 이 트리거를 부르지 않아 잠금도 잡지 않는다).
   - `READ COMMITTED`에서 트리거 안의 세기 문장은 잠금을 잡은 뒤 새 스냅숏을 쓴다. 그래서 앞에서 잠금을 쥐었던 트랜잭션이 커밋한 행까지 센다.
   - `REPEATABLE READ`·`SERIALIZABLE`에서는 세기 문장이 트랜잭션 스냅숏을 써서, 잠금을 기다리는 동안 커밋된 행을 놓친다(`SERIALIZABLE`도 상대가 `READ COMMITTED`인 API면 충돌을 잡지 못한다). 그래서 트리거 함수는 이 두 격리 수준의 쓰기를 먼저 거절한다(SQLState `25000`). 앱과 탈퇴 절차는 `READ COMMITTED`(기본값)라 걸리지 않는다. 운영자 SQL도 기본값이면 걸리지 않고, 격리 수준을 올린 트랜잭션은 `INSERT`와 시작 날짜를 바꾸는 `UPDATE`만 거절된다. 상한이 작성자의 격리 수준 설정에 기대지 않게 하려는 것이다.
   - 행 단위 `BEFORE` 트리거는 같은 문장이 앞서 넣은 행을 본다(PostgreSQL "Visibility of Data Changes"). 그래서 한 번에 7행을 넣어도 앞 행까지 센다.
@@ -410,11 +411,11 @@ BEGIN
                 USING ERRCODE = 'check_violation';
         END IF;
     END IF;
-    -- 하루 상한(결정 13): 아티스트별 잠금을 잡은 뒤 그날 시작하는 행을 자기 행을 빼고 센다.
+    -- 하루 상한(결정 13): 아티스트별 잠금을 잡은 뒤 그날 시작하는 행을 모두 센다. 넣는 행은 아직 없고 옮기는 행의 옛 버전은 다른 날이라 ID로 빼지 않는다.
     PERFORM pg_advisory_xact_lock(hashtextextended('artist_schedules:' || NEW.user_id, 0));
     EXECUTE format('SELECT count(*) FROM %I.artist_schedules WHERE user_id = $1 AND start_at >= $2 '
-                   'AND start_at < $3 AND id <> $4', TG_TABLE_SCHEMA)
-        INTO same_day USING NEW.user_id, day_start, day_end, NEW.id;
+                   'AND start_at < $3', TG_TABLE_SCHEMA)
+        INTO same_day USING NEW.user_id, day_start, day_end;
     IF same_day >= 96 THEN
         RAISE EXCEPTION '하루에 둘 수 있는 공연 가능 일정 수를 넘었다: %', NEW.user_id
             USING ERRCODE = 'check_violation', CONSTRAINT = 'ck_artist_schedules_daily_limit';
