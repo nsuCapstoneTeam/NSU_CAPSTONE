@@ -89,7 +89,9 @@ class RequestBodyLimitTomcatIntegrationTest extends EventIntegrationTestBase {
         RawSocket.Response response =
                 RawSocket.send(port, RawSocket.request("POST", LOGIN).body("application/json", loginJsonOfSize(LIMIT)));
 
-        assertThat(response.status()).isNotEqualTo(413).isLessThan(500);
+        // 본문을 끝까지 읽어 JSON으로 풀었다는 증거다. 없는 계정이라 로그인 실패(401)까지 가야 한다. 바이트를 잃었으면 JSON 오류 400이 난다
+        assertThat(response.status()).isEqualTo(401);
+        assertThat(JSON.readTree(response.body()).path("code").asString()).isEqualTo("INVALID_LOGIN_CREDENTIALS");
     }
 
     @Test
