@@ -36,6 +36,18 @@ class ArtistScheduleTable {
         jdbc.sql("SET LOCAL lock_timeout = '3s'").update();
     }
 
+    /**
+     * 같은 아티스트의 추가·수정을 한 줄로 세운다. 키는 삽입 가드 트리거({@code artist_schedule_write_guard})와 운영자 runbook의 잠금과 같아야 한다.
+     * 트랜잭션이 끝나면 풀린다. 트랜잭션 밖에서 부르면 바로 풀려 아무것도 막지 못하므로 MANDATORY가 거절한다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    void lockArtist(UUID userId) {
+        jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended('artist_schedules:' || :userId, 0))")
+                .param("userId", userId)
+                .query()
+                .singleRow();
+    }
+
     /** 일정 한 행을 넣는다. 겹침과 하루 상한은 DB가 거절한다(11 §5.1). */
     MyArtistSchedule insert(UUID id, UUID userId, ArtistScheduleDraft draft) {
         jdbc.sql("""

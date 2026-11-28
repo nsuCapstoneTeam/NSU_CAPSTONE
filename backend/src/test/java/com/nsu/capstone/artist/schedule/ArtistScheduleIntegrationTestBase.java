@@ -5,22 +5,37 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nsu.capstone.event.EventIntegrationTestBase;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 abstract class ArtistScheduleIntegrationTestBase extends EventIntegrationTestBase {
 
     static final String PATH = "/api/v1/me/artist-schedules";
+
+    /** 다른 스레드나 연결을 기다리는 테스트의 상한(초) */
+    static final long WAIT_SECONDS = 10;
+
+    @Autowired
+    DataSource dataSource;
 
     protected User artist;
 
@@ -122,5 +137,67 @@ abstract class ArtistScheduleIntegrationTestBase extends EventIntegrationTestBas
     long scheduleRows(User owner) {
         return jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM artist_schedules WHERE user_id = ?", Long.class, owner.getId());
+    }
+
+    /** 11 §4: 잠금을 못 잡으면 503 {@code ARTIST_SCHEDULE_BUSY}이고 {@code Retry-After}는 없다. */
+    static void assertBusy(ResultActions response) throws Exception {
+        response.andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("ARTIST_SCHEDULE_BUSY"))
+                .andExpect(header().doesNotExist("Retry-After"));
+    }
+
+    /** 이 아티스트의 아티스트별 잠금을 잡는 문장. 앱과 삽입 가드 트리거, 운영자 runbook이 같은 키를 쓴다(11 §5.2). */
+    String artistLock() {
+        return "SELECT pg_advisory_xact_lock(hashtextextended('artist_schedules:' || '" + artist.getId() + "', 0))";
+    }
+
+    /** 다른 연결이 잠금을 쥔 채 커밋하지 않는다. {@link #commit()}은 커밋, {@link #close()}는 롤백해서 잠금을 푼다. */
+    final class HeldLock implements AutoCloseable {
+
+        private final Connection connection;
+
+        HeldLock(String... statements) throws SQLException {
+            connection = dataSource.getConnection();
+            try {
+                connection.setAutoCommit(false);
+                try (Statement statement = connection.createStatement()) {
+                    for (String sql : statements) {
+                        statement.execute(sql);
+                    }
+                }
+            } catch (SQLException | RuntimeException exception) {
+                connection.close();
+                throw exception;
+            }
+        }
+
+        void commit() throws SQLException {
+            connection.commit();
+        }
+
+        @Override
+        public void close() throws SQLException {
+            try {
+                connection.rollback();
+            } finally {
+                connection.close();
+            }
+        }
+    }
+
+    /** 이 문장 조각을 가진 연결이 잠금을 기다리는 상태가 될 때까지 기다린다. 잠깐 자는 것으로 순서를 가정하지 않는다. */
+    void awaitLockWait(String queryFragment) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
+        while (System.nanoTime() < deadline) {
+            Long waiting = jdbcTemplate.queryForObject(
+                    "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE ?",
+                    Long.class,
+                    "%" + queryFragment + "%");
+            if (waiting != null && waiting > 0) {
+                return;
+            }
+            Thread.sleep(20);
+        }
+        throw new AssertionError("잠금을 기다리는 문장이 없다: " + queryFragment);
     }
 }

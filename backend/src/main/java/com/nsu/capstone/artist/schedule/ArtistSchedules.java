@@ -68,7 +68,9 @@ public class ArtistSchedules {
         table.limitLockWait();
         try {
             writeAccess.require(artistId);
-            return request.toDrafts().stream()
+            List<ArtistScheduleDraft> drafts = request.toDrafts();
+            table.lockArtist(artistId);
+            return drafts.stream()
                     .map(draft -> table.insert(uuidV7Generator.generate(), artistId, draft))
                     .toList();
         } catch (DataAccessException exception) {
@@ -94,6 +96,7 @@ public class ArtistSchedules {
         try {
             writeAccess.require(artistId);
             ArtistScheduleDraft draft = request.toDraft();
+            table.lockArtist(artistId);
             if (table.update(artistScheduleId, artistId, draft) == 0) {
                 throw new BusinessException(ErrorCode.ARTIST_SCHEDULE_NOT_FOUND);
             }
