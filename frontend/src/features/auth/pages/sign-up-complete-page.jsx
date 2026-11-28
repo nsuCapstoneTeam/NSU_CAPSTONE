@@ -8,7 +8,7 @@ const NEXT_STEPS = {
   organizer: ['프로필 탭에서 담당자 이름·소속 채우기', '아티스트 매칭에서 행사 조건 입력해 보기'],
 };
 
-// 가입 완료 안내. onStart를 누르면 로그인 상태가 되어 마이페이지(프로필 탭)로 이동합니다.
+// 가입 완료 안내. onStart를 누르면 마이페이지(프로필 탭)로 갑니다 (체험 모드는 바로, 서버 모드는 로그인을 거쳐서).
 export default function SignUpComplete({ profile, onStart, navigate }) {
   const isArtist = profile.role === 'artist';
   const roleName = isArtist ? '아티스트' : '행사 관계자';
@@ -47,7 +47,7 @@ export default function SignUpComplete({ profile, onStart, navigate }) {
       <small>
         {AUTH_API_MODE === 'demo'
           ? '체험 모드라 실제 회원 계정은 만들어지지 않았어요.'
-          : '로그인 기능이 연결되기 전까지는 이 브라우저의 체험 상태로 이어져요.'}
+          : '가입한 이메일과 비밀번호로 로그인하면 바로 시작할 수 있어요.'}
       </small>
     </section>
   );

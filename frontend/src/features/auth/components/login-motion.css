@@ -151,27 +151,10 @@
   box-shadow: none;
 }
 
-/* 8. 행사 관계자: 인증번호 입력칸이 펼쳐지며 나타남 */
-.organizer-code-form {
-  animation: login-reveal 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  transform-origin: top;
-}
-@keyframes login-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(-8px) scaleY(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
 /* 움직임 줄이기 설정을 켠 경우 애니메이션 끔 */
 @media (prefers-reduced-motion: reduce) {
   .login-motion-panel,
-  .login-motion-panel *,
-  .organizer-code-form {
+  .login-motion-panel * {
     animation: none !important;
     transition: none !important;
   }

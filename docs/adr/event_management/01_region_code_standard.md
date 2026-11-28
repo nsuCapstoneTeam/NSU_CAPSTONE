@@ -2,7 +2,7 @@
 
 - 상태: **Proposed** (PR 리뷰에서 확정)
 - 결정일: **2026-10-18** (NSU-54·58 설계 세션)
-- 관련: [03 행사 API §7](../../api/03_events.md#7-지역-목록), [00 공통 규칙 §2](../../api/00_conventions.md#2-명명), SSOT `EVT-042`·`AI-MATCH-051`·`SEARCH-049`, NSU-12·48·54
+- 관련: [03 행사 API §7](../../api/03_events.md#7-지역-목록), [00 공통 규칙 §2](../../api/00_conventions.md#2-명명), SSOT `EVT-042`·`AI-MATCH-051`·`SEARCH-049`, NSU-12·48·54·119, [ADR artist_profile/00](../artist_profile/00_artist_profile_api.md)
 
 ---
 
@@ -51,9 +51,9 @@ Eligibility의 지역 조건(`REGION_REACHABLE`, `AI-MATCH-051` "행사 지역 �
 
 - API의 지역 코드는 숫자 문자열이다(00 §2 예외). 클라이언트는 이름을 `GET /api/v1/regions`에서 얻는다.
 - 행정구역이 개편되면 목록 변경과 저장된 코드 이전을 마이그레이션 하나로 처리한다(Decision). 합쳐지거나 이름·코드만 바뀌는 경우는 새 코드로 그대로 옮긴다. 한 지역이 둘 이상으로 나뉠 때 기존 행사와 아티스트 지역을 어느 코드로 옮길지(대응 규칙)는 정하지 않았으며, 그런 개편이 생기면 그때 정한다. 예: 2023년 군위군이 경상북도에서 대구광역시로 옮겨 갔다. 강원(`42`→`51`)과 전북(`45`→`52`)은 특별자치도 출범으로 시·도 코드가 바뀌었다. 2026년 7월에는 광주광역시(`29`)와 전라남도(`46`)가 전남광주통합특별시(`12`)로 합쳐졌다.
-- 저장된 코드 이전의 대상에는 외래 키가 없는 배열도 있다. EVENT_PARTNER 프로필의 주요 활동 지역(시·도·시·군·구 코드 배열)은 이전 뒤 정규화를 다시 하고, 개편 마이그레이션 끝에서 점검 함수를 부른다. 배열 이전이나 다시 정규화하기를 빠뜨리면 테스트 `EventPartnerProfileRegionMigrationIntegrationTest`가 실패한다(함수 호출 자체를 빠뜨린 것은 그 테스트가 점검 함수를 직접 부르므로 잡지 못한다). 개편 PR 작성자는 이 테스트를 돌려 결과를 PR 설명에 적는다. PR마다 자동으로 돌리는 CI는 NSU-135다([ADR event_partner_profile/00](../event_partner_profile/00_event_partner_profile_api.md), 2026-11-05 추가).
+- 저장된 코드 이전의 대상에는 외래 키가 없는 배열도 있다. EVENT_PARTNER 프로필의 주요 활동 지역과 아티스트 프로필의 공연 가능 지역(둘 다 시·도·시·군·구 코드 배열)은 이전 뒤 정규화를 다시 하고, 개편 마이그레이션 끝에서 두 표를 함께 보는 점검 함수 `check_profile_regions()`를 부른다. 배열 이전이나 다시 정규화하기를 빠뜨리거나 두 표 중 하나만 옮기면 테스트 `ProfileRegionMigrationIntegrationTest`가 실패한다(함수 호출 자체를 빠뜨린 것은 그 테스트가 점검 함수를 직접 부르므로 잡지 못한다). 개편 PR 작성자는 이 테스트를 돌려 결과를 PR 설명에 적는다. PR마다 자동으로 돌리는 CI는 NSU-135다([ADR event_partner_profile/00](../event_partner_profile/00_event_partner_profile_api.md) 2026-11-05 추가, [ADR artist_profile/00](../artist_profile/00_artist_profile_api.md) 2026-11-22 아티스트 프로필 추가).
 - 목록은 법정동코드 전체자료로 만들고, 그 기준일을 함께 관리한다.
-- 아티스트가 이동 가능 지역을 고를 선택지가 많다. "서울 전체" 같은 시·도 단위 선택(앞 2자리)과 판정 규칙은 NSU-12·48에서 정한다.
+- 아티스트가 이동 가능 지역(09의 이름은 "공연 가능 지역")을 고를 선택지가 많다. "서울 전체" 같은 시·도 단위 선택(앞 2자리)은 아티스트 프로필 API(09 §2, NSU-119)가 받고, 판정 규칙(`REGION_REACHABLE`)은 ADR recommendation_eligibility/00이 정했다.
 - 프런트는 지역 선택을 시·도 → 시·군·구 두 단계로 바꾼다.
 
 ## Rejected Alternatives

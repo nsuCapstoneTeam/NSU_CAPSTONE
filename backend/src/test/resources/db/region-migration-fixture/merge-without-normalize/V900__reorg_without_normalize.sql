@@ -3,3 +3,4 @@
 -- 수원시가 서울특별시로 옮겨 갔다고 가정한다(군위군의 대구 편입과 같은 시·도 간 이동).
 UPDATE regions SET code = '11999', province_code = '11', province_name = '서울특별시' WHERE code = '41110';
 UPDATE event_partner_profiles SET region_codes = array_replace(region_codes, '41110', '11999');
+UPDATE artist_profiles SET region_codes = array_replace(region_codes, '41110', '11999');
