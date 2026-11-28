@@ -60,6 +60,7 @@ src/main/java/com/nsu/capstone/global/logging/RequestIdInterceptor.java
 src/main/java/com/nsu/capstone/global/logging/UncaughtExceptionLogger.java
 src/main/java/com/nsu/capstone/global/text/UserText.java
 src/main/java/com/nsu/capstone/global/web/BodyLimitedRequest.java
+src/main/java/com/nsu/capstone/global/web/FormPostSizeValidation.java
 src/main/java/com/nsu/capstone/global/web/RequestBodyLimitFilter.java
 src/main/java/com/nsu/capstone/global/web/RequestBodyTooLargeException.java
 src/main/java/com/nsu/capstone/identity/application/ArtistReadAccess.java
