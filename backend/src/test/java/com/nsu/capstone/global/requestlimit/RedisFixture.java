@@ -10,6 +10,9 @@ import org.testcontainers.utility.DockerImageName;
 /** 한도 테스트가 함께 쓰는 Redis 컨테이너(JVM마다 하나)와 출시 기본값 설정. */
 final class RedisFixture {
 
+    /** 동시 호출 상한이 주제가 아닌 테스트가 쓰는 넉넉한 값(기본 server.tomcat.threads.max). */
+    static final int CALL_LIMIT = 200;
+
     private static final GenericContainer<?> CONTAINER = newContainer("256mb");
 
     static {

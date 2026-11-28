@@ -37,7 +37,8 @@ class BudgetLedgerOutageTest {
                 redis,
                 clock,
                 RedisFixture.properties(serverCount, 10_000, Duration.ofSeconds(10), Duration.ofSeconds(1)),
-                executor);
+                executor,
+                RedisFixture.CALL_LIMIT);
     }
 
     @AfterEach
@@ -50,8 +51,13 @@ class BudgetLedgerOutageTest {
     @Test
     void 닫으면_한도_확인_실행기를_멈추고_넘겨받은_정리를_부른다() {
         AtomicInteger cleanups = new AtomicInteger();
-        BudgetLedger ledger =
-                new BudgetLedger(redis, clock, RedisFixture.releaseProperties(), executor, cleanups::incrementAndGet);
+        BudgetLedger ledger = new BudgetLedger(
+                redis,
+                clock,
+                RedisFixture.releaseProperties(),
+                executor,
+                RedisFixture.CALL_LIMIT,
+                cleanups::incrementAndGet);
 
         ledger.close();
 
@@ -181,7 +187,8 @@ class BudgetLedgerOutageTest {
                 redis,
                 clock,
                 RedisFixture.properties(1, 10_000, Duration.ofSeconds(10), Duration.ofMillis(100)),
-                executor);
+                executor,
+                RedisFixture.CALL_LIMIT);
         redis.holdCalls();
 
         Future<?> request = callers.submit(() -> ledger.spend(UUID.randomUUID(), RequestBudget.EVENT_REGISTRATION));
@@ -199,7 +206,8 @@ class BudgetLedgerOutageTest {
                 redis,
                 clock,
                 RedisFixture.properties(1, maxEntries, Duration.ofSeconds(10), Duration.ofSeconds(1)),
-                executor);
+                executor,
+                RedisFixture.CALL_LIMIT);
     }
 
     @Test

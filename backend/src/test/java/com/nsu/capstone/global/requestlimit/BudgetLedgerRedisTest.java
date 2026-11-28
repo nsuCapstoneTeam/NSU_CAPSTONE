@@ -36,7 +36,11 @@ class BudgetLedgerRedisTest {
             redis.delete(keys);
         }
         ledger = new BudgetLedger(
-                redis, clock, RedisFixture.releaseProperties(), Executors.newVirtualThreadPerTaskExecutor());
+                redis,
+                clock,
+                RedisFixture.releaseProperties(),
+                Executors.newVirtualThreadPerTaskExecutor(),
+                RedisFixture.CALL_LIMIT);
         // 서버가 뜬 직후 첫 요청은 탐침이다. 탐침이 끝나 "Redis 있음"이 된 뒤의 동작을 본다
         ledger.spend(UUID.randomUUID(), RequestBudget.PROFILE);
     }

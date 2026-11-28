@@ -11,6 +11,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,6 +41,7 @@ final class BudgetLedger implements AutoCloseable {
     private final MemoryBudgetCounter memory;
     private final int memoryMaxEntries;
     private final ExecutorService executor;
+    private final Semaphore slots;
     private final Runnable onClose;
     private final long retryIntervalMillis;
     private final long totalTimeoutMillis;
@@ -53,11 +55,16 @@ final class BudgetLedger implements AutoCloseable {
     }
 
     BudgetLedger(
-            StringRedisTemplate redis, Clock clock, UserRequestLimitProperties properties, ExecutorService executor) {
-        this(redis, clock, properties, executor, () -> {});
+            StringRedisTemplate redis,
+            Clock clock,
+            UserRequestLimitProperties properties,
+            ExecutorService executor,
+            int maxConcurrentCalls) {
+        this(redis, clock, properties, executor, maxConcurrentCalls, () -> {});
     }
 
     /**
+     * @param maxConcurrentCalls 동시에 Redis를 부르는 작업의 상한. 전용 연결의 명령 큐 크기와 같게 둔다
      * @param onClose 닫을 때 실행기 다음에 부른다. 이 원장이 만든 전용 연결을 닫는 데 쓴다
      */
     BudgetLedger(
@@ -65,10 +72,12 @@ final class BudgetLedger implements AutoCloseable {
             Clock clock,
             UserRequestLimitProperties properties,
             ExecutorService executor,
+            int maxConcurrentCalls,
             Runnable onClose) {
         this.redis = redis;
         this.clock = clock;
         this.executor = executor;
+        this.slots = new Semaphore(maxConcurrentCalls);
         this.onClose = onClose;
         this.memoryMaxEntries = properties.memoryMaxEntries();
         this.memory = new MemoryBudgetCounter(memoryMaxEntries);
@@ -122,25 +131,40 @@ final class BudgetLedger implements AutoCloseable {
     }
 
     /**
-     * 실행기에서 Redis를 불러 {@code redis-total-timeout}까지만 기다린다. 기한을 넘긴 호출은 취소하지 않는다.
+     * 실행기에서 Redis를 불러 {@code redis-total-timeout}까지만 기다린다. 기한을 넘긴 호출은 취소하지 않고, 끝날 때까지 동시 호출 자리를 잡는다.
      *
      * @return 스크립트의 답(-1은 받음, 0 이상은 거절이며 남은 ms). 이 요청이 답을 받지 못했으면 null이다. Redis 장애(기한 초과 포함)면 상태를
-     *     바꾸고, 실행기가 거절했거나 기다리다 끊긴 것은 이 서버의 과부하일 뿐이라 상태를 바꾸지 않는다.
+     *     바꾸고, 동시 호출 상한에 걸렸거나 실행기가 거절했거나 기다리다 끊긴 것은 이 서버의 과부하일 뿐이라 상태를 바꾸지 않는다.
      */
     private Long askRedis(UUID accountId, RequestBudget budget, long now, boolean probe) {
         BudgetRate rate = rates.get(budget);
-        Future<Long> call;
-        try {
-            call = executor.submit(() -> redis.execute(
-                    GCRA,
-                    List.of(key(budget, accountId), PROBE_KEY),
-                    Long.toString(now),
-                    Long.toString(rate.intervalMillis()),
-                    Long.toString(rate.toleranceMillis()),
-                    probe ? "1" : "0"));
-        } catch (RejectedExecutionException e) {
+        if (!slots.tryAcquire()) {
             warnOverloaded();
             return null;
+        }
+        Future<Long> call;
+        try {
+            call = executor.submit(() -> {
+                try {
+                    return redis.execute(
+                            GCRA,
+                            List.of(key(budget, accountId), PROBE_KEY),
+                            Long.toString(now),
+                            Long.toString(rate.intervalMillis()),
+                            Long.toString(rate.toleranceMillis()),
+                            probe ? "1" : "0");
+                } finally {
+                    // 결과가 호출한 요청에 보이기 전에 돌려준다. 그래야 요청 스레드 수와 상한이 같을 때 거짓 거절이 없다
+                    slots.release();
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            slots.release();
+            warnOverloaded();
+            return null;
+        } catch (RuntimeException | Error e) {
+            slots.release();
+            throw e;
         }
         try {
             return call.get(totalTimeoutMillis, TimeUnit.MILLISECONDS);

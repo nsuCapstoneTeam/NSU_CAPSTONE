@@ -3,9 +3,7 @@ package com.nsu.capstone.global.requestlimit;
 import com.nsu.capstone.global.logging.RequestIdExecutors;
 import java.time.Clock;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Executors;
 import org.springdoc.core.customizers.OperationCustomizer;
 import org.springframework.aop.Advisor;
 import org.springframework.aop.support.DefaultPointcutAdvisor;
@@ -53,8 +51,8 @@ public class UserRequestLimitConfig {
     }
 
     /**
-     * 한도 확인 전용 Redis 연결과 가상 스레드 실행기를 가진 원장. 실행기 최대 크기와 연결의 명령 큐 크기는 요청 스레드 수
-     * ({@code server.tomcat.threads.max})와 같다. 동시에 보내는 명령이 실행기 작업 수를 넘지 않아, 정상 Redis에서 큐가 먼저 차는 일이 없다.
+     * 한도 확인 전용 Redis 연결과 가상 스레드 실행기를 가진 원장. 동시 호출 상한과 연결의 명령 큐 크기는 요청 스레드 수
+     * ({@code server.tomcat.threads.max})와 같다. 동시에 보내는 명령이 그 상한을 넘지 않아, 정상 Redis에서 큐가 먼저 차는 일이 없다.
      */
     @Bean
     BudgetLedger userRequestLimitLedger(
@@ -66,18 +64,12 @@ public class UserRequestLimitConfig {
         LettuceConnectionFactory dedicated = DedicatedRedis.factory(sharedFactory, limits, requestThreads);
         // 원장이 AutoCloseable이라 Spring이 컨텍스트를 닫을 때 close()를 부르고, 거기서 실행기와 전용 연결을 닫는다
         return new BudgetLedger(
-                new StringRedisTemplate(dedicated), clock, limits, executor(requestThreads), dedicated::destroy);
+                new StringRedisTemplate(dedicated), clock, limits, executor(), requestThreads, dedicated::destroy);
     }
 
-    /** 최대 크기를 넘는 작업은 줄 세우지 않고 거절한다. 거절은 장애가 아니라 이 서버의 과부하로 다룬다. */
-    private static ExecutorService executor(int maxSize) {
-        return RequestIdExecutors.wrap(new ThreadPoolExecutor(
-                maxSize,
-                maxSize,
-                0L,
-                TimeUnit.MILLISECONDS,
-                new SynchronousQueue<>(),
-                Thread.ofVirtual().name("user-request-limit-", 0).factory(),
-                new ThreadPoolExecutor.AbortPolicy()));
+    /** 작업마다 가상 스레드를 만든다. 동시 호출 상한은 원장이 {@code Semaphore}로 센다(ADR 6번 동시 호출 상한). */
+    private static ExecutorService executor() {
+        return RequestIdExecutors.wrap(Executors.newThreadPerTaskExecutor(
+                Thread.ofVirtual().name("user-request-limit-", 0).factory()));
     }
 }

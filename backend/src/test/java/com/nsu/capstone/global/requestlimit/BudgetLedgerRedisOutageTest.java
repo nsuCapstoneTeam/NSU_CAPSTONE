@@ -63,7 +63,7 @@ class BudgetLedgerRedisOutageTest {
                 RedisFixture.properties(1, 10_000, Duration.ofSeconds(10), Duration.ofSeconds(1));
         shared = RedisFixture.sharedFactory(container);
         dedicated = DedicatedRedis.factory(shared, properties, EXECUTOR_MAX_SIZE);
-        return new BudgetLedger(new StringRedisTemplate(dedicated), clock, properties, executor);
+        return new BudgetLedger(new StringRedisTemplate(dedicated), clock, properties, executor, EXECUTOR_MAX_SIZE);
     }
 
     private void pauseRedis() {
