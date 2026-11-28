@@ -41,6 +41,18 @@ class ArtistScheduleListApiIntegrationTest extends ArtistScheduleIntegrationTest
     }
 
     @Test
+    void 운영자_SQL로_넣은_BOOKED_일정도_조회에_그대로_나온다() throws Exception {
+        UUID booked = insert(artist, "2026-12-12 18:00:00+09", "2026-12-12 19:40:00+09", "BOOKED", null);
+
+        getSchedules(artist, "2026-12-12", "2026-12-12")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(booked.toString()))
+                .andExpect(jsonPath("$.items[0].status").value("BOOKED"))
+                .andExpect(jsonPath("$.items[0].endTime").value("19:40"));
+    }
+
+    @Test
     void 조회_구간과_겹치는_일정만_자르지_않고_돌려주고_맞닿기만_한_일정과_다른_사용자의_일정은_빠진다() throws Exception {
         User other = newUser(UserRole.ARTIST, "other@example.com");
         UUID crossingStart = insert(artist, "2026-11-30 22:00:00+09", "2026-12-01 02:00:00+09", "AVAILABLE", null);

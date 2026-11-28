@@ -1,5 +1,6 @@
 package com.nsu.capstone.artist.schedule;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -19,6 +20,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
@@ -26,6 +29,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 abstract class ArtistScheduleIntegrationTestBase extends EventIntegrationTestBase {
 
@@ -36,6 +41,12 @@ abstract class ArtistScheduleIntegrationTestBase extends EventIntegrationTestBas
 
     @Autowired
     DataSource dataSource;
+
+    @Autowired
+    ArtistSchedules schedules;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
 
     protected User artist;
 
@@ -161,6 +172,48 @@ abstract class ArtistScheduleIntegrationTestBase extends EventIntegrationTestBas
             return "OK";
         } catch (SQLException exception) {
             return exception.getSQLState();
+        }
+    }
+
+    /**
+     * 추가 트랜잭션을 열어 두고 커밋하지 않는다(11 §9의 "테스트용 트랜잭션"). 같은 서비스 메서드를 쓰므로 {@code users} 행 잠금과 아티스트별 잠금도 실제와
+     * 같다. 일정은 {@code 2026-12-12 18:00~19:00 HOLD} 하나다.
+     */
+    HeldAdd holdAdd() throws Exception {
+        CountDownLatch added = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ArtistScheduleBatchRequest request = new ArtistScheduleBatchRequest(
+                List.of(new ArtistScheduleRequest("2026-12-12", "18:00", "2026-12-12", "19:00", "HOLD", null)));
+        CompletableFuture<Void> transaction =
+                CompletableFuture.runAsync(() -> new TransactionTemplate(transactionManager)
+                        .executeWithoutResult(status -> {
+                            schedules.add(artist.getId(), request);
+                            added.countDown();
+                            if (!awaitRelease(release)) {
+                                // 정상 해제가 아니면(시간 초과, 인터럽트) 커밋하지 않는다. 실패한 테스트가 행을 남기지 않게 한다
+                                status.setRollbackOnly();
+                            }
+                        }));
+        assertThat(added.await(WAIT_SECONDS, TimeUnit.SECONDS)).as("추가가 실행됐다").isTrue();
+        return new HeldAdd(transaction, release);
+    }
+
+    record HeldAdd(CompletableFuture<Void> transaction, CountDownLatch release) {
+
+        /** 보류를 풀고 커밋이 끝날 때까지 기다린다. */
+        void finish() throws Exception {
+            release.countDown();
+            transaction.get(WAIT_SECONDS, TimeUnit.SECONDS);
+        }
+    }
+
+    /** 해제됐으면 true. 시간이 지났거나 인터럽트되면 false이고, 인터럽트 상태는 남긴다. */
+    private static boolean awaitRelease(CountDownLatch latch) {
+        try {
+            return latch.await(WAIT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return false;
         }
     }
 

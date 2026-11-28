@@ -8,7 +8,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -16,10 +15,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 11 §5.2·§5.3 "추가와 탈퇴·정지 겹침". 탈퇴 절차(NSU-167)는 {@code READ COMMITTED}에서 {@code users} 상태 UPDATE 뒤 일정
@@ -29,12 +25,6 @@ class ArtistScheduleWithdrawalOverlapIntegrationTest extends ArtistScheduleInteg
 
     private static final String WITHDRAW = "UPDATE users SET status = 'WITHDRAWN' WHERE id = '%s'";
     private static final String DELETE_SCHEDULES = "DELETE FROM artist_schedules WHERE user_id = '%s'";
-
-    @Autowired
-    ArtistSchedules schedules;
-
-    @Autowired
-    PlatformTransactionManager transactionManager;
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
@@ -201,42 +191,5 @@ class ArtistScheduleWithdrawalOverlapIntegrationTest extends ArtistScheduleInteg
         jdbcTemplate.update(WITHDRAW.formatted(artist.getId()));
         jdbcTemplate.update(DELETE_SCHEDULES.formatted(artist.getId()));
         assertThat(scheduleRows(artist)).isZero();
-    }
-
-    /** 추가 트랜잭션을 열어 두고 커밋하지 않는다. 같은 서비스 메서드를 쓰므로 {@code users} 행 잠금도 실제와 같다. */
-    private HeldAdd holdAdd() throws Exception {
-        CountDownLatch added = new CountDownLatch(1);
-        CountDownLatch release = new CountDownLatch(1);
-        ArtistScheduleBatchRequest request = new ArtistScheduleBatchRequest(
-                List.of(new ArtistScheduleRequest("2026-12-12", "18:00", "2026-12-12", "19:00", "HOLD", null)));
-        Future<?> transaction =
-                executor.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-                    schedules.add(artist.getId(), request);
-                    added.countDown();
-                    if (!awaitRelease(release)) {
-                        // 정상 해제가 아니면(시간 초과, 정리의 인터럽트) 커밋하지 않는다. 실패한 테스트가 행을 남기지 않게 한다
-                        status.setRollbackOnly();
-                    }
-                }));
-        assertThat(added.await(WAIT_SECONDS, TimeUnit.SECONDS)).as("추가가 실행됐다").isTrue();
-        return new HeldAdd(transaction, release);
-    }
-
-    private record HeldAdd(Future<?> transaction, CountDownLatch release) {
-
-        void finish() throws Exception {
-            release.countDown();
-            transaction.get(WAIT_SECONDS, TimeUnit.SECONDS);
-        }
-    }
-
-    /** 해제됐으면 true. 시간이 지났거나 인터럽트되면 false이고, 인터럽트 상태는 남긴다. */
-    private static boolean awaitRelease(CountDownLatch latch) {
-        try {
-            return latch.await(WAIT_SECONDS, TimeUnit.SECONDS);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            return false;
-        }
     }
 }
