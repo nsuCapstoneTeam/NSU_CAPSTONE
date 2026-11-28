@@ -159,7 +159,7 @@ GCRA는 토큰 버킷과 같은 결과를 숫자 하나로 계산한다. `T` = `
 |---|---|---|---|
 | 정확성 | 장애 동안 한도가 없다 | 서버마다 나눈 한도로 센다. 넘어갈 때와 돌아올 때 계정·한도마다 최대 `capacity`씩 더 들어온다 | 정확하다(아무것도 받지 않는다) |
 | 보안 | Redis를 꽉 채우면(NSU-163 `noeviction`) 한도가 꺼진다. 신호는 `WARN` 로그뿐이다 | 메모리를 꽉 채워도 한도가 남는다. 메모리 항목 수에 상한이 있다 | 한도는 지키지만 Redis 장애가 쓰기 장애가 된다 |
-| 성능 | 장애가 시작될 때 이미 Redis를 부르던 요청만 기다린다(연결 timeout + 명령 timeout 2번(스크립트 캐시가 비면 `EVALSHA` 실패 뒤 `EVAL`), 기본 설정으로 약 3초). 탐침 1건이면 그 뒤 기다림 없음 | 같다(탐침 1건) | 같다(탐침 1건) |
+| 성능 | 한도 확인의 Redis 대기는 전체 기한 1초(`redis-total-timeout`)로 묶인다. 연결 생성, 공유 연결 잠금, 명령 대기를 모두 포함한다. 탐침 1건이면 그 뒤 기다림 없음 | 같다(탐침 1건) | 같다(탐침 1건) |
 | 메모리 | 없음 | 서버마다 최대 10,000항목(약 2MB) | 없음 |
 | 확장성 | 차이 없음 | 서버를 늘리면 서버 수 설정을 함께 바꾼다 | 차이 없음 |
 | 운영 부담 | 장애 로그 확인 | 같다 + 서버 수 설정 | 장애 동안 행사 등록·수정 문의 |
@@ -170,11 +170,13 @@ GCRA는 토큰 버킷과 같은 결과를 숫자 하나로 계산한다. `T` = `
 - 서버 수 `N`(`user-request-limit.server-count`, 기본 1)으로 나눈다. 서버마다 `capacity`는 `max(1, floor(capacity ÷ N))`, 간격은 `refill-every × N`이다. 서버를 모두 합쳐도 Redis 한도를 넘지 않는다(02 §2.5의 "전체 한도 ÷ 서버 수"와 같다). `capacity`가 `N`보다 작으면 서버마다 1건이라 합이 넘을 수 있다. 받아들인다.
 - 메모리 항목 상한: `user-request-limit.memory-max-entries`(기본 10,000). 새 항목을 넣을 때 가득 찼으면 버킷이 다시 가득 찬 항목(TAT ≤ 지금, 항목이 없는 것과 같다)부터 지운다. 그래도 가득 차면 그 요청은 세지 않고 통과시키고, 장애 한 번에 `WARN`을 한 번 남긴다(Codex 심판 결함: 정리만으로는 살아 있는 항목 수가 묶이지 않는다).
 - 탐침 1건(Codex 심판 결함: 장애 전환 때 여러 요청이 동시에 Redis를 시도한다):
-  - Redis 호출이 `DataAccessException`(명령 timeout 1초 포함)으로 실패하면 "Redis 없음, 다시 볼 시각 = 지금 + `redis-retry-interval`(기본 10초)"로 바꾼다.
+  - Redis 호출이 `DataAccessException`으로 실패하거나 전체 기한(아래)을 넘기면 "Redis 없음, 다시 볼 시각 = 지금 + `redis-retry-interval`(기본 10초)"로 바꾼다.
   - 그 시각 전에는 Redis를 부르지 않는다. `MEMORY_FALLBACK`은 메모리로 세고, `REJECT`는 바로 `503`이다.
-  - 그 시각이 지나면 compare-and-set에 이긴 요청 하나만 Redis를 부른다(탐침). 나머지는 계속 Redis를 건너뛴다. 회복은 쓰기가 성공했을 때만 판정한다. 탐침이 받음(`SET` 성공, 스크립트가 `-1`)을 돌려주면 "Redis 있음"으로 바꾸고 `INFO` 로그를 남긴다. 탐침이 거절(대기 시간, `GET`만 실행)을 돌려주면 그 요청에는 그대로 `429`를 주고, 상태는 "Redis 없음"으로 둔 채 다음 요청이 바로 다시 탐침을 맡는다. `maxmemory`에 닿은 Redis는 `GET`은 답하지만 `SET`은 거절하므로, 읽기만 성공한 탐침을 회복으로 보면 요청들이 다시 몰린다(설계 리뷰 지적). 탐침이 실패하면 다시 볼 시각을 미룬다.
-  - 장애가 시작되는 순간 이미 Redis를 부르고 있던 요청만 각자 한 번 기다린다. 상한은 연결 timeout + 명령 timeout 2번(스크립트 캐시가 비면 `EVALSHA` 실패 뒤 `EVAL`), 기본 설정으로 약 3초다. 공유 연결의 timeout 검사(NSU-101)는 명령 timeout만 1초 이하로 묶으므로, 요청 전체의 1초 기한은 약속하지 않는다. 그 뒤로는 서버마다 탐침 1건만 기다린다.
-  - 1초 전체 기한(가입 발송의 `SignupSendPreflight` 방식)은 두지 않는다. 기다림은 장애가 시작될 때 한 번뿐이고, 전용 연결과 기한 처리를 더하는 비용이 더 크다. `shortcut: 장애 시작 때 진행 중인 요청은 연결+명령 timeout만큼 기다림, 쓰기 API 응답 시간 목표가 생기면 전체 기한을 둔다`
+  - 그 시각이 지나면 compare-and-set에 이긴 요청 하나만 Redis를 부른다(탐침). 나머지는 계속 Redis를 건너뛴다. 회복은 쓰기가 성공했을 때만 판정한다. 탐침 호출에서는 Lua가 계정 판정 전에 탐침 키(`user-request-limit:probe`, `PX` 10초)를 먼저 쓴다. 스크립트가 오류 없이 끝나면(받음이든 거절이든) 쓰기가 된 것이므로 "Redis 있음"으로 바꾸고 `INFO` 로그를 남긴다. 그 요청의 결과는 스크립트의 판정대로다(거절이면 `429`). `maxmemory`에 닿은 Redis는 탐침 키 `SET`에서 OOM 오류를 내므로 회복으로 보지 않는다. 계정의 한도와 상관없이 판정하므로, 한도를 다 쓴 계정이 탐침을 잡아도 회복을 막지 못한다(설계 리뷰 1·2회차 지적). 탐침이 실패하면 다시 볼 시각을 미룬다.
+  - 전체 기한: 한도 확인의 Redis 호출은 `redis-total-timeout`(기본 1초) 안에 끝나야 한다. 가입 발송의 `SignupSendPreflight`와 같은 방식으로, 크기가 정해진 전용 실행기에서 호출하고 기한까지만 기다린다. 기한을 넘기거나 실행기가 가득 차 거절하면 `DataAccessException`과 같이 장애로 본다.
+  - 기한이 필요한 이유: 공유 Lettuce 연결은 처음 만들 때 팩토리 하나의 잠금 안에서 연결하고(SDR 4.1.1 `SharedConnection`), 실패하면 줄 선 다음 요청이 같은 잠금 안에서 다시 연결한다. 그래서 명령 timeout(NSU-101 검사)만으로는 대기가 묶이지 않는다. 설계 리뷰에서 대기 상한 지적이 두 회차 연달아 나와, 경로를 하나씩 막지 않고 기한 하나로 묶었다.
+  - 기한을 넘긴 호출은 뒤에서 끝날 수 있다. 그 호출이 받음으로 끝나면 그 요청은 Redis와 메모리에서 한 번씩 세어진다. 더 세는 쪽이라 받아들인다.
+  - 그래서 장애가 시작될 때 이미 Redis를 부르던 요청도 최대 1초를 기다리고, 그 뒤로는 서버마다 탐침 1건만 기다린다.
   - Redis가 돌아와도 `REJECT` 한도는 다음 탐침까지(최대 10초) `503`일 수 있다.
 - Redis가 돌아와도 메모리 카운터를 비우지 않는다. Redis가 오락가락할 때 넘어갈 때마다 계정이 새 한도를 받지 않게 하기 위해서다. 항목 수는 위 상한이 묶는다.
 - 메모리 카운터는 서버를 다시 시작하면 사라진다. 장애 중에만 쓰므로 받아들인다.
@@ -214,10 +216,11 @@ GCRA는 토큰 버킷과 같은 결과를 숫자 하나로 계산한다. `T` = `
   - 형식이 틀린 경로 값(`identityVerificationId`)도 1회로 센다. 지금은 경로 형식 `400`이 한도보다 먼저라 세지 않는다(08 §3 3·4번). 경로 검사가 핸들러 본문에 있어 advisor 뒤가 되기 때문이다.
   - 정각 창(1시간 10회, 창이 끝날 때까지 남은 초)이 GCRA(연달아 10회, 6분마다 1회)로 바뀐다. `Retry-After`는 1회가 돌아올 때까지 남은 초다.
   - "시작 1번 뒤 같은 시도의 완료 20건을 동시에 보내면 9건 `200`, 11건 `429`" 시험은 그대로 맞는다.
-- 강석윤 님 파일 두 개를 고친다. PR 요청의 특이사항이고, 푸시 요청 때 `#dev` 공지에 넣는다.
+- 강석윤 님 파일 세 개를 고친다. PR 요청의 특이사항이고, 푸시 요청 때 `#dev` 공지에 넣는다.
   - `RedisPublicRequestLimitStore`: #245가 더한 계정 단위 메서드와 kind `identity-verification`을 지운다.
   - `backend/scripts/reset_signup_limits.py`: kind `identity-verification`의 키를 `user-request-limit:IDENTITY_VERIFICATION:{계정}`으로 바꾼다. 새 키에는 시간 창이 없으므로 이 kind는 `--window-start`를 받으면 거절하고, `--account`(한 계정)를 요구한다. 모든 계정을 푸는 것은 `--all-accounts`를 명시할 때만 한다. 과거 창을 적은 옛 명령이 지금 한도를 지우지 않게 하기 위해서다(설계 리뷰 지적).
-  - #245의 설정 `identity-verification.request-limit-per-hour`가 남아 있으면 기동에 실패하고 새 설정(`user-request-limit.budgets.identity-verification.*`)으로 옮기라고 알린다. 운영자가 낮춘 값이 조용히 기본값으로 풀리지 않게 하기 위해서다(설계 리뷰 지적).
+  - `backend/README.md`: 본인확인 한도 설정 안내(#245 L184)를 새 설정 키로, 초기화 안내(#245 L303)를 "시간 창 없음, `--account` 또는 `--all-accounts`"로 바꾼다. 옛 안내를 따른 운영자가 기동 실패나 거절을 만나지 않게 하기 위해서다(설계 리뷰 2회차 지적).
+- 설정·배포 영향(PR 특이사항): #245의 설정 `identity-verification.request-limit-per-hour`가 남아 있으면 기동에 실패하고 새 설정(`user-request-limit.budgets.identity-verification.*`)으로 옮기라고 알린다. 운영자가 낮춘 값이 조용히 기본값으로 풀리지 않게 하기 위해서다(설계 리뷰 지적).
 
 ### 10. API 문서(OpenAPI)
 
@@ -236,7 +239,7 @@ GCRA는 토큰 버킷과 같은 결과를 숫자 하나로 계산한다. `T` = `
 | `UserRequestLimit` | public 애너테이션 | 컨트롤러가 가져다 쓰는 유일한 것. `@Target(METHOD)`, 값은 `RequestBudget` 하나 |
 | `RequestBudget` | public enum | 요청 한도의 유일한 목록. 상수마다 `OutagePolicy`를 가진다. Redis 키 조각은 `name()`이다 |
 | `OutagePolicy` | public enum | `MEMORY_FALLBACK`, `REJECT` |
-| `UserRequestLimitProperties` | package record | 한도마다 `capacity`·`refill-every`, `server-count`, `memory-max-entries`, `redis-retry-interval`. 기동할 때 검사한다 |
+| `UserRequestLimitProperties` | package record | 한도마다 `capacity`·`refill-every`, `server-count`, `memory-max-entries`, `redis-retry-interval`, `redis-total-timeout`. 기동할 때 검사한다 |
 | `BudgetRate` | package record | GCRA 값(`T`, `τ`)과 `Retry-After` 올림. 순수 계산 |
 | `BudgetLedger` | package class | `user-request-limit:*` 키를 읽고 쓰는 유일한 곳. Redis 상태(있음·없음·다시 볼 시각), 메모리 카운터, 장애 정책을 가진다 |
 | `UserRequestLimitAdvice` | package class | `MethodInterceptor`. 계정을 읽어 `BudgetLedger`에 1회를 쓰게 한다 |
@@ -316,10 +319,11 @@ final class BudgetLedger {
 | `user-request-limit:{RequestBudget}:{계정 UUID}` | TAT(epoch 밀리초, 10진 문자열) | `새 TAT − 지금`. 가장 길게 `capacity × refill-every` |
 
 - 계정 UUID는 원문으로 둔다. 연락처·IP와 달리 사람을 직접 가리키지 않고, JWT와 DB에 이미 있다(PR #245의 ADR identity_verification/01과 같은 판단).
-- 스크립트(`KEYS[1]` = 키, `ARGV` = 지금·`T`·`τ`, 모두 문자열로 넘긴다. `StringRedisTemplate`이 인자를 문자열로 직렬화하기 때문이다):
+- 스크립트(`KEYS[1]` = 키, `KEYS[2]` = 탐침 키 `user-request-limit:probe`, `ARGV` = 지금·`T`·`τ`·탐침 여부(`1`/`0`), 모두 문자열로 넘긴다. `StringRedisTemplate`이 인자를 문자열로 직렬화하기 때문이다):
 
 ```lua
 local now, t, tau = tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3])
+if ARGV[4] == '1' then redis.call('SET', KEYS[2], now, 'PX', 10000) end  -- 탐침: 판정 전에 쓰기를 확인한다
 local tat = tonumber(redis.call('GET', KEYS[1]))
 if tat == nil or tat < now then tat = now end
 local allowAt = tat - tau
@@ -329,6 +333,7 @@ redis.call('SET', KEYS[1], newTat, 'PX', newTat - now)    -- 받음: 한 번 쓴
 return -1
 ```
 
+- 탐침이 아닌 호출의 거절은 아무것도 쓰지 않는다. 탐침 호출만 탐침 키를 먼저 쓰므로, OOM이면 계정 판정 전에 오류가 난다.
 - 같은 키의 동시 요청은 Redis가 줄 세운다. 동시에 `N`건이 와도 정확히 `capacity`건만 받는다.
 - 키 하나는 약 150바이트다. 버킷이 다시 찰 때(가장 길게 15분)까지만 남으므로, 1만 계정이 한도 4개를 모두 써도 약 6MB다(`maxmemory 256mb`, NSU-163).
 - 스크립트가 끝난 뒤 핸들러 전에 서버가 죽으면 그 1회는 사라진다. 되돌리는 쓰기는 없다.
@@ -348,9 +353,10 @@ user-request-limit.budgets.external-account.refill-every=PT20S
 user-request-limit.server-count=1
 user-request-limit.memory-max-entries=10000
 user-request-limit.redis-retry-interval=PT10S
+user-request-limit.redis-total-timeout=PT1S
 ```
 
-- 기동할 때 검사한다. 상수마다 설정이 있어야 하고, `capacity` ≥ 1, `refill-every` ≥ 1초, `server-count` ≥ 1, `memory-max-entries` ≥ 1, `redis-retry-interval` ≥ 1초다. 어기면 서버가 뜨지 않는다.
+- 기동할 때 검사한다. 상수마다 설정이 있어야 하고, `capacity` ≥ 1, `refill-every` ≥ 1초, `server-count` ≥ 1, `memory-max-entries` ≥ 1, `redis-retry-interval` ≥ 1초, 100ms ≤ `redis-total-timeout` < `redis-retry-interval`이다. 어기면 서버가 뜨지 않는다.
 - 서버를 여러 대로 늘리면 `server-count`를 함께 바꾼다. 배포 서버를 설계할 때 이 설정을 함께 정한다.
 - 통합 테스트의 기본값은 넉넉하게 둔다(테스트 설정). 한도 테스트만 실제 숫자나 작은 숫자를 쓴다. 출시 기본값은 설정 파일을 읽는 테스트가 고정한다.
 
@@ -387,9 +393,9 @@ user-request-limit.redis-retry-interval=PT10S
 | 7 | 키는 버킷이 찰 때까지만 있다 | 키 TTL ≤ `capacity × refill-every`. 계정·한도가 서로 영향이 없다 |
 | 8 | Lua와 Java GCRA가 같다 | 같은 입력 목록(시각, 기대 결과)을 Testcontainers Redis와 메모리 카운터에 넣어 결과가 같다 |
 | 9 | Redis 장애 정책 | `RedisConnectionFailureException`·`QueryTimeoutException`에서 `MEMORY_FALLBACK`은 메모리로 세고(서버 수 2면 `floor(capacity ÷ 2)`건 뒤 `429`), `REJECT`는 `503`이고 `Retry-After`가 없다. `DataAccessException`이 아닌 예외는 그대로 나간다 |
-| 10 | 탐침 1건 | Redis를 멈춘 뒤 동시 요청 20건을 보내면, 첫 실패가 기록된 뒤의 요청은 Redis를 부르지 않는다. `redis-retry-interval`이 지난 뒤 동시 요청 20건 중 Redis를 부르는 요청은 1건이다. 탐침이 받음을 돌려주면 다음 요청부터 Redis로 센다. 탐침이 거절(한도를 다 쓴 계정)을 돌려주면 `INFO` 회복 로그가 없고 상태는 "Redis 없음"이다 |
+| 10 | 탐침 1건 | Redis를 멈춘 뒤 동시 요청 20건을 보내면, 첫 실패가 기록된 뒤의 요청은 Redis를 부르지 않는다. `redis-retry-interval`이 지난 뒤 동시 요청 20건 중 Redis를 부르는 요청은 1건이다. 탐침이 받음을 돌려주면 다음 요청부터 Redis로 센다. 한도를 다 쓴 계정이 탐침을 맡아도 그 요청은 `429`이고 회복한다. 공유 연결을 한 번도 만들지 않은 채 Redis를 멈추고(`docker pause`) 동시 요청 20건을 보내면, 모든 요청이 기한 1초와 여유 안에 끝나고 상태가 "Redis 없음"이 된다 |
 | 11 | 메모리 항목 상한 | 상한을 3으로 두고 4번째 계정이 오면 버킷이 다시 가득 찬 항목부터 지우고, 모두 살아 있으면 세지 않고 통과시키며 `WARN`이 장애 한 번에 1번이다 |
-| 12 | OOM에서도 한도가 남는다 | `maxmemory`를 작게 두고 `noeviction`인 Testcontainers Redis를 가득 채운다. `MEMORY_FALLBACK`은 메모리로 세고, `REJECT`는 `503`이다. 한도를 다 쓴 계정은 첫 확인에서 `429`다(거절 경로는 쓰지 않는다). 그 계정이 탐침을 맡아도 회복으로 바뀌지 않고, 동시 요청이 다시 Redis로 몰리지 않는다 |
+| 12 | OOM에서도 한도가 남는다 | `maxmemory`를 작게 두고 `noeviction`인 Testcontainers Redis를 가득 채운다. `MEMORY_FALLBACK`은 메모리로 세고, `REJECT`는 `503`이다. 한도를 다 쓴 계정은 첫 확인에서 `429`다(거절 경로는 쓰지 않는다). 그 계정이 탐침을 맡아도 탐침 키 쓰기가 실패해 회복으로 바뀌지 않고, 동시 요청이 다시 Redis로 몰리지 않는다 |
 | 13 | 설정을 빠뜨리면 뜨지 않는다 | 상수 하나의 설정이 없거나, `capacity` 0, `refill-every` 1초 미만, `server-count` 0이면 컨텍스트가 실패한다. 출시 기본값(Decision 표)을 설정 파일에서 읽어 고정한다 |
 | 14 | 로그에 계정 ID가 없다 | 장애 시작·회복·상한 로그에 계정 UUID가 없다(`LogSafetyFiles`에 로그를 남기는 클래스를 더한다) |
 | 15 | 문서가 코드에서 나온다 | `OpenApiDocsIntegrationTest`가 행사 4개·프로필 2개의 `429`와 외부 계정 5개의 `429`·`503 RATE_LIMIT_UNAVAILABLE`을 상태·설명·`ErrorResponse` 스키마로 고정한다 |
@@ -410,10 +416,10 @@ user-request-limit.redis-retry-interval=PT10S
 9. OpenAPI customizer, 손으로 단 `429` 삭제, `OpenApiDocsIntegrationTest`.
 10. (마지막, #245가 main에 있을 때만) 본인확인 이전(9번).
     - `IDENTITY_VERIFICATION(REJECT)`와 설정(10, `PT6M`)을 더하고, 시작·완료 핸들러에 단다.
-    - 시작·완료 서비스의 기존 한도 호출과 `RedisPublicRequestLimitStore`의 계정 단위 메서드·kind를 지운다. `reset_signup_limits.py`의 키를 바꾼다(강석윤 님 파일, 특이사항).
+    - 시작·완료 서비스의 기존 한도 호출과 `RedisPublicRequestLimitStore`의 계정 단위 메서드·kind를 지운다. `reset_signup_limits.py`의 키와 `backend/README.md`의 두 안내를 바꾼다(강석윤 님 파일, 특이사항).
     - 문서: 08 §3(순서, 세는 범위)·§9(한도 정의)·§10(11번째 요청, Redis 장애, 형식이 틀린 경로 값 시험)·§11.3 예시, ADR identity_verification/00의 본인확인 요청 제한 행과 시험 행, ADR identity_verification/01의 요청 제한 행·Reused·Rejected Alternatives·시험 행, 가입 계약 §1.6의 본인확인 행이 가리키는 근거.
     - `IdentityVerificationController`에 손으로 단 `429` `@ApiResponse`를 지운다. `503`은 지우지 않고 설명에서 `RATE_LIMIT_UNAVAILABLE`만 뺀다. customizer가 그 `503`에 `RATE_LIMIT_UNAVAILABLE`을 합친다. 완료 API의 `503`에 `IDENTITY_VERIFICATION_UNAVAILABLE`과 `RATE_LIMIT_UNAVAILABLE`이 모두 있다는 `OpenApiDocsIntegrationTest`의 기존 검사는 그대로 둔다(설계 리뷰 지적).
-    - 시험: 옛 설정 키가 있으면 기동 실패, `reset_signup_limits.py`의 `identity-verification`에 `--window-start`를 주면 거절하고 지금 키를 하나도 지우지 않음, `--account`는 그 계정 키만 지움.
+    - 시험: 옛 설정 키가 있으면 기동 실패, `reset_signup_limits.py`의 `identity-verification`에 `--window-start`를 주면 거절하고 지금 키를 하나도 지우지 않음, `--account`는 그 계정 키만 지움. `.github/workflows/ci.yml`에 `python3 -m unittest discover backend/scripts/tests` 단계를 더해 이 시험을 PR마다 돌린다(CI 설정 영향, 특이사항).
     - `RedisPublicRequestLimitStore.identityVerification(UUID, int)`를 지운다. `SecurityConfig`의 `IDENTITY_VERIFICATION_ENDPOINTS` 역할 규칙은 그대로 둔다.
     - NSU-105 AC의 "1시간 안 11번째 요청은 `429`"를 "연달아 11번째 요청은 `429`"로 바꾸도록 지휘 세션에 Linear 수정을 요청한다.
 
@@ -455,7 +461,7 @@ user-request-limit.redis-retry-interval=PT10S
 - 남은 위험:
   - 여러 계정이 동시에 몰리면 DB 연결 풀을 다 쓸 수 있다(후속 이슈, 5번).
   - Redis 장애 동안은 서버마다 나눈 한도로 센다. 넘어갈 때와 돌아올 때 계정·한도마다 최대 `capacity`씩 더 들어온다. 메모리 항목이 가득 차면 새 계정은 세지 않는다.
-  - Redis 장애가 시작되는 순간 이미 Redis를 기다리던 요청은 연결·명령 timeout만큼(기본 약 3초) 늦어진다.
+  - Redis 장애가 시작되는 순간 이미 Redis를 기다리던 요청은 최대 1초(`redis-total-timeout`) 늦어진다.
 - 경로·본문 형식이 틀린 요청, 없는 행사·남의 행사 요청도 1회로 센다. 남의 행사를 훑는 요청은 훑는 사람의 한도를 쓴다. 성공 여부로 되돌리지 않는다.
 - 외부 계정의 깨진 JSON은 더 이상 세지 않는다. 본인확인의 형식이 틀린 경로 값은 센다(9번을 할 때).
 - 새 쓰기 API는 애너테이션 없이는 테스트를 통과하지 못한다. 공개 경로에 붙여도 실패한다.
