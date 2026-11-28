@@ -7,8 +7,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.core.env.Environment;
+import org.springframework.util.unit.DataSize;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -27,6 +30,17 @@ class RequestBodyLimitTomcatIntegrationTest extends EventIntegrationTestBase {
 
     @LocalServerPort
     int port;
+
+    @Autowired
+    Environment environment;
+
+    @Test
+    void Tomcat_폼_파싱_상한은_필터의_상한과_같다() {
+        DataSize formPostSize = environment.getProperty("server.tomcat.max-http-form-post-size", DataSize.class);
+
+        assertThat(formPostSize).isNotNull();
+        assertThat(formPostSize.toBytes()).isEqualTo(RequestBodyLimitFilter.MAX_BODY_BYTES);
+    }
 
     @Test
     void 길이를_밝힌_65537바이트_로그인은_본문을_읽기_전에_413이다() throws IOException {
@@ -60,6 +74,27 @@ class RequestBodyLimitTomcatIntegrationTest extends EventIntegrationTestBase {
         assertThat(response.status()).isEqualTo(413);
         assertThat(response.header("Content-Type")).startsWith("application/json");
         assertThat(JSON.readTree(response.body()).path("code").asString()).isEqualTo("REQUEST_BODY_TOO_LARGE");
+    }
+
+    @Test
+    void 폼_POST를_chunked로_65537바이트_보내면_Tomcat_폼_상한으로_413이다() throws IOException {
+        RawSocket.Response response = RawSocket.send(
+                port,
+                RawSocket.request("POST", LOGIN)
+                        .body("application/x-www-form-urlencoded", formOfSize(LIMIT + 1))
+                        .chunked());
+
+        assertThat(response.status()).isEqualTo(413);
+        assertThat(response.header("Content-Type")).startsWith("application/json");
+        assertThat(JSON.readTree(response.body()).path("code").asString()).isEqualTo("REQUEST_BODY_TOO_LARGE");
+    }
+
+    private static byte[] formOfSize(int size) {
+        byte[] form = new byte[size];
+        Arrays.fill(form, (byte) 'v');
+        form[0] = 'k';
+        form[1] = '=';
+        return form;
     }
 
     /**
