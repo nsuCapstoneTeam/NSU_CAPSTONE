@@ -24,7 +24,7 @@ ARTIST가 자기 프로필을 저장·조회·삭제하고, EVENT_PARTNER가 아
 10. **Eligibility 연결**: `EmptyArtistProfileReader`를 지우고 `eligibility.infrastructure.SavedArtistProfileReader`가 `ArtistProfiles`를 읽는다. 출연료를 입력하지 않았으면 `feeMin = null`로 넘긴다(기본값으로 채우지 않는다).
 11. **지역 개편 점검**: 아티스트 표의 점검 함수 `check_artist_profile_regions()`와, EVENT_PARTNER 표의 함수와 함께 부르는 묶음 함수 `check_profile_regions()`를 V12에서 만든다. 개편 마이그레이션은 끝에서 묶음 함수를 부른다. 지역 개편 테스트는 두 표를 함께 검사한다.
 12. **기존 코드 재사용**: 지역 정규화(`RegionNormalizer`)를 `event.region`으로, 문자열 정리 규칙을 `global.text.UserText`로, 아티스트 ID 형식 검사(`parseArtistId`)를 `ArtistReadAccess`로 옮겨 EVENT_PARTNER 프로필·Trust Profile·외부 계정과 함께 쓴다
-13. **탈퇴 시 파기**(2026-11-22 사용자 결정): `users.status`가 `WITHDRAWN`으로 바뀌는 UPDATE의 같은 트랜잭션에서 DB 트리거가 그 사용자의 `artist_profiles` 행을 즉시 지운다. 트리거와 함수는 V12가 만든다. 탈퇴 기능(탈퇴 API, 상태 변경, 토큰 무효화, 다른 표 파기, 재가입)은 NSU-167(담당 강석윤)이 만들고, 그 이슈가 상태를 `WITHDRAWN`으로 바꾸면 이 트리거가 프로필을 지운다. 로그인할 수 없는 정지 계정의 삭제 요구는 운영자 runbook(SQL 한 줄)으로 처리한다. 새 행은 삽입 가드 트리거(`BEFORE INSERT OR UPDATE OF user_id`)가 같은 트랜잭션에서 `users` 행을 `FOR SHARE`로 잠그고 `ACTIVE` ARTIST일 때만 받는다. 그래서 어느 작성 경로(API, 운영자 SQL, 뒤에 생길 경로)로 넣어도 탈퇴 뒤에 프로필이 남지 않는다(2026-11-28 NSU-120 설계 리뷰에서 찾은 구멍, Rationale "삽입 가드").
+13. **탈퇴 시 파기**(2026-11-22 사용자 결정): `users.status`가 `WITHDRAWN`으로 바뀌는 UPDATE의 같은 트랜잭션에서 DB 트리거가 그 사용자의 `artist_profiles` 행을 즉시 지운다. 트리거와 함수는 V12가 만든다. 탈퇴 기능(탈퇴 API, 상태 변경, 토큰 무효화, 다른 표 파기, 재가입)은 NSU-167(담당 강석윤)이 만들고, 그 이슈가 상태를 `WITHDRAWN`으로 바꾸면 이 트리거가 프로필을 지운다. 로그인할 수 없는 정지 계정의 삭제 요구는 운영자 runbook(SQL 한 줄)으로 처리한다. 새 행은 삽입 가드 트리거(`BEFORE INSERT`)가 같은 트랜잭션에서 `users` 행을 `FOR SHARE`로 잠그고 `ACTIVE` ARTIST일 때만 받는다. 행의 사용자(`user_id`)를 바꾸는 UPDATE는 `users`를 잠그지 않는 소유자 고정 트리거가 거절한다. 그래서 어느 작성 경로(API, 운영자 SQL, 뒤에 생길 경로)로 넣어도 탈퇴 뒤에 프로필이 남지 않는다(2026-11-28 NSU-120 설계 리뷰에서 찾은 구멍, Rationale "삽입 가드").
 
 ## Context
 
@@ -177,7 +177,7 @@ Eligibility ADR은 JPA를 권했고, `JdbcClient`로 만들면 DataSource 수준
 
 **삽입 가드**: 위 두 경우는 작성자가 `users` 행을 `FOR SHARE`로 잠그고 `ACTIVE`를 확인할 때만 성립한다. API는 `ArtistWriteAccess`가 그렇게 한다. 운영자 SQL이나 뒤에 생길 작성 경로는 그 확인을 거치지 않을 수 있다. 탈퇴가 먼저 커밋된 뒤 그런 경로가 INSERT하면, 남아 있는 `users.id`로 FK 검사를 통과하고 이미 끝난 탈퇴의 파기 트리거를 피한다. 탈퇴한 사용자의 활동명·소개·출연료가 남는다(NSU-120 설계 리뷰가 같은 구멍을 일정 표에서 찾았다, 2026-11-28).
 
-| 관점 | 채택: 삽입 가드 트리거(`artist_profiles`의 `BEFORE INSERT OR UPDATE OF user_id`) | 받아들인 위험으로 두고 후속 이슈 | 운영자 runbook에 "넣기 전에 `FOR SHARE`로 확인" 규칙 |
+| 관점 | 채택: 삽입 가드 트리거(`artist_profiles`의 `BEFORE INSERT`)와 소유자 고정 트리거 | 받아들인 위험으로 두고 후속 이슈 | 운영자 runbook에 "넣기 전에 `FOR SHARE`로 확인" 규칙 |
 |---|---|---|---|
 | 정확성 | 어느 작성 경로든 DB가 같은 조건을 확인한다 | 확인을 빠뜨린 경로가 행을 남긴다 | 사람이 규칙을 지킬 때만 맞다. 새 코드 경로는 막지 못한다 |
 | 보안·개인정보 | 탈퇴 뒤 잔존이 없다(개인정보보호법 §21) | 잔존 가능. 찾아 지우는 점검이 필요하다 | 실수 하나로 잔존 |
@@ -191,11 +191,19 @@ Eligibility ADR은 JPA를 권했고, `JdbcClient`로 만들면 DataSource 수준
 - 트리거는 같은 트랜잭션에서 `users` 행을 `ArtistWriteAccess`와 같은 조건(`role = 'ARTIST' AND status = 'ACTIVE'`)과 같은 잠금(`FOR SHARE`)으로 읽고, 행이 없으면 `check_violation`(`23514`) 예외로 거절한다. 메시지에는 사용자 ID만 넣는다.
 - 탈퇴 UPDATE가 먼저 행을 잡았으면 트리거가 그 커밋을 기다린 뒤 바뀐 행을 다시 읽어 거절한다(`READ COMMITTED`). `REPEATABLE READ` 이상이면 잠금 단계에서 직렬화 오류로 실패한다. 어느 쪽이든 행이 생기지 않는다. 트리거가 먼저 잡았으면 탈퇴 UPDATE가 INSERT의 커밋을 기다리고, 그 뒤 파기 트리거가 지운다.
 - upsert(`INSERT … ON CONFLICT DO UPDATE`)도 `BEFORE INSERT` 행 트리거를 거친다. 그래서 갱신 경로도 같은 확인을 받는다. `DO UPDATE`는 `user_id`를 바꾸지 않는다.
-- 잠금 순서는 그대로 `users` → `artist_profiles`다. `BEFORE` 트리거가 행을 넣기 전에 `users`를 잠근다.
+- 잠금 순서는 그대로 `users` → `artist_profiles`다. `BEFORE INSERT` 트리거가 행을 넣기 전에 `users`를 잠근다.
+- 가드를 UPDATE에는 걸지 않는다. PostgreSQL은 대상 행을 잠근 뒤 `BEFORE UPDATE` 행 트리거를 부른다. 그래서 UPDATE에서 `users`를 잠그면 순서가 `artist_profiles` → `users`로 뒤집혀, `users` → 파기 `DELETE` 순서인 탈퇴와 교착(`40P01`)한다. `SET`에 같은 `user_id`를 넣은 운영자 UPDATE도 그렇다(2026-11-28 PR 적대적 리뷰 지적, NSU-120 결정 11과 같은 결론).
+- 소유자 변경은 따로 막는다. `trg_artist_profiles_fixed_owner`(`BEFORE UPDATE OF user_id`, `WHEN (OLD.user_id IS DISTINCT FROM NEW.user_id)`)가 사용자를 바꾸는 UPDATE만 `23514`로 거절한다. `WHEN`이 거짓이면 함수를 부르지 않고 `users`도 잠그지 않는다. API에는 사용자를 바꾸는 쓰기가 없다.
+- 여러 행을 한 문장으로 넣는 INSERT(`INSERT … SELECT`, `COPY`)와 여러 사용자를 한 문장으로 바꾸는 탈퇴가 겹치면, 두 문장이 `users` 행을 다른 순서로 잡아 교착으로 한쪽이 롤백될 수 있다. 행은 남지 않는다. 롤백된 쪽을 다시 실행한다.
+- 트리거를 끄는 조작(표 소유자의 `ALTER TABLE … DISABLE TRIGGER`, `session_replication_role = replica`, `pg_restore --disable-triggers`)은 이 가드도 끈다. 이 ADR의 보장은 트리거가 켜진 쓰기에만 해당한다. 그런 조작은 아래 복원 절차처럼 한 트랜잭션 안에서 가드 하나만 끈다.
 - 함수는 파기 함수와 같은 이유로 `users`를 `TG_TABLE_SCHEMA`로 한정하고 `search_path`를 `pg_catalog, pg_temp`로 고정한다. 운영자 세션의 같은 이름 임시 표(`users`)로 확인을 속일 수 없다.
 - API 응답 규칙은 바뀌지 않는다. `ArtistWriteAccess`가 먼저 막으므로 트리거 예외는 API에서 나오지 않고, 나오면 `500`이다.
-- 정지(`SUSPENDED`) 계정에도 새 행을 넣지 못한다. API(`403`)와 같은 조건이다. 이미 있는 행의 다른 열을 바꾸는 UPDATE는 막지 않는다(탈퇴하면 행이 지워지므로 잔존과 무관하다).
-- 백업 복원: 전체 복원(`pg_restore`)은 트리거를 데이터를 넣은 뒤에 만들므로 이 가드에 걸리지 않는다. 데이터만 복원(`--data-only`)하면 정지 계정의 기존 프로필 행이 `23514`로 거절된다. 그때는 `--disable-triggers`(슈퍼유저 필요)로 복원한다.
+- 정지(`SUSPENDED`) 계정에도 새 행을 넣지 못한다. API(`403`)와 같은 조건이다. 이미 있는 행의 다른 열을 바꾸는 UPDATE는 막지 않는다. `SET`에 같은 `user_id`를 넣어도 막지 않는다(탈퇴하면 행이 지워지므로 잔존과 무관하다).
+- 백업 복원: 전체 복원(`pg_restore`)은 트리거를 데이터를 넣은 뒤에 만들므로 이 가드에 걸리지 않는다. 이 표만 데이터로 되돌릴 때는 `--disable-triggers`를 쓰지 않는다. 그 옵션은 가드와 FK 검사(그리고 `users`를 함께 복원하면 파기 트리거)를 모두 끈다. 그러면 덤프 뒤에 탈퇴한 사용자의 프로필과 없는 사용자의 행이 되살아나고, 복원이 중간에 끊기면 트리거가 꺼진 채 남을 수 있다. 대신 다음 순서로 한다.
+  1. 덤프를 트리거 없는 임시 표(예: `artist_profiles_restore`)에 받는다.
+  2. `ACTIVE` ARTIST의 행은 `users`와 조인해 그 조건의 행만 `INSERT … SELECT`로 옮긴다. 가드는 켜진 채 같은 확인을 다시 한다.
+  3. 정지(`SUSPENDED`) ARTIST의 행은 한 트랜잭션에서 옮긴다. 그 사용자들의 `users` 행을 `FOR SHARE`로 잠그고, 가드 트리거 하나만 끄고(`ALTER TABLE artist_profiles DISABLE TRIGGER trg_artist_profiles_require_active_artist`), 그 행만 넣고, 다시 켠 뒤 커밋한다. `ALTER TABLE`도 트랜잭션에 묶이므로 중간에 실패하면 트리거는 켜진 상태로 돌아간다. FK 검사와 파기 트리거는 끄지 않는다. 그동안 `artist_profiles`에 `SHARE ROW EXCLUSIVE` 잠금이 걸려 저장이 기다린다.
+  4. 탈퇴했거나 없는 사용자의 행은 옮기지 않고 임시 표와 함께 지운다.
 
 ### 다른 사용자 조회를 이 이슈에 넣는 것
 
@@ -392,7 +400,7 @@ public record SavedArtistProfile(
 | `B/identity/application/ArtistWriteAccess.java` | 쓰기의 `ACTIVE` ARTIST 확인 |
 | `B/recommendation/eligibility/infrastructure/SavedArtistProfileReader.java` | Eligibility 어댑터 |
 | `B/global/text/UserText.java` | 문자열 정리·검증 규칙(05 §2) |
-| `R/db/migration/V12__create_artist_profiles_table.sql` | 표, `CHECK`, 점검 함수 둘, 탈퇴 파기 함수와 트리거, 삽입 가드 함수와 트리거 |
+| `R/db/migration/V12__create_artist_profiles_table.sql` | 표, `CHECK`, 점검 함수 둘, 탈퇴 파기 함수와 트리거, 삽입 가드·소유자 고정 함수와 트리거 |
 
 고치거나 옮기는 기존 파일:
 
@@ -536,15 +544,32 @@ END;
 $$;
 
 CREATE TRIGGER trg_artist_profiles_require_active_artist
-    BEFORE INSERT OR UPDATE OF user_id ON artist_profiles
+    BEFORE INSERT ON artist_profiles
     FOR EACH ROW EXECUTE FUNCTION require_active_artist_for_profile();
+
+-- 소유자 고정: users를 잠그지 않는다. 같은 값을 SET에 넣은 UPDATE는 WHEN 조건으로 함수를 부르지 않는다.
+CREATE FUNCTION reject_artist_profile_owner_change() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+    RAISE EXCEPTION '프로필의 사용자는 바꿀 수 없다: %', OLD.user_id
+        USING ERRCODE = 'check_violation';
+END;
+$$;
+
+CREATE TRIGGER trg_artist_profiles_fixed_owner
+    BEFORE UPDATE OF user_id ON artist_profiles
+    FOR EACH ROW WHEN (OLD.user_id IS DISTINCT FROM NEW.user_id)
+    EXECUTE FUNCTION reject_artist_profile_owner_change();
 ```
 
 ## Consequences
 
-- **V12**는 새 표, 점검 함수 둘, 탈퇴 파기 함수와 `users`의 트리거 하나, 삽입 가드 함수와 `artist_profiles`의 트리거 하나를 더한다. 기존 표의 열·제약은 바꾸지 않는다. FK와 트리거를 만드는 동안 `users`에 `SHARE ROW EXCLUSIVE` 락이 걸리고, 3초 안에 얻지 못하면 마이그레이션이 실패한다. 그러면 배포를 다시 시도한다.
+- **V12**는 새 표, 점검 함수 둘, 탈퇴 파기 함수와 `users`의 트리거 하나, 삽입 가드·소유자 고정 함수와 `artist_profiles`의 트리거 둘을 더한다. 기존 표의 열·제약은 바꾸지 않는다. FK와 트리거를 만드는 동안 `users`에 `SHARE ROW EXCLUSIVE` 락이 걸리고, 3초 안에 얻지 못하면 마이그레이션이 실패한다. 그러면 배포를 다시 시도한다.
 - **마이그레이션 번호**: 설계 시점의 번호는 V12다(V11은 NSU-105, V13은 NSU-121이 쓴다). 적용된 버전보다 낮은 버전이 뒤에 오면 Flyway 검증이 실패한다(`outOfOrder` 설정 없음). 그래서 나중에 머지되는 PR이 머지 직전에 자기 마이그레이션 번호와 그 번호를 적은 문서·테스트를 바꾼다. 이 문서와 09의 "V12"도 그때 함께 바꾼다.
-- **롤백**(F6): 1차는 앱만 이전 버전으로 되돌린다. Flyway 기본 설정(`ignoreMigrationPatterns=*:future`)이라 이전 앱은 V12가 적용된 DB로도 뜬다. 이전 앱은 이 표를 읽지 않고 빈 구현으로 돌아가므로 추천은 이 PR 전처럼 `PROFILE_MISSING`으로 빈다. 저장된 프로필은 표에 남는다. 앱만 되돌려도 탈퇴 트리거와 삽입 가드는 DB에 남아 탈퇴할 때 프로필을 계속 지우고 탈퇴한 사용자의 새 행을 막는다(바라는 동작이다). 표까지 없애야 할 때만 데이터를 백업한 뒤 forward 마이그레이션을 쓴다. 그 마이그레이션은 한 트랜잭션에서 `users`의 트리거 `trg_users_withdrawal_delete_artist_profile` → 파기 함수 `delete_artist_profile_on_withdrawal()` → 점검 함수 둘 → 표(삽입 가드 트리거도 함께 지워진다) → 삽입 가드 함수 `require_active_artist_for_profile()` 순서로 지운다. 트리거를 남긴 채 표만 지우면 PostgreSQL이 함수 본문의 표 참조를 의존성으로 추적하지 않아 트리거가 남고, 그 뒤 모든 탈퇴 UPDATE가 없는 표를 찾다 실패한다(설계 리뷰 지적). 적용한 뒤 시험 DB에서 `WITHDRAWN` UPDATE가 커밋되는지 확인한다. 그러면 저장된 프로필이 사라진다. 이 절차를 PR 설명에도 적는다.
+- **머지 전 V12 수정**: V12는 main에 없어서 이 PR 안에서 고쳤다(삽입 가드 등). 이 브랜치나 그 위 브랜치(NSU-168)의 옛 V12를 적용한 로컬 DB는 다음 시작 때 체크섬 불일치로 실패한다. `flyway repair`로 넘기지 말고 DB를 다시 만든다. repair는 체크섬만 맞추고 새 트리거를 만들지 않는다. 머지한 뒤에는 V12를 고치지 않고 다음 번호로 바꾼다.
+- **롤백**(F6): 1차는 앱만 이전 버전으로 되돌린다. Flyway 기본 설정(`ignoreMigrationPatterns=*:future`)이라 이전 앱은 V12가 적용된 DB로도 뜬다. 이전 앱은 이 표를 읽지 않고 빈 구현으로 돌아가므로 추천은 이 PR 전처럼 `PROFILE_MISSING`으로 빈다. 저장된 프로필은 표에 남는다. 앱만 되돌려도 탈퇴 트리거와 삽입 가드는 DB에 남아 탈퇴할 때 프로필을 계속 지우고 탈퇴한 사용자의 새 행을 막는다(바라는 동작이다). 표까지 없애야 할 때만 데이터를 백업한 뒤 forward 마이그레이션을 쓴다. 그 마이그레이션은 한 트랜잭션에서 `users`의 트리거 `trg_users_withdrawal_delete_artist_profile` → 파기 함수 `delete_artist_profile_on_withdrawal()` → 점검 함수 둘 → 표(삽입 가드·소유자 고정 트리거도 함께 지워진다) → 삽입 가드 함수 `require_active_artist_for_profile()`와 소유자 고정 함수 `reject_artist_profile_owner_change()` 순서로 지운다. 트리거를 남긴 채 표만 지우면 PostgreSQL이 함수 본문의 표 참조를 의존성으로 추적하지 않아 트리거가 남고, 그 뒤 모든 탈퇴 UPDATE가 없는 표를 찾다 실패한다(설계 리뷰 지적). 적용한 뒤 시험 DB에서 `WITHDRAWN` UPDATE가 커밋되는지 확인한다. 그러면 저장된 프로필이 사라진다. 이 절차를 PR 설명에도 적는다.
 - **행정구역 개편**: ADR event_management/01의 "목록 변경과 저장된 코드 이전을 마이그레이션 하나로"를 이 배열에도 적용한다. 코드를 옮긴 뒤 05 §2의 정규화를 다시 적용하고, 결과가 20개 이하여야 한다. 개편 마이그레이션은 끝에서 `check_profile_regions()`를 부른다.
   - 기존 테스트 `EventPartnerProfileRegionMigrationIntegrationTest`를 `event/region/ProfileRegionMigrationIntegrationTest`로 옮긴다. 기준 버전은 두 표가 모두 있는 V12다. V12 뒤의 버전마다 두 표를 그 시점의 정규형 지역 조합으로 다시 넣고 한 버전을 적용한 뒤 묶음 함수를 부른다. 테스트가 점검 함수를 직접 부르므로, 개편 마이그레이션이 함수 호출 자체를 빠뜨린 것은 잡지 못한다(05 §5와 같은 한계).
   - 기존 실패 픽스처 4개는 두 표 모두에서 실패해야 한다. EVENT_PARTNER 표만 옮기고 아티스트 표를 빠뜨린 픽스처(`move-partner-but-not-artist`)를 더한다.
