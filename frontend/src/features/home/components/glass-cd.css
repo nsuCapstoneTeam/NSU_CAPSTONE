@@ -1,0 +1,240 @@
+/* 홈 무대의 기울어진 유리 CD (glass-cd.jsx, NSU-179)
+   크기는 부모(.stage-cd-slot)를 꽉 채웁니다. 색은 무대 변수(stage-scope.css)와 아래 --glass-* 변수만 씁니다.
+   움직이는 것은 transform(회전)과 opacity(사진 교체)뿐입니다. (DESIGN.md 10.6) */
+
+.glass-cd-stage {
+  --glass-face: linear-gradient(
+    135deg,
+    rgb(255 255 255 / 0.38),
+    rgb(225 240 255 / 0.08) 50%,
+    rgb(255 255 255 / 0.28)
+  );
+  --glass-photo-filter: blur(2px) saturate(1.1);
+  --glass-edge: rgb(255 255 255 / 0.75);
+  --glass-shadow: rgb(20 40 64 / 0.28);
+  --glass-pink: 224 17 122;
+  --glass-sky: 0 119 200;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  perspective: 2600px;
+}
+:root[data-theme='dark'] .glass-cd-stage {
+  --glass-face: linear-gradient(
+    135deg,
+    rgb(255 255 255 / 0.2),
+    rgb(160 200 255 / 0.04) 50%,
+    rgb(255 255 255 / 0.12)
+  );
+  --glass-photo-filter: blur(2px) saturate(1.15) brightness(0.85);
+  --glass-edge: rgb(190 220 255 / 0.55);
+  --glass-shadow: rgb(0 0 0 / 0.5);
+}
+
+/* 바닥에 떨어진 그림자와 굴절된 빛 (기울지 않은 평면) */
+.glass-cd-shadow,
+.glass-cd-caustic {
+  position: absolute;
+  left: 50%;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.glass-cd-shadow {
+  top: 88%;
+  width: 84%;
+  height: 17%;
+  background: var(--glass-shadow);
+  filter: blur(50px);
+}
+.glass-cd-caustic {
+  top: 84%;
+  width: 58%;
+  height: 12%;
+  background: linear-gradient(90deg, rgb(var(--glass-pink) / 0.55), rgb(115 217 255 / 0.5), rgb(255 224 140 / 0.45));
+  filter: blur(40px);
+  mix-blend-mode: screen;
+}
+
+/* 기울인 CD: 자식들이 같은 3D 공간을 써서 테두리가 실제 두께처럼 보임 */
+.glass-cd {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(20deg) rotateY(-18deg) rotateZ(-4deg);
+}
+.glass-cd-edge,
+.glass-cd-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+/* 두께: 디스크 뒤쪽으로 2px씩 밀린 테두리 6장 */
+.glass-cd-edge {
+  border: 1.5px solid var(--glass-edge);
+  transform: translateZ(var(--z));
+  mask: radial-gradient(closest-side, transparent 0 5.8%, #000 6%);
+}
+.glass-cd-edge:first-child {
+  background: rgb(255 255 255 / 0.07);
+}
+
+/* 면: 가운데 구멍을 뚫은 원 */
+.glass-cd-face {
+  overflow: hidden;
+  mask: radial-gradient(closest-side, transparent 0 5.8%, #000 6%);
+}
+.glass-cd-spin,
+.glass-cd-photo,
+.glass-cd-label,
+.glass-cd-hub,
+.glass-cd-body,
+.glass-cd-sheen,
+.glass-cd-glint,
+.glass-cd-rim {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+/* 도는 묶음: 사진 4장 + 라벨 + 허브. 40초에 한 바퀴(사진 하나당 10초)
+   각 10초: 0~8초 천천히 60도, 8~10초 빠르게 660도 (모두 시계 방향) */
+.glass-cd-spin {
+  animation: glass-cd-spin 40s infinite;
+}
+@keyframes glass-cd-spin {
+  0% {
+    transform: rotate(0deg);
+    animation-timing-function: linear;
+  }
+  20% {
+    transform: rotate(60deg);
+    animation-timing-function: ease-in-out;
+  }
+  25% {
+    transform: rotate(720deg);
+    animation-timing-function: linear;
+  }
+  45% {
+    transform: rotate(780deg);
+    animation-timing-function: ease-in-out;
+  }
+  50% {
+    transform: rotate(1440deg);
+    animation-timing-function: linear;
+  }
+  70% {
+    transform: rotate(1500deg);
+    animation-timing-function: ease-in-out;
+  }
+  75% {
+    transform: rotate(2160deg);
+    animation-timing-function: linear;
+  }
+  95% {
+    transform: rotate(2220deg);
+    animation-timing-function: ease-in-out;
+  }
+  100% {
+    transform: rotate(2880deg);
+  }
+}
+
+/* 사진: 첫 사진만 보이는 것이 기본(움직임 줄이기). 라벨 자리에는 사진을 깔지 않음. 움직일 때는 가장 빠르게 돌 때(각 주기 8.6~9.4초) 겹쳐 바뀜.
+   사진마다 --delay로 10초씩 밀어서 같은 keyframes를 씀 */
+.glass-cd-photo {
+  background-position: center;
+  background-size: cover;
+  filter: var(--glass-photo-filter);
+  /* 사진은 바깥 고리에만: 가운데 라벨 자리(지름 40%)는 비움 */
+  mask: radial-gradient(closest-side, transparent 0 40%, #000 40.3%);
+  opacity: 0;
+  animation: glass-cd-photo 40s infinite;
+  animation-delay: var(--delay);
+}
+.glass-cd-photo:first-child {
+  opacity: 1;
+}
+@keyframes glass-cd-photo {
+  0%,
+  21.5% {
+    opacity: 1;
+  }
+  23.5%,
+  96.5% {
+    opacity: 0;
+  }
+  98.5%,
+  100% {
+    opacity: 1;
+  }
+}
+
+/* 라벨: 핫핑크에서 하늘색으로 넘어가는 반투명 고리 (글자 없음) */
+.glass-cd-label {
+  inset: 30%;
+  background: linear-gradient(135deg, rgb(var(--glass-pink) / 0.5), rgb(var(--glass-sky) / 0.45));
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.7);
+  mask: radial-gradient(closest-side, transparent 0 39%, #000 40%);
+}
+.glass-cd-hub {
+  inset: 42.2%;
+  background: rgb(255 255 255 / 0.25);
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.9);
+  mask: radial-gradient(closest-side, transparent 0 37%, #000 38%);
+}
+
+/* 제자리 빛: 유리 본체, 무지갯빛, 대각선 반사, 가장자리 하이라이트 */
+.glass-cd-body {
+  background: var(--glass-face);
+  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 0.85);
+}
+.glass-cd-sheen {
+  inset: 1.1%;
+  background: conic-gradient(
+    rgb(var(--glass-pink) / 0.05),
+    rgb(var(--glass-pink) / 0.6) 10%,
+    rgb(255 224 140 / 0.35) 20%,
+    rgb(115 217 255 / 0.05) 30%,
+    rgb(115 217 255 / 0.6) 42%,
+    rgb(158 128 255 / 0.4) 52%,
+    rgb(var(--glass-pink) / 0.05) 60%,
+    rgb(var(--glass-pink) / 0.55) 70%,
+    rgb(255 224 140 / 0.35) 80%,
+    rgb(115 217 255 / 0.55) 90%,
+    rgb(var(--glass-pink) / 0.05)
+  );
+  mask: radial-gradient(closest-side, transparent 0 40.9%, #000 41%);
+  mix-blend-mode: screen;
+  opacity: 0.45;
+}
+.glass-cd-glint {
+  background: linear-gradient(
+    130deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.55) 40%,
+    transparent 44%,
+    transparent 52%,
+    rgb(255 255 255 / 0.3) 55%,
+    transparent 58%
+  );
+  mix-blend-mode: screen;
+}
+.glass-cd-rim {
+  background: conic-gradient(
+    rgb(255 255 255 / 0.1),
+    rgb(255 255 255 / 1) 35%,
+    rgb(255 255 255 / 0.1) 50%,
+    rgb(255 255 255 / 0.7) 85%,
+    rgb(255 255 255 / 0.1)
+  );
+  mask: radial-gradient(closest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+}
+
+/* 움직임 줄이기: 회전과 사진 교체를 멈추고 첫 사진만 */
+@media (prefers-reduced-motion: reduce) {
+  .glass-cd-spin,
+  .glass-cd-photo {
+    animation: none;
+  }
+}
