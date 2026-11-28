@@ -7,29 +7,71 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 
 /** {@code user-request-limit:*} 키를 읽고 쓰는 유일한 곳. */
+@Slf4j
 final class BudgetLedger {
 
     static final String KEY_PREFIX = "user-request-limit:";
     static final String PROBE_KEY = KEY_PREFIX + "probe";
 
+    private static final long OVERLOAD_WARN_INTERVAL_MILLIS = 60_000;
+    private static final long NEVER_WARNED = Long.MIN_VALUE;
     private static final DefaultRedisScript<Long> GCRA = gcraScript();
 
     private final StringRedisTemplate redis;
     private final Clock clock;
     private final Map<RequestBudget, BudgetRate> rates = new EnumMap<>(RequestBudget.class);
+    private final Map<RequestBudget, BudgetRate> memoryRates = new EnumMap<>(RequestBudget.class);
+    private final MemoryBudgetCounter memory;
+    private final int memoryMaxEntries;
+    private final ExecutorService executor;
+    private final long retryIntervalMillis;
+    private final long totalTimeoutMillis;
+    private final AtomicReference<RedisState> state;
+    private final AtomicLong lastOverloadWarnMillis = new AtomicLong(NEVER_WARNED);
+    private final AtomicBoolean memoryFullWarned = new AtomicBoolean();
 
-    BudgetLedger(StringRedisTemplate redis, Clock clock, UserRequestLimitProperties properties) {
+    /** Redis를 쓸 수 있는지, 없으면 언제 다시 볼지. */
+    private record RedisState(boolean up, long retryAtMillis) {
+        static final RedisState UP = new RedisState(true, 0);
+    }
+
+    BudgetLedger(
+            StringRedisTemplate redis, Clock clock, UserRequestLimitProperties properties, ExecutorService executor) {
         this.redis = redis;
         this.clock = clock;
-        properties
-                .budgets()
-                .forEach((budget, setting) ->
-                        rates.put(budget, BudgetRate.of(setting.capacity(), setting.refillEvery())));
+        this.executor = executor;
+        this.memoryMaxEntries = properties.memoryMaxEntries();
+        this.memory = new MemoryBudgetCounter(memoryMaxEntries);
+        this.retryIntervalMillis = properties.redisRetryInterval().toMillis();
+        this.totalTimeoutMillis = properties.redisTotalTimeout().toMillis();
+        // 기동 직후는 "Redis 없음, 다시 볼 시각 = 기동 시각"이다. 첫 요청이 탐침이 되어 연결을 만든다
+        this.state = new AtomicReference<>(new RedisState(false, clock.millis()));
+        int servers = properties.serverCount();
+        properties.budgets().forEach((budget, setting) -> {
+            rates.put(budget, BudgetRate.of(setting.capacity(), setting.refillEvery()));
+            // 서버를 모두 합쳐도 Redis 한도를 넘지 않게 서버 몫으로 나눈다(ADR Decision 6)
+            memoryRates.put(
+                    budget,
+                    BudgetRate.of(
+                            Math.max(1, setting.capacity() / servers),
+                            setting.refillEvery().multipliedBy(servers)));
+        });
     }
 
     /**
@@ -38,16 +80,133 @@ final class BudgetLedger {
      * @throws BusinessException TOO_MANY_REQUESTS(retryAfterSeconds 포함): 한도를 다 썼다
      */
     void spend(UUID accountId, RequestBudget budget) {
-        BudgetRate rate = rates.get(budget);
-        Long waitMillis = redis.execute(
-                GCRA,
-                List.of(key(budget, accountId), PROBE_KEY),
-                Long.toString(clock.millis()),
-                Long.toString(rate.intervalMillis()),
-                Long.toString(rate.toleranceMillis()),
-                "0");
-        if (waitMillis != null && waitMillis >= 0) {
+        long now = clock.millis();
+        RedisState current = state.get();
+        boolean probe = !current.up();
+        if (probe && !wonProbe(current, now)) {
+            spendWithoutRedis(accountId, budget);
+            return;
+        }
+        Long waitMillis = askRedis(accountId, budget, now, probe);
+        if (waitMillis == null) {
+            spendWithoutRedis(accountId, budget);
+            return;
+        }
+        if (probe) {
+            markUp();
+        }
+        if (waitMillis >= 0) {
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS, BudgetRate.retryAfterSeconds(waitMillis));
+        }
+    }
+
+    /**
+     * 실행기에서 Redis를 불러 {@code redis-total-timeout}까지만 기다린다. 기한을 넘긴 호출은 취소하지 않는다.
+     *
+     * @return 스크립트의 답(-1은 받음, 0 이상은 거절이며 남은 ms). 이 요청이 답을 받지 못했으면 null이다. Redis 장애(기한 초과 포함)면 상태를
+     *     바꾸고, 실행기가 거절했거나 기다리다 끊긴 것은 이 서버의 과부하일 뿐이라 상태를 바꾸지 않는다.
+     */
+    private Long askRedis(UUID accountId, RequestBudget budget, long now, boolean probe) {
+        BudgetRate rate = rates.get(budget);
+        Future<Long> call;
+        try {
+            call = executor.submit(() -> redis.execute(
+                    GCRA,
+                    List.of(key(budget, accountId), PROBE_KEY),
+                    Long.toString(now),
+                    Long.toString(rate.intervalMillis()),
+                    Long.toString(rate.toleranceMillis()),
+                    probe ? "1" : "0"));
+        } catch (RejectedExecutionException e) {
+            warnOverloaded();
+            return null;
+        }
+        try {
+            return call.get(totalTimeoutMillis, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            markDown(e);
+            return null;
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof DataAccessException cause) {
+                markDown(cause);
+                return null;
+            }
+            throw rethrow(e.getCause());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            warnOverloaded();
+            return null;
+        }
+    }
+
+    /** 실행기 거절·대기 중단은 서버 과부하 신호다. 로그는 1분에 1번까지, 계정 ID 없이 남긴다. */
+    private void warnOverloaded() {
+        long now = clock.millis();
+        long last = lastOverloadWarnMillis.get();
+        boolean due = last == NEVER_WARNED || now - last >= OVERLOAD_WARN_INTERVAL_MILLIS;
+        if (due && lastOverloadWarnMillis.compareAndSet(last, now)) {
+            log.warn("요청 한도 확인 실행기가 가득 차거나 대기가 끊겨 해당 요청만 장애 정책대로 처리했다. Redis 상태는 바꾸지 않았다");
+        }
+    }
+
+    /** DataAccessException 밖의 예외는 잡지 않고 그대로 낸다(500, 버그). */
+    private static RuntimeException rethrow(Throwable cause) {
+        if (cause instanceof Error error) {
+            throw error;
+        }
+        if (cause instanceof RuntimeException runtime) {
+            return runtime;
+        }
+        return new IllegalStateException("한도 확인 중 예상하지 못한 예외가 났다", cause);
+    }
+
+    /** 다시 볼 시각이 지났고 compare-and-set에 이긴 요청 하나만 탐침이 된다. 이긴 쪽이 다음 탐침 시각을 미뤄 두어 나머지는 건너뛴다. */
+    private boolean wonProbe(RedisState current, long now) {
+        return now >= current.retryAtMillis() && state.compareAndSet(current, down(now));
+    }
+
+    private RedisState down(long now) {
+        return new RedisState(false, now + retryIntervalMillis);
+    }
+
+    private void markDown(Exception cause) {
+        RedisState previous = state.getAndSet(down(clock.millis()));
+        if (previous.up()) {
+            memoryFullWarned.set(false);
+            log.warn(
+                    "요청 한도 확인용 Redis를 쓸 수 없어 장애 동작으로 바꾼다. 예외: {}",
+                    cause.getClass().getName());
+        }
+    }
+
+    /** 장애 한 번에 1번만 남긴다. */
+    private void warnMemoryFull() {
+        if (memoryFullWarned.compareAndSet(false, true)) {
+            log.warn("요청 한도 메모리 카운터가 항목 수 상한({})에 차서 새 계정은 세지 않고 통과시킨다", memoryMaxEntries);
+        }
+    }
+
+    private void markUp() {
+        state.set(RedisState.UP);
+        log.info("요청 한도 확인용 Redis를 쓸 수 있게 되어 Redis로 센다");
+    }
+
+    /** Redis를 쓸 수 없는 요청에 한도의 장애 정책을 적용한다. */
+    private void spendWithoutRedis(UUID accountId, RequestBudget budget) {
+        if (budget.getOutagePolicy() == OutagePolicy.REJECT) {
+            throw new BusinessException(ErrorCode.RATE_LIMIT_UNAVAILABLE);
+        }
+        spendInMemory(accountId, budget);
+    }
+
+    private void spendInMemory(UUID accountId, RequestBudget budget) {
+        BudgetRate.Verdict verdict =
+                memory.admit(new MemoryBudgetCounter.Slot(budget, accountId), memoryRates.get(budget), clock.millis());
+        if (verdict == MemoryBudgetCounter.UNCOUNTED) {
+            warnMemoryFull();
+        } else if (!verdict.accepted()) {
+            throw new BusinessException(
+                    ErrorCode.TOO_MANY_REQUESTS, BudgetRate.retryAfterSeconds(verdict.waitMillis()));
         }
     }
 

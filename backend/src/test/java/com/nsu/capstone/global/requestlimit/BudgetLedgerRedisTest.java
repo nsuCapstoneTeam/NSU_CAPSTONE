@@ -35,7 +35,10 @@ class BudgetLedgerRedisTest {
         if (keys != null && !keys.isEmpty()) {
             redis.delete(keys);
         }
-        ledger = new BudgetLedger(redis, clock, RedisFixture.releaseProperties());
+        ledger = new BudgetLedger(
+                redis, clock, RedisFixture.releaseProperties(), Executors.newVirtualThreadPerTaskExecutor());
+        // 서버가 뜬 직후 첫 요청은 탐침이다. 탐침이 끝나 "Redis 있음"이 된 뒤의 동작을 본다
+        ledger.spend(UUID.randomUUID(), RequestBudget.PROFILE);
     }
 
     @Test
@@ -142,7 +145,7 @@ class BudgetLedgerRedisTest {
     }
 
     @Test
-    void Lua와_Java_GCRA는_같은_입력에서_같은_결과를_낸다() {
+    void Lua와_메모리_카운터는_같은_입력에서_같은_결과를_낸다() {
         UUID account = UUID.randomUUID();
         BudgetRate rate = BudgetRate.of(10, Duration.ofMinutes(1));
         // 연달아 보내고(0초), 1초 간격으로 보내고, 오래 쉬었다가 다시 보내는 입력(밀리초 오프셋)
@@ -150,15 +153,14 @@ class BudgetLedgerRedisTest {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 500, 1_000, 59_999, 60_000, 60_001, 119_999, 120_000, 120_000, 300_000,
             300_000, 300_001, 3_600_000, 3_600_000
         };
-        Long tat = null;
+        // 서버 수 1이면 메모리 카운터의 한도도 Redis와 같다
+        MemoryBudgetCounter memory = new MemoryBudgetCounter(10);
+        MemoryBudgetCounter.Slot slot = new MemoryBudgetCounter.Slot(RequestBudget.EVENT_CHANGE, account);
 
         for (long offset : offsets) {
             long now = TestClock.START_MILLIS + offset;
             clock.set(Instant.ofEpochMilli(now));
-            BudgetRate.Verdict expected = rate.admit(tat, now);
-            if (expected.accepted()) {
-                tat = expected.nextTat();
-            }
+            BudgetRate.Verdict expected = memory.admit(slot, rate, now);
 
             if (expected.accepted()) {
                 assertThatCode(() -> ledger.spend(account, RequestBudget.EVENT_CHANGE))
