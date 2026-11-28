@@ -79,13 +79,15 @@ BEGIN
                 USING ERRCODE = 'check_violation';
         END IF;
     END IF;
-    -- 하루 상한(결정 13): 아티스트별 잠금을 잡은 뒤 그날 시작하는 행을 자기 행을 빼고 센다.
+    -- 하루 상한(결정 13): 아티스트별 잠금을 잡은 뒤 그날 시작하는 행을 센다. ID로 행을 빼지 않는다. 넣는 행은 아직 표에
+    -- 없고, 시작 날짜를 옮기는 행의 옛 버전은 다른 날에 있어 세지 않는다. ID를 빼면, ID 변경(이 트리거를 부르지 않아
+    -- 잠금도 잡지 않는다)이 커밋되지 않은 동안 그 옛 ID로 넣는 행이 아직 보이는 옛 행을 빼고 세어 97번째가 된다.
     -- 하루는 Asia/Seoul 날짜의 자정부터 다음 자정까지다. 1987·1988년처럼 일광 절약 시간이 있던 날은 24시간이 아니므로
     -- 고정 24시간을 쓰지 않는다.
     PERFORM pg_advisory_xact_lock(hashtextextended('artist_schedules:' || NEW.user_id, 0));
     EXECUTE format('SELECT count(*) FROM %I.artist_schedules WHERE user_id = $1 AND start_at >= $2 '
-                   'AND start_at < $3 AND id <> $4', TG_TABLE_SCHEMA)
-        INTO same_day USING NEW.user_id, day_start, day_end, NEW.id;
+                   'AND start_at < $3', TG_TABLE_SCHEMA)
+        INTO same_day USING NEW.user_id, day_start, day_end;
     IF same_day >= 96 THEN
         RAISE EXCEPTION '하루에 둘 수 있는 공연 가능 일정 수를 넘었다: %', NEW.user_id
             USING ERRCODE = 'check_violation', CONSTRAINT = 'ck_artist_schedules_daily_limit';
