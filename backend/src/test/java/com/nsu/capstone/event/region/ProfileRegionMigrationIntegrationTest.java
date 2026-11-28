@@ -61,7 +61,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
 
     /** 두 프로필 표가 모두 있는 첫 버전. 이 버전보다 앞선 버전은 이 테스트가 다시 돌리지 않는다. */
-    private static final String PROFILE_TABLES_VERSION = "12";
+    private static final String PROFILE_TABLES_VERSION = "11";
 
     private static final String DATABASE = "region_migration_check";
     private static final String MIGRATIONS = "classpath:db/migration";
@@ -329,7 +329,7 @@ class ProfileRegionMigrationIntegrationTest extends EventIntegrationTestBase {
     }
 
     @Test
-    void 실패_픽스처는_운영_위치에_개편이_있어도_V12_바로_위에서_실행한다() {
+    void 실패_픽스처는_운영_위치에_개편이_있어도_V11_바로_위에서_실행한다() {
         // 운영 개편이 이미 수원시 코드를 옮겼다면, 그 위에서 도는 픽스처는 옮길 코드가 없어 실패하지 않는다
         assertThatThrownBy(() -> migrateStepwiseWithProfiles(
                         EnumSet.allOf(ProfileTable.class),
