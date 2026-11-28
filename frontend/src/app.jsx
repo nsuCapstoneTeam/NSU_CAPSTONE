@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useEffectEvent, useRef, useState } from 'react';
 import brandMark from './assets/clap-sound-mark.svg';
 import brandMarkDark from './assets/clap-sound-mark-dark.svg';
 import teamLogo from './assets/hallaemallae-logo.png';
@@ -7,23 +7,14 @@ import useStoredState from './hooks/use-stored-state.js';
 import { pageOf, pathOf, titleOf } from './routes.js';
 import { startupLink } from './features/external-accounts/startup-link.js';
 import './app.css';
-import SignupRoleSelect from './features/auth/components/signup-role-select.jsx';
-import OrganizerLogin from './features/auth/components/organizer-login.jsx';
-import ArtistLogin from './features/auth/components/artist-login.jsx';
 import useAuthSession from './features/auth/use-auth-session.js';
 import { authSession, pageAfterLogin } from './features/auth/auth-session.js';
 
 import Icon from './components/common/icon.jsx';
 import MainNav from './components/common/main-nav.jsx';
+import PageLoading from './components/common/page-loading.jsx';
+import PageLoadBoundary from './components/common/page-load-boundary.jsx';
 import Home from './features/home/home-page.jsx';
-import Matching from './features/matching/matching-page.jsx';
-import ArtistSignUp from './features/auth/pages/artist-sign-up-page.jsx';
-import OrganizerSignUp from './features/auth/pages/organizer-sign-up-page.jsx';
-import SignUpComplete from './features/auth/pages/sign-up-complete-page.jsx';
-import AuthRequired from './features/auth/pages/auth-required-page.jsx';
-import MyPage from './features/my-page/my-page.jsx';
-import Board from './features/board/board-page.jsx';
-import EventSearch from './features/event-search/event-search-page.jsx';
 import { STATUS_VALUES as SCHEDULE_STATUSES } from './features/my-page/availability.js';
 import useMyEvents from './features/events/use-my-events.js';
 import { AUTH_API_MODE } from './features/auth/api/auth-api.js';
@@ -49,6 +40,19 @@ const LOGIN_FLOW_PAGES = [
 ];
 
 // 앱 전체: 현재 화면(page) 전환, 공유 상태(테마·프로필·로그인·게시글·일정·관심 목록), 공통 헤더·푸터
+// 화면별로 나눠 불러오기 (NSU-182): 홈은 첫 화면이라 바로 넣고, 나머지는 처음 열 때 코드를 받아 옴
+const Matching = lazy(() => import('./features/matching/matching-page.jsx'));
+const EventSearch = lazy(() => import('./features/event-search/event-search-page.jsx'));
+const Board = lazy(() => import('./features/board/board-page.jsx'));
+const MyPage = lazy(() => import('./features/my-page/my-page.jsx'));
+const ArtistLogin = lazy(() => import('./features/auth/components/artist-login.jsx'));
+const OrganizerLogin = lazy(() => import('./features/auth/components/organizer-login.jsx'));
+const SignupRoleSelect = lazy(() => import('./features/auth/components/signup-role-select.jsx'));
+const ArtistSignUp = lazy(() => import('./features/auth/pages/artist-sign-up-page.jsx'));
+const OrganizerSignUp = lazy(() => import('./features/auth/pages/organizer-sign-up-page.jsx'));
+const SignUpComplete = lazy(() => import('./features/auth/pages/sign-up-complete-page.jsx'));
+const AuthRequired = lazy(() => import('./features/auth/pages/auth-required-page.jsx'));
+
 // 주 메뉴 [화면 key, 이름]
 const NAV_ITEMS = [
   ['home', '홈'],
@@ -351,132 +355,137 @@ export default function App() {
           page === 'home' || (page === 'match' && session?.role === 'organizer') ? ' is-stage' : ''
         }`}
       >
-        {page === 'home' && <Home navigate={navigate} />}{' '}
-        {/* 아티스트 매칭·출연료 열람은 행사 관계자(EVENT_PARTNER) 기능 (EVT-041, ART-028) */}
-        {page === 'match' && session?.role === 'organizer' && (
-          <Matching
-            saved={saved}
-            toggleSaved={toggleSaved}
-            search={search}
-            setSearch={setSearch}
-            events={myEvents.events}
-            onGoToEvents={openMyEvents}
-          />
-        )}{' '}
-        {/* 아티스트이거나 비로그인이면 행사 관계자 로그인 안내 */}
-        {page === 'match' && session?.role !== 'organizer' && (
-          <AuthRequired
-            navigate={(next) => {
-              navigate(next);
-              setReturnTo('match');
-            }}
-            loginPage="organizer-login"
-            title="행사 관계자 전용 화면이에요."
-            description={
-              session
-                ? '아티스트 매칭과 출연료 정보는 행사 관계자 계정에서만 볼 수 있어요. 행사 관계자로 다시 로그인해 주세요.'
-                : '아티스트 매칭과 출연료 정보는 행사 관계자 계정에서만 볼 수 있어요. 행사 관계자로 로그인해 주세요.'
-            }
-          />
-        )}{' '}
-        {/* 회원가입 역할 선택 */}
-        {page === 'signup-role' && (
-          <SignupRoleSelect
-            onSelect={(role) => {
-              navigate(role === 'artist' ? 'artist-signup' : 'organizer-signup');
-            }}
-            onBack={() => navigate('artist-login')}
-            onLogin={() => navigate('artist-login')}
-          />
-        )}{' '}
-        {/* 역할별 로그인 화면 (CD를 누르면 서로 전환) */}
-        {page === 'artist-login' && (
-          <ArtistLogin
-            onBack={() => navigate('home')}
-            onChangeRole={(role) =>
-              navigate(role === 'organizer' ? 'organizer-login' : 'artist-login')
-            }
-            onSignUp={() => navigate('signup-role')}
-            onLogin={loginWithEmail}
-            onQuickLogin={authSession.canStartWithoutLogin ? quickLogin : undefined}
-          />
-        )}{' '}
-        {page === 'organizer-login' && (
-          <OrganizerLogin
-            onBack={() => navigate('home')}
-            onChangeRole={(role) =>
-              navigate(role === 'organizer' ? 'organizer-login' : 'artist-login')
-            }
-            onSignUp={() => navigate('signup-role')}
-            onLogin={loginWithEmail}
-            onQuickLogin={authSession.canStartWithoutLogin ? quickLogin : undefined}
-          />
-        )}{' '}
-        {/* 역할별 회원가입 → 가입 완료 */}
-        {page === 'artist-signup' && (
-          <ArtistSignUp
-            profile={profile}
-            setProfile={profileAfterSignUp}
-            notify={setNotice}
-            navigate={navigate}
-          />
-        )}{' '}
-        {page === 'organizer-signup' && (
-          <OrganizerSignUp
-            profile={profile}
-            setProfile={profileAfterSignUp}
-            notify={setNotice}
-            navigate={navigate}
-          />
-        )}{' '}
-        {page === 'signup-complete' && (
-          <SignUpComplete
-            profile={profile}
-            onStart={startAfterSignUp}
-            navigate={navigate}
-          />
-        )}{' '}
-        {/* 로그인 필요 안내 (로그인 후 마이페이지로 복귀) */}
-        {page === 'auth-required' && (
-          <AuthRequired
-            navigate={(next) => {
-              navigate(next);
-              setReturnTo('mypage');
-            }}
-          />
-        )}{' '}
-        {/* 마이페이지: 로그인했을 때만 표시 */}
-        {page === 'mypage' && session && (
-          <MyPage
-            profile={profile}
-            setProfile={setProfile}
-            schedules={schedules}
-            setSchedules={setSchedules}
-            myEvents={myEvents}
-            initialTab={myPageTab}
-            saved={saved}
-            toggleSaved={toggleSaved}
-            notify={setNotice}
-          />
-        )}{' '}
-        {page === 'mypage' && !session && (
-          <AuthRequired
-            navigate={(next) => {
-              navigate(next);
-              setReturnTo('mypage');
-            }}
-          />
-        )}{' '}
-        {/* 행사 찾기 (NSU-116): 공개 행사를 지역별로 보기. 지금은 누구나 볼 수 있음 (로그인 필요 여부는 팀 확정 필요) */}
-        {page === 'events' && <EventSearch notify={setNotice} />}{' '}
-        {page === 'board' && (
-          <Board
-            posts={posts}
-            setPosts={setPosts}
-            profile={profile}
-            notify={setNotice}
-          />
-        )}
+        {/* 화면 코드를 받는 동안 로딩 표시, 받지 못하면 다시 시도 안내 (NSU-182). 화면이 바뀌면 안내 상자를 새로 만듦 */}
+        <PageLoadBoundary key={page}>
+          <Suspense fallback={<PageLoading />}>
+            {page === 'home' && <Home navigate={navigate} />}{' '}
+            {/* 아티스트 매칭·출연료 열람은 행사 관계자(EVENT_PARTNER) 기능 (EVT-041, ART-028) */}
+            {page === 'match' && session?.role === 'organizer' && (
+              <Matching
+                saved={saved}
+                toggleSaved={toggleSaved}
+                search={search}
+                setSearch={setSearch}
+                events={myEvents.events}
+                onGoToEvents={openMyEvents}
+              />
+            )}{' '}
+            {/* 아티스트이거나 비로그인이면 행사 관계자 로그인 안내 */}
+            {page === 'match' && session?.role !== 'organizer' && (
+              <AuthRequired
+                navigate={(next) => {
+                  navigate(next);
+                  setReturnTo('match');
+                }}
+                loginPage="organizer-login"
+                title="행사 관계자 전용 화면이에요."
+                description={
+                  session
+                    ? '아티스트 매칭과 출연료 정보는 행사 관계자 계정에서만 볼 수 있어요. 행사 관계자로 다시 로그인해 주세요.'
+                    : '아티스트 매칭과 출연료 정보는 행사 관계자 계정에서만 볼 수 있어요. 행사 관계자로 로그인해 주세요.'
+                }
+              />
+            )}{' '}
+            {/* 회원가입 역할 선택 */}
+            {page === 'signup-role' && (
+              <SignupRoleSelect
+                onSelect={(role) => {
+                  navigate(role === 'artist' ? 'artist-signup' : 'organizer-signup');
+                }}
+                onBack={() => navigate('artist-login')}
+                onLogin={() => navigate('artist-login')}
+              />
+            )}{' '}
+            {/* 역할별 로그인 화면 (CD를 누르면 서로 전환) */}
+            {page === 'artist-login' && (
+              <ArtistLogin
+                onBack={() => navigate('home')}
+                onChangeRole={(role) =>
+                  navigate(role === 'organizer' ? 'organizer-login' : 'artist-login')
+                }
+                onSignUp={() => navigate('signup-role')}
+                onLogin={loginWithEmail}
+                onQuickLogin={authSession.canStartWithoutLogin ? quickLogin : undefined}
+              />
+            )}{' '}
+            {page === 'organizer-login' && (
+              <OrganizerLogin
+                onBack={() => navigate('home')}
+                onChangeRole={(role) =>
+                  navigate(role === 'organizer' ? 'organizer-login' : 'artist-login')
+                }
+                onSignUp={() => navigate('signup-role')}
+                onLogin={loginWithEmail}
+                onQuickLogin={authSession.canStartWithoutLogin ? quickLogin : undefined}
+              />
+            )}{' '}
+            {/* 역할별 회원가입 → 가입 완료 */}
+            {page === 'artist-signup' && (
+              <ArtistSignUp
+                profile={profile}
+                setProfile={profileAfterSignUp}
+                notify={setNotice}
+                navigate={navigate}
+              />
+            )}{' '}
+            {page === 'organizer-signup' && (
+              <OrganizerSignUp
+                profile={profile}
+                setProfile={profileAfterSignUp}
+                notify={setNotice}
+                navigate={navigate}
+              />
+            )}{' '}
+            {page === 'signup-complete' && (
+              <SignUpComplete
+                profile={profile}
+                onStart={startAfterSignUp}
+                navigate={navigate}
+              />
+            )}{' '}
+            {/* 로그인 필요 안내 (로그인 후 마이페이지로 복귀) */}
+            {page === 'auth-required' && (
+              <AuthRequired
+                navigate={(next) => {
+                  navigate(next);
+                  setReturnTo('mypage');
+                }}
+              />
+            )}{' '}
+            {/* 마이페이지: 로그인했을 때만 표시 */}
+            {page === 'mypage' && session && (
+              <MyPage
+                profile={profile}
+                setProfile={setProfile}
+                schedules={schedules}
+                setSchedules={setSchedules}
+                myEvents={myEvents}
+                initialTab={myPageTab}
+                saved={saved}
+                toggleSaved={toggleSaved}
+                notify={setNotice}
+              />
+            )}{' '}
+            {page === 'mypage' && !session && (
+              <AuthRequired
+                navigate={(next) => {
+                  navigate(next);
+                  setReturnTo('mypage');
+                }}
+              />
+            )}{' '}
+            {/* 행사 찾기 (NSU-116): 공개 행사를 지역별로 보기. 지금은 누구나 볼 수 있음 (로그인 필요 여부는 팀 확정 필요) */}
+            {page === 'events' && <EventSearch notify={setNotice} />}{' '}
+            {page === 'board' && (
+              <Board
+                posts={posts}
+                setPosts={setPosts}
+                profile={profile}
+                notify={setNotice}
+              />
+            )}
+          </Suspense>
+        </PageLoadBoundary>
       </main>
       {/* 공통 푸터 */}
       <footer className="site-footer">

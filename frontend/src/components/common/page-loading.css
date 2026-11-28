@@ -1,0 +1,39 @@
+/* 화면을 불러오는 동안 표시 (page-loading.jsx, page-load-boundary.jsx) */
+.page-loading,
+.page-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 50vh;
+  padding: 48px 20px;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+}
+.page-loading .sound-wave {
+  color: var(--blue);
+  font-size: 22px;
+}
+/* 아주 빨리 불러오면 깜빡이지 않게 0.3초 뒤에 나타남 */
+.page-loading {
+  animation: page-loading-in 0.2s ease 0.3s both;
+}
+@keyframes page-loading-in {
+  from {
+    opacity: 0;
+  }
+}
+.page-load-error strong {
+  color: var(--ink);
+  font-size: 16px;
+}
+.page-load-error p {
+  margin: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-loading {
+    animation: none;
+  }
+}

@@ -7,6 +7,7 @@
 | 앱 시작 | `src/main.jsx` |
 | 메뉴, 로고, 화면 전환, 테마, 전체 상태 | `src/app.jsx` → `App` |
 | 주 메뉴와 지금 메뉴를 비추는 스포트라이트 | `src/components/common/main-nav.jsx`, `main-nav.css` |
+| 화면별 나눠 불러오기 (`app.jsx`의 `lazy`), 불러오는 동안·실패했을 때 표시 | `src/components/common/page-loading.jsx`, `page-load-boundary.jsx` |
 | 화면 주소·브라우저 뒤로 가기 (페이지 키 ↔ 주소, 탭 제목) | `src/routes.js`, `app.jsx`의 `navigate()`·`popstate` |
 | 홈 소개와 이용 순서 | `src/features/home/home-page.jsx` |
 | 홈 첫 화면 제목, 무대 조명, 무대 뒤 유리 CD (사진 4장 회전) | `src/features/home/components/track-home.jsx`, `stage-lights.jsx`, `glass-cd.jsx`, `glass-cd.css` |

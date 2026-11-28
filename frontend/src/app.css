@@ -287,14 +287,6 @@ svg {
 }
 .account-chip svg { color: var(--blue); }
 .header-logout { font-size: 11px; }
-/* 헤더 아래 체험판 안내 띠 */
-.live-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--blue);
-}
 /* 본문 영역 폭과 작은 머리글(eyebrow) */
 .page-container {
   max-width: 1240px;
