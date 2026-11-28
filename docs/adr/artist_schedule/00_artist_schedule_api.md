@@ -367,7 +367,8 @@ CREATE TABLE artist_schedules (
     CONSTRAINT ck_artist_schedules_status CHECK (
         status IN ('AVAILABLE', 'HOLD', 'BOOKED', 'UNAVAILABLE')
     ),
-    CONSTRAINT ck_artist_schedules_title CHECK (char_length(btrim(title)) >= 1),
+    -- 이름은 NULL이거나 앱이 앞뒤에서 지우는 글자(UserText.spacing: 공백·제어 공백·공백 구분자·폭 없는 공백·단어 결합자·BOM)가 아닌 글자를 하나 이상 담는다.
+    CONSTRAINT ck_artist_schedules_title CHECK (title ~ '[^\u0009-\u000D\u001C-    -​    ⁠　﻿]'),
     CONSTRAINT ex_artist_schedules_no_overlap EXCLUDE USING gist (
         user_id WITH =,
         tstzrange(start_at, end_at, '[)') WITH &&
@@ -381,7 +382,7 @@ CREATE INDEX ix_artist_schedules_user_start ON artist_schedules (user_id, start_
 -- 새 행과 시작 날짜 변경(결정 11·13)을 한 함수가 맡는다. 두 트리거가 같은 함수를 부른다.
 -- 표는 트리거가 걸린 artist_schedules와 같은 스키마(TG_TABLE_SCHEMA)에서 찾고, 함수의 search_path를 고정한다.
 -- 운영자 세션의 search_path나 같은 이름의 임시 표(users, artist_schedules)로 확인과 세기를 속일 수 없다(V11과 같다).
--- Asia/Seoul은 일광 절약 시간이 없어 하루가 늘 24시간이다.
+-- 하루는 Asia/Seoul 날짜의 자정부터 다음 자정까지다. 1987·1988년처럼 일광 절약 시간이 있던 날은 24시간이 아니므로 고정 24시간을 쓰지 않는다.
 CREATE FUNCTION artist_schedule_write_guard() RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = pg_catalog, pg_temp
@@ -389,7 +390,9 @@ AS $$
 DECLARE
     active_artist BOOLEAN;
     same_day BIGINT;
-    day_start TIMESTAMPTZ := date_trunc('day', NEW.start_at AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul';
+    local_day DATE := (NEW.start_at AT TIME ZONE 'Asia/Seoul')::date;
+    day_start TIMESTAMPTZ := local_day::timestamp AT TIME ZONE 'Asia/Seoul';
+    day_end TIMESTAMPTZ := (local_day + 1)::timestamp AT TIME ZONE 'Asia/Seoul';
 BEGIN
     -- 세기는 잠금 뒤의 새 스냅숏에 기댄다(READ COMMITTED). 그보다 높은 격리 수준은 트랜잭션 스냅숏으로 세어
     -- 앞에서 잠금을 쥐었던 트랜잭션의 행을 놓치므로 거절한다.
@@ -410,8 +413,8 @@ BEGIN
     -- 하루 상한(결정 13): 아티스트별 잠금을 잡은 뒤 그날 시작하는 행을 자기 행을 빼고 센다.
     PERFORM pg_advisory_xact_lock(hashtextextended('artist_schedules:' || NEW.user_id, 0));
     EXECUTE format('SELECT count(*) FROM %I.artist_schedules WHERE user_id = $1 AND start_at >= $2 '
-                   'AND start_at < $2 + INTERVAL ''24 hours'' AND id <> $3', TG_TABLE_SCHEMA)
-        INTO same_day USING NEW.user_id, day_start, NEW.id;
+                   'AND start_at < $3 AND id <> $4', TG_TABLE_SCHEMA)
+        INTO same_day USING NEW.user_id, day_start, day_end, NEW.id;
     IF same_day >= 96 THEN
         RAISE EXCEPTION '하루에 둘 수 있는 공연 가능 일정 수를 넘었다: %', NEW.user_id
             USING ERRCODE = 'check_violation', CONSTRAINT = 'ck_artist_schedules_daily_limit';
@@ -450,8 +453,9 @@ CREATE TRIGGER trg_artist_schedules_fixed_owner
 ```
 
 - `REFERENCES users`는 `users`에 잠금을 건다. `lock_timeout` 3초로, `users`가 바쁘면 기다리지 않고 실패한다(NSU-119 V11과 같다). 실패하면 배포를 다시 한다.
-- 일정 이름 `CHECK`는 공백만인 값을 막는 마지막 방어선이다. 앱은 더 넓은 규칙(05 §2)으로 그런 값을 `null`로 바꾼다.
+- 일정 이름 `CHECK`는 앱이 앞뒤에서 지우는 글자(`UserText`의 공백 규칙: 탭·줄바꿈 같은 제어 공백, NBSP 같은 공백 구분자, 폭 없는 공백, 단어 결합자, BOM)만으로 된 값을 거절한다. 앱은 이런 값을 `null`로 바꾸므로, 운영자 SQL과 복원에서도 "이름은 `null`이거나 보이는 글자가 있다"(11 §3)가 지켜진다. 앱의 보이는 글자 규칙(05 §2) 중 그리지 않는 글자(한글 채움 문자 등)만으로 된 값까지는 DB가 막지 않는다. 그런 값은 일정 시각·상태에 영향이 없고 화면에 빈 이름으로만 보이므로, 정규식을 앱의 글자 목록과 맞춰 유지하는 비용보다 작다고 보고 경계로 둔다(PR 리뷰 지적).
 - 삽입 가드·소유자 변경 금지·하루 상한 트리거 예외의 SQLState는 모두 `23514`(`check_violation`)다. 앱은 제약 이름으로 나눈다. `ck_artist_schedules_daily_limit`이면 `409 ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED`다. 이름이 없는 삽입 가드 예외는 API에서 나오지 않고(앞의 `ArtistWriteAccess`가 막는다), 나오면 `500`이다. 격리 수준 거절(`25000`)도 API에서 나오지 않고(앱은 `READ COMMITTED`), 나오면 `500`이다. 메시지에는 사용자 ID만 넣고 일정 값은 넣지 않는다.
+- 하루의 끝은 다음 `Asia/Seoul` 자정이다. API는 1989년 뒤의 날짜만 받아 하루가 늘 24시간이지만, 운영자 SQL은 날짜 범위 검사를 거치지 않는다. 1988-10-09처럼 25시간인 날에 고정 24시간으로 세면 마지막 한 시간의 행이 상한을 피한다(PR 리뷰 지적).
 - 세기 문장은 `ix_artist_schedules_user_start`(`user_id`, `start_at`)의 범위 조회다. 하루 96행 이하라 비용은 넣는 행마다 작은 인덱스 범위 하나다.
 - 트리거 함수는 `SECURITY DEFINER`가 아니다. 쓰는 계정의 권한으로 `users`와 일정 표를 읽는다.
 - 두 함수는 표를 `TG_TABLE_SCHEMA`(트리거가 걸린 `artist_schedules`의 스키마, 이 마이그레이션이 `users`와 같은 스키마에 만든다)로 한정하고 `search_path`를 `pg_catalog, pg_temp`로 고정한다(V11의 프로필 가드·파기 함수와 같다). 운영자 세션에 같은 이름의 임시 표(`users`, `artist_schedules`)가 있어도 가드는 실제 계정 상태를, 상한은 실제 일정 수를 본다(설계 리뷰 지적). 상한 검사를 별도 함수로 두면 고정한 `search_path`에서 그 함수를 다시 스키마로 한정해 불러야 하므로, 가드와 상한을 한 트리거 함수에 두고 `TG_OP`로 가드만 `INSERT`에 건다.
