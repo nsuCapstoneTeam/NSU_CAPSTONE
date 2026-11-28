@@ -1,0 +1,31 @@
+/* 소리 막대 로딩 표시 (sound-wave.jsx). 글자 색(currentColor)을 따라감 */
+.sound-wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 1em;
+  vertical-align: -0.12em;
+}
+.sound-wave > span {
+  width: 3px;
+  height: calc(var(--h) * 100%);
+  border-radius: 2px;
+  background: currentColor;
+  transform-origin: center;
+  animation: sound-wave-bounce 0.9s ease-in-out infinite;
+  animation-delay: calc(var(--i) * -0.13s);
+}
+@keyframes sound-wave-bounce {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.45);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sound-wave > span {
+    animation: none;
+  }
+}

@@ -70,6 +70,14 @@ test('장르가 여러 개면 선택지에 있는 첫 번째를 쓰고 알려 �
   assert.match(skipped[0], /재즈/);
 });
 
+test('행사 API 장르 이름을 매칭 선택지 이름으로 맞춘다 (NSU-125)', () => {
+  assert.equal(eventToSearch({ ...EVENT, genres: ['힙합·랩'] }, DEFAULT_EVENT).search.genre, '힙합');
+  assert.equal(eventToSearch({ ...EVENT, genres: ['EDM·일렉트로닉'] }, DEFAULT_EVENT).search.genre, 'DJ');
+  assert.equal(eventToSearch({ ...EVENT, genres: ['록'] }, DEFAULT_EVENT).search.genre, '밴드');
+  const { skipped } = eventToSearch({ ...EVENT, genres: ['클래식'] }, DEFAULT_EVENT);
+  assert.equal(skipped.length, 1);
+});
+
 test('원본 행사와 기존 조건은 바꾸지 않는다', () => {
   const before = JSON.stringify(DEFAULT_EVENT);
   eventToSearch(EVENT, DEFAULT_EVENT);

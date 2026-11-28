@@ -79,7 +79,7 @@
   min-width: 0;
 }
 .event-facts dt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .event-facts dd {
@@ -295,4 +295,76 @@
   .event-form .form-pair {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- NSU-125: 목록 나누기·불러오기·취소됨 ---------- */
+.events-period {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--soft);
+}
+.events-period button {
+  padding: 6px 14px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.events-period button em {
+  margin-left: 2px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+.events-period button[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--blue);
+  box-shadow: 0 1px 4px #163e7a1f;
+}
+.events-period button:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+.events-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 8px 0 0;
+  padding: 28px;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 600;
+}
+.events-error {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid #c93643;
+  border-left-width: 5px;
+  border-radius: 10px;
+}
+.events-error p {
+  margin: 0;
+  font-size: 13px;
+}
+.event-card.is-cancelled {
+  border-style: dashed;
+  background: var(--soft);
+}
+.event-card.is-cancelled h3,
+.event-card.is-cancelled .event-when {
+  color: var(--muted);
+}
+.event-card.is-cancelled h3 {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
