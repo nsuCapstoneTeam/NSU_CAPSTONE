@@ -41,6 +41,27 @@ class RequestBodyLimitTomcatIntegrationTest extends EventIntegrationTestBase {
         assertThat(response.header("X-Request-Id")).isNotBlank();
     }
 
+    @Test
+    void 정확히_65536바이트_로그인은_받는다() throws IOException {
+        RawSocket.Response response =
+                RawSocket.send(port, RawSocket.request("POST", LOGIN).body("application/json", loginJsonOfSize(LIMIT)));
+
+        assertThat(response.status()).isNotEqualTo(413).isLessThan(500);
+    }
+
+    @Test
+    void chunked로_보낸_65537바이트_로그인은_읽는_도중_413이다() throws IOException {
+        RawSocket.Response response = RawSocket.send(
+                port,
+                RawSocket.request("POST", LOGIN)
+                        .body("application/json", loginJsonOfSize(LIMIT + 1))
+                        .chunked());
+
+        assertThat(response.status()).isEqualTo(413);
+        assertThat(response.header("Content-Type")).startsWith("application/json");
+        assertThat(JSON.readTree(response.body()).path("code").asString()).isEqualTo("REQUEST_BODY_TOO_LARGE");
+    }
+
     /**
      * 앞에 공백을 채워 JSON 값이 맨 끝에 오게 한다. 뒤에 채우면 Jackson이 값을 다 읽은 뒤 멈추므로, 앱이 나머지 바이트를 읽지 않아 상한에
      * 걸리지 않는다.
