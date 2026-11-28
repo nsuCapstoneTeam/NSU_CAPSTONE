@@ -8,7 +8,7 @@ import com.nsu.capstone.identity.domain.UserRole;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/** V15 표의 모양을 확인한다(ADR artist_trust_architecture/10 "저장 (Flyway V15)"). */
+/** V12 표의 모양을 확인한다(ADR artist_trust_architecture/10 "저장 (Flyway V12)"). */
 class EvidenceVerificationSchemaTest extends EvidenceVerificationIntegrationTestBase {
 
     /** 감사 기록을 아티스트별로 시간순으로 찾는 조회(runbook "실행 뒤 확인")와 users FK 검사가 쓴다. */

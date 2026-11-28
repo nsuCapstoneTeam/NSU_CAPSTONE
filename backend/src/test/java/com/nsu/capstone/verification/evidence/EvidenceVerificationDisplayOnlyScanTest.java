@@ -25,7 +25,7 @@ class EvidenceVerificationDisplayOnlyScanTest {
 
     /** 이 모듈이 만든 마이그레이션만 테이블 이름을 쓸 수 있다. */
     private static final Set<String> ALLOWED_MIGRATIONS =
-            Set.of("src/main/resources/db/migration/V15__create_evidence_verifications.sql");
+            Set.of("src/main/resources/db/migration/V12__create_evidence_verifications.sql");
 
     @Test
     void 모듈_밖_운영_파일은_증빙_확인_패키지나_테이블_이름을_문자열로도_쓰지_않는다() throws IOException {
