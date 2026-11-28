@@ -19,9 +19,7 @@ public interface ArtistScheduleReader {
      * 지도 자체는 null로 돌려주지 않고, 조회에 실패하면 예외를 던진다.
      * 일정 테이블은 시작·끝·상태를 NOT NULL로 두고 DB CHECK로 {@code start_at < end_at}을 지킨다(CHECK는 NULL을 통과시킨다).
      * 보통의 겹침 조회는 뒤집히거나 NULL인 행을 돌려주지 않아
-     * 필터의 fail-closed가 닿지 않기 때문이다. 실제 창구를 붙이면 {@code EmptyArtistScheduleReader}를 지운다.
+     * 필터의 fail-closed가 닿지 않기 때문이다. 실제 창구는 {@code SavedArtistScheduleReader}다.
      */
-    Map<UUID, List<ScheduleSlot>> findByArtistIds(
-        Collection<UUID> artistIds, LocalDateTime from, LocalDateTime to
-    );
+    Map<UUID, List<ScheduleSlot>> findByArtistIds(Collection<UUID> artistIds, LocalDateTime from, LocalDateTime to);
 }
