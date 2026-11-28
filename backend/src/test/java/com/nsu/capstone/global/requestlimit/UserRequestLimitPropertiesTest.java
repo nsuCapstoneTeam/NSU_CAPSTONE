@@ -91,8 +91,12 @@ class UserRequestLimitPropertiesTest {
                         "redis-total-timeout이 100ms 미만이다",
                         settings -> settings.put("user-request-limit.redis-total-timeout", "PT0.05S")),
                 invalid(
-                        "redis-total-timeout이 redis-retry-interval 이상이다",
-                        settings -> settings.put("user-request-limit.redis-total-timeout", "PT10S")),
+                        "redis-total-timeout이 5초를 넘는다",
+                        settings -> settings.put("user-request-limit.redis-total-timeout", "PT6S")),
+                invalid("redis-total-timeout이 redis-retry-interval 이상이다", settings -> {
+                    settings.put("user-request-limit.redis-total-timeout", "PT4S");
+                    settings.put("user-request-limit.redis-retry-interval", "PT3S");
+                }),
                 invalid(
                         "redis-connect-timeout이 redis-total-timeout 이상이다",
                         settings -> settings.put("user-request-limit.redis-connect-timeout", "PT1S")),

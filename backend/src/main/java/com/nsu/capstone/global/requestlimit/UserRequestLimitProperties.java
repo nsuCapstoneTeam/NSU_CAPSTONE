@@ -28,6 +28,7 @@ record UserRequestLimitProperties(
     private static final Duration MIN_REFILL_EVERY = Duration.ofSeconds(1);
     private static final Duration MIN_RETRY_INTERVAL = Duration.ofSeconds(1);
     private static final Duration MIN_TOTAL_TIMEOUT = Duration.ofMillis(100);
+    private static final Duration MAX_TOTAL_TIMEOUT = Duration.ofSeconds(5);
 
     /** 기동할 때 검사한다. 어기면 서버가 뜨지 않는다. */
     UserRequestLimitProperties {
@@ -44,8 +45,9 @@ record UserRequestLimitProperties(
         require(
                 redisTotalTimeout != null
                         && redisTotalTimeout.compareTo(MIN_TOTAL_TIMEOUT) >= 0
+                        && redisTotalTimeout.compareTo(MAX_TOTAL_TIMEOUT) <= 0
                         && redisTotalTimeout.compareTo(redisRetryInterval) < 0,
-                "redis-total-timeout은 100ms 이상이고 redis-retry-interval보다 작아야 한다");
+                "redis-total-timeout은 100ms 이상 5초 이하이고 redis-retry-interval보다 작아야 한다");
         require(
                 redisConnectTimeout != null
                         && redisConnectTimeout.isPositive()
