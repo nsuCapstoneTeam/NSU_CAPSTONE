@@ -16,7 +16,9 @@
    - `Content-Length`가 65,536보다 크면 본문을 읽지 않고 바로 `413`을 쓴다.
    - 그 밖의 요청(`Content-Length`가 없는 chunked 요청 포함)은 래퍼로 감싼다. 래퍼의 `getInputStream()`과 `getReader()`는 실제로 읽은 바이트를 센다. 65,536바이트를 넘게 읽으려 하면 `RequestBodyTooLargeException`(`IOException`의 하위 타입)을 던진다.
    - `getReader()`도 문자 수가 아니라 바이트 수로 센다. `read`의 모든 형태(`readAllBytes`, `readNBytes`, `skip`, `transferTo` 포함)가 같은 계수기를 거친다.
-   - 래퍼는 앱이 읽은 만큼만 센다. 본문을 읽지 않는 API(예: `@RequestBody`가 없는 `DELETE`)에 온 chunked 본문은 `413`이 되지 않고 그 API의 응답이 나간다. 남은 본문은 Tomcat이 응답 뒤 `max-swallow-size`(2MiB)까지 읽어 버리고, 넘으면 연결을 닫는다. 이 바이트는 앱 힙에 쌓이지 않는다. 이 ADR이 지키는 것은 "앱이 읽는 본문의 크기"이고, 읽지 않는 본문을 막는 것은 범위 밖이다.
+   - 래퍼는 앱이 읽은 만큼만 센다. 본문을 읽지 않는 API(예: `@RequestBody`가 없는 `DELETE`)에 온 chunked 본문은 `413`이 되지 않고 그 API의 응답이 나간다. 남은 본문은 Tomcat이 응답 뒤 `max-swallow-size`(2MiB)까지 읽어 버리고, 넘으면 연결을 닫는다. 이 바이트는 앱 힙에 쌓이지 않는다. 이 ADR이 지키는 것은 "앱이 읽는 본문의 크기"이고, 읽지 않는 본문을 막는 것은 범위 밖이다. 이슈의 목적이 서버 메모리 보호이기 때문이다. Linear NSU-174 AC 첫 줄도 이 기준으로 고쳤다(2026-11-28, 지휘 세션).
+     - 확인한 방법: Tomcat 11.0.24 소스 jar(`tomcat-embed-core-11.0.24-sources.jar`)를 읽었다. chunked 본문은 `ChunkedInputFilter.end()`가 끝 chunk가 나올 때까지 `doRead`로 읽어 버린다. 버린 양이 `maxSwallowSize`를 넘으면 `BadRequestException`을 던져 연결을 닫는다. `Content-Length` 본문은 `IdentityInputFilter.end()`가 같은 일을 한다. 두 메서드 모두 연결의 읽기 버퍼를 다시 쓰고, 읽은 바이트를 모아 두지 않는다.
+     - 구현에서 고정하는 테스트: 테스트 기준 11번. 이 동작이 바뀌는 Tomcat 업그레이드는 이 테스트가 잡는다.
 3. **응답은 `413 REQUEST_BODY_TOO_LARGE`이고 본문은 `{code, message}`다**(00 §8, §12).
    - 필터가 응답 본문을 직접 쓴다(`JsonAuthenticationEntryPoint`와 같은 방식). `sendError`는 쓰지 않는다. `/error` 디스패치가 인증을 요구해서 익명 요청은 `401`로 바뀌기 때문이다(logging/00 Decision 6, NSU-147).
    - 필터 체인 안(예: `FormContentFilter`)에서 난 초과 예외도 필터가 잡아 같은 응답을 쓴다. 이미 커밋된 응답은 바꿀 수 없으므로 예외를 삼키고 끝낸다.
@@ -259,7 +261,7 @@ private static ResponseEntity<Object> requestBodyTooLarge() {
 | 8 | 로그인에 `Accept: text/html`, chunked 65,537바이트 JSON | `413`, `Content-Type: application/json`, `{code, message}` |
 | 9 | 로그인에 `Accept: text/html`, 폼 `POST` chunked 65,537바이트 | `413`, `Content-Type: application/json`, `{code, message}` |
 | 10 | EVENT_PARTNER가 아닌 토큰으로 `PUT /api/v1/me/event-partner-profile`에 chunked 65,537바이트 JSON | `403`(URL 역할 규칙이 본문을 읽기 전에 거절한다. Decision 6) |
-| 11 | 본문을 받지 않는 공개 `GET` 경로에 chunked 70KiB 본문 | `413`이 아니다(그 API의 응답. Decision 2의 경계) |
+| 11 | 본문을 받지 않는 공개 `GET` 경로에 chunked 70KiB 본문 | `413`이 아니다(그 API의 응답). 70KiB는 2MiB보다 작아 Tomcat이 다 버리므로, 같은 연결로 보낸 다음 요청도 정상 응답을 받는다. Decision 2의 경계 |
 | 12 | 위 1~11 | ERROR·WARN 로그가 없고, 로그에 본문·길이 값이 없다 |
 
 단위 테스트:
