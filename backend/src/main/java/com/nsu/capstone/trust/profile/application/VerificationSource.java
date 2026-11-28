@@ -9,6 +9,7 @@ import java.util.UUID;
 /**
  * Verification을 만드는 도메인 하나가 구현하는 포트(API 01 §7). 출처 도메인마다 bean 하나를 둔다.
  * NSU-37은 EXTERNAL_ACCOUNT, NSU-105는 IDENTITY, NSU-89는 COPYRIGHT를 만든다.
+ * NSU-33은 BUSINESS_REGISTRATION·PERFORMANCE_PARTICIPATION·OFFICIAL_ACTIVITY를 만든다.
  */
 public interface VerificationSource {
 

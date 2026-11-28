@@ -76,6 +76,10 @@ tasks.named('test') {
 	inputs.file('../.github/workflows/ci.yml')
 		.withPathSensitivity(PathSensitivity.RELATIVE)
 		.withPropertyName('ciWorkflow')
+	// 증빙 확인 runbook 테스트가 기록·취소 SQL 원문을 읽는다. 이 파일만 바뀌어도 test가 다시 실행된다.
+	inputs.file('../docs/runbook/evidence_verification.md')
+		.withPathSensitivity(PathSensitivity.RELATIVE)
+		.withPropertyName('evidenceVerificationRunbook')
 }
 
 spotless {
