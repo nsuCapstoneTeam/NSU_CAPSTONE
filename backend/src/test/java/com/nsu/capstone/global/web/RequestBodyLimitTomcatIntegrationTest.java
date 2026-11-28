@@ -335,8 +335,10 @@ class RequestBodyLimitTomcatIntegrationTest extends EventIntegrationTestBase {
                 .orElseThrow(() -> new AssertionError("RequestBodyLimitFilter가 서블릿 필터로 등록되지 않았다"))
                 .getOrder();
 
+        // 순서 값이 같은 필터는 등록 순서에 따라 먼저 돌 수 있으므로 앞 순서로 센다
         List<String> earlierFilters = registrations.stream()
-                .filter(registration -> registration.getOrder() < limitFilterOrder)
+                .filter(registration -> !(registration.getFilter() instanceof RequestBodyLimitFilter))
+                .filter(registration -> registration.getOrder() <= limitFilterOrder)
                 .map(registration -> registration.getFilter().getClass().getSimpleName())
                 .toList();
 
