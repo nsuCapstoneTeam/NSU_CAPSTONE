@@ -121,6 +121,29 @@ class ArtistScheduleDailyLimitIntegrationTest extends ArtistScheduleIntegrationT
     }
 
     @Test
+    void 일광_절약_시간이_끝난_25시간인_날도_하루_끝까지_96개로_센다() {
+        // 1988-10-09 Asia/Seoul은 서머타임이 끝나 25시간이다. 고정 24시간으로 세면 마지막 한 시간이 그날에서 빠진다
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT CAST(EXTRACT(EPOCH FROM (DATE '1988-10-10')::timestamp AT TIME ZONE 'Asia/Seoul'"
+                                + " - (DATE '1988-10-09')::timestamp AT TIME ZONE 'Asia/Seoul') / 3600 AS bigint)",
+                        Long.class))
+                .isEqualTo(25L);
+        insertSpaced(artist, "1988-10-09 00:00:00 Asia/Seoul", 95);
+        insert(artist, "1988-10-09 23:00:00 Asia/Seoul", "1988-10-09 23:10:00 Asia/Seoul", "HOLD", null);
+
+        assertThatThrownBy(() -> insert(
+                        artist, "1988-10-09 23:30:00 Asia/Seoul", "1988-10-09 23:40:00 Asia/Seoul", "HOLD", null))
+                .rootCause()
+                .isInstanceOfSatisfying(PSQLException.class, exception -> {
+                    assertThat(exception.getSQLState()).isEqualTo("23514");
+                    assertThat(exception.getServerErrorMessage().getConstraint())
+                            .isEqualTo("ck_artist_schedules_daily_limit");
+                });
+
+        assertThat(scheduleRows(artist)).isEqualTo(96);
+    }
+
+    @Test
     void 하루는_Asia_Seoul_시작_날짜로_센다_앞뒤_날과_다른_아티스트는_영향이_없다() {
         User other = newUser(UserRole.ARTIST, "other@example.com");
         insertSpaced(artist, DAY, 96);

@@ -55,7 +55,9 @@ AS $$
 DECLARE
     active_artist BOOLEAN;
     same_day BIGINT;
-    day_start TIMESTAMPTZ := date_trunc('day', NEW.start_at AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul';
+    local_day DATE := (NEW.start_at AT TIME ZONE 'Asia/Seoul')::date;
+    day_start TIMESTAMPTZ := local_day::timestamp AT TIME ZONE 'Asia/Seoul';
+    day_end TIMESTAMPTZ := (local_day + 1)::timestamp AT TIME ZONE 'Asia/Seoul';
 BEGIN
     -- 세기는 잠금 뒤의 새 스냅숏에 기댄다(READ COMMITTED). 그보다 높은 격리 수준은 트랜잭션 스냅숏으로 세어
     -- 앞에서 잠금을 쥐었던 트랜잭션의 행을 놓치므로 거절한다.
@@ -73,11 +75,12 @@ BEGIN
         END IF;
     END IF;
     -- 하루 상한(결정 13): 아티스트별 잠금을 잡은 뒤 그날 시작하는 행을 자기 행을 빼고 센다.
-    -- Asia/Seoul은 일광 절약 시간이 없어 하루가 늘 24시간이다.
+    -- 하루는 Asia/Seoul 날짜의 자정부터 다음 자정까지다. 1987·1988년처럼 일광 절약 시간이 있던 날은 24시간이 아니므로
+    -- 고정 24시간을 쓰지 않는다.
     PERFORM pg_advisory_xact_lock(hashtextextended('artist_schedules:' || NEW.user_id, 0));
     EXECUTE format('SELECT count(*) FROM %I.artist_schedules WHERE user_id = $1 AND start_at >= $2 '
-                   'AND start_at < $2 + INTERVAL ''24 hours'' AND id <> $3', TG_TABLE_SCHEMA)
-        INTO same_day USING NEW.user_id, day_start, NEW.id;
+                   'AND start_at < $3 AND id <> $4', TG_TABLE_SCHEMA)
+        INTO same_day USING NEW.user_id, day_start, day_end, NEW.id;
     IF same_day >= 96 THEN
         RAISE EXCEPTION '하루에 둘 수 있는 공연 가능 일정 수를 넘었다: %', NEW.user_id
             USING ERRCODE = 'check_violation', CONSTRAINT = 'ck_artist_schedules_daily_limit';
