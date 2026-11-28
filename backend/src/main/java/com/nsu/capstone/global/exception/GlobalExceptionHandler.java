@@ -1,10 +1,12 @@
 package com.nsu.capstone.global.exception;
 
+import com.nsu.capstone.global.web.RequestBodyTooLargeException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.web.firewall.RequestRejectedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -34,6 +36,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
             MethodArgumentNotValidException exception, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         ErrorCode errorCode = ErrorCode.VALIDATION_ERROR;
+        return ResponseEntity.status(errorCode.getHttpStatus()).body(ErrorResponse.from(errorCode));
+    }
+
+    /** 본문을 읽다 상한을 넘은 경우만 413이다. 다른 원인(잘못된 JSON 등)은 Spring 표준 400이다(ADR request_body_limit/00 Decision 3). */
+    @Override
+    protected ResponseEntity<Object> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException exception, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        if (RequestBodyTooLargeException.isBodyTooLarge(exception)) {
+            return requestBodyTooLarge();
+        }
+        return super.handleHttpMessageNotReadable(exception, headers, status, request);
+    }
+
+    private static ResponseEntity<Object> requestBodyTooLarge() {
+        ErrorCode errorCode = ErrorCode.REQUEST_BODY_TOO_LARGE;
         return ResponseEntity.status(errorCode.getHttpStatus()).body(ErrorResponse.from(errorCode));
     }
 

@@ -35,7 +35,19 @@ class RequestBodyLimitFilter extends OncePerRequestFilter {
             writeTooLarge(response);
             return;
         }
-        chain.doFilter(request, response);
+        try {
+            chain.doFilter(new BodyLimitedRequest(request, MAX_BODY_BYTES), response);
+        } catch (IOException | ServletException | RuntimeException e) {
+            if (!RequestBodyTooLargeException.isBodyTooLarge(e)) {
+                throw e;
+            }
+            // 이미 나간 응답은 바꿀 수 없으므로 예외를 삼키고 끝낸다
+            if (!response.isCommitted()) {
+                // reset()은 앞 필터가 붙인 X-Request-Id 헤더까지 지운다
+                response.resetBuffer();
+                writeTooLarge(response);
+            }
+        }
     }
 
     private void writeTooLarge(HttpServletResponse response) throws IOException {
