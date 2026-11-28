@@ -10,6 +10,8 @@
 | 홈 소개와 이용 순서 | `src/features/home/home-page.jsx` |
 | 홈 CLAP 설명·경량 시각 요소·비교 그래픽 | `src/features/home/components/` |
 | 로그인 화면(아티스트·행사 관계자) | `src/features/auth/components/artist-login.jsx`, `organizer-login.jsx` |
+| 이메일·비밀번호 로그인 폼 (두 역할 공통: 빈 칸·형식 확인, 오류 표시, 로딩) | `src/features/auth/components/email-login-form.jsx` |
+| 로그인 세션 (로그인·로그아웃, 토큰 보관·만료, 역할 이름 맞추기, 로그인 뒤 갈 화면) | `src/features/auth/auth-session.js`, `use-auth-session.js` |
 | 로그인 CD 화면 틀(CD·네온 링·라벨)과 역할 전환 버튼 | `src/features/auth/components/cd-login-stage.jsx`, `cd-login.css`, `role-switch.jsx`, `cd-login-motion.js` |
 | 로그인 애니메이션(등장·흔들림·로딩·버튼 반응) | `src/features/auth/components/login-motion.css` |
 | 회원가입 역할 선택 | `src/features/auth/components/signup-role-select.jsx` |
@@ -49,7 +51,7 @@
 
 저장: `App` → `useStoredState` → `local-demo-store` → 브라우저 localStorage.
 
-로그인 역할 전환: `RoleSwitch`('회원가입' 위 버튼) 클릭 → 라벨이 동전처럼 반쯤 뒤집힘(`useCoinFlip`, `cd-login-motion.js`) → `onChangeRole` → `App`이 `artist-login` ↔ `organizer-login` 전환 → 새 화면에서 나머지 반을 뒤집으며 들어옴. 움직임 줄이기 설정이면 뒤집는 대신 짧게 흐려졌다 나타납니다.
+로그인 역할 전환: `RoleSwitch`('회원 가입' 위 'Event Partner Login' / 'Artist Login' 버튼) 클릭 → 라벨이 동전처럼 반쯤 뒤집힘(`useCoinFlip`, `cd-login-motion.js`) → `onChangeRole` → `App`이 `artist-login` ↔ `organizer-login` 전환 → 새 화면에서 나머지 반을 뒤집으며 들어옴. 움직임 줄이기 설정이면 뒤집는 대신 짧게 흐려졌다 나타납니다.
 
 현재 CLAP·본인인증·서버 저장은 연결 전입니다. 점수는 샘플 조건 계산이며, 파일 정리는 계산식이나 저장 키를 변경하지 않습니다. Three.js는 초기 화면 용량을 줄이기 위해 제거했고 CLAP 영역은 CSS 기반으로 표시합니다.
 
