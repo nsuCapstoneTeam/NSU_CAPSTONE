@@ -436,6 +436,17 @@ backend/
 
 근거: [Spring 전달 헤더의 신뢰 경계](https://docs.spring.io/spring-framework/reference/7.1/web/webmvc/filters.html), [nginx proxy_set_header](https://nginx.org/en/docs/http/ngx_http_proxy_module.html). 확인: 2026-11-18.
 
+### 요청 본문 크기 상한 (NSU-174)
+
+앱은 모든 요청의 본문을 64KiB로 제한하고, 넘으면 `413 REQUEST_BODY_TOO_LARGE`를 돌려준다([ADR request_body_limit/00](../docs/adr/request_body_limit/00_request_body_size_limit.md), [API 공통 규칙 §12](../docs/api/00_conventions.md)). nginx에는 아래 값을 권장한다. 실제 프록시 설정과 배포 확인은 NSU-129에서 한다.
+
+- `/api/` 프록시 location에 `client_max_body_size 1m;`을 적는다. nginx 기본값과 같지만 location에 직접 적어, `http`·`server` 블록의 다른 값(`0`은 상한 없음)이 이 경로에 내려오지 않게 한다.
+- 앱 상한(64KiB)보다 크게 두는 이유: 64KiB~1MiB 본문은 앱이 `{code, message}`와 `X-Request-Id`가 있는 `413`으로 답한다. nginx가 거절한 `413`은 nginx 기본 HTML 본문이고 `X-Request-Id`가 없다.
+- `proxy_request_buffering`은 기본값(`on`)을 둔다. nginx가 본문을 다 받은 뒤 backend에 넘기므로, 느리게 보내는 클라이언트가 backend 스레드를 붙잡지 않는다.
+- 파일 업로드 경로(곡 API §2.2)는 그 location에서 상한을 올린다. 값은 업로드를 구현하는 NSU-89가 정한다.
+
+근거: [nginx client_max_body_size](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size), [nginx proxy_request_buffering](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_request_buffering). 확인: 2026-11-28.
+
 ### NSU-123 배포와 롤백 순서
 
 1. 배포 전 DB 스냅샷·복원 가능 여부를 확인하고, 위 이메일 충돌 SQL이 0행인지 확인한다. 새 약관 계약의 backend와 NSU-129 화면을 같은 배포 대상으로 준비한다. V8·V9는 락을 3초 안에 얻지 못하면 실패한다. 이 경우 트랜잭션과 Flyway 실패 상태를 확인하고 원인을 해소한 뒤 배포를 재시도한다.
