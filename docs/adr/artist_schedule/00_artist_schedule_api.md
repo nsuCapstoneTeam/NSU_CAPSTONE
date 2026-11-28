@@ -22,7 +22,7 @@ ARTIST가 자기 공연 가능 일정을 조회·추가·수정·삭제하는 AP
 8. **저장**: 새 테이블 `artist_schedules`(Flyway 번호는 머지 직전 main 최대 + 1)다. 한 행이 일정 한 건이다. ID는 서버가 만드는 UUIDv7이다. 시각은 `timestamptz`로 저장한다. DB가 `NOT NULL`, 시간 `CHECK`(30분 이상 24시간 이하, 분 단위), 상태 `CHECK`, 일정 이름 `CHECK`, 배제 제약, 삽입 가드 트리거(결정 11)를 지킨다. 저장 기술은 `JdbcClient`다.
 9. **모듈**: `com.nsu.capstone.artist.schedule` 하나의 패키지다(하위 패키지 없음). 다른 모듈에 여는 것은 일괄 조회 `ArtistSchedules.findByArtistIds(Collection<UUID>, LocalDateTime, LocalDateTime)`와 값 타입 `SavedArtistSchedule`·`ArtistScheduleStatus`뿐이다. 일정 이름은 공개 값에 넣지 않는다.
 10. **Eligibility 연결**: `EmptyArtistScheduleReader`를 지우고 `eligibility.infrastructure.SavedArtistScheduleReader`가 일괄 조회를 읽어 `ScheduleSlot`으로 바꾼다. 상태는 빠짐없는 `switch` 식으로 바꾼다. Eligibility ADR의 "NSU-12·34" 전제를 모두 지킨다(아래 "Eligibility 전제").
-11. **탈퇴 시 파기**: 파기 트리거와 공개 삭제 메서드를 두지 않는다. NSU-167 D4대로 탈퇴 절차가 `READ COMMITTED` 트랜잭션에서 `users.status`를 `WITHDRAWN`으로 바꾼 다음 `DELETE FROM artist_schedules WHERE user_id = :id`를 실행한다. 운영자 runbook도 같은 순서다. 새 행은 삽입 가드 트리거(`BEFORE INSERT OR UPDATE OF user_id`)가 같은 트랜잭션에서 `users` 행을 `FOR SHARE`로 잠그고 `ACTIVE` ARTIST일 때만 받는다. 그래서 어느 작성 경로(API, 운영자 SQL, 뒤의 섭외 성사)로 넣어도 탈퇴 뒤에 일정이 남지 않는다.
+11. **탈퇴 시 파기**: 파기 트리거와 공개 삭제 메서드를 두지 않는다. NSU-167 D4대로 탈퇴 절차가 `READ COMMITTED` 트랜잭션에서 `users.status`를 `WITHDRAWN`으로 바꾼 다음 `DELETE FROM artist_schedules WHERE user_id = :id`를 실행한다. 운영자 runbook도 같은 순서다. 새 행은 삽입 가드 트리거(`BEFORE INSERT`)가 같은 트랜잭션에서 `users` 행을 `FOR SHARE`로 잠그고 `ACTIVE` ARTIST일 때만 받는다. 그래서 어느 작성 경로(API, 운영자 SQL, 뒤의 섭외 성사)로 넣어도 탈퇴 뒤에 일정이 남지 않는다.
 12. **이름**: SSOT의 도메인 이름 `ArtistAvailability`(`ART-029` Artist Availability)를 코드와 경로에서는 "schedule"(`artist.schedule`, `artist-schedules`)로, 한국어로는 "공연 가능 일정"으로 쓴다. Eligibility 창구 이름(`ArtistScheduleReader`)이 이미 schedule이라 맞췄다. Scalar 태그는 `공연 가능 일정`이다.
 
 ## Context
@@ -68,7 +68,7 @@ Eligibility ADR Consequences의 "NSU-12·34" 전제와 이 ADR이 지키는 방�
 | 정확성 | 주간 폼의 "모두 저장하거나 하나도 저장하지 않음"을 서버가 지킨다. 다른 화면에서 고친 일정은 건드리지 않는다 | 여러 요일 추가가 중간에 실패하면 일부만 저장된다. 화면이 되돌려야 한다 | 두 화면이 같은 주를 고치면 나중 저장이 앞 저장을 지운다. 뒤에 생길 `BOOKED`(섭외 성사)도 화면이 모르면 지운다 |
 | 보안 | 차이 없음(같은 계정 확인) | 차이 없음 | 차이 없음 |
 | 성능(응답 시간, 외부 호출 대기, 스레드·연결 점유, 재시도 비용) | 주간 추가가 요청 1번, 트랜잭션 1번이다. 외부 호출은 없다. 응답을 받지 못한 추가는 다시 보내지 않고 조회한다(아래 "멱등 키를 두지 않는 이유") | 요일 수만큼 요청과 트랜잭션이 든다. 일부 실패 뒤 되돌리는 요청이 더 든다 | 요청은 1번이지만 기간의 모든 행을 지우고 다시 쓴다. 잡는 행 잠금이 기간의 일정 수만큼이다 |
-| 메모리 | 요청당 7건 이하 | 1건 | 기간 일정 전체(42일이면 2,000건 넘게 가능) |
+| 메모리 | 검증을 통과한 요청은 7건 이하다. 본문을 객체로 읽는 동안의 메모리는 이 상한과 관계없고 전역 본문 크기 상한이 맡는다(Consequences) | 1건 | 기간 일정 전체(42일이면 2,000건 넘게 가능) |
 | 확장성 | 섭외 성사가 `BOOKED` 행을 더해도 화면의 쓰기가 그 행을 건드리지 않는다 | 채택과 같다 | `BOOKED`를 지키는 규칙을 따로 만들어야 한다 |
 | 운영 부담 | 차이 없음 | 일부만 저장된 일정 문의 | 사라진 일정 문의 |
 | 사용자 경험 | 화면의 지금 동작(주간 추가는 모두 또는 전무, 한 건 수정·삭제)과 같다 | 겹침 하나로 일부 요일만 저장될 수 있다 | 다른 탭의 변경이 사라질 수 있다 |
@@ -101,6 +101,7 @@ Eligibility ADR Consequences의 "NSU-12·34" 전제와 이 ADR이 지키는 방�
 - 시간 규칙은 DB `CHECK` 하나로 모든 작성 경로에 같게 둔다. 시각은 분 단위(초 이하가 0)이고, 길이는 30분 이상 24시간 이하다. 서버는 같은 규칙을 먼저 검사해 `400`으로 돌려준다.
   - 분 단위: 응답 `HH:mm`이 저장 값을 그대로 나타낸다. 초가 있으면 같은 분 안에 시작하고 끝나는 일정이 길이 0으로 보인다.
   - 30분 하한: 겹치지 않는 30분 이상 일정이라 42일 조회가 2,017건 이하로 묶인다(아래 "조회 범위와 페이지네이션"). 운영자 SQL과 뒤의 섭외 성사에도 같은 하한이 걸려야 이 상한이 성립한다.
+  - 30분 하한의 알려진 한계(설계 리뷰 2회차 지적, 사람 판단 대기): 30분보다 짧은 가능 구간은 저장할 수 없다. 예를 들어 `18:30~19:00`과 `19:20~19:50`이 막혀 있으면 `19:00~19:20` `AVAILABLE`을 넣을 수 없어, 그 시간대의 20분 행사(03 §3.2는 0분 초과를 허용)에서 `SCHEDULE_NOT_COVERED`가 된다. 화면은 30분 단위로만 고르므로 화면에서 만든 일정끼리는 이런 틈이 생기지 않는다. 양옆이 정각·30분이 아닌 일정(운영자·섭외 성사의 `BOOKED`)일 때만 생긴다.
   - 분은 `00`~`59`를 모두 받는다. 30분 단위(`00`·`30`)는 화면이 고르는 방식으로만 둔다. 서버가 30분 단위만 받으면, 운영자나 섭외 성사가 넣은 `19:40~20:10` `BOOKED`를 같은 시간 그대로 다른 상태로 수정할 수 없다(전체 교체 `PUT`이 시각까지 다시 검사한다). DB에 30분 단위를 걸면 행사 시간대(예: 19:40)를 `BOOKED`로 쓸 수 없다.
 - 24시간 상한은 DB `CHECK`다. 행사 시간대 상한(`EVT-042`, V5 `ck_events_time_window`)과 같은 식이다. 일괄 조회의 하한(`start_at >= from − 24시간`)이 이 상한에 기댄다. 상한을 넘는 행이 있으면 그 행이 조회에서 빠지고, 막힌 일정이 판정에서 사라질 수 있다. 그래서 상한은 정확성 조건이고 DB가 지킨다.
 - 자정을 넘기는 일정을 받는다(`endDate`가 다음 날). 행사 시간대와 같은 표현이다. 하루 종일은 `D 00:00` ~ `D+1 00:00`이다.
@@ -157,15 +158,18 @@ D4가 방식을 정했다. 트리거는 프로필(V12)에만 두고, 나머지 �
 
 위 두 경우는 작성자가 `users` 행을 `FOR SHARE`로 잠그고 `ACTIVE`를 확인할 때만 성립한다. API는 `ArtistWriteAccess`가 그렇게 한다. 운영자 SQL(지금 `BOOKED`를 넣는 경로)과 뒤의 섭외 성사는 그 확인을 거치지 않을 수 있다. 운영자가 대상을 확인한 뒤 탈퇴가 먼저 커밋되면, 뒤이은 INSERT는 남아 있는 `users.id`로 FK 검사를 통과하고 이미 끝난 탈퇴의 `DELETE`를 피한다(설계 리뷰 지적).
 
-그래서 작성 경로마다 규칙을 기억하게 하지 않고 DB에 장치 하나를 둔다. 삽입 가드 트리거 `trg_artist_schedules_require_active_artist`(`BEFORE INSERT OR UPDATE OF user_id`, 행마다)다.
+그래서 작성 경로마다 규칙을 기억하게 하지 않고 DB에 장치 하나를 둔다. 삽입 가드 트리거 `trg_artist_schedules_require_active_artist`(`BEFORE INSERT`, 행마다)다. 일정의 소유자(`user_id`)는 바꿀 수 없게 따로 막는다(아래).
 
 - 같은 트랜잭션에서 `SELECT 1 FROM users WHERE id = NEW.user_id AND role = 'ARTIST' AND status = 'ACTIVE' FOR SHARE`를 실행하고, 행이 없으면 예외로 거절한다. `ArtistWriteAccess`와 같은 조건과 같은 잠금이다.
 - 탈퇴 UPDATE가 먼저 행을 잡았으면 트리거가 그 커밋을 기다린 뒤 바뀐 행을 다시 읽어 거절한다(`READ COMMITTED`). 트리거가 먼저 잡았으면 탈퇴 UPDATE가 INSERT의 커밋을 기다리고, 그 뒤의 `DELETE`가 지운다.
 - API에서는 `ArtistWriteAccess`가 같은 행을 이미 잠갔으므로 트리거는 기다리지 않고 통과한다. API 응답 규칙(`403`)은 바뀌지 않는다. 트리거 예외는 API에서 나오지 않으며, 나오면 `500`이다.
 - 비용은 넣는 행마다 기본키 조회 한 번이다(추가 한 번에 7번 이하).
 - 잠금 순서는 그대로 `users` → `artist_schedules`다. `BEFORE` 트리거가 행을 넣기 전에 `users`를 잠근다.
+- 가드는 `INSERT`에만 건다. `UPDATE`에 걸면 PostgreSQL이 대상 일정 행을 먼저 잠근 뒤 트리거를 부르므로 `artist_schedules` → `users` 순서가 된다. 운영자 UPDATE가 `SET`에 기존 `user_id`를 넣기만 해도 가드가 돌아, 탈퇴(`users` → 일정 `DELETE`)와 서로를 기다리는 교착이 생긴다(설계 리뷰 지적). 그래서 `UPDATE`는 `users`를 잠그지 않는다.
+- 소유자 변경은 따로 막는다. `trg_artist_schedules_fixed_owner`(`BEFORE UPDATE OF user_id`, `WHEN (OLD.user_id IS DISTINCT FROM NEW.user_id)`)가 소유자를 바꾸는 `UPDATE`만 거절한다. `WHEN`이 거짓이면 함수를 부르지 않고 `users`도 잠그지 않는다. API에는 소유자를 바꾸는 쓰기가 없다.
+- 소유자를 못 바꾸므로, 탈퇴한 사용자에게 일정을 옮겨 붙이는 경로가 없다. 탈퇴 뒤에 남을 수 있는 행은 새로 넣은 행뿐이고, 그것을 가드가 막는다.
 - D4의 "트리거는 프로필(V12)에만"은 탈퇴할 때 지우는 파기 트리거에 대한 결정이다. 이 트리거는 지우지 않고 새 행만 막으므로 D4와 겹치지 않는다. 파기는 그대로 탈퇴 절차가 한다.
-- 확인: 직접 INSERT의 거절, 운영자처럼 직접 INSERT하는 연결과 탈퇴의 두 순서(11 §9 "삽입 가드", "운영자 SQL과 탈퇴 겹침").
+- 확인: 직접 INSERT의 거절, 소유자 변경 UPDATE의 거절, 운영자처럼 직접 INSERT하는 연결과 탈퇴의 두 순서, 기존 `user_id`를 `SET`에 넣은 운영자 UPDATE와 탈퇴의 겹침(11 §9 "삽입 가드", "운영자 SQL과 탈퇴 겹침").
 
 일정 모듈에 탈퇴용 공개 메서드를 두지 않는다.
 
@@ -187,7 +191,8 @@ D4가 방식을 정했다. 트리거는 프로필(V12)에만 두고, 나머지 �
 행사 등록(03 §5.3.1)은 응답이 끊겨 다시 보낸 등록이 행사를 하나 더 만들지 않도록 멱등 키를 받는다. 일정 추가는 멱등 키를 받지 않고, 다시 보내도 안전한 요청으로 약속하지 않는다.
 
 - 배제 제약만으로는 재전송을 판별할 수 없다(설계 리뷰 지적). 18시 추가가 커밋되고 응답만 사라진 뒤 다른 기기에서 그 일정을 20시로 옮기면, 다시 보낸 18시 추가는 겹칠 행이 없어 `201`로 새 일정을 만든다. 제약은 지금 구간만 비교하기 때문이다.
-- 그래서 계약은 재전송을 하지 않는 흐름으로 정한다. 응답을 받지 못한 추가·수정·삭제는 다시 보내지 않고, 그 기간을 다시 읽어 저장됐는지 확인한다. 일정이 없으면 사용자가 다시 추가한다(11 §1·§8).
+- 그래서 계약은 자동 재전송을 하지 않는 흐름으로 정한다. 응답을 받지 못한 추가·수정·삭제는 자동으로 다시 보내지 않고, 그 기간을 다시 읽어 그린다(11 §1·§8).
+- 다시 읽은 결과는 조회한 순간의 상태다. 원래 요청이 DB에서 아직 처리 중이면 빈 결과 뒤에 커밋될 수 있다(`READ COMMITTED`는 커밋된 행만 본다, 설계 리뷰 지적). 그래서 화면은 빈 결과를 저장 실패로 안내하지 않고 "확인하지 못했다"고 알린다. 사용자가 다시 추가하면 보내고, 앞 요청이 그 사이 저장됐으면 겹침으로 `409`다.
 - 곧바로 다시 보낸 추가는 앞 일정과 겹쳐 `409`가 되므로 같은 일정이 두 번 생기지 않는다. 이것은 보조 효과이고 재전송을 안전하게 만드는 약속은 아니다.
 - 키를 두면 일정을 옮기거나 지운 뒤에도 같은 요청을 판별할 수 있다. 대신 키 표, 요청 본문 비교, 보존 기간, 진행 중 중복의 응답을 정해야 한다. 추가는 사람이 화면에서 누르는 동작이고 자동 재시도 경로(큐, 서버 간 호출)가 없다. 다시 읽기로 결과를 확인할 수 있으므로 키를 두지 않는다.
 
@@ -354,8 +359,22 @@ END;
 $$;
 
 CREATE TRIGGER trg_artist_schedules_require_active_artist
-    BEFORE INSERT OR UPDATE OF user_id ON artist_schedules
+    BEFORE INSERT ON artist_schedules
     FOR EACH ROW EXECUTE FUNCTION require_active_artist_for_schedule();
+
+-- 소유자 변경 금지: users를 잠그지 않는다. 같은 값을 SET에 넣은 UPDATE는 WHEN 조건으로 함수를 부르지 않는다.
+CREATE FUNCTION reject_artist_schedule_owner_change() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION '공연 가능 일정의 소유자는 바꿀 수 없다: %', OLD.id
+        USING ERRCODE = 'check_violation';
+END;
+$$;
+
+CREATE TRIGGER trg_artist_schedules_fixed_owner
+    BEFORE UPDATE OF user_id ON artist_schedules
+    FOR EACH ROW WHEN (OLD.user_id IS DISTINCT FROM NEW.user_id)
+    EXECUTE FUNCTION reject_artist_schedule_owner_change();
 ```
 
 - `REFERENCES users`는 `users`에 잠금을 건다. `lock_timeout` 3초로, `users`가 바쁘면 기다리지 않고 실패한다(NSU-119 V12와 같다). 실패하면 배포를 다시 한다.
@@ -418,6 +437,7 @@ DELETE FROM artist_schedules WHERE id = ? AND user_id = ?;                      
 - 탈퇴(NSU-167): 결정 11의 순서로 `artist_schedules`를 지운다. D3(탈퇴한 계정의 요청은 `401`)을 넣으면 탈퇴 뒤에 시작한 요청은 이 API에 오지 않는다. 그때 11 §9 "계정 상태"의 `WITHDRAWN` 기대값을 `403`에서 `401`로 바꾼다. 탈퇴와 겹친 요청의 `403`은 그대로다(11 §4 "탈퇴한 계정").
 - 처리방침(NSU-165): 수집 항목에 공연 가능 일정(시간, 상태, 일정 이름)을 더하고 지난 일정의 보유 기간을 정한다. 실사용자에게 열기 전에 끝낸다.
 - 요청 제한(NSU-100): 이 쓰기 API를 대상에 넣는다. 그 전에는 로그인한 ARTIST가 `POST`를 되풀이해 일정 행을 대량으로 만들 수 있다(알려진 위험, 03 §5.3의 행사 등록과 같다). 조회는 42일로, 판정 조회는 행사 시간대 근처로 크기가 묶여 있어 응답은 커지지 않는다.
+- 본문 크기: `items` 7개 상한은 본문을 객체로 읽은 뒤에 검사하므로, 큰 배열은 읽는 동안 메모리를 쓴 뒤에야 `400`이 된다(설계 리뷰 지적). 모든 JSON API(행사 등록, 프로필 등)에 같은 문제가 있고, 이 API만 막으면 다른 경로가 남는다. 그래서 전역 장치 하나로 둔다. 앞단 프록시의 본문 크기 상한(music_upload/00의 "앞단" 규칙과 같은 방식)과 앱의 JSON 본문 크기 상한(초과 `413`, 본문을 읽기 전 거절)이다. 이 장치는 별도 이슈로 지휘 세션에 올렸다. 그 전에는 로그인한 ARTIST만 이 API를 부를 수 있고, NSU-158 전에는 외부 시연 서버에 배포하지 않는다.
 - 시연 서버: 전역 시연 쓰기 필터(NSU-158)가 생기기 전에는 이 쓰기 API를 외부에서 접속할 수 있는 시연 서버에 배포하지 않는다(09 §4.1과 같다).
 - 배포 DB: `btree_gist` 확장이 있어야 하고, 마이그레이션 계정이 확장을 만들 수 있어야 한다. 신뢰 확장이라 그 데이터베이스에 `CREATE` 권한이 있으면 슈퍼유저가 아니어도 된다. V1의 `vector` 확장을 만든 계정이면 된다.
 - 강석윤 님이 만든 `ErrorCode`·`SecurityConfig`를 고친다. PR 특이사항에 적는다.
