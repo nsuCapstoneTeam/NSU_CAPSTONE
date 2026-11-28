@@ -199,11 +199,15 @@ Eligibility ADR은 JPA를 권했고, `JdbcClient`로 만들면 DataSource 수준
 - 함수는 파기 함수와 같은 이유로 `users`를 `TG_TABLE_SCHEMA`로 한정하고 `search_path`를 `pg_catalog, pg_temp`로 고정한다. 운영자 세션의 같은 이름 임시 표(`users`)로 확인을 속일 수 없다.
 - API 응답 규칙은 바뀌지 않는다. `ArtistWriteAccess`가 먼저 막으므로 트리거 예외는 API에서 나오지 않고, 나오면 `500`이다.
 - 정지(`SUSPENDED`) 계정에도 새 행을 넣지 못한다. API(`403`)와 같은 조건이다. 이미 있는 행의 다른 열을 바꾸는 UPDATE는 막지 않는다. `SET`에 같은 `user_id`를 넣어도 막지 않는다(탈퇴하면 행이 지워지므로 잔존과 무관하다).
-- 백업 복원: 전체 복원(`pg_restore`)은 트리거를 데이터를 넣은 뒤에 만들므로 이 가드에 걸리지 않는다. 이 표만 데이터로 되돌릴 때는 `--disable-triggers`를 쓰지 않는다. 그 옵션은 가드와 FK 검사(그리고 `users`를 함께 복원하면 파기 트리거)를 모두 끈다. 그러면 덤프 뒤에 탈퇴한 사용자의 프로필과 없는 사용자의 행이 되살아나고, 복원이 중간에 끊기면 트리거가 꺼진 채 남을 수 있다. 대신 다음 순서로 한다.
-  1. 덤프를 트리거 없는 임시 표(예: `artist_profiles_restore`)에 받는다.
-  2. `ACTIVE` ARTIST의 행은 `users`와 조인해 그 조건의 행만 `INSERT … SELECT`로 옮긴다. 가드는 켜진 채 같은 확인을 다시 한다.
-  3. 정지(`SUSPENDED`) ARTIST의 행은 한 트랜잭션에서 옮긴다. 그 사용자들의 `users` 행을 `FOR SHARE`로 잠그고, 가드 트리거 하나만 끄고(`ALTER TABLE artist_profiles DISABLE TRIGGER trg_artist_profiles_require_active_artist`), 그 행만 넣고, 다시 켠 뒤 커밋한다. `ALTER TABLE`도 트랜잭션에 묶이므로 중간에 실패하면 트리거는 켜진 상태로 돌아간다. FK 검사와 파기 트리거는 끄지 않는다. 그동안 `artist_profiles`에 `SHARE ROW EXCLUSIVE` 잠금이 걸려 저장이 기다린다.
-  4. 탈퇴했거나 없는 사용자의 행은 옮기지 않고 임시 표와 함께 지운다.
+- 백업 복원: 전체 복원(`pg_restore`)은 트리거를 데이터를 넣은 뒤에 만들므로 이 가드에 걸리지 않는다. 이 표만 데이터로 되돌릴 때는 `--disable-triggers`를 쓰지 않는다. 그 옵션은 가드와 FK 검사(그리고 `users`를 함께 복원하면 파기 트리거)를 모두 끈다. 그러면 덤프 뒤에 탈퇴한 사용자의 프로필과 없는 사용자의 행이 되살아나고, 복원이 중간에 끊기면 트리거가 꺼진 채 남을 수 있다. 대신 아래를 한 `psql` 세션의 한 트랜잭션으로 실행한다(`\set ON_ERROR_STOP on`). 중간에 멈추면 모두 롤백되고, 임시 표도 세션과 함께 사라진다.
+  1. `BEGIN`, `SET LOCAL lock_timeout = '3s'`.
+  2. `CREATE TEMP TABLE artist_profiles_restore (LIKE artist_profiles)`를 만들고 덤프의 이 표 데이터를 `\copy`로 받는다.
+  3. 받은 행 중 `users`에 없거나, ARTIST가 아니거나, `WITHDRAWN`인 사용자의 행을 먼저 지운다. 남은 사용자의 `users` 행은 `FOR SHARE`로 잠근다.
+  4. `ACTIVE` ARTIST의 행은 가드를 켠 채 `INSERT … SELECT`로 옮긴다. 가드가 같은 확인을 다시 한다.
+  5. 정지(`SUSPENDED`) ARTIST의 행은 가드 트리거 하나만 끄고(`ALTER TABLE artist_profiles DISABLE TRIGGER trg_artist_profiles_require_active_artist`) 그 행만 넣는다. FK 검사와 파기 트리거는 끄지 않는다.
+  6. 가드를 다시 켜기 전에, `artist_profiles`에 ARTIST가 아니거나 상태가 `ACTIVE`·`SUSPENDED`가 아닌 사용자의 행이 없는지 확인한다. 있으면 예외를 던져 트랜잭션 전체를 롤백한다. 없으면 가드를 다시 켜고 `COMMIT`한 뒤, `pg_trigger.tgenabled`가 `'O'`인지 본다.
+  - 잠금: `DISABLE TRIGGER`는 `artist_profiles`에 `SHARE ROW EXCLUSIVE` 잠금을 잡는다. 진행 중인 쓰기(`PUT`, `DELETE`, 탈퇴의 파기)가 끝나기를 기다리고, 그때부터 커밋까지 새 쓰기가 줄을 선다. 커밋 전의 트리거 변경은 다른 세션에 보이지 않으므로, 다른 세션이 가드 없이 넣는 창은 없다.
+  - 한계: 덤프 뒤에 본인이 `DELETE`로 지운 프로필도 되살아난다. 탈퇴와 달리 걸러낼 표식이 없다. 되돌릴 사용자 범위는 사고 내용에 맞게 운영자가 좁힌다.
 
 ### 다른 사용자 조회를 이 이슈에 넣는 것
 
