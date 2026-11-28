@@ -168,7 +168,7 @@ A를 고른다. 막아야 하는 곳(인증 전 JSON, `FormContentFilter`, 폼 �
 | `resources/config/web.properties` (새 파일) | - | `server.tomcat.max-http-form-post-size=64KB` |
 | `global/web/FormPostSizeValidation.java` (새 파일, 구현 뒤 추가) | - | 기동할 때 폼 상한이 `MAX_BODY_BYTES`와 다르면 실패(Decision 8) |
 | `resources/application.properties` | 강석윤 | `spring.config.import`에 `config/web.properties` 한 줄 |
-| `src/test/resources/lombok-style-files.txt` | - | 새 운영 코드 파일 세 개 |
+| `src/test/resources/lombok-style-files.txt` | - | 새 운영 코드 파일 네 개 |
 | `backend/README.md` | 강석윤 | "요청 본문 크기 상한" 절(설계 단계에서 씀) |
 | `docs/api/00_conventions.md` | 김동엽 | §8 공통 code 표에 `413` 행, 새 §12(설계 단계에서 씀) |
 | `docs/adr/authentication/00_csrf_protection_for_bearer_api.md` | 김동엽 | Decision 6의 다시 판단할 조건 아래 이번 검토 결과 한 줄(설계 단계에서 씀) |
