@@ -74,6 +74,8 @@ public enum ErrorCode {
     EXTERNAL_ACCOUNT_BUSY(
             "EXTERNAL_ACCOUNT_BUSY", HttpStatus.SERVICE_UNAVAILABLE, "다른 변경을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."),
     ARTIST_PROFILE_BUSY("ARTIST_PROFILE_BUSY", HttpStatus.SERVICE_UNAVAILABLE, "다른 변경을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."),
+    // 요청 본문 크기 상한(API 00 §12). RFC 9110 이름인 CONTENT_TOO_LARGE를 쓴다(PAYLOAD_TOO_LARGE는 옛 이름)
+    REQUEST_BODY_TOO_LARGE("REQUEST_BODY_TOO_LARGE", HttpStatus.CONTENT_TOO_LARGE, "요청 본문이 허용 크기를 넘었습니다."),
     INTERNAL_SERVER_ERROR("INTERNAL_SERVER_ERROR", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
     private final String code;
