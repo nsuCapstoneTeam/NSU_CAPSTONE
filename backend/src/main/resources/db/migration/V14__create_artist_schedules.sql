@@ -43,3 +43,73 @@ CREATE TABLE artist_schedules (
 -- 배제 제약의 GiST 인덱스는 `= ANY(배열)` 조건에 쓰이지 않는다. 탈퇴 절차의 삭제도 이 인덱스를 쓴다.
 -- 새 표라 CONCURRENTLY가 필요 없다.
 CREATE INDEX ix_artist_schedules_user_start ON artist_schedules (user_id, start_at);
+
+-- 새 행을 넣을 때 활성 아티스트인지 확인한다(삽입 가드, 결정 11). 앱은 앞에서 ArtistWriteAccess가 막지만,
+-- 운영자 SQL처럼 앱을 거치지 않는 경로도 탈퇴·정지 계정에는 넣을 수 없게 DB에서도 지킨다.
+-- 표는 트리거가 걸린 artist_schedules와 같은 스키마(TG_TABLE_SCHEMA)에서 찾고, 함수의 search_path를 고정한다.
+-- 운영자 세션의 search_path나 같은 이름의 임시 표(users)로 확인을 속일 수 없다(V11과 같다).
+CREATE FUNCTION artist_schedule_write_guard() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+    active_artist BOOLEAN;
+    same_day BIGINT;
+    day_start TIMESTAMPTZ := date_trunc('day', NEW.start_at AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul';
+BEGIN
+    -- 세기는 잠금 뒤의 새 스냅숏에 기댄다(READ COMMITTED). 그보다 높은 격리 수준은 트랜잭션 스냅숏으로 세어
+    -- 앞에서 잠금을 쥐었던 트랜잭션의 행을 놓치므로 거절한다.
+    IF current_setting('transaction_isolation') IN ('repeatable read', 'serializable') THEN
+        RAISE EXCEPTION '공연 가능 일정은 READ COMMITTED 트랜잭션에서만 넣거나 시작 날짜를 바꿀 수 있다'
+            USING ERRCODE = 'invalid_transaction_state';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        EXECUTE format('SELECT true FROM %I.users WHERE id = $1 AND role = ''ARTIST'' AND status = ''ACTIVE'' FOR SHARE',
+                       TG_TABLE_SCHEMA)
+            INTO active_artist USING NEW.user_id;
+        IF active_artist IS NULL THEN
+            RAISE EXCEPTION '활성 아티스트가 아닌 사용자의 공연 가능 일정은 저장할 수 없다: %', NEW.user_id
+                USING ERRCODE = 'check_violation';
+        END IF;
+    END IF;
+    -- 하루 상한(결정 13): 아티스트별 잠금을 잡은 뒤 그날 시작하는 행을 자기 행을 빼고 센다.
+    -- Asia/Seoul은 일광 절약 시간이 없어 하루가 늘 24시간이다.
+    PERFORM pg_advisory_xact_lock(hashtextextended('artist_schedules:' || NEW.user_id, 0));
+    EXECUTE format('SELECT count(*) FROM %I.artist_schedules WHERE user_id = $1 AND start_at >= $2 '
+                   'AND start_at < $2 + INTERVAL ''24 hours'' AND id <> $3', TG_TABLE_SCHEMA)
+        INTO same_day USING NEW.user_id, day_start, NEW.id;
+    IF same_day >= 96 THEN
+        RAISE EXCEPTION '하루에 둘 수 있는 공연 가능 일정 수를 넘었다: %', NEW.user_id
+            USING ERRCODE = 'check_violation', CONSTRAINT = 'ck_artist_schedules_daily_limit';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_artist_schedules_before_insert
+    BEFORE INSERT ON artist_schedules
+    FOR EACH ROW EXECUTE FUNCTION artist_schedule_write_guard();
+
+-- 시작 날짜를 바꾸는 수정만 센다. TG_OP가 UPDATE라 users는 잠그지 않는다(탈퇴와의 교착 방지, "탈퇴 시 파기").
+CREATE TRIGGER trg_artist_schedules_start_day_change
+    BEFORE UPDATE OF start_at ON artist_schedules
+    FOR EACH ROW
+    WHEN ((OLD.start_at AT TIME ZONE 'Asia/Seoul')::date
+          IS DISTINCT FROM (NEW.start_at AT TIME ZONE 'Asia/Seoul')::date)
+    EXECUTE FUNCTION artist_schedule_write_guard();
+
+-- 소유자 변경 금지: users를 잠그지 않는다. 같은 값을 SET에 넣은 UPDATE는 WHEN 조건으로 함수를 부르지 않는다.
+CREATE FUNCTION reject_artist_schedule_owner_change() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+    RAISE EXCEPTION '공연 가능 일정의 소유자는 바꿀 수 없다: %', OLD.id
+        USING ERRCODE = 'check_violation';
+END;
+$$;
+
+CREATE TRIGGER trg_artist_schedules_fixed_owner
+    BEFORE UPDATE OF user_id ON artist_schedules
+    FOR EACH ROW WHEN (OLD.user_id IS DISTINCT FROM NEW.user_id)
+    EXECUTE FUNCTION reject_artist_schedule_owner_change();

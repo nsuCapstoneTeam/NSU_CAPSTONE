@@ -31,6 +31,21 @@ abstract class ArtistScheduleIntegrationTestBase extends EventIntegrationTestBas
         return id;
     }
 
+    /** 한 문장으로 count개를 넣는다. {@code firstStart}부터 10분 간격으로 시작하는 1분짜리 AVAILABLE 일정이다. */
+    void insertSpaced(User owner, String firstStart, int count) {
+        jdbcTemplate.update("""
+                INSERT INTO artist_schedules (id, user_id, start_at, end_at, status)
+                SELECT gen_random_uuid(), CAST(? AS uuid),
+                       CAST(? AS timestamptz) + n * INTERVAL '10 minutes',
+                       CAST(? AS timestamptz) + n * INTERVAL '10 minutes' + INTERVAL '1 minute',
+                       'AVAILABLE'
+                FROM generate_series(0, ? - 1) AS n""", owner.getId(), firstStart, firstStart, count);
+    }
+
+    void changeStatus(User user, String status) {
+        jdbcTemplate.update("UPDATE users SET status = ? WHERE id = ?", status, user.getId());
+    }
+
     long scheduleRows(User owner) {
         return jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM artist_schedules WHERE user_id = ?", Long.class, owner.getId());
