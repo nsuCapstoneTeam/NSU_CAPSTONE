@@ -346,6 +346,32 @@ class BudgetLedgerOutageTest {
     }
 
     @Test
+    void 첫_장애에_요청_여러_건이_동시에_실패해도_장애_시작_WARN은_한_번이다() throws Exception {
+        for (int round = 0; round < 200; round++) {
+            redis.recover();
+            BudgetLedger ledger = ledgerWith(1);
+            ledger.spend(UUID.randomUUID(), RequestBudget.PROFILE);
+            redis.failWith(() -> new RedisConnectionFailureException("연결 실패"));
+            CountDownLatch held = redis.holdCalls();
+            int callsBefore = redis.calls();
+
+            try (LedgerLogs logs = new LedgerLogs();
+                    SpendBurst burst = SpendBurst.start(ledger, RequestBudget.PROFILE, UUID::randomUUID, 8)) {
+                // 8건이 모두 Redis 안에서 멈춘 뒤 한꺼번에 실패시켜 markDown이 겹치게 한다
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                while (redis.calls() < callsBefore + 8) {
+                    assertThat(System.nanoTime()).as("Redis에 들어간 호출이 8건 미만이다").isLessThan(deadline);
+                    Thread.onSpinWait();
+                }
+                held.countDown();
+                burst.awaitDone(8);
+
+                assertThat(logs.messages(Level.WARN)).as("%d번째 라운드", round).hasSize(1);
+            }
+        }
+    }
+
+    @Test
     void 장애_시작_회복_상한_로그에는_계정_ID와_예외_메시지가_없고_예외_클래스_이름만_있다() {
         BudgetLedger ledger = ledgerWithMemoryLimit(1);
         // 기동 직후 첫 요청(탐침)이 성공해 "Redis 있음"이 된 뒤에 장애를 낸다

@@ -226,7 +226,7 @@ final class BudgetLedger implements AutoCloseable {
      */
     private void markDown(Exception cause) {
         RedisState previous = state.getAndSet(down(clock.millis()));
-        boolean firstFailureSinceStartup = startupFailureUnlogged.getAndSet(false);
+        boolean firstFailureSinceStartup = !previous.up() && startupFailureUnlogged.getAndSet(false);
         if (previous.up() || firstFailureSinceStartup) {
             memoryFullWarned.set(false);
             log.warn(
@@ -243,6 +243,8 @@ final class BudgetLedger implements AutoCloseable {
     }
 
     private void markUp() {
+        // 한 번이라도 "Redis 있음"이 되면 장애 시작 WARN은 상태 전환(previous.up())만 정한다. 둘이 동시에 정하면 첫 장애에 WARN이 겹칠 수 있다
+        startupFailureUnlogged.set(false);
         state.set(RedisState.UP);
         log.info("요청 한도 확인용 Redis를 쓸 수 있게 되어 Redis로 센다");
     }
