@@ -25,7 +25,6 @@
   --stage-glass: linear-gradient(145deg, rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.7));
   --stage-glass-line: rgb(20 40 64 / 0.08);
   --stage-track: rgb(20 40 64 / 0.1);
-  --stage-ring-line: rgb(8 102 223 / 0.16);
   --stage-cd-shadow: 0 34px 70px rgb(22 62 122 / 0.25);
   --stage-chrome: rgb(255 255 255 / 0.82);
   --stage-coral: #e8505b;
@@ -53,7 +52,6 @@
   --stage-glass: linear-gradient(145deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.04));
   --stage-glass-line: rgb(255 255 255 / 0.14);
   --stage-track: rgb(255 255 255 / 0.16);
-  --stage-ring-line: rgb(128 186 255 / 0.18);
   --stage-cd-shadow: 0 40px 80px rgb(0 0 0 / 0.5);
   --stage-chrome: rgb(19 33 55 / 0.78);
   --stage-coral: #ff8a5b;
