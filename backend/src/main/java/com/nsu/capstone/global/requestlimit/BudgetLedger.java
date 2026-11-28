@@ -181,9 +181,13 @@ final class BudgetLedger implements AutoCloseable {
         return new IllegalStateException("한도 확인 중 예상하지 못한 예외가 났다", cause);
     }
 
-    /** 다시 볼 시각이 지났고 compare-and-set에 이긴 요청 하나만 탐침이 된다. 이긴 쪽이 다음 탐침 시각을 미뤄 두어 나머지는 건너뛴다. */
+    /**
+     * 다시 볼 시각이 지났고 compare-and-set에 이긴 요청 하나만 탐침이 된다. 이긴 쪽이 다음 탐침 시각을 미뤄 두어 나머지는 건너뛴다. 시계가 장애를 기록한 시각
+     * (다시 볼 시각 - 탐침 간격)보다 뒤로 갔으면 그 시각을 기다리지 않고 탐침으로 본다.
+     */
     private boolean wonProbe(RedisState current, long now) {
-        return now >= current.retryAtMillis() && state.compareAndSet(current, down(now));
+        boolean due = now >= current.retryAtMillis() || now < current.retryAtMillis() - retryIntervalMillis;
+        return due && state.compareAndSet(current, down(now));
     }
 
     private RedisState down(long now) {

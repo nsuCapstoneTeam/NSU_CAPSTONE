@@ -111,6 +111,21 @@ class BudgetLedgerOutageTest {
     }
 
     @Test
+    void 장애를_기록한_뒤_시계가_뒤로_가도_탐침_간격만큼_흐르면_탐침이_나간다() {
+        redis.failWith(() -> new RedisConnectionFailureException("연결 실패"));
+        BudgetLedger ledger = ledgerWith(1);
+        ledger.spend(UUID.randomUUID(), RequestBudget.EVENT_REGISTRATION);
+        clock.set(clock.instant().minus(Duration.ofHours(1)));
+        clock.advance(Duration.ofSeconds(10));
+        redis.recover();
+
+        ledger.spend(UUID.randomUUID(), RequestBudget.EVENT_REGISTRATION);
+
+        // 기동 직후 탐침(실패), 시계가 되돌아간 뒤 탐침 간격이 지나 나간 탐침(성공)
+        assertThat(redis.probeFlags()).containsExactly("1", "1");
+    }
+
+    @Test
     void 다음_탐침_시각이_지나면_동시_요청_20건_중_Redis를_부르는_요청은_1건이다() throws Exception {
         redis.failWith(() -> new RedisConnectionFailureException("연결 실패"));
         BudgetLedger ledger = ledgerWith(1);
