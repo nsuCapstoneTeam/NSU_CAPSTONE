@@ -320,7 +320,7 @@ DB가 관여하는 경우(upsert, `CHECK`, 동시 요청, 배열, 조회 횟수)
 | 출연료 | `feeMin > feeMax`, 음수, 10억 초과, 소수, 한쪽만 있음은 `VALIDATION_ERROR`. 0과 10억, 두 값이 같은 경우는 통과. 출연료가 저장된 프로필에 `"feeMin": "", "feeMax": ""`(다른 필드는 유효)나 `"500000"` 문자열을 보내면 `400`이고 저장된 출연료가 그대로다 |
 | 목록 키 | `artistTypes`·`genres`·`regionCodes`가 빠지거나 `null`이면 `VALIDATION_ERROR`이며 `ProblemDetail`이 아니다 |
 | 형식 오류 | 깨진 JSON은 Spring 표준 400(`ProblemDetail`) |
-| 요청 한도 | 수정·삭제를 섞은 11번째는 `429`, `Retry-After: 120`이다. EVENT_PARTNER의 요청과 JSON 문법·타입 오류는 한도를 쓰지 않고, 본문 검증 `400`은 1회를 쓴다(NSU-100) |
+| 요청 한도 | 수정·삭제를 섞은 11번째는 `429`이고 `Retry-After`는 남은 초(120 이하)다. 시각을 고정한 테스트에서만 `Retry-After: 120`을 기대한다. EVENT_PARTNER의 요청과 JSON 문법·타입 오류는 한도를 쓰지 않고, 본문 검증 `400`은 1회를 쓴다(NSU-100) |
 | 무시하는 필드 | 본문의 `updatedAt`·`artistId`와 모르는 필드는 저장 결과에 영향이 없다 |
 | 운영 관측 | 형식은 맞지만 목록에 없는 지역 코드(`29`)를 보내면 `400`이고 WARN 로그에 그 코드가 남는다(양성 대조). 가짜 활동명·소개를 넣은 저장 성공, 검증 실패(41자 활동명), 깨진 JSON, 지역 코드 거절 흐름에서 배포 설정 인코더의 실제 출력 바이트에 그 값이 없다(`LogPrivacyIntegrationTest`와 같은 방식) |
 
