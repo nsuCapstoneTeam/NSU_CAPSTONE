@@ -150,6 +150,7 @@ Eligibility ADR Consequences의 "NSU-12·34" 전제와 이 ADR이 지키는 방�
 - 잠금은 PostgreSQL 트랜잭션 advisory 잠금이다. 키는 `hashtextextended('artist_schedules:' || user_id, 0)`다. 외부 계정(06 §11.3, `ExternalAccountRepository`)과 같은 방식이고 접두어만 다르다. 다른 키와 해시가 겹치면 두 아티스트의 쓰기가 줄을 설 뿐 결과는 같다. 트랜잭션이 끝나면 풀린다.
 - 상한은 트리거 둘이 같은 트리거 함수(`artist_schedule_write_guard`)로 검사한다. `trg_artist_schedules_before_insert`(`BEFORE INSERT`)와 `trg_artist_schedules_start_day_change`(`BEFORE UPDATE OF start_at`, `Asia/Seoul` 시작 날짜가 바뀔 때만 도는 `WHEN` 조건)다. 잠금을 잡은 뒤 그날 시작하는 같은 아티스트의 행을 모두 센다. 96개 이상이면 SQLState `23514`, 제약 이름 `ck_artist_schedules_daily_limit`으로 거절한다.
   - 세기에서 ID로 행을 빼지 않는다. 넣는 행은 아직 표에 없고, 시작 날짜를 옮기는 행의 옛 버전은 다른 날에 있어 어차피 세지 않는다. ID로 빼면 운영자가 꽉 찬 날의 행 ID를 바꾸는 동안 그 옛 ID로 같은 날에 넣는 행이, 아직 보이는 옛 행을 빼고 95개로 세어 97번째가 된다(ID 변경은 이 트리거를 부르지 않아 잠금도 잡지 않는다).
+  - 그래서 운영자가 꽉 찬 날의 기존 행을 `INSERT ... ON CONFLICT (id) DO UPDATE`로 고치면, 같은 날 안의 수정이어도 `INSERT` 트리거가 먼저 돌아 `23514`로 거절된다. 상한이 깨지는 방향이 아니라 더 거절하는 방향이다. 앱은 이 표에 `ON CONFLICT`를 쓰지 않는다. 운영자는 기존 행을 `UPDATE`로 고친다.
   - `READ COMMITTED`에서 트리거 안의 세기 문장은 잠금을 잡은 뒤 새 스냅숏을 쓴다. 그래서 앞에서 잠금을 쥐었던 트랜잭션이 커밋한 행까지 센다.
   - `REPEATABLE READ`·`SERIALIZABLE`에서는 세기 문장이 트랜잭션 스냅숏을 써서, 잠금을 기다리는 동안 커밋된 행을 놓친다(`SERIALIZABLE`도 상대가 `READ COMMITTED`인 API면 충돌을 잡지 못한다). 그래서 트리거 함수는 이 두 격리 수준의 쓰기를 먼저 거절한다(SQLState `25000`). 앱과 탈퇴 절차는 `READ COMMITTED`(기본값)라 걸리지 않는다. 운영자 SQL도 기본값이면 걸리지 않고, 격리 수준을 올린 트랜잭션은 `INSERT`와 시작 날짜를 바꾸는 `UPDATE`만 거절된다. 상한이 작성자의 격리 수준 설정에 기대지 않게 하려는 것이다.
   - 행 단위 `BEFORE` 트리거는 같은 문장이 앞서 넣은 행을 본다(PostgreSQL "Visibility of Data Changes"). 그래서 한 번에 7행을 넣어도 앞 행까지 센다.
