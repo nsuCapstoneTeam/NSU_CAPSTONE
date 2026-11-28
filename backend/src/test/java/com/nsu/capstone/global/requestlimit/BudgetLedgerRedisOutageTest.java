@@ -34,7 +34,7 @@ class BudgetLedgerRedisOutageTest {
 
     @BeforeAll
     static void startRedis() {
-        container = RedisFixture.newContainer("256mb");
+        container = RedisFixture.newContainer(RedisFixture.MAXMEMORY);
         container.start();
     }
 
@@ -54,8 +54,20 @@ class BudgetLedgerRedisOutageTest {
             dedicated.destroy();
         }
         if (shared != null) {
+            resetRedisMemory();
             shared.destroy();
         }
+    }
+
+    /** 컨테이너는 클래스가 함께 쓰므로, 메모리를 채운 시험이 낮춘 maxmemory와 채운 키를 다음 시험이 물려받지 않게 되돌린다. */
+    private void resetRedisMemory() {
+        StringRedisTemplate admin = new StringRedisTemplate(shared);
+        admin.afterPropertiesSet();
+        admin.execute((RedisCallback<Object>) c -> {
+            c.serverCommands().setConfig("maxmemory", RedisFixture.MAXMEMORY);
+            c.serverCommands().flushAll();
+            return null;
+        });
     }
 
     private BudgetLedger newLedger() {

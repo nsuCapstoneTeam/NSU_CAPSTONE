@@ -78,6 +78,11 @@ class UserRequestLimitConfigTest {
     private final StringRedisTemplate redis = RedisFixture.newTemplate();
 
     @AfterEach
+    void closeRedis() {
+        RedisFixture.closeTemplate(redis);
+    }
+
+    @AfterEach
     void clearLogin() {
         SecurityContextHolder.clearContext();
     }

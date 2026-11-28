@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -28,6 +29,11 @@ class BudgetLedgerRedisTest {
     private final TestClock clock = new TestClock();
     private final StringRedisTemplate redis = RedisFixture.newTemplate();
     private BudgetLedger ledger;
+
+    @AfterEach
+    void closeRedis() {
+        RedisFixture.closeTemplate(redis);
+    }
 
     @BeforeEach
     void setUp() {

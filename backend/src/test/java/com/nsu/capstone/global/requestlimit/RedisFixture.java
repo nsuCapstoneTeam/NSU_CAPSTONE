@@ -13,7 +13,10 @@ final class RedisFixture {
     /** 동시 호출 상한이 주제가 아닌 테스트가 쓰는 넉넉한 값(기본 server.tomcat.threads.max). */
     static final int CALL_LIMIT = 200;
 
-    private static final GenericContainer<?> CONTAINER = newContainer("256mb");
+    /** 컨테이너를 시작할 때의 maxmemory. 메모리를 채운 테스트가 되돌릴 값이기도 하다. */
+    static final String MAXMEMORY = "256mb";
+
+    private static final GenericContainer<?> CONTAINER = newContainer(MAXMEMORY);
 
     static {
         CONTAINER.start();
@@ -61,6 +64,11 @@ final class RedisFixture {
         StringRedisTemplate template = new StringRedisTemplate(factory);
         template.afterPropertiesSet();
         return template;
+    }
+
+    /** {@link #newTemplate()}가 만든 연결 팩토리를 닫는다. 템플릿을 쓴 테스트는 끝에 부른다. */
+    static void closeTemplate(StringRedisTemplate template) {
+        ((LettuceConnectionFactory) template.getConnectionFactory()).destroy();
     }
 
     /** ADR Decision 표와 같은 출시 기본값. */
