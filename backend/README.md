@@ -443,9 +443,11 @@ backend/
 - `/api/` 프록시 location에 `client_max_body_size 1m;`을 적는다. nginx 기본값과 같지만 location에 직접 적어, `http`·`server` 블록의 다른 값(`0`은 상한 없음)이 이 경로에 내려오지 않게 한다.
 - 앱 상한(64KiB)보다 크게 두는 이유: 64KiB~1MiB 본문은 앱이 `{code, message}`와 `X-Request-Id`가 있는 `413`으로 답한다. nginx가 거절한 `413`은 nginx 기본 HTML 본문이고 `X-Request-Id`가 없다.
 - `proxy_request_buffering`은 기본값(`on`)을 둔다. nginx가 본문을 다 받은 뒤 backend에 넘기므로, 느리게 보내는 클라이언트가 backend 스레드를 붙잡지 않는다.
+- 본문 수신 시간: `/api/` location에 `client_body_timeout 10s;`를 권장한다. nginx 기본값은 `60s`이고, 이 값은 전체 전송 시간이 아니라 두 번의 읽기 사이 간격에 걸린다. 앱은 본문 수신 시간 상한을 따로 두지 않는다(ADR Decision 9). 64KiB~1MiB 본문은 읽기 사이 10초 넘게 멈출 일이 드물어 정상 요청에 영향이 거의 없다.
 - 파일 업로드 경로(곡 API §2.2)는 그 location에서 상한을 올린다. 값은 업로드를 구현하는 NSU-89가 정한다.
+- 배포 전제: 외부에서 닿는 환경은 모두 위 "단일 공개 nginx → 비공개 Spring" 구성이다([authentication/01](../docs/adr/authentication/01_oauth_browser_binding.md) Decision 5). Spring을 프록시 없이 바로 여는 구성에서는 위 시간 상한과 버퍼링이 없으므로 이 전제 밖이다.
 
-근거: [nginx client_max_body_size](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size), [nginx proxy_request_buffering](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_request_buffering). 확인: 2026-11-28.
+근거: [nginx client_max_body_size](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size), [nginx client_body_timeout](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_body_timeout), [nginx proxy_request_buffering](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_request_buffering). 확인: 2026-11-28.
 
 ### NSU-123 배포와 롤백 순서
 

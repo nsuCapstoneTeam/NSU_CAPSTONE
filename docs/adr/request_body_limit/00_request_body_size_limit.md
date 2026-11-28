@@ -50,7 +50,7 @@
    - API 계약 문서의 검사 순서 표(예: 05 §4, 06 §2)에는 `413`을 따로 적지 않는다. `413`의 자리는 00 §12 한 곳이 정한다. API마다 적으면 새 API가 생길 때마다 빠뜨릴 곳이 늘기 때문이다.
 7. **로그**: 이 결정의 `413`과 폼 파싱 `400`은 ERROR로 남기지 않는다. 새 로그 줄도 만들지 않는다. `RequestIdFilter`의 완료 줄(INFO, 상태 `413`) 하나만 남는다. 본문, 길이 헤더 값, 예외 메시지는 남기지 않는다.
 8. **상한 값의 정본은 필터의 상수다.** `server.tomcat.max-http-form-post-size`에는 같은 값을 적고, 둘이 같은지 테스트로 지킨다. 배포에서 환경 변수(`SERVER_TOMCAT_MAX_HTTP_FORM_POST_SIZE`) 등으로 이 값을 바꾸면 chunked 폼 `POST`만 상한이 풀리므로(`Content-Length` 폼은 필터가 막는다), 기동할 때 값이 필터 상수와 다르면 앱이 뜨지 않게 한다(`RedisTimeoutValidation`과 같은 방식). 64KiB보다 큰 본문이 필요하면 설정이 아니라 이 ADR의 예외로 다룬다(00 §12). 이 설정은 새 파일 `config/web.properties`에 두고 `application.properties`의 `spring.config.import`에 더한다.
-9. **프록시는 권장값만 적는다.** nginx `/api/` location에 `client_max_body_size 1m`을 명시하고, `proxy_request_buffering`은 기본값(`on`)을 둔다. `backend/README.md`의 "요청 본문 크기 상한" 절에 적는다. 프록시 설정 파일과 배포 확인은 이 이슈 밖이다(NSU-129).
+9. **프록시는 권장값만 적는다.** nginx `/api/` location에 `client_max_body_size 1m`과 `client_body_timeout 10s`(본문 수신 시간 권장값)를 명시하고, `proxy_request_buffering`은 기본값(`on`)을 둔다. 외부에서 닿는 환경은 모두 nginx 뒤에 둔다는 배포 전제(`backend/README.md`, authentication/01 Decision 5)에 기댄다. 프록시 없이 Spring을 바로 여는 구성은 이 전제 밖이다. `backend/README.md`의 "요청 본문 크기 상한" 절에 적는다. 프록시 설정 파일과 배포 확인은 이 이슈 밖이다(NSU-129).
 10. 외부 데이터·서비스를 쓰지 않으므로 `public-api-scout`은 해당 없다.
 
 ## Context
