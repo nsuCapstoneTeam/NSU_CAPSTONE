@@ -82,7 +82,11 @@ final class RedisFixture {
                 memoryMaxEntries,
                 redisRetryInterval,
                 redisTotalTimeout,
-                Duration.ofMillis(200),
-                Duration.ofMillis(250));
+                min(Duration.ofMillis(200), redisTotalTimeout.dividedBy(4)),
+                min(Duration.ofMillis(250), redisTotalTimeout.dividedBy(2)));
+    }
+
+    private static Duration min(Duration a, Duration b) {
+        return a.compareTo(b) <= 0 ? a : b;
     }
 }

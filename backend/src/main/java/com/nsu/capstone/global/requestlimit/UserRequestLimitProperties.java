@@ -25,9 +25,62 @@ record UserRequestLimitProperties(
         Duration redisConnectTimeout,
         Duration redisCommandTimeout) {
 
+    private static final Duration MIN_REFILL_EVERY = Duration.ofSeconds(1);
+    private static final Duration MIN_RETRY_INTERVAL = Duration.ofSeconds(1);
+    private static final Duration MIN_TOTAL_TIMEOUT = Duration.ofMillis(100);
+
+    /** 기동할 때 검사한다. 어기면 서버가 뜨지 않는다. */
+    UserRequestLimitProperties {
+        for (RequestBudget budget : RequestBudget.values()) {
+            if (budgets == null || budgets.get(budget) == null) {
+                throw invalid("한도 설정이 없다: " + budget.name());
+            }
+        }
+        require(serverCount >= 1, "server-count는 1 이상이어야 한다");
+        require(memoryMaxEntries >= 1, "memory-max-entries는 1 이상이어야 한다");
+        require(
+                redisRetryInterval != null && redisRetryInterval.compareTo(MIN_RETRY_INTERVAL) >= 0,
+                "redis-retry-interval은 1초 이상이어야 한다");
+        require(
+                redisTotalTimeout != null
+                        && redisTotalTimeout.compareTo(MIN_TOTAL_TIMEOUT) >= 0
+                        && redisTotalTimeout.compareTo(redisRetryInterval) < 0,
+                "redis-total-timeout은 100ms 이상이고 redis-retry-interval보다 작아야 한다");
+        require(
+                redisConnectTimeout != null
+                        && redisConnectTimeout.isPositive()
+                        && redisConnectTimeout.compareTo(redisTotalTimeout) < 0,
+                "redis-connect-timeout은 0보다 크고 redis-total-timeout보다 작아야 한다");
+        require(
+                redisCommandTimeout != null
+                        && redisCommandTimeout.isPositive()
+                        && redisCommandTimeout.compareTo(redisTotalTimeout) < 0,
+                "redis-command-timeout은 0보다 크고 redis-total-timeout보다 작아야 한다");
+    }
+
+    private static void require(boolean condition, String message) {
+        if (!condition) {
+            throw invalid(message);
+        }
+    }
+
+    private static IllegalArgumentException invalid(String message) {
+        return new IllegalArgumentException("요청 한도 설정이 잘못됐다. " + message);
+    }
+
     /**
      * @param capacity 연달아 받는 건수
      * @param refillEvery 그 뒤 1건이 돌아오는 시간
      */
-    record Budget(int capacity, Duration refillEvery) {}
+    record Budget(int capacity, Duration refillEvery) {
+
+        Budget {
+            if (capacity < 1) {
+                throw invalid("capacity는 1 이상이어야 한다");
+            }
+            if (refillEvery == null || refillEvery.compareTo(MIN_REFILL_EVERY) < 0) {
+                throw invalid("refill-every는 1초 이상이어야 한다");
+            }
+        }
+    }
 }
