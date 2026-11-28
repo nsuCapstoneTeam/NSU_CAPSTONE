@@ -15,16 +15,16 @@ ARTIST가 자기 프로필을 저장·조회·삭제하고, EVENT_PARTNER가 아
 1. **경로**: 본인 `GET`·`PUT`·`DELETE /api/v1/me/artist-profile`(ARTIST). 열람 `GET /api/v1/artists/{artistId}/profile`(EVENT_PARTNER, 본인 ARTIST).
 2. **필드**: 활동명 `name`(필수, 1~40자), 소개 `bio`(선택, 700자 이하), 공연 형태 `artistTypes`(0~4개), 장르 `genres`(0~3개), 공연 가능 지역 `regionCodes`(요청 0~20개, 서버가 정규화), 출연료 `feeMin`·`feeMax`(원 단위 정수, 둘 다 있거나 둘 다 없음, `0 ≤ feeMin ≤ feeMax ≤ 1,000,000,000`).
 3. **분류 값**: 공연 형태와 장르는 행사와 같은 enum(`ArtistType`, `Genre`, 03 §3.3)이다. 지역은 `regions` 목록(03 §7)의 시·도 2자리 또는 시·군·구 5자리 코드이며, EVENT_PARTNER 프로필과 같은 정규화(05 §2)를 쓴다.
-4. **저장**: 새 테이블 `artist_profiles`(V12). `user_id`가 PK이면서 `users.id` FK다. FK에 `ON DELETE`를 두지 않는다. 목록은 배열 컬럼과 `CHECK`로 저장한다.
+4. **저장**: 새 테이블 `artist_profiles`(V11). `user_id`가 PK이면서 `users.id` FK다. FK에 `ON DELETE`를 두지 않는다. 목록은 배열 컬럼과 `CHECK`로 저장한다.
 5. **생성·수정·삭제**: EVENT_PARTNER 프로필과 같다. 첫 `PUT`이 행을 만들고, `PUT`은 전체 교체이며 `INSERT … ON CONFLICT (user_id) DO UPDATE` 한 문장이다. `DELETE`는 `204`이고 행이 없어도 `204`다. 행이 없으면 조회는 `200`과 빈 값이다. 동시 수정은 나중 저장이 이긴다.
 6. **쓰기의 계정 상태**: `PUT`은 호출자가 `ACTIVE` ARTIST인지 DB로 확인한다. 아니면 `403 ACCESS_DENIED`다. 확인은 본문 검증보다 먼저다. 확인은 저장과 같은 트랜잭션에서 `users` 행을 `FOR SHARE`로 잠그며 한다(결정 13). `DELETE`는 계정 상태를 보지 않는다(개인정보 삭제 요구, 아래 "쓰기의 계정 상태"). 본인 조회와 열람은 호출자의 계정 상태를 보지 않는 기존 규칙(`ArtistReadAccess`)을 따른다. 열람 대상은 `ACTIVE` ARTIST여야 한다(09 §4.2).
 7. **열람 범위**: EVENT_PARTNER는 `ACTIVE` ARTIST의 프로필 전체(출연료 포함)를 본다. 다른 ARTIST는 `403`, 비로그인은 `401`이다. 응답은 본인 조회와 같은 DTO 하나다.
 8. **모듈**: `com.nsu.capstone.artist.profile` 하나의 패키지(하위 패키지 없음). 다른 모듈에 여는 것은 일괄 조회 `ArtistProfiles.findByArtistIds(Collection<UUID>)`와 값 타입 `SavedArtistProfile`뿐이다. 쓰기와 단건 조회는 package-private이다.
 9. **저장 기술**: Spring `JdbcClient`. 일괄 조회는 입력 크기와 관계없이 `= ANY(CAST(:ids AS uuid[]))` 한 문장이다.
 10. **Eligibility 연결**: `EmptyArtistProfileReader`를 지우고 `eligibility.infrastructure.SavedArtistProfileReader`가 `ArtistProfiles`를 읽는다. 출연료를 입력하지 않았으면 `feeMin = null`로 넘긴다(기본값으로 채우지 않는다).
-11. **지역 개편 점검**: 아티스트 표의 점검 함수 `check_artist_profile_regions()`와, EVENT_PARTNER 표의 함수와 함께 부르는 묶음 함수 `check_profile_regions()`를 V12에서 만든다. 개편 마이그레이션은 끝에서 묶음 함수를 부른다. 지역 개편 테스트는 두 표를 함께 검사한다.
+11. **지역 개편 점검**: 아티스트 표의 점검 함수 `check_artist_profile_regions()`와, EVENT_PARTNER 표의 함수와 함께 부르는 묶음 함수 `check_profile_regions()`를 V11에서 만든다. 개편 마이그레이션은 끝에서 묶음 함수를 부른다. 지역 개편 테스트는 두 표를 함께 검사한다.
 12. **기존 코드 재사용**: 지역 정규화(`RegionNormalizer`)를 `event.region`으로, 문자열 정리 규칙을 `global.text.UserText`로, 아티스트 ID 형식 검사(`parseArtistId`)를 `ArtistReadAccess`로 옮겨 EVENT_PARTNER 프로필·Trust Profile·외부 계정과 함께 쓴다
-13. **탈퇴 시 파기**(2026-11-22 사용자 결정): `users.status`가 `WITHDRAWN`으로 바뀌는 UPDATE의 같은 트랜잭션에서 DB 트리거가 그 사용자의 `artist_profiles` 행을 즉시 지운다. 트리거와 함수는 V12가 만든다. 탈퇴 기능(탈퇴 API, 상태 변경, 토큰 무효화, 다른 표 파기, 재가입)은 NSU-167(담당 강석윤)이 만들고, 그 이슈가 상태를 `WITHDRAWN`으로 바꾸면 이 트리거가 프로필을 지운다. 로그인할 수 없는 정지 계정의 삭제 요구는 운영자 runbook(SQL 한 줄)으로 처리한다. 새 행은 삽입 가드 트리거(`BEFORE INSERT`)가 같은 트랜잭션에서 `users` 행을 `FOR SHARE`로 잠그고 `ACTIVE` ARTIST일 때만 받는다. 행의 사용자(`user_id`)를 바꾸는 UPDATE는 `users`를 잠그지 않는 소유자 고정 트리거가 거절한다. 그래서 어느 작성 경로(API, 운영자 SQL, 뒤에 생길 경로)로 넣어도 탈퇴 뒤에 프로필이 남지 않는다(2026-11-28 NSU-120 설계 리뷰에서 찾은 구멍, Rationale "삽입 가드").
+13. **탈퇴 시 파기**(2026-11-22 사용자 결정): `users.status`가 `WITHDRAWN`으로 바뀌는 UPDATE의 같은 트랜잭션에서 DB 트리거가 그 사용자의 `artist_profiles` 행을 즉시 지운다. 트리거와 함수는 V11이 만든다. 탈퇴 기능(탈퇴 API, 상태 변경, 토큰 무효화, 다른 표 파기, 재가입)은 NSU-167(담당 강석윤)이 만들고, 그 이슈가 상태를 `WITHDRAWN`으로 바꾸면 이 트리거가 프로필을 지운다. 로그인할 수 없는 정지 계정의 삭제 요구는 운영자 runbook(SQL 한 줄)으로 처리한다. 새 행은 삽입 가드 트리거(`BEFORE INSERT`)가 같은 트랜잭션에서 `users` 행을 `FOR SHARE`로 잠그고 `ACTIVE` ARTIST일 때만 받는다. 행의 사용자(`user_id`)를 바꾸는 UPDATE는 `users`를 잠그지 않는 소유자 고정 트리거가 거절한다. 그래서 어느 작성 경로(API, 운영자 SQL, 뒤에 생길 경로)로 넣어도 탈퇴 뒤에 프로필이 남지 않는다(2026-11-28 NSU-120 설계 리뷰에서 찾은 구멍, Rationale "삽입 가드").
 
 ## Context
 
@@ -76,7 +76,7 @@ EVENT_PARTNER 프로필(05, NSU-50)이 같은 모양의 API를 먼저 만들었�
 | F3 | 중간 | 열람 경로의 검사 순서가 `/me` 경로와 다르다 | 09 §4에 두 경로의 순서와 이유를 따로 적는다 |
 | F4 | 중간 | "다른 연결이 먼저 커밋"만 하는 upsert 테스트는 `조회 → 있으면 UPDATE` 구현도 통과한다 | 05의 upsert 경로 테스트처럼 실제 행을 넣고 저장소 조회가 빈 값을 답하게 고정한다(09 §9) |
 | F5 | 중간 | Eligibility 통과와 활동명 조회 사이에 `DELETE`가 커밋되면 같은 추천 요청에서도 키가 없다 | Consequences의 NSU-63 전제 |
-| F6 | 낮음 | V12 적용 뒤 롤백 절차가 없다 | Consequences의 롤백 |
+| F6 | 낮음 | V11 적용 뒤 롤백 절차가 없다 | Consequences의 롤백 |
 
 ### 모듈 모양과 공개 표면
 
@@ -404,7 +404,7 @@ public record SavedArtistProfile(
 | `B/identity/application/ArtistWriteAccess.java` | 쓰기의 `ACTIVE` ARTIST 확인 |
 | `B/recommendation/eligibility/infrastructure/SavedArtistProfileReader.java` | Eligibility 어댑터 |
 | `B/global/text/UserText.java` | 문자열 정리·검증 규칙(05 §2) |
-| `R/db/migration/V12__create_artist_profiles_table.sql` | 표, `CHECK`, 점검 함수 둘, 탈퇴 파기 함수와 트리거, 삽입 가드·소유자 고정 함수와 트리거 |
+| `R/db/migration/V11__create_artist_profiles_table.sql` | 표, `CHECK`, 점검 함수 둘, 탈퇴 파기 함수와 트리거, 삽입 가드·소유자 고정 함수와 트리거 |
 
 고치거나 옮기는 기존 파일:
 
@@ -423,7 +423,7 @@ public record SavedArtistProfile(
 
 의존 방향: `artist.profile` → `event.domain`(enum), `event.region`, `identity.application`, `global`. `eligibility.infrastructure` → `artist.profile`. NSU-127이 `event.application` → `artist.profile`을 더하면 패키지 수준 순환(`event` ↔ `artist.profile`)이 생긴다. 클래스 수준 순환은 아니다. 분류 enum을 공용 모듈로 옮기는 일은 이 이슈 범위가 아니다.
 
-### V12 스케치
+### V11 스케치
 
 ```sql
 SET LOCAL lock_timeout = '3s';
@@ -506,7 +506,7 @@ BEGIN
         RAISE EXCEPTION '탈퇴 처리는 READ COMMITTED 트랜잭션에서 해야 한다: %',
             current_setting('transaction_isolation');
     END IF;
-    -- 표는 트리거가 걸린 users와 같은 스키마(V12가 함께 만든다)에서 찾는다.
+    -- 표는 트리거가 걸린 users와 같은 스키마(V11이 함께 만든다)에서 찾는다.
     -- 호출 세션의 search_path나 같은 이름의 임시 표에 기대지 않는다(설계 리뷰 지적).
     EXECUTE format('DELETE FROM %I.artist_profiles WHERE user_id = $1', TG_TABLE_SCHEMA)
         USING NEW.id;
@@ -523,7 +523,7 @@ CREATE TRIGGER trg_users_withdrawal_delete_artist_profile
 
 - 조건은 새 상태만 본다. 이미 `WITHDRAWN`인 행을 다시 `WITHDRAWN`으로 써도 지울 행이 없어 0행이다. 역할은 보지 않는다(ARTIST가 아니면 행이 없다).
 - `UPDATE OF status`는 `SET`에 `status`가 있는 UPDATE에만 걸린다. 상태를 바꾸는 UPDATE는 반드시 `status`를 `SET`한다.
-- 함수는 삭제할 표를 `TG_TABLE_SCHEMA`(트리거가 걸린 `users`의 스키마)로 한정하고, 함수의 `search_path`를 `pg_catalog, pg_temp`로 고정한다. 그래서 탈퇴를 실행한 세션(운영자 `psql` 포함)의 `search_path`나 같은 이름의 임시 표와 관계없이 V12가 만든 표에서 지운다. 스키마 이름을 SQL에 적지 않으므로 Flyway 기본 스키마가 바뀌어도 그대로 맞다.
+- 함수는 삭제할 표를 `TG_TABLE_SCHEMA`(트리거가 걸린 `users`의 스키마)로 한정하고, 함수의 `search_path`를 `pg_catalog, pg_temp`로 고정한다. 그래서 탈퇴를 실행한 세션(운영자 `psql` 포함)의 `search_path`나 같은 이름의 임시 표와 관계없이 V11이 만든 표에서 지운다. 스키마 이름을 SQL에 적지 않으므로 Flyway 기본 스키마가 바뀌어도 그대로 맞다.
 
 - 삽입 가드 트리거(결정 13, Rationale "삽입 가드"):
 
@@ -570,23 +570,23 @@ CREATE TRIGGER trg_artist_profiles_fixed_owner
 
 ## Consequences
 
-- **V12**는 새 표, 점검 함수 둘, 탈퇴 파기 함수와 `users`의 트리거 하나, 삽입 가드·소유자 고정 함수와 `artist_profiles`의 트리거 둘을 더한다. 기존 표의 열·제약은 바꾸지 않는다. FK와 트리거를 만드는 동안 `users`에 `SHARE ROW EXCLUSIVE` 락이 걸리고, 3초 안에 얻지 못하면 마이그레이션이 실패한다. 그러면 배포를 다시 시도한다.
-- **마이그레이션 번호**: 설계 시점의 번호는 V12다(V11은 NSU-105, V13은 NSU-121이 쓴다). 적용된 버전보다 낮은 버전이 뒤에 오면 Flyway 검증이 실패한다(`outOfOrder` 설정 없음). 그래서 나중에 머지되는 PR이 머지 직전에 자기 마이그레이션 번호와 그 번호를 적은 문서·테스트를 바꾼다. 이 문서와 09의 "V12"도 그때 함께 바꾼다.
-- **머지 전 V12 수정**: V12는 main에 없어서 이 PR 안에서 고쳤다(삽입 가드 등). 이 브랜치나 그 위 브랜치(NSU-168)의 옛 V12를 적용한 로컬 DB는 다음 시작 때 체크섬 불일치로 실패한다. `flyway repair`로 넘기지 말고 DB를 다시 만든다. repair는 체크섬만 맞추고 새 트리거를 만들지 않는다. 머지한 뒤에는 V12를 고치지 않고 다음 번호로 바꾼다.
-- **롤백**(F6): 1차는 앱만 이전 버전으로 되돌린다. Flyway 기본 설정(`ignoreMigrationPatterns=*:future`)이라 이전 앱은 V12가 적용된 DB로도 뜬다. 이전 앱은 이 표를 읽지 않고 빈 구현으로 돌아가므로 추천은 이 PR 전처럼 `PROFILE_MISSING`으로 빈다. 저장된 프로필은 표에 남는다. 앱만 되돌려도 탈퇴 트리거와 삽입 가드는 DB에 남아 탈퇴할 때 프로필을 계속 지우고 탈퇴한 사용자의 새 행을 막는다(바라는 동작이다). 표까지 없애야 할 때만 데이터를 백업한 뒤 forward 마이그레이션을 쓴다. 그 마이그레이션은 한 트랜잭션에서 `users`의 트리거 `trg_users_withdrawal_delete_artist_profile` → 파기 함수 `delete_artist_profile_on_withdrawal()` → 점검 함수 둘 → 표(삽입 가드·소유자 고정 트리거도 함께 지워진다) → 삽입 가드 함수 `require_active_artist_for_profile()`와 소유자 고정 함수 `reject_artist_profile_owner_change()` 순서로 지운다. 트리거를 남긴 채 표만 지우면 PostgreSQL이 함수 본문의 표 참조를 의존성으로 추적하지 않아 트리거가 남고, 그 뒤 모든 탈퇴 UPDATE가 없는 표를 찾다 실패한다(설계 리뷰 지적). 적용한 뒤 시험 DB에서 `WITHDRAWN` UPDATE가 커밋되는지 확인한다. 그러면 저장된 프로필이 사라진다. 이 절차를 PR 설명에도 적는다.
+- **V11**은 새 표, 점검 함수 둘, 탈퇴 파기 함수와 `users`의 트리거 하나, 삽입 가드·소유자 고정 함수와 `artist_profiles`의 트리거 둘을 더한다. 기존 표의 열·제약은 바꾸지 않는다. FK와 트리거를 만드는 동안 `users`에 `SHARE ROW EXCLUSIVE` 락이 걸리고, 3초 안에 얻지 못하면 마이그레이션이 실패한다. 그러면 배포를 다시 시도한다.
+- **마이그레이션 번호**: 설계 시점의 번호는 V12였다(V11은 NSU-105, V13은 NSU-121). 2026-11-28 이 PR을 NSU-105(#245)보다 먼저 머지하기로 해 main 최대(V10) 다음인 V11로 바꿨다. 적용된 버전보다 낮은 버전이 뒤에 오면 Flyway 검증이 실패한다(`outOfOrder` 설정 없음). 그래서 나중에 머지되는 PR(NSU-105 등)이 머지 직전에 자기 마이그레이션 번호와 그 번호를 적은 문서·테스트를 바꾼다.
+- **머지 전 마이그레이션 수정**: 이 마이그레이션은 main에 없어서 이 PR 안에서 고쳤고(삽입 가드 등), 머지 직전에 번호를 V12에서 V11로 바꿨다. 이 브랜치나 그 위 브랜치(NSU-168)의 옛 V12를 적용한 로컬 DB는 다음 시작 때 Flyway 검증(체크섬 불일치, 또는 적용된 V12가 없고 그보다 낮은 V11이 남음)으로 실패한다. `flyway repair`로 넘기지 말고 DB를 다시 만든다. repair는 체크섬만 맞추고 새 트리거를 만들지 않는다. 머지한 뒤에는 V11을 고치지 않고 다음 번호의 마이그레이션으로 바꾼다.
+- **롤백**(F6): 1차는 앱만 이전 버전으로 되돌린다. Flyway 기본 설정(`ignoreMigrationPatterns=*:future`)이라 이전 앱은 V11이 적용된 DB로도 뜬다. 이전 앱은 이 표를 읽지 않고 빈 구현으로 돌아가므로 추천은 이 PR 전처럼 `PROFILE_MISSING`으로 빈다. 저장된 프로필은 표에 남는다. 앱만 되돌려도 탈퇴 트리거와 삽입 가드는 DB에 남아 탈퇴할 때 프로필을 계속 지우고 탈퇴한 사용자의 새 행을 막는다(바라는 동작이다). 표까지 없애야 할 때만 데이터를 백업한 뒤 forward 마이그레이션을 쓴다. 그 마이그레이션은 한 트랜잭션에서 `users`의 트리거 `trg_users_withdrawal_delete_artist_profile` → 파기 함수 `delete_artist_profile_on_withdrawal()` → 점검 함수 둘 → 표(삽입 가드·소유자 고정 트리거도 함께 지워진다) → 삽입 가드 함수 `require_active_artist_for_profile()`와 소유자 고정 함수 `reject_artist_profile_owner_change()` 순서로 지운다. 트리거를 남긴 채 표만 지우면 PostgreSQL이 함수 본문의 표 참조를 의존성으로 추적하지 않아 트리거가 남고, 그 뒤 모든 탈퇴 UPDATE가 없는 표를 찾다 실패한다(설계 리뷰 지적). 적용한 뒤 시험 DB에서 `WITHDRAWN` UPDATE가 커밋되는지 확인한다. 그러면 저장된 프로필이 사라진다. 이 절차를 PR 설명에도 적는다.
 - **행정구역 개편**: ADR event_management/01의 "목록 변경과 저장된 코드 이전을 마이그레이션 하나로"를 이 배열에도 적용한다. 코드를 옮긴 뒤 05 §2의 정규화를 다시 적용하고, 결과가 20개 이하여야 한다. 개편 마이그레이션은 끝에서 `check_profile_regions()`를 부른다.
-  - 기존 테스트 `EventPartnerProfileRegionMigrationIntegrationTest`를 `event/region/ProfileRegionMigrationIntegrationTest`로 옮긴다. 기준 버전은 두 표가 모두 있는 V12다. V12 뒤의 버전마다 두 표를 그 시점의 정규형 지역 조합으로 다시 넣고 한 버전을 적용한 뒤 묶음 함수를 부른다. 테스트가 점검 함수를 직접 부르므로, 개편 마이그레이션이 함수 호출 자체를 빠뜨린 것은 잡지 못한다(05 §5와 같은 한계).
+  - 기존 테스트 `EventPartnerProfileRegionMigrationIntegrationTest`를 `event/region/ProfileRegionMigrationIntegrationTest`로 옮긴다. 기준 버전은 두 표가 모두 있는 V11이다. V11 뒤의 버전마다 두 표를 그 시점의 정규형 지역 조합으로 다시 넣고 한 버전을 적용한 뒤 묶음 함수를 부른다. 테스트가 점검 함수를 직접 부르므로, 개편 마이그레이션이 함수 호출 자체를 빠뜨린 것은 잡지 못한다(05 §5와 같은 한계).
   - 기존 실패 픽스처 4개는 두 표 모두에서 실패해야 한다. EVENT_PARTNER 표만 옮기고 아티스트 표를 빠뜨린 픽스처(`move-partner-but-not-artist`)를 더한다.
   - 코드 보존 검사(설계 리뷰 지적): 점검 함수는 남은 코드의 존재와 정규형만 보므로 이전 SQL이 원소를 떨어뜨려도(예: `[]`) 통과한다. 그래서 테스트는 버전을 적용한 뒤 시드한 같은 `user_id`의 배열을 기대값과 비교한다.
     - 모든 행을 기대 배열과 정확히 비교한다. 기대 배열은 시드 배열에 그 버전의 대응표를 적용하고, 개편 뒤 지역 목록으로 정규화한 것이다. 사라진 코드가 없는 행도 비교하므로, 남은 시·군·구 코드를 그 시·도 코드로 넓히는 이전(예: `["11680"]` → `["11"]`)도 잡는다(PR 리뷰 지적). 이 경우를 일부러 만드는 실패 픽스처를 더한다.
     - 비어 있지 않던 배열은 비지 않아야 한다.
     - 사라진 코드는 그 개편 PR이 테스트에 더한 버전별 대응표(마이그레이션 버전 → 옛 코드 → 새 코드 목록, event_management/01이 개편 때 정하는 것)로 기대 배열을 계산해 같은지 본다. 대응표는 그 버전을 적용하는 단계에만 쓴다. 대응표 없이 사라진 코드가 있으면 실패한다.
-    - 실패 픽스처(V900번대)는 운영 마이그레이션을 기준 버전(V12)까지만 적용한 스키마에 픽스처만 적용해 검사한다. 뒤에 실제 개편이 들어와도 픽스처 검사가 그 개편과 섞이지 않는다(PR 리뷰 지적).
+    - 실패 픽스처(V900번대)는 운영 마이그레이션을 기준 버전(V11)까지만 적용한 스키마에 픽스처만 적용해 검사한다. 뒤에 실제 개편이 들어와도 픽스처 검사가 그 개편과 섞이지 않는다(PR 리뷰 지적).
     - 테스트 전용 픽스처 번호는 운영 번호와 겹치지 않게 V800번대(올바른 운영 개편 흉내)와 V900번대(실패 재현)를 쓴다. 운영에 같은 번호가 들어와 Flyway 중복 버전 오류로 테스트가 깨지는 것을 막는다.
     - 시드에는 지역이 3개 이상인 배열을 넣는다. 각 단계는 그 시점의 스키마에 있는 프로필 표만 정리·시드한다. 마지막 스키마의 표별 연결 검사는 그대로 모든 표를 본다(PR 리뷰 지적).
     - 실패 픽스처에 "바뀐 원소만 떨어뜨린 이전"을 더한다.
   - 표별 연결 검사(설계 리뷰 지적): `information_schema.columns`에서 배열 컬럼 `region_codes`를 가진 표를 찾는다. 표마다 다른 표는 정상으로 둔 채 그 표에만 형식은 맞고 목록에 없는 코드(`99999`)를 넣고 묶음 함수가 실패하는지 본다. 함수 이름이나 정의 문자열에 기대지 않는다. 새로 찾은 표에 넣을 최소 행 픽스처가 테스트에 없으면 실패하므로, 지역 배열을 가진 표를 더하는 PR이 픽스처와 점검 함수를 함께 더한다.
-  - V8~V11은 V7 기준의 기존 테스트로 이미 확인했거나(V8~V10) 그 PR에서 확인한다(V11). V11을 쓰는 NSU-105 PR은 이 PR이 머지되기 전에 옛 `EventPartnerProfileRegionMigrationIntegrationTest`(V7 기준)를 돌린다. 이 PR이 머지되면 V12보다 앞선 버전은 어떤 테스트도 다시 돌리지 않는다. 마이그레이션 번호가 바뀌면(아래 "마이그레이션 번호") 기준 버전도 함께 바꾼다.
+  - V8~V10은 V7 기준의 기존 테스트로 이미 확인했다. 이 PR이 머지되면 V11보다 앞선 버전은 어떤 테스트도 다시 돌리지 않는다. 뒤에 머지되는 NSU-105의 마이그레이션은 V11 뒤 버전이 되어 이 테스트가 확인한다. 마이그레이션 번호가 바뀌면(아래 "마이그레이션 번호") 기준 버전도 함께 바꾼다.
   - **받아들인 위험**: `PUT`이 지역을 검증한 뒤 저장하기 전에 개편 마이그레이션이 커밋되면 사라진 코드가 저장될 수 있다. EVENT_PARTNER 프로필과 같은 위험이며 같은 결정(개편 배포는 앱을 멈추고 한다, 2026-11-05)을 따른다.
 - **쓰기의 계정 상태**: 확인이 `users` 행을 `FOR SHARE`로 잠그므로(Rationale "탈퇴 시 파기") 확인 직후의 정지·탈퇴는 `PUT`이 커밋될 때까지 기다린다. 정지는 그 뒤에 커밋되어 저장은 통과한 채로 남고, 정지된 아티스트는 Eligibility에서 계정 상태로 빠진다. 탈퇴는 트리거가 그 저장을 지운다.
 - **정지·탈퇴한 아티스트의 삭제**: `DELETE`는 계정 상태를 보지 않으므로 정지된 아티스트도 만료 전 토큰으로 지울 수 있다. 탈퇴하면 트리거가 즉시 지운다(결정 13). 탈퇴 기능은 NSU-167이 만들고, 그 이슈가 상태를 `WITHDRAWN`으로 바꾸면 이 트리거가 프로필을 지운다. 탈퇴 트랜잭션은 `READ COMMITTED`(기본값)여야 한다.
