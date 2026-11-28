@@ -87,6 +87,18 @@ class OpenApiDocsIntegrationTest {
         return type.size() == 1 ? type.path(0).asString("") : type.toString();
     }
 
+    /** OpenAPI 3.1의 type은 문자열이나 배열이다. 둘 다 집합으로 돌려주고, type이 없으면 빈 집합이다. */
+    private static Set<String> types(JsonNode schema) {
+        JsonNode type = schema.path("type");
+        Set<String> types = new TreeSet<>();
+        if (type.isArray()) {
+            type.forEach(element -> types.add(element.asString()));
+        } else if (!type.isMissingNode()) {
+            types.add(type.asString());
+        }
+        return types;
+    }
+
     /** 스키마의 enum 값. $ref면 components에서 찾아 읽는다. */
     private List<String> enumValues(JsonNode docs, JsonNode schema) {
         String ref = schema.path("$ref").asString("");
@@ -187,7 +199,7 @@ class OpenApiDocsIntegrationTest {
 
         assertThat(publicApis).hasSize(21);
         assertThat(publicApisWithAuth).isEmpty();
-        assertThat(otherApis).hasSize(17);
+        assertThat(otherApis).hasSize(21);
         assertThat(otherApisWithOverride).isEmpty();
     }
 
@@ -229,6 +241,9 @@ class OpenApiDocsIntegrationTest {
         if (path.startsWith("/api/v1/me/event-partner-profile")) {
             return "EVENT_PARTNER 프로필";
         }
+        if (path.startsWith("/api/v1/me/artist-profile") || path.equals("/api/v1/artists/{artistId}/profile")) {
+            return "아티스트 프로필";
+        }
         if (path.contains("external-accounts")) {
             return "외부 계정";
         }
@@ -254,8 +269,12 @@ class OpenApiDocsIntegrationTest {
         put    | /api/v1/me/external-accounts/{externalAccountId}/works | 200 | ExternalAccountResponse
         delete | /api/v1/me/external-accounts/{externalAccountId} | 204 | ''
         get    | /api/v1/artists/{artistId}/external-accounts | 200 | ExternalAccountListResponse
+        get    | /api/v1/me/artist-profile              | 200 | ArtistProfileResponse
+        put    | /api/v1/me/artist-profile              | 200 | ArtistProfileResponse
+        delete | /api/v1/me/artist-profile              | 204 | ''
+        get    | /api/v1/artists/{artistId}/profile     | 200 | ArtistProfileResponse
         """)
-    @DisplayName("행사·지역·외부 계정 API의 성공 상태와 응답 스키마를 적는다")
+    @DisplayName("행사·지역·외부 계정·아티스트 프로필 API의 성공 상태와 응답 스키마를 적는다")
     void documentsSuccessStatusAndSchema(String method, String path, String status, String schema) throws Exception {
         JsonNode responses = operation(method, path).path("responses");
 
@@ -280,6 +299,10 @@ class OpenApiDocsIntegrationTest {
         put    | /api/v1/me/external-accounts/{externalAccountId}/works
         delete | /api/v1/me/external-accounts/{externalAccountId}
         get    | /api/v1/artists/{artistId}/external-accounts
+        get    | /api/v1/me/artist-profile
+        put    | /api/v1/me/artist-profile
+        delete | /api/v1/me/artist-profile
+        get    | /api/v1/artists/{artistId}/profile
         """)
     @DisplayName("인증이 필요한 API에 401 AUTHENTICATION_REQUIRED를 적는다")
     void documentsUnauthorizedResponse(String method, String path) throws Exception {
@@ -305,8 +328,10 @@ class OpenApiDocsIntegrationTest {
         put    | /api/v1/me/external-accounts/{externalAccountId}/works | 400=INVALID_EXTERNAL_ACCOUNT_ID,VALIDATION_ERROR,EXTERNAL_ACCOUNT_WORK_NOT_CANDIDATE,ProblemDetail;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;404=EXTERNAL_ACCOUNT_NOT_FOUND;409=EXTERNAL_ACCOUNT_WORKS_NOT_SUPPORTED;429=TOO_MANY_REQUESTS;503=EXTERNAL_PROVIDER_UNAVAILABLE,EXTERNAL_PROVIDER_DISABLED,RATE_LIMIT_UNAVAILABLE,EXTERNAL_ACCOUNT_BUSY
         delete | /api/v1/me/external-accounts/{externalAccountId} | 400=INVALID_EXTERNAL_ACCOUNT_ID;403=ACCESS_DENIED,DEMO_WRITE_NOT_ALLOWED;404=EXTERNAL_ACCOUNT_NOT_FOUND;429=TOO_MANY_REQUESTS;503=RATE_LIMIT_UNAVAILABLE,EXTERNAL_ACCOUNT_BUSY
         get    | /api/v1/artists/{artistId}/external-accounts | 400=INVALID_ARTIST_ID;403=ACCESS_DENIED;404=ARTIST_NOT_FOUND
+        put    | /api/v1/me/artist-profile             | 400=VALIDATION_ERROR,ProblemDetail;403=ACCESS_DENIED;503=ARTIST_PROFILE_BUSY
+        delete | /api/v1/me/artist-profile             | 403=ACCESS_DENIED;503=ARTIST_PROFILE_BUSY
         """)
-    @DisplayName("행사·지역·외부 계정 API의 오류 상태와 code를 계약(03 §9, 06 §10)대로 적는다")
+    @DisplayName("행사·지역·외부 계정·아티스트 프로필 쓰기 API의 오류 상태와 code를 계약(03 §9, 06 §10, 09 §4.1)대로 적는다")
     void documentsErrorResponsesFromContract(String method, String path, String errors) throws Exception {
         Map<String, List<String>> expected = new TreeMap<>();
         for (String entry : errors.split(";")) {
@@ -393,6 +418,50 @@ class OpenApiDocsIntegrationTest {
                         "expectedAudience",
                         "description",
                         "visibility");
+    }
+
+    @Test
+    @DisplayName("아티스트 프로필 수정 본문의 필수 필드를 계약(09 §2)대로 적는다")
+    void documentsArtistProfileRequest() throws Exception {
+        Set<String> required = new TreeSet<>();
+        schema("ArtistProfileRequest").path("required").forEach(field -> required.add(field.asString()));
+
+        assertThat(required).containsExactlyInAnyOrder("name", "artistTypes", "genres", "regionCodes");
+    }
+
+    @ParameterizedTest(name = "{0}.{1}")
+    @CsvSource({
+        "ArtistProfileResponse, name, string",
+        "ArtistProfileResponse, bio, string",
+        "ArtistProfileResponse, feeMin, integer",
+        "ArtistProfileResponse, feeMax, integer",
+        "ArtistProfileResponse, updatedAt, string",
+        "ArtistProfileRequest, bio, string",
+        "ArtistProfileRequest, feeMin, integer",
+        "ArtistProfileRequest, feeMax, integer"
+    })
+    @DisplayName("null일 수 있는 아티스트 프로필 필드는 스키마 type에 null을 함께 적는다(09 §2, §3)")
+    void documentsNullableArtistProfileFields(String schemaName, String field, String type) throws Exception {
+        JsonNode property = schema(schemaName).path("properties").path(field);
+
+        assertThat(types(property)).as(property.toString()).containsExactlyInAnyOrder(type, "null");
+    }
+
+    @ParameterizedTest(name = "{0}.{1}")
+    @CsvSource({
+        "ArtistProfileResponse, artistTypes",
+        "ArtistProfileResponse, genres",
+        "ArtistProfileResponse, regionCodes",
+        "ArtistProfileRequest, name",
+        "ArtistProfileRequest, artistTypes",
+        "ArtistProfileRequest, genres",
+        "ArtistProfileRequest, regionCodes"
+    })
+    @DisplayName("null이 될 수 없는 아티스트 프로필 필드의 스키마 type에는 null을 적지 않는다")
+    void doesNotDocumentNullForNonNullableArtistProfileFields(String schemaName, String field) throws Exception {
+        JsonNode property = schema(schemaName).path("properties").path(field);
+
+        assertThat(types(property)).as(property.toString()).doesNotContain("null");
     }
 
     @ParameterizedTest

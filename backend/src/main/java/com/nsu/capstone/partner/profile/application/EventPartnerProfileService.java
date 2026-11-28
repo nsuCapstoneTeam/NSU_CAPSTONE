@@ -1,6 +1,6 @@
 package com.nsu.capstone.partner.profile.application;
 
-import com.nsu.capstone.event.region.RegionRepository;
+import com.nsu.capstone.event.region.RegionNormalizer;
 import com.nsu.capstone.partner.profile.repository.EventPartnerProfileRepository;
 import com.nsu.capstone.partner.profile.repository.StoredProfile;
 import java.time.Clock;
@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 public class EventPartnerProfileService {
 
     private final EventPartnerProfileRepository repository;
-    private final RegionRepository regionRepository;
+    private final RegionNormalizer regionNormalizer;
     private final Clock clock;
 
     /** 저장된 프로필. 없으면(저장 전이거나 삭제함) 비어 있다. */
@@ -24,7 +24,7 @@ public class EventPartnerProfileService {
     }
 
     public StoredProfile save(UUID userId, ProfileContent content) {
-        List<String> regionCodes = new RegionNormalizer(regionRepository.findAll()).normalize(content.regionCodes());
+        List<String> regionCodes = regionNormalizer.normalize(content.regionCodes());
         return repository.upsert(
                 userId,
                 new ProfileContent(
