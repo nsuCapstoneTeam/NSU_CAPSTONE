@@ -54,7 +54,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * Tomcat이 폼 본문을 파라미터로 읽다 낸 예외. errorCode가 413이면 상한 초과다(server.tomcat.max-http-form-post-size). 나머지(잘못된
+     * Tomcat이 쿼리 문자열과 폼 본문을 파라미터로 읽다 낸 예외. errorCode가 413이면 상한 초과다(server.tomcat.max-http-form-post-size). 나머지(잘못된
      * 퍼센트 인코딩, 파라미터 수 초과)는 클라이언트 오류이므로 500과 ERROR가 아니라 Spring 표준 400이다. Tomcat 메시지에는 파라미터 원문이 들어갈
      * 수 있어 detail은 잘못된 JSON의 400과 같은 고정 문구다.
      */

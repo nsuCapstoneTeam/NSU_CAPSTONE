@@ -155,6 +155,20 @@ class RequestBodyLimitTomcatIntegrationTest extends EventIntegrationTestBase {
         assertThat(response.bodyText()).doesNotContain("hunter2").doesNotContain("%zz");
     }
 
+    /** Tomcat은 파라미터를 처음 읽을 때 쿼리 문자열부터 파싱한다. 컨트롤러가 파라미터를 읽는 GET이 그 경로다. */
+    @Test
+    void 잘못된_퍼센트_인코딩_쿼리_문자열은_요청_값을_싣지_않은_400이다() throws IOException {
+        RawSocket.Response response = RawSocket.send(
+                port,
+                RawSocket.request("GET", "/api/v1/me/events?page=%zz-hunter2")
+                        .header("Authorization", bearer(partner)));
+
+        assertThat(response.status()).isEqualTo(400);
+        assertThat(response.header("Content-Type")).startsWith("application/problem+json");
+        assertThat(JSON.readTree(response.body()).path("detail").asString()).isEqualTo("Failed to read request");
+        assertThat(response.bodyText()).doesNotContain("hunter2").doesNotContain("%zz");
+    }
+
     @Test
     void Accept가_text_html이어도_chunked_초과_JSON의_413은_JSON이다() throws IOException {
         RawSocket.Response response = RawSocket.send(
@@ -211,11 +225,11 @@ class RequestBodyLimitTomcatIntegrationTest extends EventIntegrationTestBase {
     }
 
     /**
-     * 위 요청들(ADR 테스트 1~11)을 모두 보낸 뒤 로그를 본다. 완료 줄은 응답을 보낸 뒤 RequestIdFilter의 finally에서 남으므로, 응답을 받자마자 읽지 않고
+     * 위 요청들(ADR 테스트 1~11과 쿼리 문자열 400)을 모두 보낸 뒤 로그를 본다. 완료 줄은 응답을 보낸 뒤 RequestIdFilter의 finally에서 남으므로, 응답을 받자마자 읽지 않고
      * 줄이 모일 때까지 기다린다. 고정 sleep은 쓰지 않는다. 실패 메시지에는 줄의 내용이 아니라 로거 이름만 싣는다.
      */
     @Test
-    void 상한_요청_11가지는_WARN_ERROR_줄과_본문_길이_값을_로그에_남기지_않는다() throws Exception {
+    void 상한_요청_12가지는_WARN_ERROR_줄과_본문_길이_값을_로그에_남기지_않는다() throws Exception {
         User artist = newUser(UserRole.ARTIST, "artist@example.com");
         byte[] unreadBody = new byte[70 * 1024];
         Arrays.fill(unreadBody, (byte) 'x');
@@ -238,6 +252,8 @@ class RequestBodyLimitTomcatIntegrationTest extends EventIntegrationTestBase {
                         .body(
                                 "application/x-www-form-urlencoded",
                                 "secret=%zz-hunter2".getBytes(StandardCharsets.UTF_8))),
+                List.of(RawSocket.request("GET", "/api/v1/me/events?page=%zz-hunter2")
+                        .header("Authorization", bearer(partner))),
                 List.of(RawSocket.request("POST", LOGIN)
                         .header("Accept", "text/html")
                         .body("application/json", loginJsonOfSize(LIMIT + 1))
