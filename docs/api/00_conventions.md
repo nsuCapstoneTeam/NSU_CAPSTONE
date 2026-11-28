@@ -90,7 +90,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 애플리케이션 오류 응답은 [ADR-007](../adr/ADR-007-spring-backend-global-exception-handling.md)의 `{code, message}` 형식이다(2026-10-14 결정). 이 문서는 처음에 RFC 9457 Problem Details를 정했지만, 먼저 구현되어 프론트가 쓰고 있는 ADR-007에 맞췄다.
 
 - 대상: `BusinessException`, 요청 DTO 검증 실패, `401`·`403`, 예상하지 못한 `500`
-- 예외: 잘못된 JSON, 지원하지 않는 HTTP method처럼 Spring MVC가 직접 처리하는 표준 4xx는 프레임워크의 기존 응답(`ProblemDetail`)을 그대로 쓴다(ADR-007 §4.4). 클라이언트는 이 경우 HTTP 상태 코드로 분기한다.
+- 예외: 잘못된 JSON, 잘못된 퍼센트 인코딩의 쿼리·폼 파라미터, 지원하지 않는 HTTP method처럼 Spring MVC가 직접 처리하는 표준 4xx는 프레임워크의 기존 응답(`ProblemDetail`)을 그대로 쓴다(ADR-007 §4.4). 클라이언트는 이 경우 HTTP 상태 코드로 분기한다.
 
 ```json
 {

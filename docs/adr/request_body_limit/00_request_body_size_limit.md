@@ -36,6 +36,7 @@
    - `application/x-www-form-urlencoded` `POST`는 Tomcat이 파라미터로 파싱한다. 이 파싱은 앱의 래퍼를 거치지 않는다. 그래서 `server.tomcat.max-http-form-post-size`를 `64KB`로 둔다(Boot의 KB는 KiB).
    - Tomcat이 이 상한으로 거절하면 `InvalidParameterException`(errorCode `413`)이 난다. `GlobalExceptionHandler`가 이것을 같은 `413 REQUEST_BODY_TOO_LARGE`로 바꾼다.
    - 같은 예외의 나머지 경우(잘못된 퍼센트 인코딩, 파라미터 수 초과. Tomcat errorCode `400`)는 Spring 표준 `400`(`ProblemDetail`)으로 바꾼다. 잘못된 JSON과 같은 모양이고, `detail`은 고정 문구다. 지금은 둘 다 `500`과 ERROR 로그다.
+   - 이 `400`은 폼 본문만이 아니라 쿼리 문자열에도 걸린다. Tomcat은 `getParameter*`를 처음 부를 때 쿼리 문자열부터 파싱하고, 같은 예외를 던진다(Tomcat 11.0.24 `Parameters.handleQueryParameters`). 그래서 `GET ...?page=%zz` 같은 요청도 컨트롤러가 파라미터를 읽으면 `500`이 아니라 `400`이다. 정상 클라이언트는 이런 값을 보내지 않으므로 바뀌는 응답은 잘못된 요청뿐이다. 실제 Tomcat 테스트로 고정한다.
    - `server.tomcat.max-swallow-size`는 기본값(2MiB)을 둔다.
 5. **예외 경로는 지금 없다.** 예외를 거는 장치도 미리 만들지 않는다. 업로드(NSU-89)가 multipart를 켜면서 업로드 두 경로를 이 필터에서 뺀다(Consequences의 NSU-89 인계).
 6. **검사 순서**
