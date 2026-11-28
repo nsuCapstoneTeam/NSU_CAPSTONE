@@ -146,6 +146,24 @@ abstract class ArtistScheduleIntegrationTestBase extends EventIntegrationTestBas
                 .andExpect(header().doesNotExist("Retry-After"));
     }
 
+    /** 앱을 거치지 않은 INSERT(한 시간짜리 AVAILABLE). 삽입 가드 트리거가 users 행을 {@code FOR SHARE}로 잠근다. */
+    String directInsert(String startAt) {
+        return "INSERT INTO artist_schedules (id, user_id, start_at, end_at, status) VALUES (gen_random_uuid(), '"
+                + artist.getId() + "', '" + startAt + "', TIMESTAMPTZ '" + startAt
+                + "' + INTERVAL '1 hour', 'AVAILABLE')";
+    }
+
+    /** 문장을 실행하고 커밋한다. 성공이면 "OK", DB 오류면 그 SQLState를 돌려준다. */
+    static String finish(HeldLock connection, String sql) {
+        try {
+            connection.execute(sql);
+            connection.commit();
+            return "OK";
+        } catch (SQLException exception) {
+            return exception.getSQLState();
+        }
+    }
+
     /** 이 아티스트의 아티스트별 잠금을 잡는 문장. 앱과 삽입 가드 트리거, 운영자 runbook이 같은 키를 쓴다(11 §5.2). */
     String artistLock() {
         return "SELECT pg_advisory_xact_lock(hashtextextended('artist_schedules:' || '" + artist.getId() + "', 0))";
@@ -168,6 +186,13 @@ abstract class ArtistScheduleIntegrationTestBase extends EventIntegrationTestBas
             } catch (SQLException | RuntimeException exception) {
                 connection.close();
                 throw exception;
+            }
+        }
+
+        /** 같은 트랜잭션에서 문장 하나를 더 실행한다. 다른 연결이 쥔 잠금을 기다리면 그동안 돌아오지 않는다. */
+        void execute(String sql) throws SQLException {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute(sql);
             }
         }
 

@@ -110,6 +110,42 @@ class ArtistScheduleLockWaitApiIntegrationTest extends ArtistScheduleIntegration
         deleteSchedule(artist, id.toString()).andExpect(status().isNoContent());
     }
 
+    /** 11 §9 "운영자 UPDATE와 교착". 어느 쪽이 끊겨도 결과가 둘 중 하나여야 한다. */
+    @Test
+    void 운영자_UPDATE와_엮여_교착이_나면_요청이_끊기면_503이고_운영자가_끊기면_요청은_201이다() throws Exception {
+        UUID id = insert(artist, "2026-12-12 18:00:00+09", "2026-12-12 19:00:00+09", "AVAILABLE", null);
+        ResultActions post;
+        String operatorOutcome;
+
+        try (HeldLock operator = new HeldLock("UPDATE artist_schedules SET start_at = '2026-12-12 20:00:00+09',"
+                + " end_at = '2026-12-12 21:00:00+09' WHERE id = '" + id + "'")) {
+            Future<ResultActions> request =
+                    executor.submit(() -> postSchedules(artist, batch(item("2026-12-12", "20:30", "21:30", "HOLD"))));
+            awaitLockWait("INSERT INTO artist_schedules");
+            Future<String> operatorInsert =
+                    executor.submit(() -> finish(operator, directInsert("2026-12-12 22:00:00+09")));
+
+            operatorOutcome = operatorInsert.get(WAIT_SECONDS, TimeUnit.SECONDS);
+            post = request.get(WAIT_SECONDS, TimeUnit.SECONDS);
+        }
+
+        if (post.andReturn().getResponse().getStatus() == 503) {
+            assertBusy(post);
+            assertThat(operatorOutcome).as("요청이 끊겼으니 운영자는 끝까지 간다").isEqualTo("OK");
+            assertThat(jdbcTemplate.queryForObject(
+                            "SELECT count(*) FROM artist_schedules WHERE user_id = ? AND start_at = CAST(? AS timestamptz)",
+                            Long.class,
+                            artist.getId(),
+                            "2026-12-12 20:30:00+09"))
+                    .as("끊긴 요청의 행은 없다")
+                    .isZero();
+        } else {
+            post.andExpect(status().isCreated());
+            assertThat(operatorOutcome).as("운영자가 끊겼으니 요청은 끝까지 간다").isEqualTo("40P01");
+            assertThat(scheduleRows(artist)).as("옛 값으로 돌아온 R과 요청의 행").isEqualTo(2);
+        }
+    }
+
     @Test
     void 운영자가_고친_행이_커밋되지_않은_채_겹치는_추가는_3초만_기다리고_503이다() throws Exception {
         UUID id = insert(artist, "2026-12-12 18:00:00+09", "2026-12-12 19:00:00+09", "AVAILABLE", null);
