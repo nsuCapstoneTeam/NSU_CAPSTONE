@@ -123,11 +123,16 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 | 503 | `RATE_LIMIT_UNAVAILABLE` | 요청 제한 카운터(Redis)를 쓸 수 없어 요청을 막음(fail-closed). `Retry-After`는 붙이지 않는다. 어느 경로가 막는지는 [signup-terms-and-send-limits §1.6](./signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때)에 있다 |
 
 - 멱등 키(`Idempotency-Key` 헤더)는 [03 행사 등록 §5.3.1](./03_events.md#531-멱등-키)에서 처음 정했다(2026-10-18). 값은 따옴표 없는 소문자 하이픈 표기 UUID이고, 키는 호출자마다 따로다. 다른 생성 API가 멱등 키를 받게 되면 같은 헤더·값 형식과 `400 VALIDATION_ERROR`·`422 IDEMPOTENCY_KEY_REUSED` 규칙을 따른다.
+- 로그인한 사용자가 상태를 바꾸는 요청(`POST`·`PUT`·`PATCH`·`DELETE`)은 계정마다 요청 한도를 받는다([ADR user_request_limit/00](../adr/user_request_limit/00_per_account_request_limits.md), 2026-11-28). 요청마다 외부 비용이 드는 조회(외부 계정 작업물 후보)도 받는다. 한도를 넘으면 `429 TOO_MANY_REQUESTS`이고, `Retry-After`는 1건을 다시 보낼 수 있을 때까지 남은 초다.
+  - 세는 시점은 모든 API에서 같다. 토큰 `401`, 시연 서버 `403`, 역할 `403`, JSON 문법 `400`(`ProblemDetail`) 다음이고, 경로·헤더·본문 검증 `400`과 업무 판정(`404`·`403`·`409`·`422`·`503`) 전이다.
+  - 앞의 거절은 세지 않고, 뒤의 거절은 1회로 센다. `429`로 거절된 요청은 세지 않는다.
+  - 한도와 API별 검사 순서는 각 계약 문서에 있다. Redis를 쓸 수 없을 때 한도마다 서버 메모리로 세거나 `503 RATE_LIMIT_UNAVAILABLE`로 막는다([signup-terms-and-send-limits §1.6](./signup-terms-and-send-limits.md#16-redis를-쓸-수-없을-때)).
 
 구현 메모:
 
 - 응답은 `global/exception`의 `ErrorCode`·`ErrorResponse`·`GlobalExceptionHandler`가 만든다(ADR-007). 새 `code`는 `ErrorCode`에 추가한다.
 - 경로 값 형식 오류를 `INVALID_{대상}`으로 내려면, 컨트롤러가 값을 문자열로 받아 직접 검사하고 `BusinessException`을 던진다. 경로 변수를 `UUID` 타입으로 받으면 변환 실패가 Spring MVC 표준 400(`ProblemDetail`)이 된다.
+- 계정별 요청 한도는 컨트롤러 메서드에 `@UserRequestLimit(RequestBudget.X)`를 달아 건다. 익명으로 부를 수 없는 쓰기 매핑에 빠지면 `UserRequestLimitCoverageIntegrationTest`가 실패한다. 역할 검사는 URL 규칙·`@PreAuthorize`·모듈 인터셉터에 둔다. 서비스 코드에서 역할을 검사하면 그 거절도 한도를 쓴다.
 - `401`·`403`은 Spring Security 필터 체인에서 만들어지므로 `JsonAuthenticationEntryPoint`·`JsonAccessDeniedHandler`가 같은 형식을 낸다.
 - 공개 경로(로그인, 토큰 재발급·로그아웃, 가입, OAuth, 외부 계정 연결의 Google 콜백 `GET /api/v1/external-accounts/oauth/callback/youtube`, API 문서)를 뺀 경로에서 토큰 없는 요청은 HTTP 메서드와 관계없이 `401`이다. 서버는 Bearer 토큰으로만 인증하므로 CSRF 보호를 쓰지 않는다([ADR authentication/00](../adr/authentication/00_csrf_protection_for_bearer_api.md)).
 
@@ -161,6 +166,7 @@ API를 새로 만들거나 바꿀 때 아래를 지킨다.
 | 태그 | 컨트롤러마다 한글 `@Tag(name = "...")`를 단다. 같은 기능의 컨트롤러는 같은 이름을 쓴다 |
 | 에러 응답 | md 에러 표의 상태마다 `@ApiResponse`를 단다. 설명에는 그 상태로 오는 `code`를 쉼표로 나열하고, `content`에 `ErrorResponse` 스키마를 반드시 적는다. `content`를 빠뜨리면 springdoc가 메서드 반환 타입(예: `EventResponse`)을 에러 본문으로 적는다 |
 | `401` | 인증이 필요한 컨트롤러에 클래스 단위로 한 번 단다 |
+| `429`와 요청 한도의 `503` | 손으로 달지 않는다. `@UserRequestLimit`을 읽어 문서가 `429`(`Retry-After` 헤더 포함)와, Redis 장애 때 막는 한도의 `503 RATE_LIMIT_UNAVAILABLE`을 만든다([ADR user_request_limit/00](../adr/user_request_limit/00_per_account_request_limits.md) 10번) |
 | `500` | 달지 않는다. 문서 첫 화면 설명에 "모든 API는 `500 INTERNAL_SERVER_ERROR`가 날 수 있다"고 적혀 있다 |
 | Spring 표준 `400` | 잘못된 JSON처럼 `ProblemDetail`로 끝나는 경우(§8)는 `400` 설명에 한 줄로 적는다 |
 | 성공 응답 | 에러 `@ApiResponse`(클래스 단위 `401` 포함)가 걸린 메서드는 성공 상태도 `@ApiResponse`로 적는다. springdoc는 명시한 응답이 있으면 `@ResponseStatus`가 없는 메서드의 `200`을 만들지 않는다. 성공 `@ApiResponse`에는 `content`를 적지 않는다. 그러면 반환 타입에서 스키마를 만든다 |

@@ -191,11 +191,14 @@
 | 가입 세션 생성·OAuth 시작·콜백(§1.4) | 막는다 | 세션 생성은 `503 RATE_LIMIT_UNAVAILABLE`, OAuth는 `error=RATE_LIMIT_UNAVAILABLE`로 리다이렉트 | 세션·인가 요청 자체가 Redis에 있어 어차피 만들 수 없다 |
 | 본인확인 시작·완료(ADR 본인확인 요청 제한) | 막는다. PortOne을 부르지 않는다 | `503 RATE_LIMIT_UNAVAILABLE` | PortOne 재조회 남용을 막는다 |
 | 로그인(§1.5) | 한도 검사 없이 비밀번호를 확인한다(fail-open). `WARN` 로그 | 평소와 같다. 단 Refresh Token은 Redis에 저장하므로 주지 않는다([07 §3](./07_auth_tokens.md#3-토큰을-주는-응답)) | Redis가 멈춘 동안에도 팀이 로그인할 수 있게 한다. 그동안은 비밀번호 추측과 bcrypt 남용을 막지 못한다 |
+| 로그인 사용자의 행사 등록·수정·취소·삭제, EVENT_PARTNER 프로필 수정·삭제(계정별 요청 한도, [ADR user_request_limit/00](../adr/user_request_limit/00_per_account_request_limits.md) 6번). 댓글·아티스트 프로필도 그 API가 들어오면 같다 | 서버 메모리 카운터로 센다. 서버마다 한도를 서버 수(`user-request-limit.server-count`)로 나눈다 | 평소와 같다. 넘으면 `429 TOO_MANY_REQUESTS` | PostgreSQL에만 쓰는 요청이라 Redis가 없어도 처리할 수 있다. 막으면 Redis 장애가 쓰기 장애가 된다 |
+| 외부 계정 연결의 `/me/external-accounts/**`(계정별 요청 한도, [06 §11.2](./06_external_accounts.md#112-요청-제한과-youtube-하루-예산)) | 막는다. 외부 제공자를 부르지 않는다 | `503 RATE_LIMIT_UNAVAILABLE`, `Retry-After` 없음 | 연결 진행 상태도 Redis에 있어 어차피 실패하고, 요청마다 YouTube units가 든다 |
 
 - 가입 인증 발송 전 세션 조회·미발송 예약 복구·새 예약·발송 시작은 하나의 전체 800ms 기한을 공유한다. 한 번의 발급에서 처리할 복구 건수는 제한하며, 남은 복구 대상 때문에 발급을 끝낼 수 없으면 같은 발송 실패 응답을 반환한다. 전용 연결의 연결 200ms·명령 250ms는 로컬·같은 배포망에서 검증할 초기값이며 각 호출은 명령 한도와 전체 기한의 남은 시간 중 짧은 시간까지만 기다린다. Redis 장애 시 발송 API는 1초 안에 `503 VERIFICATION_DELIVERY_FAILED`를 반환하고 제공자 호출은 0건이어야 한다. 기한을 넘긴 응답 경로에서는 `cancel()`이나 쿨다운 조회를 기다리지 않는다. 제공자 미호출을 아는 경로에서는 보상을 시도하되 제출 거절·재시도 실패·프로세스 종료까지 환불을 보장하지 않는다. 늦은 Redis 명령·응답은 제공자 호출을 시작하지 않는다. START 전 예약은 기존 미발송 복구에 맡기고, START 반영 후 결과 미기록이면 불확실한 차감과 결과 미정 제한을 보수적으로 유지한다. 발송 전용 연결은 공유 Redis 연결의 timeout 설정을 따르지 않는다.
 - 다른 카운터 명령의 timeout 기준은 1초다. 이 명령들은 공유 Redis 연결을 쓰며, NSU-101에서 그 연결의 명령 timeout `REDIS_COMMAND_TIMEOUT`과 연결 timeout `REDIS_CONNECT_TIMEOUT`을 기본 1초로 정했다. 명령 timeout이 0 이하·1초 초과이거나 연결 timeout이 1ms 미만이거나 두 값 중 하나가 비어 있으면 기동에 실패한다. Lettuce 기본값(명령 60초, 연결 10초)이면 Redis가 멈춘 동안 요청 스레드를 그만큼 붙잡는다. Redis를 멈춘 상태에서 세션 생성·OAuth 시작·로그인이 설정한 timeout 근처에서 끝나는지는 `SharedRedisTimeoutIntegrationTest`로 검증한다.
 - 가입 인증 확인에도 기존 공통 `RATE_LIMIT_UNAVAILABLE`(`503`)을 사용한다. 격리 Redis 8.10.2의 OOM 재현과 fail-closed 회귀는 `SignupSendRedisFailureIntegrationTest.oomCannotAllowTheCorrectCodeAfterAnUncountedWrongCode`로 검증한다. 실제 배포 Redis 검증과는 구분한다.
-- 02 §2.5·04의 요청 제한은 Redis에 접속할 수 없으면 서버 메모리 카운터로 넘어간다. 이 계약은 그 방식을 쓰지 않는다. 서버 메모리 카운터는 재시작하면 사라지고, 위 경로들은 막아도 사용자가 잠시 뒤 다시 하면 된다.
+- 02 §2.5·04의 요청 제한과 위 표의 로그인 사용자 쓰기는 Redis에 접속할 수 없으면 서버 메모리 카운터로 넘어간다. 로그인 전 요청(가입·로그인·인증 코드)은 그 방식을 쓰지 않는다. 서버 메모리 카운터는 재시작하면 사라지고, 그 경로들은 막아도 사용자가 잠시 뒤 다시 하면 된다.
+- 계정별 요청 한도는 Redis 호출이 한 번 실패하면 10초(`user-request-limit.redis-retry-interval`) 동안 Redis를 부르지 않는다. 그 뒤 요청 1건만 Redis를 다시 시도하고(탐침), 성공하면 Redis로 돌아간다. 그래서 장애가 시작되는 순간 Redis를 기다리던 요청만 최대 1초 늦어진다. 메모리 카운터는 서버마다 최대 10,000항목이고, 가득 차면 새 계정의 요청은 세지 않고 처리한다. 넘어갈 때와 돌아올 때 계정·한도마다 최대 한도만큼 더 들어올 수 있다.
 
 ## 2. breaking change
 
