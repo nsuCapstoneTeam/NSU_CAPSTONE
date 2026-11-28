@@ -19,7 +19,7 @@ ARTIST가 자기 공연 가능 일정을 조회·추가·수정·삭제하는 AP
 5. **추가·수정·삭제**: `POST`는 1~7개를 한 트랜잭션으로 모두 저장하거나 하나도 저장하지 않는다. `PUT`은 한 건 전체 교체다. 없거나 다른 사용자의 일정에 대한 `PUT`은 `404 ARTIST_SCHEDULE_NOT_FOUND`다. `DELETE`는 `204`이고, 없거나 다른 사용자의 일정이어도 `204`다(지우지 않는다). 추가는 멱등 키가 없어 다시 보내도 안전한 요청이 아니다. 응답을 받지 못한 추가는 다시 보내지 않고 조회로 결과를 확인한다(11 §8).
 6. **조회**: `from`·`to`(날짜, 둘 다 포함, 42일 이하)와 겹치는 자기 일정을 시작 순으로 돌려준다. 페이지네이션은 없다.
 7. **쓰기의 계정 상태와 잠금**: `POST`·`PUT`은 `ArtistWriteAccess`(NSU-119)로 `users` 행을 `FOR SHARE`로 잠그며 `ACTIVE` ARTIST인지 확인한다. 확인은 본문 검증보다 먼저다. 본문 검증 뒤 저장 문장 전에 아티스트별 잠금(결정 13)을 잡는다. `DELETE`는 계정 상태를 보지 않고 아티스트별 잠금도 잡지 않는다. 쓰기 트랜잭션은 잠금 하나를 3초까지만 기다린다(`SET LOCAL lock_timeout = '3s'`). 넘기거나 교착으로 끊기면 `503 ARTIST_SCHEDULE_BUSY`다.
-8. **저장**: 새 테이블 `artist_schedules`(Flyway 번호는 머지 직전 main 최대 + 1)다. 한 행이 일정 한 건이다. ID는 서버가 만드는 UUIDv7이다. 시각은 `timestamptz`로 저장한다. DB가 `NOT NULL`, 시간 `CHECK`(시작 < 끝, 24시간 이하, 분 단위), 상태 `CHECK`, 일정 이름 `CHECK`, 배제 제약, 삽입 가드 트리거(결정 11), 하루 상한 트리거(결정 13)를 지킨다. 저장 기술은 `JdbcClient`다.
+8. **저장**: 새 테이블 `artist_schedules`(Flyway 번호는 머지 직전 main 최대 + 1)다. 한 행이 일정 한 건이다. ID는 서버가 만드는 UUIDv7이다. 시각은 `timestamptz`로 저장한다. DB가 `NOT NULL`, 시간 `CHECK`(시작 < 끝, 24시간 이하, 분 단위), 상태 `CHECK`, 일정 이름 `CHECK`, 배제 제약, 삽입 가드·하루 상한 트리거(`BEFORE INSERT`, 결정 11·13), 시작 날짜를 바꾸는 수정의 하루 상한 트리거(결정 13), 소유자 변경 금지 트리거(결정 11)를 지킨다. 저장 기술은 `JdbcClient`다.
 9. **모듈**: `com.nsu.capstone.artist.schedule` 하나의 패키지다(하위 패키지 없음). 다른 모듈에 여는 것은 일괄 조회 `ArtistSchedules.findByArtistIds(Collection<UUID>, LocalDateTime, LocalDateTime)`와 값 타입 `SavedArtistSchedule`·`ArtistScheduleStatus`뿐이다. 일정 이름은 공개 값에 넣지 않는다.
 10. **Eligibility 연결**: `EmptyArtistScheduleReader`를 지우고 `eligibility.infrastructure.SavedArtistScheduleReader`가 일괄 조회를 읽어 `ScheduleSlot`으로 바꾼다. 상태는 빠짐없는 `switch` 식으로 바꾼다. Eligibility ADR의 "NSU-12·34" 전제를 모두 지킨다(아래 "Eligibility 전제").
 11. **탈퇴 시 파기**: 파기 트리거와 공개 삭제 메서드를 두지 않는다. NSU-167 D4대로 탈퇴 절차가 `READ COMMITTED` 트랜잭션에서 `users.status`를 `WITHDRAWN`으로 바꾼 다음 `DELETE FROM artist_schedules WHERE user_id = :id`를 실행한다. 운영자 runbook도 같은 순서다. 새 행은 삽입 가드 트리거(`BEFORE INSERT`)가 같은 트랜잭션에서 `users` 행을 `FOR SHARE`로 잠그고 `ACTIVE` ARTIST일 때만 받는다. 그래서 어느 작성 경로(API, 운영자 SQL, 뒤의 섭외 성사)로 넣어도 탈퇴 뒤에 일정이 남지 않는다.
@@ -69,7 +69,7 @@ Eligibility ADR Consequences의 "NSU-12·34" 전제와 이 ADR이 지키는 방�
 | 정확성 | 주간 폼의 "모두 저장하거나 하나도 저장하지 않음"을 서버가 지킨다. 다른 화면에서 고친 일정은 건드리지 않는다 | 여러 요일 추가가 중간에 실패하면 일부만 저장된다. 화면이 되돌려야 한다 | 두 화면이 같은 주를 고치면 나중 저장이 앞 저장을 지운다. 뒤에 생길 `BOOKED`(섭외 성사)도 화면이 모르면 지운다 |
 | 보안 | 차이 없음(같은 계정 확인) | 차이 없음 | 차이 없음 |
 | 성능(응답 시간, 외부 호출 대기, 스레드·연결 점유, 재시도 비용) | 주간 추가가 요청 1번, 트랜잭션 1번이다. 외부 호출은 없다. 응답을 받지 못한 추가는 다시 보내지 않고 조회한다(아래 "멱등 키를 두지 않는 이유") | 요일 수만큼 요청과 트랜잭션이 든다. 일부 실패 뒤 되돌리는 요청이 더 든다 | 요청은 1번이지만 기간의 모든 행을 지우고 다시 쓴다. 잡는 행 잠금이 기간의 일정 수만큼이다 |
-| 메모리 | 검증을 통과한 요청은 7건 이하다. 본문을 객체로 읽는 동안의 메모리는 이 상한과 관계없고 전역 본문 크기 상한이 맡는다(Consequences) | 1건 | 기간 일정 전체(42일이면 2,000건 넘게 가능) |
+| 메모리 | 검증을 통과한 요청은 7건 이하다. 본문을 객체로 읽는 동안의 메모리는 이 상한과 관계없고 전역 본문 크기 상한이 맡는다(Consequences) | 1건 | 기간 일정 전체(42일이면 4,000건 넘게 가능) |
 | 확장성 | 섭외 성사가 `BOOKED` 행을 더해도 화면의 쓰기가 그 행을 건드리지 않는다 | 채택과 같다 | `BOOKED`를 지키는 규칙을 따로 만들어야 한다 |
 | 운영 부담 | 차이 없음 | 일부만 저장된 일정 문의 | 사라진 일정 문의 |
 | 사용자 경험 | 화면의 지금 동작(주간 추가는 모두 또는 전무, 한 건 수정·삭제)과 같다 | 겹침 하나로 일부 요일만 저장될 수 있다 | 다른 탭의 변경이 사라질 수 있다 |
@@ -112,7 +112,7 @@ Eligibility ADR Consequences의 "NSU-12·34" 전제와 이 ADR이 지키는 방�
 - 날짜는 `2000-01-01`부터 `2099-12-31`까지다. 조회 파라미터(`from`·`to`)도 같다.
   - `Asia/Seoul`은 1988년 뒤로 일광 절약 시간과 오프셋 변경이 없다. 그래서 받는 값에는 없는 시각이나 두 번 있는 시각이 없고, 벽시계 차이와 시점 차이가 같다.
   - 연도 `0000`(기원전 1년)이나 다섯 자리 연도(`9999-12-31`의 다음 날) 같은 값이 드라이버 변환을 거치지 않는다.
-  - 이 범위 밖의 일정은 쓸 곳이 없다.
+  - 이 범위 밖의 일정은 쓸 곳이 없다. 행사 날짜가 이 범위 밖이면 그 행사는 일정으로 덮이지 않아 모든 아티스트가 `SCHEDULE_NOT_COVERED`로 빠진다(안전한 쪽의 실패).
 - 과거 일정은 막지 않는다. 화면도 막지 않고, 판정은 미래 행사만 본다. 지난 일정의 보유 기간은 처리방침(NSU-165)이 정한다.
 
 ### `BOOKED`를 요청으로 받지 않는 이유
@@ -153,7 +153,7 @@ Eligibility ADR Consequences의 "NSU-12·34" 전제와 이 ADR이 지키는 방�
   - `REPEATABLE READ`·`SERIALIZABLE`에서는 세기 문장이 트랜잭션 스냅숏을 써서, 잠금을 기다리는 동안 커밋된 행을 놓친다(`SERIALIZABLE`도 상대가 `READ COMMITTED`인 API면 충돌을 잡지 못한다). 그래서 상한 함수는 이 두 격리 수준의 쓰기를 먼저 거절한다(SQLState `25000`). 앱과 탈퇴 절차는 `READ COMMITTED`(기본값)라 걸리지 않는다. 운영자 SQL도 기본값이면 걸리지 않고, 격리 수준을 올린 트랜잭션은 `INSERT`와 시작 날짜를 바꾸는 `UPDATE`만 거절된다. 상한이 작성자의 격리 수준 설정에 기대지 않게 하려는 것이다.
   - 행 단위 `BEFORE` 트리거는 같은 문장이 앞서 넣은 행을 본다(PostgreSQL "Visibility of Data Changes"). 그래서 한 번에 7행을 넣어도 앞 행까지 센다.
   - 시작 날짜를 바꾸지 않는 `UPDATE`는 그날의 개수를 바꾸지 않으므로 잠금도 세기도 하지 않는다. 운영자의 상태 수정이 탈퇴(`users` → 일정 `DELETE`)나 다른 쓰기와 엮일 일을 줄인다.
-- 삽입 가드(결정 11)와 한 함수로 합친다. `INSERT`에서는 `users` `FOR SHARE` → advisory 잠금 → 세기 순서다. API도 `ArtistWriteAccess`(`users`) → advisory 잠금 → 저장 문장 순서라, 모든 `INSERT` 경로의 잠금 순서가 `users` → advisory → `artist_schedules`로 같다. 트리거 두 개로 나누면 실행 순서가 트리거 이름의 알파벳 순서에 기대게 된다.
+- 삽입 가드(결정 11)와 한 트리거 함수로 묶는다. 그 함수가 가드 뒤에 상한 함수를 부른다. `INSERT`에서는 `users` `FOR SHARE` → advisory 잠금 → 세기 순서다. API도 `ArtistWriteAccess`(`users`) → advisory 잠금 → 저장 문장 순서라, 모든 `INSERT` 경로의 잠금 순서가 `users` → advisory → `artist_schedules`로 같다. 트리거 두 개로 나누면 실행 순서가 트리거 이름의 알파벳 순서에 기대게 된다.
 - API가 저장 문장 전에 잠금을 먼저 잡는 이유: `PUT`은 대상 일정 행을 잠근 뒤에 트리거가 돈다. 앱이 먼저 잡지 않으면 `PUT`은 일정 행 → advisory, `POST`는 advisory → (겹치는 미커밋 행) 순서가 되어 둘이 교착할 수 있다. 앱이 먼저 잡으면 트리거의 같은 잠금은 이미 쥔 잠금이라 기다리지 않는다.
 - 잠금은 본문 검증 뒤에 잡는다. 검증에 걸리는 요청은 줄을 서지 않는다. 검사 순서(`403` → `400` → `409`)는 바뀌지 않는다.
 - 상한을 넘으면 `409 ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED`다. 지금 저장된 일정 때문에 거절하는 것이라 `409`다(요청 제한의 `429`가 아니다). 한 행이 상한과 겹침에 함께 걸리면 트리거가 먼저 돌므로 상한 쪽이다.
@@ -215,7 +215,7 @@ D4가 방식을 정했다. 트리거는 프로필(V12)에만 두고, 나머지 �
 
 - 모양은 NSU-119와 같다(그 ADR "모듈 모양과 공개 표면" 비교표). 다른 모듈은 일괄 조회 하나만 부른다. 쓰기와 본인 조회는 package-private이라 접근 검사를 건너뛴 쓰기가 다른 모듈에서 컴파일되지 않는다.
 - 상태 enum은 일정 모듈이 갖는다(`ArtistScheduleStatus`). Eligibility의 `ScheduleStatus`를 재사용하면 일정 모듈이 추천 모듈에 기대어 의존이 양방향이 된다. 어댑터는 default 없는 `switch` 식으로 바꾼다. 그래서 일정 쪽에 상태를 더하면 어댑터의 컴파일이 깨진다.
-- 일정 이름은 공개 값(`SavedArtistSchedule`)에 넣지 않는다. 판정에 쓰지 않고 본인만 보는 값이다(`SEC-120`).
+- 일정 이름은 공개 값(`SavedArtistSchedule`)에 넣지 않는다. 판정에 쓰지 않고 본인만 보는 값이라, 필요한 곳에만 개인정보를 두는 `SEC-120`(개인정보 최소화)에 따라 다른 모듈에 넘기지 않는다.
 - 시간대는 `Event.ZONE`을 쓴다. 전역 시간대 상수는 없고, 모듈마다 private 상수를 둔 곳도 있다(`EventPartnerProfileResponse`, `ExternalAccountResponse`). 일정은 행사 시간대와 같은 벽시계여야 판정이 맞으므로, 두 값이 갈라지지 않게 같은 상수를 쓴다. Eligibility ADR도 `Event.ZONE`을 적었다.
 
 ### 멱등 키를 두지 않는 이유
@@ -454,7 +454,7 @@ CREATE TRIGGER trg_artist_schedules_fixed_owner
 
 - `REFERENCES users`는 `users`에 잠금을 건다. `lock_timeout` 3초로, `users`가 바쁘면 기다리지 않고 실패한다(NSU-119 V12와 같다). 실패하면 배포를 다시 한다.
 - 일정 이름 `CHECK`는 공백만인 값을 막는 마지막 방어선이다. 앱은 더 넓은 규칙(05 §2)으로 그런 값을 `null`로 바꾼다.
-- 트리거 예외의 SQLState는 둘 다 `23514`(`check_violation`)다. 앱은 제약 이름으로 나눈다. `ck_artist_schedules_daily_limit`이면 `409 ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED`다. 이름이 없는 삽입 가드 예외는 API에서 나오지 않고(앞의 `ArtistWriteAccess`가 막는다), 나오면 `500`이다. 격리 수준 거절(`25000`)도 API에서 나오지 않고(앱은 `READ COMMITTED`), 나오면 `500`이다. 메시지에는 사용자 ID만 넣고 일정 값은 넣지 않는다.
+- 삽입 가드·소유자 변경 금지·하루 상한 트리거 예외의 SQLState는 모두 `23514`(`check_violation`)다. 앱은 제약 이름으로 나눈다. `ck_artist_schedules_daily_limit`이면 `409 ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED`다. 이름이 없는 삽입 가드 예외는 API에서 나오지 않고(앞의 `ArtistWriteAccess`가 막는다), 나오면 `500`이다. 격리 수준 거절(`25000`)도 API에서 나오지 않고(앱은 `READ COMMITTED`), 나오면 `500`이다. 메시지에는 사용자 ID만 넣고 일정 값은 넣지 않는다.
 - 세기 문장은 `ix_artist_schedules_user_start`(`user_id`, `start_at`)의 범위 조회다. 하루 96행 이하라 비용은 넣는 행마다 작은 인덱스 범위 하나다.
 - 트리거 함수는 `SECURITY DEFINER`가 아니다. 쓰는 계정의 권한으로 `users`와 일정 표를 읽는다.
 - 롤백 계획(NSU-119 F6와 같은 방식):
