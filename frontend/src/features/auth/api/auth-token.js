@@ -7,9 +7,7 @@
 
 export const TOKEN_KEY = 'hm-auth-token-v1';
 
-// 백엔드 역할 → 화면 역할 (화면은 예전부터 'organizer'라는 이름을 씀)
-const ROLE_TO_APP = { ARTIST: 'artist', EVENT_PARTNER: 'organizer' };
-export const toAppRole = (role) => ROLE_TO_APP[role] ?? null;
+// 역할 이름 맞추기는 auth-session.js의 normalizeRole을 씁니다.
 
 // 저장된 값이 올바른 모양인지
 const isSaved = (v) =>

@@ -10,6 +10,8 @@ import './app.css';
 import SignupRoleSelect from './features/auth/components/signup-role-select.jsx';
 import OrganizerLogin from './features/auth/components/organizer-login.jsx';
 import ArtistLogin from './features/auth/components/artist-login.jsx';
+import useAuthSession from './features/auth/use-auth-session.js';
+import { authSession, pageAfterLogin } from './features/auth/auth-session.js';
 
 import Icon from './components/common/icon.jsx';
 import Home from './features/home/home-page.jsx';
@@ -31,11 +33,6 @@ const profileValue = (value) =>
   value &&
   typeof value.name === 'string' &&
   ['artist', 'organizer'].includes(value.role);
-const sessionValue = (value) =>
-  value === null ||
-  (value &&
-    typeof value.name === 'string' &&
-    ['artist', 'organizer'].includes(value.role));
 
 // 로그인·가입 진행 중인 화면. 이 화면들 사이를 오가는 동안에는
 // 로그인 후 돌아갈 화면(returnTo)을 기억합니다.
@@ -48,8 +45,6 @@ const LOGIN_FLOW_PAGES = [
   'organizer-signup',
   'signup-complete',
 ];
-// 가입을 새로 시작하는 화면 (들어가면 기존 로그인 세션을 종료)
-const SIGNUP_START_PAGES = ['signup-role', 'artist-signup', 'organizer-signup'];
 
 // 앱 전체: 현재 화면(page) 전환, 공유 상태(테마·프로필·로그인·게시글·일정·관심 목록), 공통 헤더·푸터
 export default function App() {
@@ -67,11 +62,8 @@ export default function App() {
     INITIAL_PROFILE,
     profileValue,
   );
-  const [session, setSession, sessionError] = useStoredState(
-    'hm-mvp-session-v1',
-    null,
-    sessionValue,
-  );
+  // 로그인 세션 (NSU-94): 토큰 보관·만료·역할 이름은 auth-session.js가 맡음
+  const { session, login, logout: endSession, startDemo, storageError: sessionError } = useAuthSession();
   const [posts, setPosts, postsError] = useStoredState(
     'hm-mvp-posts-v1',
     INITIAL_POSTS,
@@ -131,10 +123,8 @@ export default function App() {
   }
   // 화면 전환: 화면을 바꾸고 주소도 함께 바꿈 (브라우저 방문 기록에 한 칸 추가)
   // replace: 지금 기록을 바꿔 끼움 (로그인을 마친 뒤 뒤로 가기로 로그인 폼에 돌아가지 않게)
+  // 화면만 바꾸고 로그인 상태는 건드리지 않음 (가입을 마치면 그때 새 계정으로 바뀜: startAfterSignUp)
   function navigate(next, { replace = false } = {}) {
-    // 가입을 새로 시작하면 기존 로그인은 끝냄.
-    // (로그인한 행사 관계자가 아티스트로 가입해도 예전 역할로 매칭 화면이 열리지 않도록)
-    if (SIGNUP_START_PAGES.includes(next) && session) setSession(null);
     showPage(next);
     const path = pathOf(next);
     // 같은 화면을 다시 누르면 기록을 늘리지 않음
@@ -173,25 +163,47 @@ export default function App() {
         : '관심 아티스트에 저장했습니다. 마이페이지에서 확인하세요.',
     );
   }
-  // 로그인 완료: 세션 저장 → 프로필에 이름·역할 반영 → 돌아갈 화면(없으면 마이페이지)으로 이동
-  function completeLogin(nextSession) {
-    setSession(nextSession);
+  // 로그인을 마친 뒤: 프로필에 이름·역할 반영 → 돌아갈 화면(없으면 마이페이지)으로 이동
+  // roleChanged: 로그인한 화면과 계정 역할이 달라 계정 역할로 들어감 (NSU-94 결정 2026-10-08)
+  function finishLogin(nextSession, { roleChanged = false } = {}) {
     setProfile((current) => ({
       ...current,
       name: nextSession.name || current.name,
       role: nextSession.role,
     }));
-    // 매칭 화면은 행사 관계자만 볼 수 있으므로 아티스트는 마이페이지로
-    const target =
-      returnTo === 'match' && nextSession.role !== 'organizer'
-        ? 'mypage'
-        : returnTo || 'mypage';
-    navigate(target, { replace: true });
-    setNotice(`${nextSession.name}님, 환영합니다.`);
+    navigate(pageAfterLogin(returnTo, nextSession.role), { replace: true });
+    const roleName = nextSession.role === 'organizer' ? '행사 관계자' : '아티스트';
+    setNotice(
+      roleChanged
+        ? `${nextSession.name}님, ${roleName} 계정이라 ${roleName}로 로그인했어요.`
+        : `${nextSession.name}님, 환영합니다.`,
+    );
   }
-  // 로그아웃: 세션만 지우고 홈으로 (프로필은 유지)
+  // 이메일 로그인 (로그인 화면의 폼). 실패하면 오류를 던져 폼이 문구를 보여 줌
+  async function loginWithEmail(email, password, roleHint) {
+    const result = await login(email, password, { roleHint, profile });
+    finishLogin(result.session, { roleChanged: result.roleChanged });
+  }
+  // 개발용 빠른 로그인 (체험 모드에서만)
+  function quickLogin(next) {
+    if (startDemo(next)) finishLogin(next);
+  }
+  // 가입 완료 → '프로필 채우러 가기': 예전 로그인은 끝내고 새 계정으로 시작
+  // 체험 모드는 바로 시작, 서버 모드는 가입한 이메일로 로그인해야 토큰을 받으므로 로그인 화면으로
+  function startAfterSignUp() {
+    const next = { role: profile.role, name: profile.name };
+    if (startDemo(next)) {
+      finishLogin(next);
+      return;
+    }
+    endSession();
+    navigate(next.role === 'organizer' ? 'organizer-login' : 'artist-login');
+    setReturnTo('mypage');
+    setNotice('가입한 이메일과 비밀번호로 로그인해 주세요.');
+  }
+  // 로그아웃: 토큰과 세션을 지우고 홈으로 (프로필은 유지)
   function logout() {
-    setSession(null);
+    endSession();
     navigate('home');
     setNotice('로그아웃했습니다.');
   }
@@ -381,7 +393,8 @@ export default function App() {
               navigate(role === 'organizer' ? 'organizer-login' : 'artist-login')
             }
             onSignUp={() => navigate('signup-role')}
-            onLogin={completeLogin}
+            onLogin={loginWithEmail}
+            onQuickLogin={authSession.canStartWithoutLogin ? quickLogin : undefined}
           />
         )}{' '}
         {page === 'organizer-login' && (
@@ -391,7 +404,8 @@ export default function App() {
               navigate(role === 'organizer' ? 'organizer-login' : 'artist-login')
             }
             onSignUp={() => navigate('signup-role')}
-            onLogin={completeLogin}
+            onLogin={loginWithEmail}
+            onQuickLogin={authSession.canStartWithoutLogin ? quickLogin : undefined}
           />
         )}{' '}
         {/* 역할별 회원가입 → 가입 완료 */}
@@ -414,9 +428,7 @@ export default function App() {
         {page === 'signup-complete' && (
           <SignUpComplete
             profile={profile}
-            onStart={() =>
-              completeLogin({ role: profile.role, name: profile.name })
-            }
+            onStart={startAfterSignUp}
             navigate={navigate}
           />
         )}{' '}

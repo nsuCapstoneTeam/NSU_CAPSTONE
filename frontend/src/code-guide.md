@@ -11,6 +11,7 @@
 | 홈 CLAP 설명·경량 시각 요소·비교 그래픽 | `src/features/home/components/` |
 | 로그인 화면(아티스트·행사 관계자) | `src/features/auth/components/artist-login.jsx`, `organizer-login.jsx` |
 | 이메일·비밀번호 로그인 폼 (두 역할 공통: 빈 칸·형식 확인, 오류 표시, 로딩) | `src/features/auth/components/email-login-form.jsx` |
+| 로그인 세션 (로그인·로그아웃, 토큰 보관·만료, 역할 이름 맞추기, 로그인 뒤 갈 화면) | `src/features/auth/auth-session.js`, `use-auth-session.js` |
 | 로그인 CD 화면 틀(CD·네온 링·라벨)과 역할 전환 버튼 | `src/features/auth/components/cd-login-stage.jsx`, `cd-login.css`, `role-switch.jsx`, `cd-login-motion.js` |
 | 로그인 애니메이션(등장·흔들림·로딩·버튼 반응) | `src/features/auth/components/login-motion.css` |
 | 회원가입 역할 선택 | `src/features/auth/components/signup-role-select.jsx` |
