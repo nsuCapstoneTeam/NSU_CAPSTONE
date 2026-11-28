@@ -522,7 +522,7 @@ DB가 관여하는 경우(배제 제약, `CHECK`, 동시 요청, 잠금, 조회 
 | 하루 상한 경쟁 | 95개인 날에 서로 겹치지 않는 한 건짜리 추가 두 개를 배리어로 같은 순간에 출발시키고 20번 되풀이한다. 매번 그날 행은 96개이고, 하나는 `201`, 다른 하나는 `409 ARTIST_SCHEDULE_DAILY_LIMIT_EXCEEDED`다 |
 | 하루 상한 DB | 직접 INSERT로 97번째 행을 넣으면 SQLState `23514`, 제약 이름 `ck_artist_schedules_daily_limit`으로 거절한다. 한 문장으로 여러 행을 넣어도 앞 행까지 센다(95개인 날에 2행 INSERT는 거절). 운영자처럼 직접 UPDATE로 시작 날짜를 96개인 날로 옮기면 거절, 같은 날 안의 시간 변경과 상태 변경은 통과. `REPEATABLE READ`·`SERIALIZABLE` 트랜잭션의 직접 INSERT와 시작 날짜 변경 UPDATE는 개수와 관계없이 SQLState `25000`으로 거절, 같은 날 안의 수정은 통과 |
 | 임시 표로 속이기 | 운영자 연결이 같은 이름의 임시 표 `users`(대상 사용자를 `ACTIVE` ARTIST로 넣음)와 `artist_schedules`(비어 있음)를 만든 뒤, 실제로는 `WITHDRAWN`인 사용자의 일정을 INSERT하면 삽입 가드가 거절한다. 실제로 96개인 날에 INSERT하면 `ck_artist_schedules_daily_limit`으로 거절한다 |
-| 일정 표 복원 | `ACTIVE`·`SUSPENDED`·`WITHDRAWN` 아티스트와 없는 사용자의 행이 섞인 덤프를 ADR "마이그레이션 스케치"의 복원 절차로 되돌린다. `ACTIVE`·`SUSPENDED`의 행만 들어가고, 커밋 뒤 `trg_artist_schedules_before_insert`가 켜져 있다. 복원으로 어느 날이 96개를 넘으면 전체가 롤백된다 |
+| 일정 표 복원 | `ACTIVE`·`SUSPENDED`·`WITHDRAWN` 아티스트와 없는 사용자의 행이 섞인 덤프를 ADR "마이그레이션 스케치"의 복원 절차로 되돌린다. `ACTIVE`·`SUSPENDED`의 행만 들어가고, 커밋 뒤 `trg_artist_schedules_before_insert`가 켜져 있다. 복원으로 어느 날이 96개를 넘으면 전체가 롤백된다. 복원 트랜잭션이 아티스트별 잠금을 잡지 않는다(`pg_locks`에 `advisory` 행이 없다) |
 | 아티스트별 잠금 키 | 앱이 잡는 잠금과 트리거가 잡는 잠금이 같은 키다. 요청이 잠금을 쥔 채 멈춘 동안(테스트용 지연), 다른 연결의 직접 INSERT가 `pg_locks`의 같은 advisory 키에서 기다린다 |
 | 마이그레이션 | 다른 연결이 `users` 행을 UPDATE한 채 커밋하지 않으면 마이그레이션은 `lock timeout`으로 실패한다(FK가 `users`에 락을 건다). 테스트는 파일을 버전 번호가 아니라 설명(`create_artist_schedules`)으로 찾는다. 머지 직전에 번호를 바꿔도 테스트를 고치지 않게 하기 위해서다 |
 
