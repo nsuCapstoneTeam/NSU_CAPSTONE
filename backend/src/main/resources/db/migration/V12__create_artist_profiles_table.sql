@@ -136,3 +136,31 @@ CREATE TRIGGER trg_users_withdrawal_delete_artist_profile
     FOR EACH ROW
     WHEN (NEW.status = 'WITHDRAWN')
     EXECUTE FUNCTION delete_artist_profile_on_withdrawal();
+
+-- 활성 아티스트가 아닌 사용자에게는 SQL로 직접 넣어도 프로필 행이 생기지 않게 한다(09 §5 삽입 가드, ADR 결정 13).
+-- API는 ArtistWriteAccess가 같은 행을 먼저 잠그므로 이 트리거에 걸리지 않는다. 이 트리거는 그 밖의 쓰기 경로를 막는다.
+-- users는 트리거가 걸린 artist_profiles와 같은 스키마에서 찾고, 함수의 search_path를 고정해 같은 이름의 임시 표에 기대지 않는다.
+-- 조건과 잠금(FOR SHARE)은 ArtistWriteAccess와 같다. 탈퇴 UPDATE와 겹치면 잠금을 기다린 뒤 바뀐 상태를 다시 읽어 거절한다.
+CREATE FUNCTION require_active_artist_for_profile() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+    active_artist BOOLEAN;
+BEGIN
+    EXECUTE format('SELECT true FROM %I.users WHERE id = $1 AND role = ''ARTIST'' AND status = ''ACTIVE'' FOR SHARE',
+                   TG_TABLE_SCHEMA)
+        INTO active_artist USING NEW.user_id;
+    IF active_artist IS NULL THEN
+        RAISE EXCEPTION '활성 아티스트가 아닌 사용자의 프로필은 저장할 수 없다: %', NEW.user_id
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+-- 새 행과 user_id 변경만 본다. 기존 행의 다른 열을 고치는 UPDATE(지역 개편 포함)는 걸리지 않는다.
+CREATE TRIGGER trg_artist_profiles_require_active_artist
+    BEFORE INSERT OR UPDATE OF user_id ON artist_profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION require_active_artist_for_profile();
