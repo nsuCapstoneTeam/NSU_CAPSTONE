@@ -176,12 +176,11 @@ export default function App() {
       role: nextSession.role,
     }));
     navigate(pageAfterLogin(returnTo, nextSession.role), { replace: true });
-    const roleName = nextSession.role === 'organizer' ? '행사 관계자' : '아티스트';
-    setNotice(
-      roleChanged
-        ? `${nextSession.name}님, ${roleName} 계정이라 ${roleName}로 로그인했어요.`
-        : `${nextSession.name}님, 환영합니다.`,
-    );
+    // 환영 알림은 띄우지 않음. 로그인한 화면과 계정 역할이 다를 때만 어느 역할로 들어갔는지 알림
+    if (roleChanged) {
+      const roleName = nextSession.role === 'organizer' ? '행사 관계자' : '아티스트';
+      setNotice(`${roleName} 계정이라 ${roleName}로 로그인했어요.`);
+    }
   }
   // 이메일 로그인 (로그인 화면의 폼). 실패하면 오류를 던져 폼이 문구를 보여 줌
   async function loginWithEmail(email, password, roleHint) {
