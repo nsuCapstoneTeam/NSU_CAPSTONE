@@ -1,10 +1,17 @@
 package com.nsu.capstone.artist.schedule;
 
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 import com.nsu.capstone.event.EventIntegrationTestBase;
 import com.nsu.capstone.identity.domain.User;
 import com.nsu.capstone.identity.domain.UserRole;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +53,54 @@ abstract class ArtistScheduleIntegrationTestBase extends EventIntegrationTestBas
                        CAST(? AS timestamptz) + n * INTERVAL '10 minutes' + INTERVAL '1 minute',
                        'AVAILABLE'
                 FROM generate_series(0, ? - 1) AS n""", owner.getId(), firstStart, firstStart, count);
+    }
+
+    /** 11 §2.2의 일정 한 건. 날짜와 시각은 {@code Asia/Seoul} 벽시계다. */
+    static Map<String, Object> item(
+            String startDate, String startTime, String endDate, String endTime, String status, String title) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("startDate", startDate);
+        item.put("startTime", startTime);
+        item.put("endDate", endDate);
+        item.put("endTime", endTime);
+        item.put("status", status);
+        item.put("title", title);
+        return item;
+    }
+
+    /** 같은 날 {@code 시:분 ~ 시:분}인 일정 */
+    static Map<String, Object> item(String date, String startTime, String endTime, String status) {
+        return item(date, startTime, date, endTime, status, null);
+    }
+
+    static Map<String, Object> batch(Object... items) {
+        return Map.of("items", List.of(items));
+    }
+
+    ResultActions postSchedules(User caller, Object body) throws Exception {
+        return postRaw(caller, objectMapper.writeValueAsString(body));
+    }
+
+    ResultActions postRaw(User caller, String json) throws Exception {
+        return mockMvc.perform(post(PATH)
+                .header("Authorization", bearer(caller))
+                .contentType(APPLICATION_JSON)
+                .content(json));
+    }
+
+    ResultActions putSchedule(User caller, String artistScheduleId, Object body) throws Exception {
+        return putRaw(caller, artistScheduleId, objectMapper.writeValueAsString(body));
+    }
+
+    ResultActions putRaw(User caller, String artistScheduleId, String json) throws Exception {
+        return mockMvc.perform(put(PATH + "/" + artistScheduleId)
+                .header("Authorization", bearer(caller))
+                .contentType(APPLICATION_JSON)
+                .content(json));
+    }
+
+    ResultActions deleteSchedule(User caller, String artistScheduleId) throws Exception {
+        return mockMvc.perform(delete(PATH + "/" + artistScheduleId).header("Authorization", bearer(caller)));
     }
 
     /** {@code null}인 파라미터는 아예 보내지 않는다. */

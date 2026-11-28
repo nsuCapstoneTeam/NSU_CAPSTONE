@@ -12,6 +12,8 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * {@code artist_schedules} 표의 읽기·쓰기. 시각은 {@code timestamptz}로 저장하고, 안과 밖의 벽시계는 {@code Event.ZONE}(Asia/Seoul)으로 바꾼다. 서버 기본 시간대에 기대지 않는다.
@@ -24,6 +26,53 @@ class ArtistScheduleTable {
     private static final long MAX_LENGTH_HOURS = 24;
 
     private final JdbcClient jdbc;
+
+    /**
+     * 이 트랜잭션이 잠금을 기다리는 시간을 3초로 제한한다. 쥔 쪽이 풀리지 않아도 요청이 DB 연결과 스레드를 무한정 쥐지 않게 한다.
+     * SET LOCAL이라 이 트랜잭션에만 적용된다. 트랜잭션 밖에서 부르면 아무것도 제한하지 못해 MANDATORY가 거절한다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    void limitLockWait() {
+        jdbc.sql("SET LOCAL lock_timeout = '3s'").update();
+    }
+
+    /** 일정 한 행을 넣는다. 겹침과 하루 상한은 DB가 거절한다(11 §5.1). */
+    MyArtistSchedule insert(UUID id, UUID userId, ArtistScheduleDraft draft) {
+        jdbc.sql("""
+                        INSERT INTO artist_schedules (id, user_id, start_at, end_at, status, title)
+                        VALUES (:id, :userId, :startAt, :endAt, :status, :title)""")
+                .param("id", id)
+                .param("userId", userId)
+                .param("startAt", draft.start().atZone(Event.ZONE).toOffsetDateTime())
+                .param("endAt", draft.end().atZone(Event.ZONE).toOffsetDateTime())
+                .param("status", draft.status().name())
+                .param("title", draft.title())
+                .update();
+        return new MyArtistSchedule(id, draft.start(), draft.end(), draft.status(), draft.title());
+    }
+
+    /** 내 일정 한 건을 지운다. 없거나 남의 일정이면 아무것도 지우지 않는다. */
+    void delete(UUID id, UUID userId) {
+        jdbc.sql("DELETE FROM artist_schedules WHERE id = :id AND user_id = :userId")
+                .param("id", id)
+                .param("userId", userId)
+                .update();
+    }
+
+    /** 내 일정 한 건을 통째로 바꾼다. 바뀐 행 수를 돌려준다(없거나 남의 일정이면 0). */
+    int update(UUID id, UUID userId, ArtistScheduleDraft draft) {
+        return jdbc.sql("""
+                        UPDATE artist_schedules
+                        SET start_at = :startAt, end_at = :endAt, status = :status, title = :title
+                        WHERE id = :id AND user_id = :userId""")
+                .param("id", id)
+                .param("userId", userId)
+                .param("startAt", draft.start().atZone(Event.ZONE).toOffsetDateTime())
+                .param("endAt", draft.end().atZone(Event.ZONE).toOffsetDateTime())
+                .param("status", draft.status().name())
+                .param("title", draft.title())
+                .update();
+    }
 
     /**
      * 한 아티스트의 일정 중 {@code [from, toExclusive)}와 겹치는 것을 시작 순으로 읽는다. 구간에 맞닿기만 한 일정은 빠진다(11 §2.1).

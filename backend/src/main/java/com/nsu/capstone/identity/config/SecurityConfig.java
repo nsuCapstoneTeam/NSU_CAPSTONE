@@ -62,6 +62,11 @@ public class SecurityConfig {
     private static final RequestMatcher ARTIST_PROFILE_ENDPOINT =
             PathPatternRequestMatcher.pathPattern("/api/v1/me/artist-profile");
 
+    // 11 §4 검사 순서도 같다. 역할(403)이 본문 검증(400)보다 앞이어야 한다
+    private static final RequestMatcher ARTIST_SCHEDULE_ENDPOINTS = new OrRequestMatcher(
+            PathPatternRequestMatcher.pathPattern("/api/v1/me/artist-schedules"),
+            PathPatternRequestMatcher.pathPattern("/api/v1/me/artist-schedules/**"));
+
     // shortcut: API 문서 경로를 로그인 없이 연다(배포 서버 없음), 배포 설계(ADR-006) 때 막거나 끈다
     private static final RequestMatcher API_DOCS_ENDPOINTS = new OrRequestMatcher(
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/v3/api-docs/**"),
@@ -107,6 +112,8 @@ public class SecurityConfig {
                         .requestMatchers(EVENT_PARTNER_PROFILE_ENDPOINT)
                         .hasRole("EVENT_PARTNER")
                         .requestMatchers(ARTIST_PROFILE_ENDPOINT)
+                        .hasRole("ARTIST")
+                        .requestMatchers(ARTIST_SCHEDULE_ENDPOINTS)
                         .hasRole("ARTIST")
                         .anyRequest()
                         .authenticated())
