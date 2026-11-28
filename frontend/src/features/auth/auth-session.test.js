@@ -106,6 +106,12 @@ describe('로그인', () => {
     assert.equal(storage.getItem(TOKEN_KEY), null);
   });
 
+  it('서버 모드에서 응답에 userId가 없으면 로그인하지 않는다', async () => {
+    const { auth, storage } = setup({ answer: { ...OK, userId: undefined } });
+    await assert.rejects(auth.login('kim@example.com', 'password1'), { code: 'UNKNOWN_ERROR' });
+    assert.equal(storage.getItem(TOKEN_KEY), null);
+  });
+
   it('모르는 역할이 오면 로그인하지 않는다', async () => {
     const { auth } = setup({ answer: { ...OK, role: 'ADMIN' } });
     await assert.rejects(auth.login('kim@example.com', 'password1'), { code: 'UNKNOWN_ERROR' });
@@ -190,6 +196,13 @@ describe('저장된 세션 확인과 로그아웃', () => {
     assert.equal(auth.restore({ ...saved, userId: 'u2' }), null);
     assert.equal(auth.restore({ ...saved, role: 'artist' }), null);
     assert.equal(auth.restore({ name: 'kim', role: 'organizer' }), null);
+  });
+
+  it('서버 모드: 토큰과 세션 모두 userId가 없으면 같은 계정인지 알 수 없어 null', () => {
+    const { auth, tokens } = setup();
+    tokens.save({ ...OK, userId: undefined });
+    assert.equal(auth.restore({ name: 'kim', role: 'organizer' }), null);
+    assert.equal(auth.restore({ name: 'kim', role: 'organizer', userId: '' }), null);
   });
 
   it('체험 모드: 토큰이 없어도 저장된 세션을 쓴다', () => {

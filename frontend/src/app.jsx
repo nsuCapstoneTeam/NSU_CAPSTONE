@@ -115,8 +115,9 @@ export default function App() {
   // 화면만 바꿈: 로그인 흐름 밖으로 나가면 돌아갈 화면을 잊고, 맨 위로 스크롤 후 본문에 포커스
   function showPage(next) {
     if (!LOGIN_FLOW_PAGES.includes(next)) setReturnTo(null);
-    // 로그인 화면을 벗어나면 아직 오지 않은 로그인 응답은 버림 (auth-session.js 로그인 세대)
-    if (next !== 'artist-login' && next !== 'organizer-login') cancelPendingLogin();
+    // 화면이 바뀌면 아직 오지 않은 로그인 응답은 버림 (auth-session.js 로그인 세대).
+    // 로그인 화면끼리 이동(브라우저 뒤로 가기로 다른 역할 로그인 화면)도 포함. 성공한 로그인은 이동 전에 이미 저장됨
+    cancelPendingLogin();
     setMyPageTab('profile');
     setPage(next);
     setNotice('');

@@ -27,6 +27,9 @@ export const isSession = (value) =>
   value === null ||
   Boolean(value && typeof value.name === 'string' && ['artist', 'organizer'].includes(value.role));
 
+// 계정 id가 있는지 (빈 문자열·숫자가 아닌 값은 없는 것으로 봄)
+const hasUserId = (value) => typeof value?.userId === 'string' && value.userId !== '';
+
 // 로그인 뒤 갈 화면: 돌아갈 화면이 있으면 그곳, 없으면 마이페이지.
 // 아티스트 매칭은 행사 관계자만 볼 수 있으므로 아티스트는 마이페이지로
 export function pageAfterLogin(returnTo, role) {
@@ -57,6 +60,8 @@ export function createAuthSession({ api = authApi, tokens = tokenStore, mode = A
       if (mine !== generation) throw new AuthApiError('LOGIN_CANCELLED');
       const role = normalizeRole(result?.role);
       if (!role) throw new AuthApiError('UNKNOWN_ERROR');
+      // 서버 모드는 계정 확인(restore)에 userId가 필요하므로, 없으면 로그인하지 않음
+      if (mode === 'server' && !hasUserId(result)) throw new AuthApiError('UNKNOWN_ERROR');
       // 서버 모드는 토큰이 있어야 API를 부를 수 있으므로, 저장하지 못하면 로그인하지 않음
       if (!tokens.save(result) && mode === 'server') {
         tokens.clear();
@@ -72,7 +77,9 @@ export function createAuthSession({ api = authApi, tokens = tokenStore, mode = A
       if (!isSession(saved) || saved === null) return null;
       if (mode !== 'server') return saved;
       const token = tokens.read();
-      if (!token || token.userId !== saved.userId || normalizeRole(token.role) !== saved.role) return null;
+      // userId가 둘 다 없으면 같은 계정인지 알 수 없으므로 복원하지 않음
+      if (!token || !hasUserId(saved) || !hasUserId(token)) return null;
+      if (token.userId !== saved.userId || normalizeRole(token.role) !== saved.role) return null;
       return saved;
     },
     // 로그아웃: 토큰을 지우고, 진행 중인 로그인 응답은 버림 (세션은 화면 상태라 훅에서 지움)
