@@ -42,6 +42,9 @@ class ArtistScheduleRestoreIntegrationTest extends ArtistScheduleIntegrationTest
 
                 assertThat(advisoryLocksOf(restore)).as("복원이 쥔 advisory 잠금").isZero();
                 restore.commit();
+                assertThat(restoreTableExists(restore))
+                        .as("커밋한 뒤 풀로 돌아갈 연결에 임시 표가 남지 않는다")
+                        .isFalse();
             } finally {
                 restore.rollback();
             }
@@ -83,7 +86,8 @@ class ArtistScheduleRestoreIntegrationTest extends ArtistScheduleIntegrationTest
     private static void stageDump(Connection restore, String... dumpStatements) throws SQLException {
         try (Statement statement = restore.createStatement()) {
             statement.execute("SET LOCAL lock_timeout = '3s'");
-            statement.execute("CREATE TEMP TABLE artist_schedules_restore (LIKE artist_schedules)");
+            // 성공해 커밋한 뒤에도 표가 풀의 연결에 남지 않게 한다. 다음 테스트가 같은 연결에서 같은 이름의 표를 만들 수 있어야 한다
+            statement.execute("CREATE TEMP TABLE artist_schedules_restore (LIKE artist_schedules) ON COMMIT DROP");
             for (String sql : dumpStatements) {
                 statement.execute(sql.startsWith("INSERT") ? sql : dumpInsert(sql));
             }
@@ -138,6 +142,15 @@ class ArtistScheduleRestoreIntegrationTest extends ArtistScheduleIntegrationTest
                         "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()")) {
             result.next();
             return result.getLong(1);
+        }
+    }
+
+    private boolean restoreTableExists(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement();
+                ResultSet result =
+                        statement.executeQuery("SELECT to_regclass('pg_temp.artist_schedules_restore') IS NOT NULL")) {
+            result.next();
+            return result.getBoolean(1);
         }
     }
 
