@@ -45,6 +45,7 @@ import org.springframework.test.web.servlet.ResultActions;
 class UserRequestLimitHttpIntegrationTest extends EventIntegrationTestBase {
 
     private static final String PROFILE_PATH = "/api/v1/me/event-partner-profile";
+    private static final String ARTIST_PROFILE_PATH = "/api/v1/me/artist-profile";
 
     @Autowired
     private StringRedisTemplate redis;
@@ -53,6 +54,7 @@ class UserRequestLimitHttpIntegrationTest extends EventIntegrationTestBase {
     @AfterEach
     void deleteProfiles() {
         jdbcTemplate.update("DELETE FROM event_partner_profiles");
+        jdbcTemplate.update("DELETE FROM artist_profiles");
     }
 
     @Test
@@ -98,6 +100,43 @@ class UserRequestLimitHttpIntegrationTest extends EventIntegrationTestBase {
 
     private ResultActions deleteEventPartnerProfile(User caller) throws Exception {
         return mockMvc.perform(delete(PROFILE_PATH).header("Authorization", bearer(caller)));
+    }
+
+    private ResultActions putArtistProfile(User caller) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", "노을밴드");
+        body.put("bio", "어쿠스틱 록 밴드입니다.");
+        body.put("artistTypes", List.of("BAND"));
+        body.put("genres", List.of("ROCK", "ACOUSTIC"));
+        body.put("regionCodes", List.of("41", "11", "11680"));
+        body.put("feeMin", 500000);
+        body.put("feeMax", 1500000);
+        return mockMvc.perform(put(ARTIST_PROFILE_PATH)
+                .header("Authorization", bearer(caller))
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)));
+    }
+
+    private ResultActions deleteArtistProfile(User caller) throws Exception {
+        return mockMvc.perform(delete(ARTIST_PROFILE_PATH).header("Authorization", bearer(caller)));
+    }
+
+    @Test
+    void 아티스트_프로필_수정과_삭제는_PROFILE_한도를_나눠_쓰고_11번째는_429다() throws Exception {
+        User artist = newUser(UserRole.ARTIST, "artist-profile@example.com");
+        for (int i = 0; i < 5; i++) {
+            putArtistProfile(artist).andExpect(status().isOk());
+        }
+        for (int i = 0; i < 5; i++) {
+            deleteArtistProfile(artist).andExpect(status().isNoContent());
+        }
+
+        putArtistProfile(artist)
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "120"));
+        deleteArtistProfile(artist)
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "120"));
     }
 
     private Set<String> limitKeysOf(User user) {
