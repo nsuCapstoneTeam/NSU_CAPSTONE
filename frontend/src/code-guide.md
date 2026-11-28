@@ -23,6 +23,9 @@
 | 추천 결과 체험 데이터·원하는 템포 비교 | `src/features/matching/song-results.js` |
 | 추천 곡 재생기 (한 번에 한 곡, 박자 소리) | `src/features/matching/use-song-player.js` |
 | 역할별 프로필·일정·관심 목록 | `src/features/my-page/my-page.jsx` |
+| 내 행사 등록·수정·삭제 화면 (행사 관계자) | `src/features/my-page/components/events-tab.jsx`, `event-form.jsx` |
+| 행사 API 연결 (서버·체험 모드, 오류 안내, 등록 키, 목록 훅, 코드 ↔ 이름) | `src/features/events/events-api.js`, `registration-key.js`, `use-my-events.js`, `event-api-mapper.js`, `event-codes.js` |
+| 소리 막대 로딩 표시 | `src/components/common/sound-wave.jsx` |
 | 외부 계정(YouTube·Spotify) 연결, 작업물 고르기 | `src/features/external-accounts/external-accounts-panel.jsx`(마이페이지 작업물 메뉴), `use-external-accounts.js`, `external-accounts-api.js` |
 | 외부 링크 표시(링크 목록·출처 표기) | `src/features/external-accounts/external-links.jsx`, 주소 거르기 `safe-link.js` |
 | 외부 계정 OAuth 콜백으로 돌아온 값 처리 | `src/features/external-accounts/startup-link.js`, `startup-connection.js` |

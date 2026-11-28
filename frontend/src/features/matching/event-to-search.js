@@ -3,6 +3,16 @@
 import { GENRES, REGIONS, TYPES } from './matching.js';
 import { provinceShort } from '../my-page/event-place.js';
 
+// 행사 장르 이름(행사 API) → 지금 매칭 선택지 이름 (NSU-125). 매칭 장르가 API 코드로 바뀌기 전까지 쓰는
+// 임시 대응표 (팀 확정 필요). 표에 없는 장르(재즈 등)는 이름이 같으면 그대로, 다르면 안내만 함
+const MATCH_GENRE = {
+  '힙합·랩': '힙합',
+  'EDM·일렉트로닉': 'DJ',
+  록: '밴드',
+  발라드: '보컬',
+  '팝·대중가요': '보컬',
+};
+
 // 행사 하나를 지금 매칭 조건(current)에 덮어써서 돌려줍니다.
 // - 행사에 없는 조건(분위기·템포·리듬)은 current 값을 그대로 둡니다.
 // - 매칭 선택지에 없는 값은 current 값을 두고 skipped에 이유를 남깁니다.
@@ -30,7 +40,8 @@ export function eventToSearch(event, current) {
   pick('type', event.eventType, TYPES, '행사 종류');
 
   // 매칭은 장르를 하나만 받으므로, 희망 장르 중 선택지에 있는 첫 번째를 사용
-  const genre = event.genres.find((g) => GENRES.includes(g));
+  // 행사 장르 이름(행사 API)과 매칭 선택지 이름이 다른 것은 맞춰 줌 (NSU-125)
+  const genre = event.genres.map((g) => MATCH_GENRE[g] ?? g).find((g) => GENRES.includes(g));
   if (genre) {
     search.genre = genre;
     if (event.genres.length > 1) {
