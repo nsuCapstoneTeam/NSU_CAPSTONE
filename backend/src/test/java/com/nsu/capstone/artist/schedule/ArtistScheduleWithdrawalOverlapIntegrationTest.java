@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -53,10 +55,31 @@ class ArtistScheduleWithdrawalOverlapIntegrationTest extends ArtistScheduleInteg
         assertThat(scheduleRows(artist)).isZero();
     }
 
+    /**
+     * 탈퇴 절차(NSU-167)를 흉내 낸다. {@code READ COMMITTED} 한 트랜잭션에서 상태 UPDATE, 일정 DELETE, 커밋 순서로 돈다. UPDATE를 먼저
+     * 커밋하고 DELETE를 따로 돌리면 실제 절차가 막는 틈을 테스트가 건너뛴다. 상태를 바꾼 users 행 수를 돌려준다.
+     */
+    private int withdrawAndDeleteSchedules() throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+                Statement statement = connection.createStatement()) {
+            connection.setAutoCommit(false);
+            connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            try {
+                int updated = statement.executeUpdate(WITHDRAW.formatted(artist.getId()));
+                statement.executeUpdate(DELETE_SCHEDULES.formatted(artist.getId()));
+                connection.commit();
+                return updated;
+            } catch (SQLException | RuntimeException exception) {
+                connection.rollback();
+                throw exception;
+            }
+        }
+    }
+
     @Test
-    void 추가가_커밋되기_전에_시작한_탈퇴는_기다리고_추가가_커밋된_뒤_DELETE가_일정을_지운다() throws Exception {
+    void 추가가_커밋되기_전에_시작한_탈퇴는_기다리고_추가가_커밋된_뒤_같은_탈퇴_트랜잭션의_DELETE가_일정을_지운다() throws Exception {
         HeldAdd held = holdAdd();
-        Future<Integer> withdrawal = executor.submit(() -> jdbcTemplate.update(WITHDRAW.formatted(artist.getId())));
+        Future<Integer> withdrawal = executor.submit(() -> withdrawAndDeleteSchedules());
         awaitLockWait("UPDATE users");
         assertThat(withdrawal.isDone()).as("추가가 잡은 users 행 잠금을 기다리는 중").isFalse();
         assertThat(scheduleRows(artist)).as("커밋 전 행은 다른 연결에 보이지 않는다").isZero();
@@ -64,9 +87,7 @@ class ArtistScheduleWithdrawalOverlapIntegrationTest extends ArtistScheduleInteg
         held.finish();
 
         assertThat(withdrawal.get(WAIT_SECONDS, TimeUnit.SECONDS)).isOne();
-        assertThat(scheduleRows(artist)).as("탈퇴 UPDATE가 끝난 뒤 추가한 행이 보인다").isOne();
-        jdbcTemplate.update(DELETE_SCHEDULES.formatted(artist.getId()));
-        assertThat(scheduleRows(artist)).isZero();
+        assertThat(scheduleRows(artist)).as("탈퇴 커밋 뒤 그 사용자의 일정이 남지 않는다").isZero();
     }
 
     @Test
@@ -106,10 +127,10 @@ class ArtistScheduleWithdrawalOverlapIntegrationTest extends ArtistScheduleInteg
     }
 
     @Test
-    void 운영자_INSERT가_먼저_커밋을_보류하면_탈퇴_UPDATE가_기다리고_INSERT_커밋_뒤_DELETE가_지워_행이_없다() throws Exception {
+    void 운영자_INSERT가_먼저_커밋을_보류하면_탈퇴_UPDATE가_기다리고_INSERT_커밋_뒤_같은_탈퇴_트랜잭션의_DELETE가_지워_행이_없다() throws Exception {
         Future<Integer> withdrawal;
         try (HeldLock operator = new HeldLock(directInsert("2026-12-12 18:00:00+09"))) {
-            withdrawal = executor.submit(() -> jdbcTemplate.update(WITHDRAW.formatted(artist.getId())));
+            withdrawal = executor.submit(() -> withdrawAndDeleteSchedules());
             awaitLockWait("UPDATE users");
             assertThat(withdrawal.isDone()).as("INSERT가 잡은 users 행 잠금을 기다리는 중").isFalse();
 
@@ -117,8 +138,7 @@ class ArtistScheduleWithdrawalOverlapIntegrationTest extends ArtistScheduleInteg
         }
 
         assertThat(withdrawal.get(WAIT_SECONDS, TimeUnit.SECONDS)).isOne();
-        jdbcTemplate.update(DELETE_SCHEDULES.formatted(artist.getId()));
-        assertThat(scheduleRows(artist)).isZero();
+        assertThat(scheduleRows(artist)).as("탈퇴 커밋 뒤 그 사용자의 일정이 남지 않는다").isZero();
     }
 
     @Test
@@ -155,7 +175,7 @@ class ArtistScheduleWithdrawalOverlapIntegrationTest extends ArtistScheduleInteg
                 "SELECT 1 FROM users WHERE id = '" + artist.getId() + "' FOR SHARE",
                 artistLock(),
                 "UPDATE artist_schedules SET status = 'HOLD' WHERE id = '" + id + "'")) {
-            withdrawal = executor.submit(() -> jdbcTemplate.update(WITHDRAW.formatted(artist.getId())));
+            withdrawal = executor.submit(() -> withdrawAndDeleteSchedules());
             awaitLockWait("UPDATE users");
             assertThat(withdrawal.isDone()).as("운영자가 잡은 users 행을 기다리는 중").isFalse();
 
@@ -164,9 +184,7 @@ class ArtistScheduleWithdrawalOverlapIntegrationTest extends ArtistScheduleInteg
         }
 
         assertThat(withdrawal.get(WAIT_SECONDS, TimeUnit.SECONDS)).isOne();
-        assertThat(scheduleRows(artist)).as("탈퇴 UPDATE가 끝나고 운영자가 넣은 일정까지 2건").isEqualTo(2);
-        jdbcTemplate.update(DELETE_SCHEDULES.formatted(artist.getId()));
-        assertThat(scheduleRows(artist)).isZero();
+        assertThat(scheduleRows(artist)).as("탈퇴 커밋 뒤 운영자가 넣은 일정까지 남지 않는다").isZero();
     }
 
     @Test
@@ -188,8 +206,7 @@ class ArtistScheduleWithdrawalOverlapIntegrationTest extends ArtistScheduleInteg
 
         assertThat(List.of(operatorOutcome, withdrawalOutcome)).as("한쪽만 끊긴다").containsExactlyInAnyOrder("OK", "40P01");
 
-        jdbcTemplate.update(WITHDRAW.formatted(artist.getId()));
-        jdbcTemplate.update(DELETE_SCHEDULES.formatted(artist.getId()));
+        withdrawAndDeleteSchedules();
         assertThat(scheduleRows(artist)).isZero();
     }
 }
