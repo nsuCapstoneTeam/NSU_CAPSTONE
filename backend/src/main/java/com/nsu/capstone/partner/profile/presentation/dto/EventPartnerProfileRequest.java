@@ -19,8 +19,8 @@ import java.util.List;
  */
 public record EventPartnerProfileRequest(
         @Schema(requiredMode = REQUIRED) String name,
-        String organization,
-        String bio,
+        @Schema(types = {"string", "null"}) String organization,
+        @Schema(types = {"string", "null"}) String bio,
 
         @ArraySchema(arraySchema = @Schema(requiredMode = REQUIRED), schema = @Schema(implementation = EventType.class))
         List<String> eventTypes,
