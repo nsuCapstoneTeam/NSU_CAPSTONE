@@ -163,6 +163,17 @@ class OpenApiDocsIntegrationTest {
     }
 
     @Test
+    @DisplayName("문서 첫 화면 설명에 요청 본문 상한 413과 프록시 413의 구분을 적는다")
+    void describesRequestBodyLimitOnFirstPage() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(jsonPath("$.info.description")
+                        .value(allOf(
+                                containsString("64KiB"),
+                                containsString("413 REQUEST_BODY_TOO_LARGE"),
+                                containsString("앞단 프록시가 먼저 거절한 `413`"))));
+    }
+
+    @Test
     @DisplayName("문서 첫 화면 설명에 모든 응답의 X-Request-Id 헤더를 적는다")
     void describesRequestIdHeaderOnFirstPage() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))

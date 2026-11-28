@@ -57,6 +57,7 @@ flowchart TD
 | 임시 파일 | `MultipartFile.transferTo(Path)`로 권한·용량을 제한한 임시 경로에 옮기고, 처리가 끝나면 `finally`에서 지운다 |
 | S3 전송 | `RequestBody.fromFile(Path)`로 보낸다. 파일 전체를 힙에 올리지 않는다 |
 | 앞단 | 프록시(ALB·nginx)에도 본문 크기 상한을 둔다. `Content-Length`만 믿지 않고 실제 받은 양으로도 끊는다 |
+| 앱 전역 본문 상한 | 모든 요청의 본문은 64KiB로 막혀 있다([request_body_limit/00](../request_body_limit/00_request_body_size_limit.md), NSU-174). 업로드 두 경로를 그 필터에서 뺀다. multipart를 켜면 Boot가 `MultipartConfigElement`를 DispatcherServlet 전체에 걸고, Tomcat은 어느 경로·메서드든 `getParameter*`가 불릴 때 앱의 본문 래퍼를 거치지 않고 파트를 파싱한다. 그래서 `resolve-lazily`만으로는 막지 못한다. 업로드가 아닌 경로의 multipart 요청을 체인 전에 거절하거나, 업로드만 별도 서블릿에서 받는다. 테스트 기준(두 선택지 공통): 업로드가 아닌 경로(공개 `GET` 포함)에 chunked multipart를 보내도 임시 파일이 생기지 않고 파트로 파싱하지 않는다. 파일이 아닌 파트의 합계에는 Tomcat `maxPostSize`(64KiB)가 걸리고, 넘으면 `IllegalStateException`이 나므로 응답 형식과 로그 수준을 정한다(request_body_limit/00 "NSU-89에 넘기는 것") |
 | 동시성 | 동시 업로드 수에 상한을 둔다 |
 
 ## Context

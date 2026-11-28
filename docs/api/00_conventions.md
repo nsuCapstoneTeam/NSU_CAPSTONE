@@ -90,7 +90,7 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 애플리케이션 오류 응답은 [ADR-007](../adr/ADR-007-spring-backend-global-exception-handling.md)의 `{code, message}` 형식이다(2026-10-14 결정). 이 문서는 처음에 RFC 9457 Problem Details를 정했지만, 먼저 구현되어 프론트가 쓰고 있는 ADR-007에 맞췄다.
 
 - 대상: `BusinessException`, 요청 DTO 검증 실패, `401`·`403`, 예상하지 못한 `500`
-- 예외: 잘못된 JSON, 지원하지 않는 HTTP method처럼 Spring MVC가 직접 처리하는 표준 4xx는 프레임워크의 기존 응답(`ProblemDetail`)을 그대로 쓴다(ADR-007 §4.4). 클라이언트는 이 경우 HTTP 상태 코드로 분기한다.
+- 예외: 잘못된 JSON, 잘못된 퍼센트 인코딩의 쿼리·폼 파라미터, 지원하지 않는 HTTP method처럼 Spring MVC가 직접 처리하는 표준 4xx는 프레임워크의 기존 응답(`ProblemDetail`)을 그대로 쓴다(ADR-007 §4.4). 클라이언트는 이 경우 HTTP 상태 코드로 분기한다.
 
 ```json
 {
@@ -115,8 +115,9 @@ Spring Boot 서비스 API 전체에 적용하는 규칙이다. 개별 API 문서
 | 401 | `AUTHENTICATION_REQUIRED` | 토큰 없음, 만료, 서명 오류. 지금은 앱까지 도달한 요청 중 토큰 없이 보낸 요청이 주소·메서드·쿼리 형식 오류로 거절돼도 401이 나간다(서버 오류 응답 경로가 인증을 요구하는 지금 동작, [ADR logging/00](../adr/logging/00_structured_logs_and_request_id.md) Decision 6. NSU-147에서 다룬다). Tomcat이 앱에 넘기기 전에 거절하는 요청(예: 인코딩하지 않은 `\|`가 든 쿼리)은 Tomcat의 `400`이고 `X-Request-Id`도 없다(§11) |
 | 401 | `REFRESH_TOKEN_INVALID` | 재발급에 쓴 Refresh Token이 없거나, 만료·사용·로그아웃됐거나, 사용자가 `ACTIVE`가 아님. 다시 로그인한다([07 §4](./07_auth_tokens.md#4-재발급)) |
 | 403 | `ACCESS_DENIED` | 인증은 됐지만 호출 주체에게 허용되지 않은 요청 |
-| 403 | `DEMO_WRITE_NOT_ALLOWED` | 시연 서버(`DEMO`)에서 허용 목록 밖 계정이 상태를 바꾸는 요청(`POST`·`PUT`·`PATCH`·`DELETE`)을 보냄. 인증(`401`) 바로 다음, 역할·본문 검사를 포함한 다른 모든 판정보다 먼저 검사한다. 본문을 읽기 전에 서버·프록시가 거절하는 요청 크기 초과(`413`, 04 §2.2)는 예외다. 가입·로그인·로그아웃·토큰 재발급·실명 본인확인·검색창 즉시 추천·회원 탈퇴는 제외한다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)) |
+| 403 | `DEMO_WRITE_NOT_ALLOWED` | 시연 서버(`DEMO`)에서 허용 목록 밖 계정이 상태를 바꾸는 요청(`POST`·`PUT`·`PATCH`·`DELETE`)을 보냄. 인증(`401`) 바로 다음, 역할·본문 검사를 포함한 다른 모든 판정보다 먼저 검사한다. 요청 본문 크기 초과(`413`)는 예외다. 어느 `413`이 이 검사보다 먼저인지는 §12와 04 §2.2가 정한다. 가입·로그인·로그아웃·토큰 재발급·실명 본인확인·검색창 즉시 추천·회원 탈퇴는 제외한다([identity_verification/00](../adr/identity_verification/00_mvp_sandbox_identity_verification.md)) |
 | 404 | `{대상}_NOT_FOUND` | 대상이 없거나 호출 주체에게 존재를 드러내지 않는 대상 |
+| 413 | `REQUEST_BODY_TOO_LARGE` | 요청 본문이 상한(64KiB)을 넘음. 앱은 본문을 끝까지 읽지 않고 거절한다. 판정 순서와 프록시가 거절한 `413`은 §12에 있다 |
 | 422 | `IDEMPOTENCY_KEY_REUSED` | 같은 `Idempotency-Key`로 먼저 처리한 요청과 다른 본문을 보냄 |
 | 429 | `TOO_MANY_REQUESTS` | 요청 제한을 넘음. `Retry-After` 헤더에 다시 시도할 수 있을 때까지 남은 초를 준다. 이미 있는 기능별 code(예: `VERIFICATION_REQUEST_LIMIT_EXCEEDED`)는 그대로 쓴다 |
 | 500 | `INTERNAL_SERVER_ERROR` | 서버 오류. 예외 메시지·스택 트레이스 등 내부 정보를 담지 않는다 |
@@ -201,3 +202,21 @@ API를 구현하거나 바꾼 PR이 병합되면 Slack `#dev`에서 프론트 �
 - 화면과 API가 같은 출처라(로컬 Vite 프록시, 배포 nginx) `fetch` 응답에서 `response.headers.get('X-Request-Id')`로 읽을 수 있다. 다른 출처에서 부르게 되면 `Access-Control-Expose-Headers: X-Request-Id`를 함께 설정한다.
 - 브라우저가 페이지 이동으로 받은 응답(OAuth `302` 등)의 헤더는 화면 코드가 읽을 수 없다. 개발자도구에서만 보인다.
 - 서버가 AI 서버를 부를 때도 같은 값을 `X-Request-Id`로 보낸다(Linear 서버 협의 017). AI client를 만드는 NSU-63부터 적용한다.
+
+## 12. 요청 본문 크기
+
+모든 API는 요청 본문을 64KiB(65,536바이트)까지 받는다. 넘으면 `413 REQUEST_BODY_TOO_LARGE`(`{code, message}`, §8)다. 결정 근거는 [ADR request_body_limit/00](../adr/request_body_limit/00_request_body_size_limit.md)에 있다(NSU-174).
+
+- 본문 형식(JSON, 폼)과 HTTP 메서드를 가리지 않는다. 정확히 65,536바이트는 받는다. `413`은 요청의 `Accept`와 상관없이 `Content-Type: application/json`이다.
+- `Content-Length`가 상한보다 크면 서버는 본문을 읽지 않고 거절한다. 앱에 닿은 요청에서는 인증(`401`)을 포함한 다른 모든 판정보다 먼저다. Tomcat이 앱에 넘기기 전에 거절하는 요청(§8의 `401` 행)은 그 거절이 먼저다.
+- `Content-Length` 없이 나눠 보낸 본문(chunked)은 서버가 읽다가 상한을 넘을 때 거절한다. 잘못된 JSON의 `400`과 같은 단계다. 그래서 본문을 읽기 전의 검사가 먼저다.
+  - 인증(`401`), 시연 서버 쓰기 차단(`403 DEMO_WRITE_NOT_ALLOWED`), URL 규칙과 모듈 인터셉터의 역할 검사(`403`).
+  - 외부 계정 API(06 §2)는 지금 모듈 인터셉터가 본문을 읽기 전에 요청 한도를 센다. 그래서 chunked `413`도 1회로 센다. 이 한도가 계정별 요청 한도(NSU-100)로 옮겨 가면 본문을 읽은 뒤에 세므로 `413`은 세지 않는다.
+  - 단 `PUT`·`PATCH`·`DELETE`의 폼 본문은 인증보다 먼저 읽으므로 `413`이 인증과 시연 서버 쓰기 차단보다도 먼저다.
+  - 본문을 받지 않는 API에 보낸 본문은 읽지 않고 버린다. `413`이 아니라 그 API의 응답이 나간다.
+- 두 경우 모두 `413`은 본문을 요청 값으로 바꾸기 전에 난다. `@PreAuthorize` 역할 검사, 요청 값 검증, 업무 판정과 그 뒤에 세는 요청 한도에 닿지 않는다.
+- API 문서의 검사 순서에는 `413`을 따로 적지 않는다. `413`의 자리는 이 절이 정한다.
+- `413`을 받은 요청은 처리되지 않았다. 멱등 키(03 §5.3.1)도 기록되지 않는다. 같은 본문으로 다시 보내도 결과가 같으므로 자동으로 다시 보내지 않는다.
+- 앞단 프록시(nginx)가 더 큰 본문(권장값 1MiB 초과)을 먼저 거절하면, 응답은 `413`이지만 본문이 `{code, message}`가 아니고 `X-Request-Id`도 없다(§11). 클라이언트는 `413`을 상태 코드로 분기한다.
+- 파일 업로드 API(04 §2.2)는 그 절의 상한과 `413` 형식을 따른다.
+- 64KiB보다 큰 본문이 필요한 API를 만들면 그 API 계약과 위 ADR에 예외를 적는다.
