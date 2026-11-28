@@ -13,12 +13,15 @@
   --home-pink-text: #e0117a;
   --home-sky: #0077c8;
   --home-title-glow: 0 0 24px rgb(255 255 255 / 0.55);
+  --home-brand-glow: var(--home-title-glow);
 }
 :root[data-theme='dark'] .stage-home {
   --stage-pie-shadow: rgb(0 0 0 / 0.45);
   --home-pink-text: #ff5fae;
-  --home-sky: #80baff;
+  /* 다크: CLAP SOUND는 밝은 하늘색 + 같은 색의 은은한 빛 (Figma 'B · 다크') */
+  --home-sky: #8fd3ff;
   --home-title-glow: 0 0 24px rgb(12 21 35 / 0.6);
+  --home-brand-glow: 0 0 24px rgb(56 181 255 / 0.6);
 }
 
 .stage-cd-slot {
@@ -269,6 +272,7 @@
   font-size: clamp(44px, 8.9vw, 128px);
   line-height: 1.12;
   white-space: nowrap;
+  text-shadow: var(--home-brand-glow);
 }
 .stage-hero-lead {
   margin: 0 0 30px;
