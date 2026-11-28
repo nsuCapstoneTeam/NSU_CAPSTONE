@@ -25,8 +25,13 @@
    - Spring MVC가 `@RequestBody`를 읽다가 난 초과는 `HttpMessageNotReadableException`의 원인 사슬에 남는다. `GlobalExceptionHandler`가 `handleHttpMessageNotReadable`을 재정의해, 원인 사슬에 이 예외가 있으면 같은 `413`을 낸다. 없으면 지금처럼 Spring 표준 `400`(`ProblemDetail`)이다.
    - 이 결정의 `413`(`REQUEST_BODY_TOO_LARGE`)은 요청의 `Accept`와 상관없이 `Content-Type: application/json`이다. 업로드 API의 `413`(04 §2.2)은 이 결정 밖이다. 필터는 직접 쓰므로 그렇다. 처리기 두 곳(`handleHttpMessageNotReadable`, `InvalidParameterException`)은 `413` 응답을 만드는 private 메서드 하나를 함께 쓰고, 그 메서드가 `Content-Type`을 명시한다. 명시하지 않으면 Spring이 `Accept`로 형식을 고른다. `ErrorResponse`는 `ProblemDetail`과 달리 맞는 형식이 없을 때의 대체 형식이 없다(Spring 7.0.9 `AbstractMessageConverterMethodProcessor`). 그래서 `Accept: text/html`인 요청은 `HttpMediaTypeNotAcceptableException`으로 처리기 응답을 쓰지 못한다(`ExceptionHandlerExceptionResolver`가 WARN을 남긴다). 그 뒤는 경로마다 다르다.
      - JSON 경로: 원래 `HttpMessageNotReadableException`을 `DefaultHandlerExceptionResolver`가 받아 `sendError(400)`을 부른다. `/error`로 가서 익명이면 `401`이다.
-     - 폼 경로: 받는 resolver가 없어 `InvalidParameterException`이 `ServletException`으로 감싸인다. Tomcat이 ERROR를 남기고 `/error`(익명이면 `401`)로 간다.
-   - **초과 판정은 한 곳에 둔다.** `RequestBodyTooLargeException.isBodyTooLarge(Throwable)`가 원인 사슬에서 두 가지를 찾는다: 이 예외, 그리고 errorCode가 `413`인 Tomcat `InvalidParameterException`. 필터의 catch와 처리기 두 곳이 모두 이 메서드를 쓴다. 그래서 감지한 곳이 MVC 안이든 그 밖(앞으로 Security 필터나 다른 서블릿 필터가 `getParameter*`로 폼 본문을 읽는 경우)이든, 필터 체인 밖으로 나온 초과는 필터가 같은 `413`으로 쓴다. 지금 Security 체인에는 `POST` 폼 본문을 파라미터로 읽는 곳이 없다(OAuth 콜백 필터는 `GET`만 받고, Bearer 토큰의 폼 본문 파라미터는 꺼져 있다. `OAuthSecurityConfigurer`, Spring Security 7.1.1 `DefaultBearerTokenResolver`). 이 판정은 그런 곳이 생겨도 형식이 바뀌지 않게 하려는 것이다.
+     - 폼 경로: 받는 resolver가 없어 `InvalidParameterException`이 `ServletException`("Request processing failed")으로 감싸여 필터 체인을 거슬러 올라간다. 응답은 아직 커밋 전이라 아래 판정으로 이 필터가 같은 `413`을 쓴다. WARN은 남는다. 그래서 폼 경로에서 `Content-Type` 명시는 WARN을 없애는 역할만 하고, 이 회귀는 테스트 9가 아니라 테스트 12(WARN 없음)와 처리기 단위 테스트가 잡는다.
+   - **초과 판정은 한 곳에 둔다.** `RequestBodyTooLargeException.isBodyTooLarge(Throwable)`가 원인 사슬에서 두 가지를 찾는다: 이 예외, 그리고 errorCode가 `413`인 Tomcat `InvalidParameterException`. 필터의 catch와 처리기 두 곳이 모두 이 메서드를 쓴다. 지금 Security 체인에는 `POST` 폼 본문을 파라미터로 읽는 곳이 없다(OAuth 콜백 필터는 `GET`만 받고, Bearer 토큰의 폼 본문 파라미터는 꺼져 있다. `OAuthSecurityConfigurer`, Spring Security 7.1.1 `DefaultBearerTokenResolver`). 이 판정은 그런 곳이 생겨도 형식이 바뀌지 않게 하려는 것이다.
+   - **같은 `413`이 보장되는 범위.** 예외를 응답으로 바꾸는 곳은 두 곳이다. MVC 안은 `GlobalExceptionHandler`, 그 밖은 이 필터다. 두 곳 모두 위 판정을 쓴다.
+     - MVC 안: 메시지 변환(`HttpMessageNotReadableException`), 폼 파라미터(`InvalidParameterException`), 그리고 컨트롤러가 본문을 직접 읽다 그대로 던진 `RequestBodyTooLargeException`. 마지막 것은 전용 `@ExceptionHandler`가 받는다. 없으면 `@ExceptionHandler(Exception.class)`가 받아 `500`과 ERROR가 된다. 지금 본문을 직접 읽는 컨트롤러는 없다.
+     - MVC 밖: 이 필터 뒤(+10보다 늦은 순서)에서 나서 예외 그대로 필터 체인 밖으로 나온 초과.
+     - 범위 밖: 이 필터보다 앞 순서의 필터가 읽은 본문, 예외를 스스로 잡아 다른 응답으로 바꾸는 필터(예: `OAuth2AuthorizationRequestRedirectFilter`는 failure handler로 넘긴다), 초과 예외를 다른 타입으로 감싸 `Exception` 처리기로 보내는 코드. 지금 코드에는 셋 다 없다.
+     - 범위 밖이 생기지 않게 막는 장치: 이 필터보다 앞 순서의 서블릿 필터 목록을 테스트로 고정한다(테스트 기준 13번). 앞 순서에 필터를 더하는 변경은 이 테스트를 고쳐야 하므로, 그 필터가 본문을 읽는지 리뷰에서 보게 된다. 예외를 스스로 잡는 Security 필터가 `POST` 본문을 읽게 되는 변경은 Security 필터 목록 테스트(authentication/00 Decision 6)가 바뀌는 변경이라 같은 리뷰에 걸린다.
 4. **Tomcat의 폼 파싱에도 같은 상한을 건다.**
    - `application/x-www-form-urlencoded` `POST`는 Tomcat이 파라미터로 파싱한다. 이 파싱은 앱의 래퍼를 거치지 않는다. 그래서 `server.tomcat.max-http-form-post-size`를 `64KB`로 둔다(Boot의 KB는 KiB).
    - Tomcat이 이 상한으로 거절하면 `InvalidParameterException`(errorCode `413`)이 난다. `GlobalExceptionHandler`가 이것을 같은 `413 REQUEST_BODY_TOO_LARGE`로 바꾼다.
@@ -158,7 +163,7 @@ A를 고른다. 막아야 하는 곳(인증 전 JSON, `FormContentFilter`, 폼 �
 | `global/web/BodyLimitedRequest.java` (새 파일) | - | 바이트 세는 요청 래퍼 |
 | `global/web/RequestBodyTooLargeException.java` (새 파일) | - | `IOException` 하위 타입, 원인 사슬 찾기 |
 | `global/exception/ErrorCode.java` | 강석윤 | 상수 `REQUEST_BODY_TOO_LARGE` 하나 |
-| `global/exception/GlobalExceptionHandler.java` | 강석윤 | `handleHttpMessageNotReadable` 재정의, `InvalidParameterException` 처리기 |
+| `global/exception/GlobalExceptionHandler.java` | 강석윤 | `handleHttpMessageNotReadable` 재정의, `InvalidParameterException`·`RequestBodyTooLargeException` 처리기 |
 | `global/config/OpenApiConfig.java` | 김동엽 | 첫 화면 설명에 `413` 한 줄(00 §10.1의 `500`과 같은 방식) |
 | `resources/config/web.properties` (새 파일) | - | `server.tomcat.max-http-form-post-size=64KB` |
 | `resources/application.properties` | 강석윤 | `spring.config.import`에 `config/web.properties` 한 줄 |
@@ -238,6 +243,12 @@ ResponseEntity<Object> handleInvalidParameter(InvalidParameterException exceptio
     return handleExceptionInternal(exception, body, new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
 }
 
+// 컨트롤러가 본문을 직접 읽다 그대로 던진 초과. 없으면 Exception 처리기가 500으로 바꾼다(Decision 3)
+@ExceptionHandler(RequestBodyTooLargeException.class)
+ResponseEntity<Object> handleRequestBodyTooLarge(RequestBodyTooLargeException exception) {
+    return requestBodyTooLarge();
+}
+
 // Accept가 JSON을 받지 않아도 쓸 수 있게 Content-Type을 명시한다(Decision 3)
 private static ResponseEntity<Object> requestBodyTooLarge() {
     ErrorCode errorCode = ErrorCode.REQUEST_BODY_TOO_LARGE;
@@ -271,18 +282,19 @@ private static ResponseEntity<Object> requestBodyTooLarge() {
 | 10 | EVENT_PARTNER가 아닌 토큰으로 `PUT /api/v1/me/event-partner-profile`에 chunked 65,537바이트 JSON | `403`(URL 역할 규칙이 본문을 읽기 전에 거절한다. Decision 6) |
 | 11 | 본문을 받지 않는 공개 `GET` 경로에 chunked 70KiB 본문 | `413`이 아니다(그 API의 응답). 70KiB는 2MiB보다 작아 Tomcat이 다 버리므로, 같은 소켓으로 보낸 다음 요청도 정상 응답을 받는다. Decision 2의 경계 |
 | 12 | 위 1~11 | ERROR·WARN 로그가 없고, 로그에 본문·길이 값이 없다 |
+| 13 | (요청 없음) 등록된 서블릿 필터 중 `RequestBodyLimitFilter`보다 앞 순서인 것 | 구현할 때의 목록과 같다. 앞 순서에 필터를 더하면 실패한다(Decision 3의 보장 범위) |
 
 단위 테스트:
 
 - 필터: `Content-Length`가 상한보다 크면 체인과 `getInputStream()`을 부르지 않는다. 체인 안에서 초과 예외가 나면 `413`을 쓰고 `X-Request-Id`를 지우지 않는다. 체인 안의 필터가 던진 `InvalidParameterException`(errorCode `413`)도 같은 `413`이 되고, errorCode `400`이면 그대로 던진다. 커밋된 응답이면 쓰지 않는다. 다른 예외는 그대로 던진다.
 - 래퍼: `read()`, `read(byte[], int, int)`, `readAllBytes()`, `readNBytes`, `skip`, `transferTo`, `getReader()`가 모두 바이트로 센다. 정확히 상한은 통과하고 상한+1은 예외다. 상한 이하에서는 원래 바이트를 그대로 돌려준다.
-- 처리기: 원인 사슬 깊숙이 초과 예외가 있는 `HttpMessageNotReadableException`이 `413`이 된다. 원인이 다르면 `400` `ProblemDetail` 그대로다. 두 처리기의 `413` 응답에 `Content-Type: application/json`이 명시돼 있다.
+- 처리기: 원인 사슬 깊숙이 초과 예외가 있는 `HttpMessageNotReadableException`이 `413`이 된다. 그대로 던진 `RequestBodyTooLargeException`도 `500`이 아니라 `413`이 된다. 원인이 다르면 `400` `ProblemDetail` 그대로다. 두 처리기의 `413` 응답에 `Content-Type: application/json`이 명시돼 있다.
 - 설정: `server.tomcat.max-http-form-post-size`와 `MAX_BODY_BYTES`가 같다.
 - 동시성 테스트는 해당 없다. 필터와 래퍼에 요청 사이 공유 상태가 없다.
 
 ### 계약 검토 (`api-and-interface-design`)
 
-- 오류 형식: 앱이 내는 `413`은 감지 경로(필터, MVC, Tomcat 폼 파싱)와 요청의 `Accept`에 상관없이 `{code, message}` 하나다(Decision 3). 형식이 다른 `413`은 프록시와 업로드 API 둘뿐이고 00 §12에 적었다.
+- 오류 형식: 앱이 내는 `413`은 감지 경로(필터, MVC, Tomcat 폼 파싱)와 요청의 `Accept`에 상관없이 `{code, message}` 하나다. 보장 범위와 그 밖을 막는 테스트는 Decision 3에 있다. 형식이 다른 `413`은 프록시와 업로드 API 둘뿐이고 00 §12에 적었다.
 - 드러내는 것: 상한 값(65,536바이트)과 판정 순서는 계약으로 적는다. 받은 크기와 상한 값은 응답 본문에 싣지 않고, `message`는 계약이 아니다. `413` 뒤 연결을 닫는 것은 Tomcat 동작이라 계약으로 적지 않는다.
 - 호환성: 새 `code` 하나를 더하는 변경이다. 정상 클라이언트가 보내는 본문은 모두 상한 안이라 바뀌는 응답이 없다.
 - 이름: 04 §2.2의 `LICENSE_TOO_LARGE`와 같은 `{대상}_TOO_LARGE` 꼴이다.
@@ -308,7 +320,14 @@ private static ResponseEntity<Object> requestBodyTooLarge() {
 | §12의 폼 `413`(인증보다 먼저)이 §8 시연 서버 행("본문을 읽기 전의 `413`만 예외")과 모순된다 | §8 시연 서버 행의 예외를 "`413`, 순서는 §12"로 고치고, §12·Decision 6에 시연 서버 차단의 자리를 적었다 |
 | NSU-89 테스트 기준 "거절되고"가 별도 서블릿 선택지와 맞지 않는다 | 두 선택지 공통 기준(임시 파일 없음, 파트로 파싱하지 않음)으로 바꿨다. 파일이 아닌 파트 합계 초과가 `IllegalStateException`이라는 사실을 인계에 적었다 |
 | 테스트 11이 `HttpClient`로는 같은 연결을 확인하지 못하고, Tomcat 업그레이드를 잡는다는 문장이 과하다 | 11번을 raw 소켓 하나로 두 요청을 보내는 테스트로 바꾸고, 고정하는 것을 "`413`이 아님, 같은 연결 유지"로 좁혔다 |
-| (근거 없는 주장) JSON 경로도 Tomcat ERROR로 간다고 적었다 | Decision 3을 경로별로 고쳤다. JSON은 WARN 뒤 `sendError(400)` → `/error`, 폼은 Tomcat ERROR → `/error`다 |
+| (근거 없는 주장) JSON 경로도 Tomcat ERROR로 간다고 적었다 | Decision 3을 경로별로 고쳤다. JSON은 WARN 뒤 `sendError(400)` → `/error`다. 폼 경로는 3차 리뷰에서 다시 고쳤다(아래) |
+
+3차(마지막 확인) 리뷰. 2차 지적 5건은 해결로 판정됐고, 1건은 고치면서 새 Low 1건이 생겼다. 확인 리뷰를 두 번 받았으므로 이 반영은 다시 리뷰받지 않고 사람 승인과 PR 리뷰에서 본다.
+
+| 지적 | 처리 |
+|---|---|
+| Decision 3의 폼 경로 흐름("Tomcat ERROR → `/error`")이 같은 커밋에서 넓힌 필터 catch와 맞지 않는다. 실제로는 감싼 `ServletException`이 필터까지 올라와 `413`이 되고 WARN만 남는다 | 확인됨(Spring 7.0.9 `FrameworkServlet` 1006-1008행, 필터 catch가 `ServletException`을 받는다). 폼 경로 문장을 실제 흐름으로 고치고, 이 회귀는 테스트 9가 아니라 테스트 12와 처리기 단위 테스트가 잡는다고 적었다 |
+| (근거 없는 주장) "감지한 곳이 어디든 같은 `413`"은 필터 앞 순서, 예외를 스스로 잡는 필터, 컨트롤러가 본문을 직접 읽는 경우에 맞지 않는다 | 확인됨(세 경우 모두 지금 코드에는 없다). 같은 종류(경로에 따라 `413` 형식이 깨짐)가 세 번째라 경계를 적고 장치를 더했다. MVC 안은 `RequestBodyTooLargeException` 전용 처리기로 덮고, MVC 밖은 보장 범위를 "이 필터 뒤에서 나서 그대로 나온 초과"로 좁혔다. 범위 밖이 생기지 않게 앞 순서 필터 목록을 테스트 13으로 고정한다 |
 
 ## Consequences
 
